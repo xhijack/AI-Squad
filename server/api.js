@@ -45,6 +45,7 @@ const floorRoot = (id) => building.floorEntry(id).path;
 // [method, pattern, handler(params, body, req), { pin, raw }]
 const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
+  ['GET', /^\/api\/watchdog$/, () => squad.watchdogStatus()],
   ['PATCH', /^\/api\/building$/, (p, b) => { building.setBuildingName(b.name); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/auth$/, () => ({ ok: true }), { pin: true }],
 

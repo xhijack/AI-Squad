@@ -153,6 +153,7 @@ export function buildingSnapshot() {
     ...states.flatMap((s) => s.attention || []),
   ];
   for (const s of states) if (s.budget?.level === 'warn') attention.push({ id: attId('budget-warn', s.entry.id), kind: 'budget', level: 'warn', floorId: s.entry.id, floorNumber: s.entry.number, floorName: s.cfg.floor.name, text: `Budget at ${s.budget.pct} %: $${s.budget.used.toFixed(2)} of $${s.cfg.floor.budget.usd} this ${s.cfg.floor.budget.period}`, ts: Date.now() });
+  stampAlerts(attention);
   const floorPaths = new Set(b.floors.map((f) => f.path));
   const detected = tx.discoverProjects().filter((p) => !floorPaths.has(p.root)).slice(0, 30);
   const floorsOut = states.map(summary).sort((x, y) => x.number - y.number);
@@ -173,7 +174,46 @@ function suggestProjectsDir(b) {
   const best = parents.sort((x, y) => parents.filter((p) => p === y).length - parents.filter((p) => p === x).length)[0];
   return best || path.join(os.homedir(), 'projects');
 }
-export const invalidate = () => { snapCache.at = 0; tx.resetDiscoveryCache(); };
+// Watchdog alerts (stall, budget, resources) are recomputed on every snapshot; remember when each
+// one first appeared so "since" stays stable, and report new ones once.
+const firstSeen = new Map();
+export const WATCH_KINDS = new Set(['stall', 'budget', 'resource']);
+function stampAlerts(items, onNew = null) {
+  const now = Date.now(), live = new Set();
+  for (const a of items) {
+    if (!WATCH_KINDS.has(a.kind)) continue;
+    live.add(a.id);
+    if (!firstSeen.has(a.id)) { firstSeen.set(a.id, now); onNew?.(a); }
+    a.ts = firstSeen.get(a.id);
+  }
+  for (const id of firstSeen.keys()) if (!live.has(id)) firstSeen.delete(id);
+}
+
+// background tick: keeps alerts current without a browser open and logs new ones
+const reported = new Set();
+export function watchdogTick(log = console.log) {
+  snapCache.at = 0;
+  const snap = buildingSnapshot();
+  const live = new Set();
+  for (const a of snap.attention) {
+    live.add(a.id);
+    if (!reported.has(a.id)) { reported.add(a.id); log(`[watchdog] ${a.kind}${a.floorName ? ` · ${a.floorName}` : ''}${a.agentName ? ` · ${a.agentName}` : ''}: ${a.text.split('\n')[0]}`); }
+  }
+  for (const id of reported) if (!live.has(id)) reported.delete(id);
+  return snap;
+}
+
+export function watchdogStatus() {
+  const snap = buildingSnapshot();
+  return {
+    resources: snap.resources,
+    alerts: snap.attention.filter((a) => WATCH_KINDS.has(a.kind)),
+    waiting: snap.attention.filter((a) => !WATCH_KINDS.has(a.kind)).length,
+    floors: snap.floors.map((f) => ({ id: f.id, number: f.number, name: f.name, lamp: f.lamp, counts: f.counts, cost: f.cost, budget: f.budget, attention: f.attention })),
+  };
+}
+
+export const invalidate = () => { snapCache.at = 0; tx.resetDiscoveryCache(); for (const c of costs.values()) c.at = 0; };
 
 export function floorDetail(id) {
   const entry = building.floorEntry(id);

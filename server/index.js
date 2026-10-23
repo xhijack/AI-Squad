@@ -5,7 +5,7 @@ import { createHandler } from './api.js';
 import { loadPin } from './pin.js';
 import { paths } from './config.js';
 import { seedDefaults } from './roles.js';
-import { flushPending } from './squad.js';
+import { flushPending, watchdogTick } from './squad.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -21,3 +21,5 @@ server.listen(PORT, HOST, () => {
   if (HOST !== '127.0.0.1' && HOST !== 'localhost') console.log(`Warning: listening on ${HOST}; anyone who can reach this port can see your Floors.`);
 });
 setInterval(() => { flushPending().catch(() => {}); }, 3000).unref();
+setTimeout(() => { try { watchdogTick(); } catch { /* next tick */ } }, 5000).unref();
+setInterval(() => { try { watchdogTick(); } catch (e) { console.error('[watchdog]', e.message); } }, 60000).unref();
