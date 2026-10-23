@@ -215,7 +215,9 @@ export class BuildingScene {
     for (const f of floors) {
       seen.add(f.id);
       let o = this.floors.get(f.id);
-      const view = this.draft && this.draft.id === f.id ? { ...f, ...this.draft } : f;
+      const d = this.draft && this.draft.id === f.id ? this.draft : null;
+      // Edit Mode draft: layout, desks, devices and appearance previewed before saving
+      const view = d ? { ...f, layout: d.layout, desks: d.desks, devices: d.devices, agents: (f.agents || []).map((a) => (d.appearance[a.id] ? { ...a, appearance: { ...a.appearance, ...d.appearance[a.id] } } : a)) } : f;
       if (o && o.sig !== sigOf(view)) { dispose(o.g); o = null; }
       if (!o) { o = this.buildFloor(view); this.floors.set(f.id, o); }
       o.data = view;
@@ -356,6 +358,34 @@ export class BuildingScene {
     this.labels.setSize(w, h);
   }
 
+  // ---------- Edit Mode helpers ----------
+  objectFor(floorId, sel) {
+    const o = this.floors.get(floorId);
+    if (!o || !sel) return null;
+    return sel.agent ? o.stations.get(sel.agent)?.g : o.devices.get(sel.device) || null;
+  }
+
+  // world point on the floor plane under the pointer, in the floor's local coordinates
+  floorPoint(e, floorId) {
+    const o = this.floors.get(floorId);
+    if (!o) return null;
+    this.ray.setFromCamera(this.ndc(e), this.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(o.g.position.y + .36));
+    const p = new THREE.Vector3();
+    if (!this.ray.ray.intersectPlane(plane, p)) return null;
+    return { x: p.x, z: p.z };
+  }
+
+  select(floorId, sel) {
+    if (!this.ring) {
+      this.ring = new THREE.Mesh(new THREE.RingGeometry(.95, 1.1, 40), basic('#f2b544', { transparent: true, opacity: .9, side: THREE.DoubleSide, depthTest: false }));
+      this.ring.rotation.x = -Math.PI / 2; this.ring.renderOrder = 10;
+      this.scene.add(this.ring);
+    }
+    this.selection = sel ? { floorId, ...sel } : null;
+    this.ring.visible = !!sel;
+  }
+
   // ---------- picking ----------
   bindPointer() {
     const el = this.renderer.domElement;
@@ -395,6 +425,10 @@ export class BuildingScene {
       if (u >= 1) this.camAnim = null;
     }
     for (const o of this.floors.values()) if (o.g.visible) for (const st of o.stations.values()) poseStation(st, t);
+    if (this.ring?.visible && this.selection) {
+      const obj = this.objectFor(this.selection.floorId, this.selection);
+      if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;
+    }
     this.handlers.onFrame?.(t);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);

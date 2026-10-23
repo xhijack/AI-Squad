@@ -4,6 +4,7 @@ import { $, esc, money, gb, toast, api, askPin, hasPin } from './lib.js';
 import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
+import './edit.js';
 
 const state = ctx.state;
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -34,6 +35,7 @@ const scene = new BuildingScene($('scene'), {
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
 });
 ctx.scene = scene;
+window.aisquad = ctx;                     // handy in the console and for scripted UI checks
 
 // ---------- polling ----------
 let timer = null, inflight = false;
@@ -219,12 +221,15 @@ function render() {
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
   scene.sync(floorsForScene);
   const viewKey = routeKey(route) + (state.desk ? '' : '-');
-  if (scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route }); }
+  if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route }); }
 
   if (!ctx.editing) layoutPanels(lastSections = sectionsFor());
   ctx.afterRender?.();
 }
 ctx.render = render;
+ctx.layoutPanels = layoutPanels;
+ctx.updateInsets = () => { insetKey = ''; updateInsets(); };
+ctx.isPhone = isPhone;
 
 function attentionPopHtml() {
   return lobbySections(state.building).find((s) => s.id === 'attention').html;
