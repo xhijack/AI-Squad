@@ -321,5 +321,11 @@ $('menu').addEventListener('click', (e) => {
   } else actions[b.dataset.menu]?.(b);
 });
 
+// #/new-floor (from "/aisquad new-floor") opens the wizard over the Lobby
+if (location.hash === '#/new-floor') {
+  history.replaceState(null, '', '#/');
+  const open = () => (state.building ? actions['new-floor']() : setTimeout(open, 300));
+  setTimeout(open, 300);
+}
 state.route = parseRoute();
 refresh();
