@@ -48,6 +48,7 @@ function costFor(floorId, root) {
 }
 
 // ---------- live view of one Floor ----------
+const ASK_OPEN_MS = 6 * 3600e3;
 function liveAgents(entry, team, sessions, { events = false } = {}) {
   const now = Date.now();
   const transcripts = tx.agentTranscripts(entry.path);
@@ -61,7 +62,8 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
     const st = t ? statusOf(t.file, entry.path, events) : null;
     const recent = st && now - st.lastTs < tx.ACTIVE_MS;
     const busy = running && tm.isBusy(screen);
-    const state = dialog || (st?.ask && (running || recent)) ? 'waiting' : busy || recent ? 'working' : running ? 'idle' : 'stopped';
+    const asking = st?.ask && (running || now - st.ask.ts < ASK_OPEN_MS);   // Claude waits for an answer indefinitely
+    const state = dialog || asking ? 'waiting' : busy || recent ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
     if (w && !w.doneAt && st && st.lastEndTurn > w.assignedAt && !busy && !dialog) { w.doneAt = st.lastEndTurn; setWork(entry.id, a.id, w); }
     if (dialog && st?.ask?.questions?.length) {

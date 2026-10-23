@@ -1,1 +1,59 @@
-<!doctype html><title>The AI Squad</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The AI Squad</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='3' width='20' height='27' rx='2' fill='%23f2b544'/%3E%3Cg fill='%230f1320'%3E%3Crect x='10' y='7' width='4' height='4'/%3E%3Crect x='18' y='7' width='4' height='4'/%3E%3Crect x='10' y='14' width='4' height='4'/%3E%3Crect x='18' y='14' width='4' height='4'/%3E%3Crect x='13' y='22' width='6' height='8'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="scene"></div>
+
+<header id="topbar">
+  <a class="brand" href="#/" title="Back to the Lobby"><span class="logo" aria-hidden="true"></span><span class="brandName">The AI Squad</span></a>
+  <nav id="crumbs" aria-label="Location"></nav>
+  <div class="spacer"></div>
+  <span id="costChip" class="chip" title="Estimated cost today, all Floors"></span>
+  <span id="resChip" class="chip" title="Machine resources"></span>
+  <button id="attBtn" class="attBtn" aria-haspopup="true" aria-expanded="false"><span class="pulse"></span><span id="attCount">0</span><span class="hideSm"> Attention</span></button>
+  <button id="menuBtn" class="ghost iconBtn" aria-haspopup="true" aria-expanded="false" title="Menu">☰</button>
+</header>
+<div id="menu" class="popover" role="menu" hidden>
+  <button role="menuitem" data-menu="new-floor">New Floor</button>
+  <button role="menuitem" data-menu="templates">Role Templates</button>
+  <button role="menuitem" data-menu="rename">Rename Building</button>
+  <button role="menuitem" data-menu="pin">Enter PIN</button>
+</div>
+<div id="attPop" class="popover attPop" hidden></div>
+
+<aside id="left" class="panel" hidden></aside>
+<aside id="right" class="panel" hidden></aside>
+<section id="sheet" class="sheet" hidden>
+  <button class="grip" id="grip" aria-label="Resize panel"></button>
+  <div class="tabs" id="sheetTabs" role="tablist"></div>
+  <div class="sheetBody" id="sheetBody"></div>
+</section>
+<nav id="elevator" aria-label="Elevator" hidden></nav>
+<div id="editBar" hidden></div>
+
+<dialog id="pinDlg">
+  <form method="dialog">
+    <h3>Enter PIN</h3>
+    <p class="note">Changes and agent screens are locked with the local PIN. Find it with <code>cat ~/.aisquad/pin</code> on this machine.</p>
+    <label for="pinIn">PIN</label><input id="pinIn" inputmode="numeric" autocomplete="off" required>
+    <div class="actions"><button value="cancel" class="ghost" formnovalidate>Cancel</button><button value="ok" class="gold">Unlock</button></div>
+  </form>
+</dialog>
+<dialog id="modal"><div id="modalBody"></div></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<noscript>The AI Squad needs JavaScript.</noscript>
+<script type="module" src="app.js"></script>
+</body>
+</html>
