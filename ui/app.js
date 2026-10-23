@@ -204,7 +204,7 @@ function render() {
   $('resChip').title = r.warnings.join('\n') || 'Machine resources are fine';
   $('attCount').textContent = b.attention.length;
   $('attBtn').classList.toggle('on', b.attention.length > 0);
-  if (!$('attPop').hidden) patch($('attPop'), `<div class="sectionHead"><h3 class="grow">Attention</h3></div>${attentionPopHtml()}`);
+  if (!$('attPop').hidden) patch($('attPop'), attentionPopHtml());
   if (state.offline) toast('Server not reachable, retrying…');
 
   // elevator (Floor switcher)
