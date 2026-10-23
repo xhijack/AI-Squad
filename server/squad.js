@@ -1,5 +1,6 @@
 // The live Building: Floor summaries, agent states, Attention, running agents and sending tasks.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { paths } from './config.js';
@@ -160,10 +161,17 @@ export function buildingSnapshot() {
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
-      branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b) },
+      branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
+      projectsDir: suggestProjectsDir(b) },
   };
   snapCache = { at: Date.now(), value };
   return value;
+}
+// where new project directories probably go: next to existing Floors, else ~/projects
+function suggestProjectsDir(b) {
+  const parents = b.floors.map((f) => path.dirname(f.path));
+  const best = parents.sort((x, y) => parents.filter((p) => p === y).length - parents.filter((p) => p === x).length)[0];
+  return best || path.join(os.homedir(), 'projects');
 }
 export const invalidate = () => { snapCache.at = 0; tx.resetDiscoveryCache(); };
 

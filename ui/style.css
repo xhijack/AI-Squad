@@ -202,6 +202,8 @@ dialog h3 { margin-bottom: 6px; font-size: 17px; }
 .memberRow { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg); }
 .memberRow + .memberRow { margin-top: 8px; }
 .tplList .card { display: flex; gap: 10px; align-items: center; }
+.tplLayout { display: grid; grid-template-columns: 230px 1fr; gap: 16px; margin-top: 12px; }
+.tplList { max-height: 62vh; overflow: auto; }
 details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 10px 0 4px; }
 .err { color: var(--bad); font-size: 12px; min-height: 1em; }
 
@@ -224,6 +226,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin:
   #elevator button { width: 34px; min-height: 30px; }
   .grid2 { grid-template-columns: 1fr; }
   .kv { grid-template-columns: 96px 1fr; }
+  .tplLayout { grid-template-columns: 1fr; }
+  .tplList { max-height: 30vh; }
   #editBar { bottom: calc(46vh + 8px); }
   #modal { width: 100vw; max-width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; margin: 0; }
   #modalBody { max-height: 100vh; height: 100%; }

@@ -120,3 +120,11 @@ test('edit floor layout and number, template update flow over HTTP', async () =>
   assert.ok(diff.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
   assert.equal((await call('POST', '/api/floors/acme/agents/rina-pm/template', { action: 'update' })).body.agent.role.version, 2);
 });
+
+test('diff between two template versions', async () => {
+  const r = await call('GET', '/api/roles/project-manager/diff?from=1&to=2');
+  assert.equal(r.status, 200);
+  assert.ok(r.body.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
+  assert.equal((await call('GET', '/api/roles/project-manager/diff?from=1&to=9')).status, 404);
+  assert.ok((await call('GET', '/api/building')).body.options.projectsDir.endsWith('playground'));
+});

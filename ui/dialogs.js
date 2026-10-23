@@ -1,0 +1,117 @@
+// Floor and agent dialogs: add / edit agent (overrides), Floor settings, template update / keep / detach.
+import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, segValue, diffHtml } from './lib.js';
+import { memberHtml, readMember, gitHtml, readGit } from './forms.js';
+import { openWizard } from './wizard.js';
+import { openTemplates } from './templates.js';
+import { ctx } from './ctx.js';
+
+const floorId = () => ctx.state.route.floorId;
+const teamAgent = (id) => ctx.state.floor?.team?.find((a) => a.id === id);
+
+function frame(title, inner, foot) {
+  return `<div class="mHead"><h3 class="grow">${title}</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div>
+    <form class="mBody" id="dForm" novalidate>${inner}</form><div class="mFoot"><div class="err grow" id="dErr"></div>${foot}</div>`;
+}
+function wire(body) { body.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => closeModal()); return body; }
+const fail = (e) => { document.getElementById('dErr').textContent = e.message; };
+
+async function addAgent() {
+  const { templates } = await api('GET', '/api/roles');
+  let m = { displayName: '', template: templates[0].role, overrides: {}, appearance: {} };
+  const draw = () => {
+    const body = wire(openModal(frame('Add agent', memberHtml(m, templates, { removable: false }), '<button class="ghost" data-close>Cancel</button><button class="gold" data-ok>Add to team</button>')));
+    body.querySelector('[data-f="template"]').addEventListener('change', () => { m = readMember(body.querySelector('[data-member]')); draw(); });
+    body.querySelector('[data-f="displayName"]').focus();
+    body.querySelector('[data-ok]').onclick = async () => {
+      const input = readMember(body.querySelector('[data-member]'));
+      if (!input.displayName) return fail(new Error('Display name is required.'));
+      try { const r = await api('POST', `/api/floors/${floorId()}/agents`, input); closeModal(); toast(`${r.agent.displayName} joined the team`); ctx.refresh(); } catch (e) { fail(e); }
+    };
+  };
+  draw();
+}
+
+async function editAgent(el) {
+  const a = teamAgent(el.dataset.agent);
+  if (!a) return;
+  const { templates } = await api('GET', '/api/roles');
+  const list = a.role.detached ? [{ ...a.definition, role: a.role.template, title: `${a.definition.title} (detached)`, version: a.role.version }] : templates;
+  const tpl = list.find((t) => t.role === a.role.template);
+  const locked = tpl ? list : [{ role: a.role.template, title: a.role.template, version: a.role.version, skills: [], model: '', effort: '' }, ...list];
+  const body = wire(openModal(frame(`Edit ${esc(a.displayName)}`,
+    `<p class="note" style="margin-top:12px">Agent id <code>${esc(a.id)}</code> stays the same when you rename. Role: ${esc(a.role.template)}@${a.role.version}${a.role.detached ? ' (detached)' : ''}.</p>
+     ${memberHtml({ ...a, template: a.role.template }, locked, { removable: false, templateLocked: true })}`,
+    '<button class="ghost" data-close>Cancel</button><button class="gold" data-ok>Save</button>')));
+  body.querySelector('[data-ok]').onclick = async () => {
+    const m = readMember(body.querySelector('[data-member]'));
+    try {
+      await api('PATCH', `/api/floors/${floorId()}/agents/${a.id}`, { displayName: m.displayName, overrides: m.overrides, appearance: m.appearance, lead: m.lead });
+      closeModal(); toast('Agent saved; agent file regenerated'); ctx.refresh();
+    } catch (e) { fail(e); }
+  };
+}
+
+async function floorSettings() {
+  const f = ctx.state.floor;
+  if (!f?.floor) return;
+  const c = f.floor;
+  const body = wire(openModal(frame(`Floor ${f.number} settings`, `
+    <div class="grid2"><div><label>Name</label><input name="name" value="${esc(c.name)}" maxlength="60"></div>
+      <div class="row"><div class="grow"><label>Floor number</label><input name="number" type="number" min="1" max="99" value="${f.number}"></div><div><label>Colour</label><input name="accent" type="color" value="${esc(c.accent)}"></div></div></div>
+    <label>Goal summary</label><textarea name="goal" rows="3" maxlength="400">${esc(c.goal)}</textarea>
+    <p class="note">The full brief lives in <code>AISQUAD.md</code> in the repository.</p>
+    <label>Workflow</label>${segHtml('workflow', [['free-team', 'Free Team'], ['squad-sprint', 'Squad Sprint']], c.workflow)}
+    <div class="grid2"><div><label>Budget (USD, 0 = none)</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
+      <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], c.budget.period)}</div></div>
+    <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git)}`,
+  '<button class="ghost danger" data-remove>Remove Floor</button><span class="spacer"></span><button class="ghost" data-close>Cancel</button><button class="gold" data-ok>Save</button>')));
+  bindSegs(body);
+  body.querySelector('[data-remove]').onclick = async () => {
+    if (!confirm('Remove this Floor from the Building? The project directory and its files stay untouched.')) return;
+    try { await api('DELETE', `/api/floors/${f.id}`); closeModal(); toast('Floor removed'); location.hash = '#/'; } catch (e) { fail(e); }
+  };
+  body.querySelector('[data-ok]').onclick = async () => {
+    const form = body.querySelector('#dForm');
+    const v = (n) => form.elements[n].value;
+    try {
+      await api('PATCH', `/api/floors/${f.id}`, { name: v('name'), number: Number(v('number')), accent: v('accent'), goal: v('goal'), workflow: segValue(form, 'workflow'),
+        budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, git: readGit(form) });
+      closeModal(); toast('Floor saved'); ctx.refresh();
+    } catch (e) { fail(e); }
+  };
+}
+
+async function templateDiff(el) {
+  const d = await api('GET', `/api/floors/${floorId()}/agents/${el.dataset.agent}/diff`);
+  const body = wire(openModal(frame(`Update ${esc(d.role)}: v${d.from} → v${d.to}`, `<p class="note" style="margin-top:12px">Changes in the Role Template. The agent's overrides are kept either way.</p>${diffHtml(d.diff)}`,
+    '<button class="ghost" data-act-keep>Keep current</button><button class="gold" data-act-update>Update</button>')));
+  body.querySelector('[data-act-update]').onclick = async () => { await templateAction(el.dataset.agent, 'update'); closeModal(); };
+  body.querySelector('[data-act-keep]').onclick = async () => { await templateAction(el.dataset.agent, 'keep'); closeModal(); };
+}
+
+async function templateAction(agentId, action) {
+  try {
+    await api('POST', `/api/floors/${floorId()}/agents/${agentId}/template`, { action });
+    toast({ update: 'Agent updated to the latest template', keep: 'Keeping the current version', detach: 'Agent detached from its template' }[action]);
+  } catch (e) { toast(e.message); }
+  ctx.refresh();
+}
+
+Object.assign(ctx.actions, {
+  'new-floor': () => openWizard(),
+  templates: () => openTemplates(),
+  'from-detected': (el) => { const p = ctx.state.building.detected[+el.dataset.i]; openWizard({ name: p.name, path: p.root }); },
+  'add-agent': addAgent,
+  'edit-agent': editAgent,
+  'floor-settings': floorSettings,
+  'tpl-diff': templateDiff,
+  'tpl-update': (el) => templateAction(el.dataset.agent, 'update'),
+  'tpl-keep': (el) => templateAction(el.dataset.agent, 'keep'),
+  'tpl-detach': (el) => { if (confirm('Detach this agent? It becomes a standalone copy and no longer receives template updates.')) return templateAction(el.dataset.agent, 'detach'); },
+  async 'remove-agent'(el) {
+    const a = teamAgent(el.dataset.agent);
+    if (!confirm(`Remove ${a?.displayName || 'this agent'} from the team? Its session is stopped and its generated agent file deleted.`)) return;
+    await api('DELETE', `/api/floors/${floorId()}/agents/${el.dataset.agent}`);
+    toast('Agent removed'); location.hash = `#/floor/${floorId()}`;
+  },
+});

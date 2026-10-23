@@ -3,6 +3,7 @@ import { BuildingScene } from './scene.js';
 import { $, esc, money, gb, toast, api, askPin, hasPin } from './lib.js';
 import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
+import './dialogs.js';
 
 const state = ctx.state;
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -258,7 +259,7 @@ $('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(upda
 addEventListener('resize', () => { for (const id of ['left', 'right', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 
 // ---------- actions (event delegation on data-act / data-href / data-tab) ----------
-export const actions = {
+const actions = Object.assign(ctx.actions, {
   async start(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`, {}); toast('Starting agent…'); },
   async stop(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {}); toast('Agent stopped'); },
   async 'start-all'() { for (const a of state.floor.agents.filter((x) => !x.running)) await api('POST', `/api/floors/${state.route.floorId}/agents/${a.id}/start`, {}); toast('Starting the team…'); },
@@ -280,8 +281,7 @@ export const actions = {
   },
   async unlock() { if (await askPin()) refresh(); },
   async copy(el) { try { await navigator.clipboard.writeText(el.dataset.text); toast('Copied'); } catch { toast(el.dataset.text, 6000); } },
-};
-ctx.actions = actions;
+});
 
 document.addEventListener('click', async (e) => {
   const tab = e.target.closest('[data-tab]');

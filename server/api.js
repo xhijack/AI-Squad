@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './config.js';
-import { HttpError, notFound } from './util.js';
+import { HttpError, notFound, lineDiff } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
 import * as roles from './roles.js';
@@ -51,6 +51,12 @@ const routes = [
   ['GET', /^\/api\/roles$/, () => ({ templates: roles.listTemplates(), models: roles.MODELS, efforts: roles.EFFORTS, styles: roles.STYLES })],
   ['GET', /^\/api\/roles\/([\w-]+)$/, ([role]) => ({ template: roles.getTemplate(role), versions: roles.templateVersions(role) })],
   ['GET', /^\/api\/roles\/([\w-]+)\/versions\/(\d+)$/, ([role, v]) => { const t = roles.templateText(role, +v); if (!t) throw notFound('Unknown version'); return { text: t }; }],
+  ['GET', /^\/api\/roles\/([\w-]+)\/diff$/, ([role], b, req) => {
+    const q = new URL(req.url, 'http://x').searchParams;
+    const from = roles.templateText(role, +q.get('from')), to = roles.templateText(role, +q.get('to'));
+    if (!from || !to) throw notFound('Unknown version');
+    return { role, from: +q.get('from'), to: +q.get('to'), diff: lineDiff(from, to) };
+  }],
   ['POST', /^\/api\/roles$/, (p, b) => roles.saveTemplate(b, { create: true }), { pin: true }],
   ['PUT', /^\/api\/roles\/([\w-]+)$/, ([role], b) => { const r = roles.saveTemplate({ ...b, role }); squad.invalidate(); return r; }, { pin: true }],
 

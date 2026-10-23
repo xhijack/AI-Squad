@@ -24,7 +24,7 @@ export function presetSpots(n, layout) {
       out.push({ x: px + side * .95, z: front ? 1.3 : -1.7, ry: front ? Math.PI : 0 });
     }
   } else if (layout === 'open-space') {
-    const cols = Math.max(2, Math.ceil(Math.sqrt(n * 1.6)));
+    const cols = Math.max(1, Math.min(n, Math.ceil(Math.sqrt(n * 1.6))));
     for (let i = 0; i < n; i++) {
       const c = i % cols, r = Math.floor(i / cols);
       const jitter = ((i * 7919) % 13) / 13 - .5;                    // deterministic, looks hand-placed

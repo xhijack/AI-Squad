@@ -4,4 +4,5 @@ export const ctx = {
   refresh: async () => {},
   render: () => {},
   scene: null,
+  actions: {},                 // data-act handlers; feature modules add their own
 };
