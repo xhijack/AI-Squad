@@ -1,0 +1,14 @@
+{
+  "name": "aisquad",
+  "version": "0.1.0",
+  "description": "The AI Squad: run Claude Code agent teams as floors of a 3D building.",
+  "type": "module",
+  "private": true,
+  "bin": { "aisquad": "server/index.js" },
+  "scripts": {
+    "start": "node server/index.js --port 8097",
+    "test": "node --test 'test/*.test.js'"
+  },
+  "engines": { "node": ">=22" },
+  "license": "UNLICENSED"
+}
