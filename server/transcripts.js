@@ -74,7 +74,7 @@ function toolDetail(name, input = {}, root = '') {
 // status of one transcript: last activity, unanswered AskUserQuestion, last end of turn, events
 export function transcriptStatus(file, root = '', { events = false } = {}) {
   const recs = tailRecords(file);
-  let lastTs = 0, activity = '', kind = 'idle', ask = null, lastEndTurn = 0, model = '';
+  let lastTs = 0, activity = '', kind = 'idle', ask = null, lastEndTurn = 0, model = '', turnOpen = false;
   const evs = [];
   const messages = [];
   for (const r of recs) {
@@ -84,7 +84,8 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
     const content = Array.isArray(msg.content) ? msg.content : [];
     if (r.type === 'assistant') {
       if (msg.model && msg.model !== '<synthetic>') model = msg.model;
-      if (msg.stop_reason === 'end_turn') lastEndTurn = ts;
+      turnOpen = msg.stop_reason !== 'end_turn';
+      if (!turnOpen) lastEndTurn = ts;
       for (const c of content) {
         if (c.type === 'tool_use') {
           [kind, activity] = describeTool(c.name, c.input, root);
@@ -97,6 +98,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
         }
       }
     } else if (r.type === 'user') {
+      if (!r.isMeta) turnOpen = true;                    // a task or a tool result: the agent continues
       if (typeof msg.content === 'string' && events && !r.isMeta && !msg.content.startsWith('<')) evs.push({ ts, kind: 'task', title: 'task from owner', detail: clip(msg.content, 900) });
       for (const c of content) {
         if (c.type === 'tool_result' && ask && c.tool_use_id === ask.id) ask = null;
@@ -105,7 +107,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
       }
     }
   }
-  return { lastTs, activity, kind, ask, lastEndTurn, model, messages, ...(events ? { events: evs.slice(-120) } : {}) };
+  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, model, messages, ...(events ? { events: evs.slice(-120) } : {}) };
 }
 
 // ---------- session ownership ----------

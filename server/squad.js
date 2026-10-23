@@ -61,7 +61,7 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
     const dialog = running ? tm.parsePrompt(screen) : null;
     const t = transcripts.get(a.id);
     const st = t ? statusOf(t.file, entry.path, events) : null;
-    const recent = st && now - st.lastTs < tx.ACTIVE_MS;
+    const recent = st && st.turnOpen && now - st.lastTs < tx.ACTIVE_MS;   // finished turns are not "working"
     const busy = running && tm.isBusy(screen);
     const asking = st?.ask && (running || now - st.ask.ts < ASK_OPEN_MS);   // Claude waits for an answer indefinitely
     const state = dialog || asking ? 'waiting' : busy || recent ? 'working' : running ? 'idle' : 'stopped';
@@ -207,7 +207,7 @@ export function deskDetail(floorId, agentId) {
   try { effective = floors.effectiveOf(entry.path, agent); } catch (e) { error = e.message; }
   return {
     floorId, ...agentView(entry.path, l, cost), agent, effective, error,
-    screen: l.running ? tm.capture(l.session, 300).replace(/\s+$/, '') : '', dialog: l.dialog,
+    screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(), model: effective?.model, modelId: l.status?.model || '',
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
     attach: `tmux attach -t ${l.session}`,
@@ -231,7 +231,8 @@ export async function startAgent(floorId, agentId, task = '') {
   const { entry, agent, name } = locate(floorId, agentId);
   floors.generate(entry.path);                          // agent file is current before Claude reads it
   const eff = floors.effectiveOf(entry.path, agent);
-  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny });
+  // model comes from the agent file; effort is not read from agent files for the main session, so pass it
+  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs: ['--effort', eff.effort] });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   invalidate();
@@ -266,9 +267,10 @@ export async function sendTask(floorId, agentId, text, attachments = []) {
     pending.set(workKey(floorId, agentId), { text: body, since: Date.now() });
     return { ok: true, queued: true, note: 'Agent shows a dialog; answer it in Attention and the task is typed afterwards.' };
   }
+  const at = Date.now();                                 // before typing: fast replies may end within the verify wait
   const r = await tm.typeTask(name, body);
   if (!r.ok) throw bad(r.error);
-  setWork(floorId, agentId, { text: body.slice(0, 300), assignedAt: Date.now(), doneAt: null });
+  setWork(floorId, agentId, { text: body.slice(0, 300), assignedAt: at, doneAt: null });
   invalidate();
   return { ok: true, queued: false };
 }
@@ -286,8 +288,9 @@ export async function flushPending() {
       if (t.startedAt && Date.now() - t.startedAt < 4000) continue;
       if (!tm.isReady(tm.capture(name))) continue;
       pending.delete(key);
+      const at = Date.now();
       const r = await tm.typeTask(name, t.text);
-      if (r.ok) setWork(floorId, agentId, { text: t.text.slice(0, 300), assignedAt: Date.now(), doneAt: null });
+      if (r.ok) setWork(floorId, agentId, { text: t.text.slice(0, 300), assignedAt: at, doneAt: null });
       else if (r.dialog) pending.set(key, t);
     }
   } finally { flushing = false; }

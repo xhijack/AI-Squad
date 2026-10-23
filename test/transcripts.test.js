@@ -92,3 +92,16 @@ test('discovers projects with Claude Code activity', () => {
   assert.equal(list[0].name, 'acme');
   assert.equal(list[0].sessions, 2);
 });
+
+test('a finished turn is closed; a new task opens it again', () => {
+  const f = path.join(root, 'turns.jsonl');
+  const done = [
+    { type: 'user', timestamp: iso(3000), message: { content: 'Say OK' } },
+    { type: 'assistant', timestamp: iso(2000), message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'OK' }] } },
+    { type: 'system', timestamp: iso(1000), subtype: 'turn_duration' },
+  ];
+  fs.writeFileSync(f, jsonl(done));
+  assert.equal(tx.transcriptStatus(f).turnOpen, false);
+  fs.writeFileSync(f, jsonl([...done, { type: 'user', timestamp: iso(500), message: { content: 'Next task' } }]));
+  assert.equal(tx.transcriptStatus(f).turnOpen, true);
+});

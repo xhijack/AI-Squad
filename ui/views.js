@@ -6,7 +6,7 @@ const WORKFLOW_TEXT = { 'free-team': 'Free Team', 'squad-sprint': 'Squad Sprint'
 const KIND_TEXT = { question: 'Question', permission: 'Permission', stall: 'Stalled', budget: 'Budget', resource: 'Resources' };
 
 // ---------- Attention ----------
-export function attentionHtml(items, { showFloor = true } = {}) {
+export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
   if (!items.length) return '<div class="empty">All clear. Nothing is waiting for you.</div>';
   return items.map((a) => {
     const where = [KIND_TEXT[a.kind] || a.kind, showFloor && a.floorNumber ? `Floor ${a.floorNumber} · ${esc(a.floorName)}` : '', a.agentName ? esc(a.agentName) : ''].filter(Boolean).join(' · ');
@@ -19,7 +19,7 @@ export function attentionHtml(items, { showFloor = true } = {}) {
       body = `${a.options?.length ? `<ol class="note">${a.options.map((o) => `<li>${esc(o.label)}</li>`).join('')}</ol>` : ''}<div class="note">Answer it in the agent's terminal (not started from The AI Squad).</div>`;
     }
     const links = [];
-    if (a.floorId && a.agentId) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">Open desk</a>`);
+    if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">Open desk</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">Open Floor</a>`);
     if (a.kind === 'stall') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
     return `<div class="att ${a.kind} ${a.level || ''}"><div class="where">${where} · ${ago(a.ts)}</div><div class="q">${esc(a.text)}</div>${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
@@ -131,7 +131,7 @@ export function deskSections(floor, d, { locked = false } = {}) {
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">Update available</div><div class="q">${esc(e.title)} template v${d.agent.role.version} → v${ts.latestVersion}</div>
       <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">View diff</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">Update</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">Keep current</button></div></div>` : '';
   const overview = `${head}${update}
-    ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false })}</div>` : ''}
+    ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
     <div class="section"><div class="sectionHead"><h3 class="grow">Send task</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">Queued: ${esc(d.pending.slice(0, 120))}</div>` : ''}
       ${d.work ? `<div class="note" style="margin-top:6px">Current work (${d.work.doneAt ? `done ${ago(d.work.doneAt)}` : `since ${ago(d.work.assignedAt)}`}): ${esc(d.work.text.slice(0, 160))} <button class="small ghost" data-act="work-done" data-agent="${d.id}">Clear</button></div>` : ''}</div>
