@@ -78,14 +78,29 @@ export function renderTemplate(t) {
 const contentKey = (t) => JSON.stringify({ ...t, version: 0, source: undefined, writable: undefined });
 
 // ---------- library ----------
+// Copies shipped default templates into the local library. A newer shipped version replaces the local
+// copy only while that copy still has the version we seeded (user edits always bump the version).
 export function seedDefaults() {
   const dir = paths.roles();
   fs.mkdirSync(dir, { recursive: true });
+  const seededFile = path.join(dir, '.defaults.json');
+  const seeded = readJsonFile(seededFile);
   for (const f of safeReaddir(config.defaultRoles)) {
-    if (!f.endsWith('.md') || fs.existsSync(path.join(dir, f))) continue;
-    fs.copyFileSync(path.join(config.defaultRoles, f), path.join(dir, f));
+    if (!f.endsWith('.md')) continue;
+    const role = f.slice(0, -3), dest = path.join(dir, f);
+    let shipped; try { shipped = parseTemplate(readText(path.join(config.defaultRoles, f)), role); } catch { continue; }
+    if (!fs.existsSync(dest)) { fs.copyFileSync(path.join(config.defaultRoles, f), dest); seeded[role] = shipped.version; continue; }
+    let local; try { local = parseTemplate(readText(dest), role); } catch { continue; }
+    if (seeded[role] === undefined) seeded[role] = local.version;      // libraries seeded before this was tracked
+    if (shipped.version > local.version && local.version === seeded[role]) {
+      writeText(historyFile(role, local.version), renderTemplate(local));
+      fs.copyFileSync(path.join(config.defaultRoles, f), dest);
+      seeded[role] = shipped.version;
+    }
   }
+  writeText(seededFile, JSON.stringify(seeded, null, 2) + '\n');
 }
+const readJsonFile = (f) => { try { return JSON.parse(readText(f)) || {}; } catch { return {}; } };
 
 function libraryDirs() {
   return [{ name: 'local', dir: paths.roles(), writable: true },

@@ -26,6 +26,8 @@ test('New Floor wizard: new directory, git init, all files generated, registered
   });
   assert.equal(r.entry.number, 1);
   assert.ok(fs.existsSync(path.join(proj, '.git')));
+  assert.equal(execFileSync('git', ['-C', proj, 'log', '--format=%s', 'main'], { encoding: 'utf8' }).trim(), 'chore: set up The AI Squad Floor', 'main exists with the scaffold');
+  assert.equal(execFileSync('git', ['-C', proj, 'status', '--porcelain'], { encoding: 'utf8' }), '');
   const team = json('.claude/aisquad/team.json');
   assert.deepEqual(team.agents.map((a) => a.id), ['rina-project-manager', 'ramdani-frappe-developer', 'ramdani-frappe-developer-2']);
   assert.deepEqual(team.agents[1].role, { template: 'frappe-developer', version: 1 });

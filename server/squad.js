@@ -76,15 +76,20 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
   const now = Date.now();
   const transcripts = tx.agentTranscripts(entry.path);
   const work = workOf(entry.id);
+  // teammates the lead spawned live inside the lead's session: they count as running while it runs
+  const lead = team.agents.find((x) => x.lead) || team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  const leadRunning = !!lead && sessions.has(tm.sessionName(entry.id, lead.id));
   return team.agents.map((a) => {
     const name = tm.sessionName(entry.id, a.id);
-    const running = sessions.has(name);
-    const screen = running ? tm.capture(name) : '';
-    const dialog = running ? tm.parsePrompt(screen) : null;
+    const own = sessions.has(name);
+    const inLead = !own && leadRunning && a !== lead && !!hooks.agentState(entry.id, a.id, now);
+    const running = own || inLead;
+    const screen = own ? tm.capture(name) : '';
+    const dialog = own ? tm.parsePrompt(screen) : null;
     const t = transcripts.get(a.id);
     const st = t ? statusOf(t.file, entry.path, events) : null;
     const recent = st && st.turnOpen && now - st.lastTs < tx.ACTIVE_MS;   // finished turns are not "working"
-    const busy = running && tm.isBusy(screen);
+    const busy = own && tm.isBusy(screen);
     const asking = st?.ask && (running || now - st.ask.ts < ASK_OPEN_MS);   // Claude waits for an answer indefinitely
     // plugin hook events are live; they win over the transcript heuristic when they are newer
     const h = hooks.agentState(entry.id, a.id, now);
@@ -101,7 +106,7 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity };
+      hook: hookFresh ? h : null, activity, inLead };
   });
 }
 
@@ -111,7 +116,7 @@ function agentView(root, l, cost) {
   return {
     id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead,
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
-    state: l.state, running: l.running, activity: l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
+    state: l.state, running: l.running, inLead: l.inLead, activity: l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
     models: modelReport(eff, l.running, l.started, l.status),
     peek: l.status?.peek ? codeWindow(root, (({ id, ...rest }) => rest)(l.status.peek)) : null, kindOf: sprint.roleKind(l.agent),

@@ -112,7 +112,7 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {} }) {
   if (isRunning(name)) return { ok: true, already: true };
   const vars = Object.entries(agentEnv).filter(([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null).map(([k, v]) => `${k}=${v}`);
-  const cmd = [...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', disallowedTools.join(',')] : []), ...extraArgs].map(shq).join(' ');
+  const cmd = [...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', ...disallowedTools] : []), ...extraArgs].map(shq).join(' ');
   const tm = ['tmux', ...tmuxArgs(['new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, cmd])];
   const env = { ...process.env, PATH: `${process.execPath.replace(/\/node$/, '')}:${process.env.PATH || ''}` };
   delete env.TMUX;
@@ -126,10 +126,17 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
   return { ok: isRunning(name) };
 }
 
+// kill-session only hangs up the panes; Claude Code can outlive that, so make sure the pane processes end
 export function stopSession(name) {
   if (!isRunning(name)) return { ok: true, already: true };
+  const pids = (tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}']) || '').split('\n').map(Number).filter((n) => n > 1);
   tmux(['kill-session', '-t', `=${name}`]);
-  return { ok: !isRunning(name) };
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  for (const pid of pids) if (alive(pid)) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
+  const deadline = Date.now() + 3000;
+  while (pids.some(alive) && Date.now() < deadline) execFileSync('sleep', ['0.1']);
+  for (const pid of pids) if (alive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+  return { ok: !isRunning(name) && !pids.some(alive), pids };
 }
 
 // ---------- typing ----------

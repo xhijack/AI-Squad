@@ -26,6 +26,7 @@ function draw() {
   process.stdout.write(s);
 }
 if (log) fs.appendFileSync(log, `START ${process.argv.slice(2).join(' ')}\nENV ${['AISQUAD_AGENT', 'AISQUAD_URL', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'].map((k) => `${k}=${process.env[k] || ''}`).join(' ')}\n`);
+process.on('SIGHUP', () => {});                   // like the real one: survives the tmux pane closing
 process.stdin.setRawMode(true);
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (k) => {

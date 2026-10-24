@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { scratch } from './helpers.js';
-import { paths } from '../server/config.js';
+import { paths, configure, config } from '../server/config.js';
 import * as roles from '../server/roles.js';
 
 const root = scratch();
@@ -53,4 +53,24 @@ test('extra libraries are listed read-only and local wins', () => {
   assert.equal(d.version, 4);
   assert.equal(roles.getTemplate('qa-engineer').title, 'QA Engineer');
   assert.throws(() => roles.saveTemplate({ role: 'devops-engineer', title: 'X' }), /read-only/);
+});
+
+test('shipped default upgrades replace only untouched local copies', () => {
+  const ship = path.join(root, 'ship');
+  fs.mkdirSync(ship);
+  const t = (v, extra = '') => `---\nrole: helper\ntitle: Helper\nversion: ${v}\n---\n## Prompt\nHelp.${extra}\n`;
+  const before = config.defaultRoles;
+  configure({ defaultRoles: ship });
+  fs.writeFileSync(path.join(ship, 'helper.md'), t(1));
+  roles.seedDefaults();
+  assert.equal(roles.getTemplate('helper').version, 1);
+  fs.writeFileSync(path.join(ship, 'helper.md'), t(2, ' New.'));
+  roles.seedDefaults();
+  assert.equal(roles.getTemplate('helper').version, 2, 'untouched copy upgraded');
+  assert.deepEqual(roles.templateVersions('helper'), [1, 2], 'old version kept in history');
+  roles.saveTemplate({ role: 'helper', prompt: 'My own prompt.' });           // user edit -> v3
+  fs.writeFileSync(path.join(ship, 'helper.md'), t(4, ' Newer.'));
+  roles.seedDefaults();
+  assert.equal(roles.getTemplate('helper').prompt, 'My own prompt.', 'edited copy left alone');
+  configure({ defaultRoles: before });
 });

@@ -88,7 +88,10 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
     effort: eff.effort,
   };
   if (eff.tools.length) fm.tools = eff.tools.join(', ');
-  if (eff.permissions.deny.length) fm.disallowedTools = eff.permissions.deny.join(', ');
+  // agent files only understand whole tool names here: a rule like Bash(git push*) would remove Bash entirely.
+  // Pattern rules are enforced with --disallowedTools when The AI Squad starts the agent.
+  const wholeTools = eff.permissions.deny.filter((d) => /^\w+$/.test(d));
+  if (wholeTools.length) fm.disallowedTools = wholeTools.join(', ');
   if (eff.skills.length) fm.skills = eff.skills.join(', ');
   const source = eff.detached ? 'a detached copy' : `${eff.role}@${eff.version} + overrides`;
   const sections = [

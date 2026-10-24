@@ -41,17 +41,29 @@ export function scaffold(root, { git = {}, agents = [] } = {}) {
     if (rel.endsWith('.cjs') && rel.includes('hooks')) fs.chmodSync(dest, 0o755);
     created.push(rel);
   }
-  mergeSettings(root);
+  mergeSettings(root, { qualityGate: git.qualityGate });
   updateTeamBlock(root, agents);
   return created;
 }
 
-// .claude/settings.json: agent teams on, TaskCompleted / TeammateIdle gate hooks (added once, merged)
-export function mergeSettings(root) {
+// Teammates run as background agents: without allow rules every Write or command needs a prompt they
+// cannot show (and auto mode refuses background writes it cannot classify). Same idea as dtamu-app's settings.
+export const SQUAD_ALLOW = ['Edit', 'Write', 'Bash(node *)', 'Bash(npm test*)', 'Bash(npm run test*)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)',
+  'Bash(git show*)', 'Bash(git add *)', 'Bash(git commit *)', 'Bash(git switch *)', 'Bash(git branch*)', 'Bash(git rev-parse*)', 'Bash(git mv *)',
+  'Bash(ls*)', 'Bash(mkdir *)', 'Bash(mv docs/squad/*)', 'Bash(cp *)', 'Bash(cat *)'];
+export const SQUAD_DENY = ['Read(./.env)', 'Read(./.env.*)', 'Bash(git push*)', 'Bash(git reset --hard*)', 'Bash(rm -rf *)', 'Bash(* --force*)'];
+
+// .claude/settings.json: agent teams on, permission rules, TaskCompleted / TeammateIdle gate hooks (merged, idempotent)
+export function mergeSettings(root, { qualityGate = '' } = {}) {
   const p = path.join(root, '.claude', 'settings.json');
   const cur = fs.existsSync(p) ? readJson(p, null) : {};
   if (!cur) return false;                                   // unreadable settings: leave them alone
   cur.env = { ...(cur.env || {}), CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
+  const gate = String(qualityGate || readConfig(root).TEST_CMD || '').trim();
+  const allow = [...SQUAD_ALLOW, ...(gate && !/[;&|`$<>]/.test(gate) ? [`Bash(${gate}*)`] : [])];
+  cur.permissions = { ...(cur.permissions || {}) };
+  cur.permissions.allow = [...new Set([...(cur.permissions.allow || []), ...allow])];
+  cur.permissions.deny = [...new Set([...(cur.permissions.deny || []), ...SQUAD_DENY])];
   cur.hooks = cur.hooks || {};
   // Node gate hooks (no jq). Entries for the older bash versions are replaced.
   const add = (event, base, timeout, statusMessage) => {

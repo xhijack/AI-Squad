@@ -125,7 +125,7 @@ test('auto-merge tick: only approved Floors, only finished work of idle agents',
   await floors.createFloor({ name: 'Shop', directory: { mode: 'new', path: dir }, git: { qualityGate: 'true' },
     team: [{ displayName: 'Budi - Dev', template: 'fullstack-developer' }] });
   g(dir, 'config', 'user.name', 'Owner'); g(dir, 'config', 'user.email', 'owner@example.com');
-  g(dir, 'add', '-A'); g(dir, 'commit', '-q', '-m', 'chore: floor');
+  g(dir, 'add', '-A'); g(dir, 'commit', '-q', '--allow-empty', '-m', 'chore: floor');
   branchWork(dir, 'budi-dev/catalogue', [['cat.js', 'c\n', 'feat: catalogue']]);
   const work = (doneAt) => fs.writeFileSync(paths.runtime(), JSON.stringify({ work: { 'shop/budi-dev': { text: 't', assignedAt: 1, doneAt } } }));
 

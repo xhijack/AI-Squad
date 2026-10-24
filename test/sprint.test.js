@@ -40,6 +40,8 @@ test('choosing Squad Sprint scaffolds the pack, team ids and hooks', async () =>
   const settings = JSON.parse(read(proj, '.claude/settings.json'));
   assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
   assert.deepEqual(settings.attribution, { commit: '', pr: '' }, 'existing settings kept');
+  for (const r of ['Edit', 'Write', 'Bash(node *)', 'Bash(git commit *)', 'Bash(npm test -- --run*)']) assert.ok(settings.permissions.allow.includes(r), r);
+  for (const r of ['Bash(git push*)', 'Read(./.env)']) assert.ok(settings.permissions.deny.includes(r), r);
   assert.equal(settings.hooks.TaskCompleted.length, 1);
   assert.equal(settings.hooks.TeammateIdle.length, 1);
   assert.deepEqual([settings.hooks.TaskCompleted[0].hooks[0].command, settings.hooks.TaskCompleted[0].hooks[0].args], ['node', ['${CLAUDE_PROJECT_DIR}/.claude/hooks/task-completed.cjs']]);

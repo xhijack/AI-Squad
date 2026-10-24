@@ -134,6 +134,8 @@ test('end to end with a fake Claude Code in tmux: dialog, answer, typed task', {
   tm.answerDialog(name, perm, 3);
   assert.ok(await wait(() => fs.readFileSync(log, 'utf8').includes('ANSWER ask 3')));
 
-  assert.equal(tm.stopSession(name).ok, true);
+  const stopped = tm.stopSession(name);
+  assert.equal(stopped.ok, true);
   assert.equal(tm.isRunning(name), false);
+  for (const pid of stopped.pids) assert.throws(() => process.kill(pid, 0), 'pane process ended even though it ignores SIGHUP');
 });

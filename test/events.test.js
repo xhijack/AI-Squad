@@ -90,3 +90,11 @@ test('server down or no PIN: exits 0 quickly and silently', async () => {
   const garbage = await runHook([], 'not json', { AISQUAD_HOME: config.home, AISQUAD_URL: 'http://127.0.0.1:9' });
   assert.equal(garbage.code, 0);
 });
+
+test('SubagentStop is credited to the teammate that stopped', () => {
+  ev.reset();
+  ev.ingest({ event: 'PreToolUse', agent: 'shop/rina-pm', payload: { agent_type: 'budi-dev', tool_name: 'Write', tool_input: { file_path: 'a.js' } } }, FLOORS);
+  assert.equal(ev.agentState('shop', 'budi-dev').state, 'working');
+  assert.equal(ev.ingest({ event: 'SubagentStop', agent: 'shop/rina-pm', payload: { agent_type: 'budi-dev' } }, FLOORS), 'shop/budi-dev');
+  assert.equal(ev.agentState('shop', 'budi-dev').state, 'idle');
+});

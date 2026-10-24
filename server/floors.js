@@ -138,7 +138,7 @@ export function generate(root) {
   }
   for (const f of safeReaddir(lockDir(root))) if (f.endsWith('.md') && !used.has(f)) fs.rmSync(path.join(lockDir(root), f));
   writeBrief(root, floor, team);
-  if (sprint.hasPack(root)) sprint.updateTeamBlock(root, team.agents);
+  if (sprint.hasPack(root)) { sprint.updateTeamBlock(root, team.agents); sprint.mergeSettings(root, { qualityGate: git.qualityGate }); }
 }
 
 const TEAM_START = '<!-- aisquad:team:start -->', TEAM_END = '<!-- aisquad:team:end -->';
@@ -365,9 +365,21 @@ export async function createFloor(input) {
   writeBrief(root, floor, { agents: [] }, input.goal);   // brief first, generate() then fills the team table
   if (floor.workflow === 'squad-sprint') sprint.scaffold(root, { git, agents });
   generate(root);
+  if (mode === 'new') await initialCommit(root);          // main must exist for sprints and merges
   const entry = building.registerFloor(root, { name, number });
   if (input.git?.autoMergeApproved) setApproval(entry.id, true);   // approval lives in ~/.aisquad, never in the repo
   return { entry, ...readFloor(root) };
+}
+
+// first commit of a new project (scaffold only), so the main branch exists. Uses the configured git
+// identity; without one, a neutral setup identity.
+async function initialCommit(root) {
+  const id = await run('git', ['-C', root, 'config', 'user.email'], { timeout: 5000 }).then((r) => r.stdout.trim(), () => '');
+  const env = id ? process.env : { ...process.env, GIT_AUTHOR_NAME: 'The AI Squad', GIT_AUTHOR_EMAIL: 'setup@aisquad.local', GIT_COMMITTER_NAME: 'The AI Squad', GIT_COMMITTER_EMAIL: 'setup@aisquad.local' };
+  try {
+    await run('git', ['-C', root, 'add', '-A'], { timeout: 20000 });
+    await run('git', ['-C', root, 'commit', '-q', '--no-verify', '-m', 'chore: set up The AI Squad Floor'], { timeout: 20000, env });
+  } catch { /* nothing to commit or git unavailable: the Floor still works */ }
 }
 
 // register a directory that already contains .claude/aisquad (e.g. cloned from a teammate)

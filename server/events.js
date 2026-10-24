@@ -25,7 +25,7 @@ export function ingest(body, floors, now = Date.now()) {
     const id = [p.agent_type, p.transcript_path ? sessionAgent(String(p.transcript_path)) : ''].find((x) => x && floor.agentIds.includes(x));
     if (!id) return null;
     key = `${floor.id}/${id}`;
-  } else if (p.agent_type && name !== 'SubagentStop') {
+  } else if (p.agent_type) {
     // a teammate / subagent of an AI Squad session reports with the parent's env: credit the subagent when it is on the team
     const [floorId] = key.split('/');
     const floor = floors.find((f) => f.id === floorId);
