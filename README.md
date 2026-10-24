@@ -13,7 +13,7 @@ Agents are Claude Code sessions in tmux, created from **Role Templates** with pe
 - Node.js 22 or newer (no npm packages needed: the server has zero dependencies)
 - Claude Code (`claude` on the PATH, or next to the `node` binary as with nvm)
 - tmux; `systemd-run --user` is used when available so agents and the server survive the terminal that started them
-- A browser with WebGL. three.js 0.160.0 is loaded from jsDelivr.
+- A browser with WebGL. three.js 0.160.0 is vendored in `ui/vendor/three`, so the UI works offline.
 
 ## Install
 
@@ -62,6 +62,10 @@ Projects listed under **Detected** can become a Floor with one click. A director
 
 On a Desk: **Start** opens `claude --agent <id>` in tmux session `aisquad-<floor>-<agent>`. Type a task and press **Send task**; when the agent is still starting or shows a dialog, the task waits and is typed once Claude Code is ready. Questions and permission prompts (numbered, and unnumbered ones such as "Do you trust this folder?") appear under **Attention** with their options as buttons. You can always look at the real terminal with `tmux attach -t aisquad-<floor>-<agent>`.
 
+Agents started by The AI Squad load this plugin's hooks (`--plugin-dir`), which stream session events (task submitted, tool use, permission prompts, end of turn) to the server. Status and Attention update live, and the Floor shows a **live** badge. With **per agent** commit identity in the Floor's git settings, each agent commits with its own name and email (`GIT_AUTHOR_*` / `GIT_COMMITTER_*`).
+
+On the Floor, desk screens show what each agent is doing: the file it is editing, its terminal, QA screenshots, or a question waiting for you. Idle agents wander to the lounge and run back when work arrives. Click a monitor (or **Look at screen** on the Desk) to look over the agent's shoulder at its live terminal.
+
 ### Role Templates and overrides
 
 Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json` as a directory (`"path"`) or a git repository (`"url"`).
@@ -90,7 +94,7 @@ For each branch with finished work (an agent's branch once its task is done and 
 
 ### Squad Sprint
 
-Choosing the Squad Sprint workflow scaffolds the optional pack into the project (existing files are never overwritten): `.claude/squad/config.sh` (sprint number, test command, team ids kept in sync with `team.json`), the `TaskCompleted` and `TeammateIdle` gate hooks (merged into `.claude/settings.json`), a `/sprint` command, and the `docs/squad` board (PLAN, TASKS, QUESTIONS, handoff, qa, bugs and templates including RELEASE). Use the **Sprint Lead**, **Sprint Developer** and **Sprint QA** templates (the wizard's **+ Squad Sprint team** adds them). The hooks need `jq`.
+Choosing the Squad Sprint workflow scaffolds the optional pack into the project (existing files are never overwritten): `.claude/squad/config.sh` (sprint number, test command, team ids kept in sync with `team.json`), the `TaskCompleted` and `TeammateIdle` gate hooks (merged into `.claude/settings.json`), a `/sprint` command, and the `docs/squad` board (PLAN, TASKS, QUESTIONS, handoff, qa, bugs and templates including RELEASE). It also merges permission rules for the squad's normal work (edit and write files, `node`, the quality gate, the git commands it needs; deny `.env`, `git push`, `reset --hard`, `rm -rf`), because teammates run as background agents that cannot answer prompts. Use the **Sprint Lead**, **Sprint Developer** and **Sprint QA** templates (the wizard's **+ Squad Sprint team** adds them). The gate hooks are small Node scripts.
 
 The Board tab reads `docs/squad/TASKS.md`. A sprint is closed when `sprint-<N>` has `docs/squad/sprint-<N>/RELEASE.md`, the closing commit `docs(squad): close sprint <N>` and a final QA report with `STATUS: PASS`, and the working tree is clean. The server then merges `sprint-<N>`; with **start the next sprint automatically** on, the lead gets a fresh session that runs `/sprint <N+1>`.
 
