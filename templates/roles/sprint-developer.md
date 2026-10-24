@@ -1,7 +1,7 @@
 ---
 role: sprint-developer
 title: Sprint Developer
-version: 2
+version: 3
 description: Developer in a Squad Sprint. Builds the modules the lead assigns, test first, hands them to QA, and fixes the bugs QA files.
 model: sonnet
 effort: medium
@@ -33,9 +33,9 @@ Use external services through adapters with mocks. Do not start a second app ser
 
 When the module is done:
 1. Write `docs/squad/handoff/<ID>.md` from `docs/squad/templates/handoff.md`.
-2. Mark `BUILD <ID>` completed (the hook refuses without a handoff or with failing tests).
+2. Ask the lead to mark `BUILD <ID>` DONE on the board (`docs/squad/TASKS.md`); the board gate refuses it without a handoff or with failing tests.
 3. Message QA: "<ID> <name> is ready for QA. Handoff: docs/squad/handoff/<ID>.md". Then continue with your next task.
 
 When QA files a bug: reproduce it, write a failing regression test, fix the root cause, fill in "Fix" in the bug
-file, set `STATUS: FIXED`, mark `BUG <ID>-Bnn` completed and ask QA to retest. If you think it is not a bug,
+file, set `STATUS: FIXED`, ask the lead to mark `BUG <ID>-Bnn` DONE on the board and ask QA to retest. If you think it is not a bug,
 explain why to QA and the lead.

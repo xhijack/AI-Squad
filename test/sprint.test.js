@@ -28,7 +28,7 @@ after(() => { try { execFileSync('tmux', ['-L', config.tmuxSocket, 'kill-server'
 
 test('choosing Squad Sprint scaffolds the pack, team ids and hooks', async () => {
   await floors.createFloor({ name: 'Shop', directory: { mode: 'new', path: proj }, workflow: 'squad-sprint', git: { qualityGate: 'npm test -- --run' }, team: TEAM });
-  for (const f of ['.claude/squad/config.sh', '.claude/hooks/task-completed.cjs', '.claude/hooks/teammate-idle.cjs', '.claude/hooks/squad-lib.cjs', '.claude/commands/sprint.md',
+  for (const f of ['.claude/squad/config.sh', '.claude/hooks/task-completed.cjs', '.claude/hooks/teammate-idle.cjs', '.claude/hooks/board-gate.cjs', '.claude/hooks/squad-lib.cjs', '.claude/commands/sprint.md',
     'docs/squad/PLAN.md', 'docs/squad/TASKS.md', 'docs/squad/QUESTIONS.md', 'docs/squad/templates/RELEASE.md', 'docs/squad/templates/bug.md', 'docs/squad/qa/.gitkeep']) assert.ok(fs.existsSync(path.join(proj, f)), f);
   assert.ok(fs.statSync(path.join(proj, '.claude/hooks/task-completed.cjs')).mode & 0o100, 'hook is executable');
   const cfg = sprint.readConfig(proj);
@@ -45,6 +45,8 @@ test('choosing Squad Sprint scaffolds the pack, team ids and hooks', async () =>
   assert.equal(settings.hooks.TaskCompleted.length, 1);
   assert.equal(settings.hooks.TeammateIdle.length, 1);
   assert.deepEqual([settings.hooks.TaskCompleted[0].hooks[0].command, settings.hooks.TaskCompleted[0].hooks[0].args], ['node', ['${CLAUDE_PROJECT_DIR}/.claude/hooks/task-completed.cjs']]);
+  assert.equal(settings.hooks.PostToolUse.find((g) => JSON.stringify(g).includes('board-gate.cjs')).matcher, 'Edit|Write|MultiEdit|Bash');
+  assert.equal(settings.hooks.PreToolUse, undefined);
 });
 
 test('older bash gate entries are replaced by the Node hooks', () => {
@@ -110,6 +112,46 @@ test('TaskCompleted gate: handoff, bug status, QA report and open bugs', () => {
   assert.equal(hook('task-completed.cjs', { task_subject: 'Something else' }).status, 0);
 });
 
+test('board gate: rows newly marked DONE on TASKS.md (by any tool) must pass the gate, or are put back', () => {
+  const board = path.join(proj, 'docs/squad/TASKS.md');
+  const gate = (tool_name) => spawnSync(process.execPath, [path.join(proj, '.claude/hooks/board-gate.cjs')], { input: JSON.stringify({ tool_name, tool_input: {} }), env: { ...process.env, CLAUDE_PROJECT_DIR: proj }, encoding: 'utf8' });
+  const snap = path.join(proj, '.git/aisquad-board-snapshot.md');
+  fs.writeFileSync(path.join(proj, '.claude/squad/config.sh'), read(proj, '.claude/squad/config.sh').replace(/^TEST_CMD=.*$/m, 'TEST_CMD="true"'));
+  write(proj, 'docs/squad/bugs/M02-B01.md', 'STATUS: OPEN\nOWNER: dev-two\n');
+  fs.rmSync(path.join(proj, 'docs/squad/qa/M02.md'), { force: true });
+  const start = read(proj, 'docs/squad/TASKS.md');
+  fs.writeFileSync(snap, start);                                     // last accepted board
+  assert.equal(gate('Bash').status, 0, 'unchanged board');
+  // like the haiku lead: sed in Bash marks BUILD M02 (handoff + green tests) and QA M02 (no report) DONE
+  fs.writeFileSync(board, start.replace('| BUILD M02 Cart | dev-two | BUILD M01 | IN_PROGRESS |', '| BUILD M02 Cart | dev-two | BUILD M01 | DONE |').replace('| QA M02 Cart | quinn-qa | BUILD M02 | TODO |', '| QA M02 Cart | quinn-qa | BUILD M02 | DONE |'));
+  let r = gate('Bash');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /put back[\s\S]*QA M02 Cart: Quality gate: no QA report/);
+  assert.doesNotMatch(r.stderr, /BUILD M02/);
+  let now = read(proj, 'docs/squad/TASKS.md');
+  assert.match(now, /\| BUILD M02 Cart \| dev-two \| BUILD M01 \| DONE \|/, 'the passing row stays DONE');
+  assert.match(now, /\| QA M02 Cart \| quinn-qa \| BUILD M02 \| TODO \|/, 'the failing row is put back');
+  assert.equal(read(proj, '.git/aisquad-board-snapshot.md'), now, 'accepted board remembered');
+  // a new DONE row for an open bug is set to TODO; rows already DONE are not checked again
+  fs.writeFileSync(board, now.replace('| BUG M02-B01 Total wrong | dev-two | — | OPEN |', '| BUG M02-B01 Total wrong | dev-two | — | OPEN |\n| BUG M02-B02 Rounding | dev-two | — | DONE |'));
+  write(proj, 'docs/squad/bugs/M02-B02.md', 'STATUS: OPEN\nOWNER: dev-two\n');
+  r = gate('Edit');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /BUG M02-B02 Rounding: Quality gate: set 'STATUS: FIXED'/);
+  assert.doesNotMatch(r.stderr, /BUILD M02|QA M01/);
+  assert.match(read(proj, 'docs/squad/TASKS.md'), /\| BUG M02-B02 Rounding \| dev-two \| — \| TODO \|/);
+  // without a snapshot the committed board is the baseline; not a gated task: accepted
+  fs.rmSync(snap);
+  const committed = execFileSync('git', ['-C', proj, 'show', 'HEAD:docs/squad/TASKS.md'], { encoding: 'utf8' });
+  fs.writeFileSync(board, `${committed}| Write the docs | dev-one | — | DONE |\n`);
+  assert.equal(gate('Write').status, 0, 'only BUILD / BUG / QA rows are gated');
+  fs.rmSync(path.join(proj, 'docs/squad/bugs/M02-B02.md'));
+  fs.writeFileSync(board, start);
+  fs.rmSync(snap, { force: true });
+  write(proj, 'docs/squad/bugs/M02-B01.md', 'STATUS: FIXED\nOWNER: dev-two\n');   // state the next tests expect
+  write(proj, 'docs/squad/qa/M02.md', 'STATUS: PASS\n');
+});
+
 test('TeammateIdle: QA held for untested handoffs, developers for their open bugs, released after 3 nudges', () => {
   let r = hook('teammate-idle.cjs', { teammate_name: 'quinn-qa' });
   assert.equal(r.status, 2);
@@ -166,4 +208,20 @@ test('a closed sprint is merged by the server and the next sprint starts in a fr
   tm.stopSession(tm.sessionName('shop', 'lina-sprint-lead'));
   squad.invalidate();
   assert.deepEqual(await squad.mergeTick({ checkMemory: false }), [], 'handled once');
+});
+
+test('the next sprint waits until the lead has finished its turn', async () => {
+  const hooks = await import('../server/events.js');
+  const floorsNow = [{ id: 'shop', path: proj, agentIds: ['lina-sprint-lead'] }];
+  fs.writeFileSync(paths.runtime(), JSON.stringify({ nextSprint: { shop: { sprint: 3, lead: 'lina-sprint-lead', since: Date.now() } } }));
+  hooks.ingest({ event: 'PreToolUse', agent: 'shop/lina-sprint-lead', payload: { tool_name: 'SendMessage', tool_input: { to: 'dev-one' } } }, floorsNow);
+  squad.invalidate();
+  assert.equal(await squad.startNextSprint('shop'), null, 'lead still working: wait');
+  assert.equal(tm.isRunning(tm.sessionName('shop', 'lina-sprint-lead')), false);
+  hooks.ingest({ event: 'Stop', agent: 'shop/lina-sprint-lead', payload: {} }, floorsNow);
+  squad.invalidate();
+  assert.deepEqual(await squad.startNextSprint('shop'), { sprint: 3, lead: 'lina-sprint-lead' });
+  assert.ok(tm.isRunning(tm.sessionName('shop', 'lina-sprint-lead')));
+  assert.equal(await squad.startNextSprint('shop'), null, 'only once');
+  tm.stopSession(tm.sessionName('shop', 'lina-sprint-lead'));
 });

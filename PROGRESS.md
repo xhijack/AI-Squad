@@ -1,6 +1,6 @@
 # Progress: The AI Squad MVP
 
-Status on 24 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions and the five Phase 1.2 items are built and committed, one Conventional Commit each. `npm test` runs 97 tests in 14 modules and all pass. During Phases 1.1 and 1.2 the tests were run one module at a time because of memory pressure on the machine.
+Status on 24 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions and the five Phase 1.2 items are built and committed, one Conventional Commit each. `npm test` runs 99 tests in 14 modules and all pass. During Phases 1.1 and 1.2 the tests were run one module at a time because of memory pressure on the machine.
 
 ## What works
 
@@ -90,6 +90,28 @@ Status on 24 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 de
    - **Also seen** (by design): the merge waited about a minute because the Watchdog pauses automatic merges while free RAM is below 1.5 GB.
    - **Cleanup**: all sessions were stopped. No Claude, tmux or server process is left, and this run's transcripts were removed from `~/.claude/projects`. The `playground/real/adder` repository is kept (gitignored) for inspection.
 
+## Phase 1.2 follow-up: TaskCompleted gate re-check (24 Oct 2026)
+
+Re-ran the same dogfood sprint three times with real Claude Code (haiku, same playground, same tiny task). The full flow completed every time in about 3 minutes: plan, build, QA, close, server squash merge after `node --test`, next sprint.
+
+**What we found**:
+- **The TaskCompleted gate cannot fire with Claude Code 2.1.310.** The TaskCreate/TaskUpdate tools don't exist in these sessions: the lead searched for them and got "Team task tools aren't in this session". The teammates are background agents, not a team with a shared task list. The board in `docs/squad/TASKS.md` is the only task list the squad has.
+- **A PreToolUse gate on Edit/Write wasn't enough.** In run 3 the haiku lead changed TASKS.md only through Bash (`sed -i`, `cat > … <<EOF`): 30 Bash calls, no Edit or Write. So that first board gate never ran.
+- **The next sprint cut the lead off mid-turn.** The server restarted the lead the moment the merge finished, while the lead was still sending close-out messages to its teammates. That killed one of our running event hooks (Claude Code logged a non-blocking hook error, exit 1).
+
+**Fixes**:
+- **Board gate** (`.claude/hooks/board-gate.cjs`, PostToolUse on Edit|Write|MultiEdit|Bash). After every change to TASKS.md, with any tool, rows newly marked DONE get the same checks as TaskCompleted. The check logic now lives in one shared function, `checkTask`. Failing rows are put back to their previous status (new rows go to TODO), and the agent gets the reason (exit 2). The last accepted board is kept in `.git/aisquad-board-snapshot.md`, so the working tree never gets dirty; the first baseline is the committed board. TaskCompleted stays for Claude Code versions that have the team task list.
+- **Next sprint waits for the lead.** After a sprint merge the server records the pending next sprint and restarts the lead only once its turn has ended (a later tick if needed).
+- **Templates v3.** The sprint templates now describe the board gate instead of requiring TaskCreate/TaskUpdate (mirroring the board in the task list is optional, when those tools exist).
+
+**Verified in run 4**:
+- The board gate ran on the real team's edits: `Edit accepted BUILD M01 Adder CLI` (handoff present, tests green), then `QA M01`.
+- The merge finished while the lead was still working; the next sprint started about a minute later, once the lead was idle.
+- There were no hook errors.
+- The team's work passed the gate, so nothing was put back. The put-back path is tested with the real hook script, not observed live.
+
+**Cost** (estimated from transcript usage): run 2 $0.074, run 3 $0.082, run 4 $0.085, about **$0.24** in total. All sessions were stopped, no Claude, tmux or server process is left, and the runs' transcripts were removed from `~/.claude/projects`.
+
 ## How to run
 
 ```
@@ -116,7 +138,8 @@ scripts/dev.sh stop
   - Feature branches merge once nobody on the Floor has open work.
 - **Squad Sprint**:
   - It relies on Claude Code's experimental Agent Teams. One real sprint has run, with haiku and a tiny task. Larger sprints and other models are untested.
-  - The TaskCompleted gate never ran in the dogfood, because the lead didn't use the task list. The template now requires it, but that change is not re-tested with real Claude Code.
+  - With Claude Code 2.1.310 the TaskCompleted hook never fires, because there is no team task list. The board gate on `docs/squad/TASKS.md` is the gate that actually runs; it was seen accepting real changes, and its refusal path is covered by tests.
+  - The board gate runs after the change and puts failing rows back. A determined agent could still mark a row DONE again in a later command; each time it is checked again and put back.
   - Teammates are background agents. Anything not covered by the allow rules in `.claude/settings.json` fails for them instead of prompting.
   - The Board shows `TASKS.md` as written by the lead. It does not read Claude Code's own task list.
 - **Libraries**: private git repositories need git credentials that work non-interactively (ssh key or credential helper); prompts are disabled.
@@ -134,5 +157,5 @@ scripts/dev.sh stop
   - Agents walk in straight lines (they can pass through furniture).
   - Name tags can overlap in tight layouts.
 - **Hook events**: they come from agents The AI Squad starts (via `--plugin-dir`). Other sessions send events only if the plugin is installed. Permission prompts reported by hooks are shown but answered on the Desk screen or in the terminal.
-- **License**: not decided. `package.json` says UNLICENSED, and the plugin validator warns that there is no LICENSE file.
+- **License**: UNLICENSED for now (owner decision). The plugin validator warns that there is no LICENSE file.
 - The real Claude Code smoke test recorded "trusted folder" for `playground/real/smoke` in Claude Code's own `~/.claude.json`. That directory no longer exists. The entry stays, as the owner asked.

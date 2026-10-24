@@ -15,7 +15,7 @@ import * as hooks from './events.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], sessions: r.sessions || {} }; };
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {} }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
 
@@ -454,6 +454,7 @@ export async function mergeTick({ checkMemory = true } = {}) {
     if (checkMemory && res.mem && res.mem.available < wd.LIMITS.freeRamBytes) return done;     // quality gates are heavy; wait for memory
     const snap = buildingSnapshot();
     for (const f of snap.floors) {
+      if (!f.missing) { const n = await startNextSprint(f.id); if (n) done.push({ branch: '', result: 'next-sprint', nextSprint: n }); }
       if (f.missing || !merge.approval(f.id)) continue;
       const entry = building.floorEntry(f.id);
       const { git, team, floor } = floors.readFloor(entry.path);
@@ -487,13 +488,29 @@ async function sprintTick(f, entry, git, team, floor) {
   if (result.result === 'merged' && floor.sprint.autoNext) {
     const lead = team.agents.find((a) => a.lead) || team.agents.find((a) => sprint.roleKind(a) === 'lead');
     if (lead) {
-      const next = Number(st.sprint) + 1;
-      stopAgent(f.id, lead.id);
-      await startAgent(f.id, lead.id, `/sprint ${next}`);
-      result.nextSprint = { sprint: next, lead: lead.id };
+      const r = loadRuntime();
+      r.nextSprint = { ...(r.nextSprint || {}), [f.id]: { sprint: Number(st.sprint) + 1, lead: lead.id, since: Date.now() } };
+      saveRuntime(r);
+      result.nextSprint = await startNextSprint(f.id) || { sprint: Number(st.sprint) + 1, lead: lead.id, waiting: true };
     }
   }
   return result;
+}
+
+// the lead usually still wraps up (messages to teammates, report) after the closing commit: restart it
+// for the next sprint only once its turn has ended, so it is never cut off mid-turn
+export async function startNextSprint(floorId) {
+  const r = loadRuntime();
+  const p = r.nextSprint?.[floorId];
+  if (!p) return null;
+  snapCache.at = 0;
+  const lead = buildingSnapshot().floors.find((x) => x.id === floorId)?.agents.find((a) => a.id === p.lead);
+  if (!lead || lead.state === 'working' || lead.state === 'waiting') return null;
+  delete r.nextSprint[floorId];
+  saveRuntime(r);
+  stopAgent(floorId, p.lead);
+  await startAgent(floorId, p.lead, `/sprint ${p.sprint}`);
+  return { sprint: p.sprint, lead: p.lead };
 }
 
 // ---------- plugin hook events ----------

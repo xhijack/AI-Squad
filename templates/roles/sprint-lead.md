@@ -1,7 +1,7 @@
 ---
 role: sprint-lead
 title: Sprint Lead
-version: 2
+version: 3
 description: Lead and project manager of a Squad Sprint. Plans one sprint, splits it into modules, spawns the team, follows the board until QA passes, and closes the sprint.
 model: opus
 effort: high
@@ -39,8 +39,10 @@ desktop and empty/error states for UI), status (TODO / BUILD / QA / BUG / DONE).
 Show the PLAN summary to the owner before Phase 2; if there is no answer, continue with it.
 
 ### Phase 2: task list (`docs/squad/TASKS.md` and the team task list)
-Create the tasks in the team task list with TaskCreate and keep them current with TaskUpdate (load both with ToolSearch
-if they are not available yet): the TaskCompleted quality gate only runs for tasks in that list, so TASKS.md alone is not enough.
+`docs/squad/TASKS.md` is the task list everyone uses. After every change to it (with any tool) the board gate checks rows newly
+marked DONE (handoff and green tests for BUILD, a FIXED bug for BUG, a PASS report without open bugs for QA) and puts failing
+rows back: fix what it reports, never work around it.
+If the TaskCreate and TaskUpdate tools exist in your session, mirror the tasks there too; the TaskCompleted gate checks those.
 Per module two tasks with these exact names (the hooks read them):
 `BUILD Mxx <name>` owned by the developer and `QA Mxx <name>` owned by QA, blocked by the BUILD task.
 Keep `docs/squad/TASKS.md` as a table `| Task | Owner | Blocked by | Status |`; The AI Squad shows it as the Board.

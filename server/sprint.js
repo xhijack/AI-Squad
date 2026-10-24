@@ -66,13 +66,18 @@ export function mergeSettings(root, { qualityGate = '' } = {}) {
   cur.permissions.deny = [...new Set([...(cur.permissions.deny || []), ...SQUAD_DENY])];
   cur.hooks = cur.hooks || {};
   // Node gate hooks (no jq). Entries for the older bash versions are replaced.
-  const add = (event, base, timeout, statusMessage) => {
+  const add = (event, base, timeout, statusMessage, matcher) => {
     const list = (cur.hooks[event] || []).filter((g) => !JSON.stringify(g).includes(`.claude/hooks/${base}.sh`));
-    if (!JSON.stringify(list).includes(`${base}.cjs`)) list.push({ hooks: [{ type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/.claude/hooks/${base}.cjs`], timeout, ...(statusMessage ? { statusMessage } : {}) }] });
+    if (!JSON.stringify(list).includes(`${base}.cjs`)) list.push({ ...(matcher ? { matcher } : {}), hooks: [{ type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/.claude/hooks/${base}.cjs`], timeout, ...(statusMessage ? { statusMessage } : {}) }] });
     cur.hooks[event] = list;
   };
   add('TaskCompleted', 'task-completed', 900, 'Squad Sprint: checking the quality gate...');
   add('TeammateIdle', 'teammate-idle', 30);
+  // the board in TASKS.md is the task list when Claude Code has no team task tools, and agents edit it with
+  // any tool (sed in Bash included): check it after every change
+  if (cur.hooks.PreToolUse) cur.hooks.PreToolUse = cur.hooks.PreToolUse.filter((g) => !JSON.stringify(g).includes('board-gate.cjs'));
+  if (cur.hooks.PreToolUse && !cur.hooks.PreToolUse.length) delete cur.hooks.PreToolUse;
+  add('PostToolUse', 'board-gate', 900, 'Squad Sprint: checking the board...', 'Edit|Write|MultiEdit|Bash');
   writeJson(p, cur);
   return true;
 }

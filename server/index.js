@@ -32,5 +32,5 @@ setInterval(() => { flushPending().catch(() => {}); }, 3000).unref();
 setTimeout(() => { try { watchdogTick(); } catch { /* next tick */ } }, 5000).unref();
 setInterval(() => { try { watchdogTick(); } catch (e) { console.error('[watchdog]', e.message); } }, 60000).unref();
 setInterval(() => {
-  mergeTick().then((done) => { for (const m of done) console.log(`[merge] ${m.branch}: ${m.result}${m.reason ? ` (${m.reason})` : ''}`); }, (e) => console.error('[merge]', e.message));
+  mergeTick().then((done) => { for (const m of done) console.log(`[merge] ${m.branch || 'sprint'}: ${m.result}${m.reason ? ` (${m.reason})` : ''}`); }, (e) => console.error('[merge]', e.message));
 }, 60000).unref();
