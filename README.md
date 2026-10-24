@@ -64,11 +64,7 @@ On a Desk: **Start** opens `claude --agent <id>` in tmux session `aisquad-<floor
 
 ### Role Templates and overrides
 
-Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json`:
-
-```json
-{ "libraries": [{ "name": "team", "path": "/path/to/templates" }] }
-```
+Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json` as a directory (`"path"`) or a git repository (`"url"`).
 
 Every saved change is a new version. An agent keeps the version it was created with until you choose **Update**, **Keep current** or **Detach** (a standalone copy) on its Desk, after reviewing the diff.
 
@@ -79,6 +75,24 @@ Every saved change is a new version. An agent keeps the version it was created w
 | rules | appended; template rules always apply |
 | permissions | may only be stricter (extra denies; allows must already be allowed by the template) |
 | prompt | appended below the template prompt |
+
+Git libraries are cloned into `~/.aisquad/libraries/<name>` and pulled when you press **Pull** in the editor (**Role Templates → Libraries**); the commit is shown as the library version. Any template can be copied into the local library to change it.
+
+```json
+{ "libraries": [{ "name": "team", "url": "git@github.com:org/roles.git", "ref": "main", "subdir": "roles" }] }
+```
+
+### Merges
+
+Merges are done by The AI Squad server, never by an agent (decision D3). The policy lives in `git.json` (merge policy, squash or merge commit, quality gate, push policy); the one-time approval per Floor is stored on this machine in `~/.aisquad/approvals.json`, never in the repo.
+
+For each branch with finished work (an agent's branch once its task is done and it is idle; feature branches once nobody has open work; a closed sprint branch) the server merges in a temporary worktree, runs the quality gate on the merged result, and refuses on conflicts, a red gate or a missing gate. Then it fast-forwards the main branch, pushes only when the push policy allows, and logs the attempt in `~/.aisquad/merges/<floor>.jsonl`. Failures appear in Attention. **Floor Settings → Merges** shows the policy, branches ready to merge (with **Merge now**) and the last merges. Automatic merges pause while free RAM is below the Watchdog limit.
+
+### Squad Sprint
+
+Choosing the Squad Sprint workflow scaffolds the optional pack into the project (existing files are never overwritten): `.claude/squad/config.sh` (sprint number, test command, team ids kept in sync with `team.json`), the `TaskCompleted` and `TeammateIdle` gate hooks (merged into `.claude/settings.json`), a `/sprint` command, and the `docs/squad` board (PLAN, TASKS, QUESTIONS, handoff, qa, bugs and templates including RELEASE). Use the **Sprint Lead**, **Sprint Developer** and **Sprint QA** templates (the wizard's **+ Squad Sprint team** adds them). The hooks need `jq`.
+
+The Board tab reads `docs/squad/TASKS.md`. A sprint is closed when `sprint-<N>` has `docs/squad/sprint-<N>/RELEASE.md`, the closing commit `docs(squad): close sprint <N>` and a final QA report with `STATUS: PASS`, and the working tree is clean. The server then merges `sprint-<N>`; with **start the next sprint automatically** on, the lead gets a fresh session that runs `/sprint <N+1>`.
 
 ### Edit Mode
 
@@ -105,7 +119,10 @@ Checked every minute and shown in the Lobby:
 ~/.aisquad/roles/<role>.md                 local Role Template library (+ .history/ for old versions)
 ~/.aisquad/libraries.json                  optional extra template libraries
 ~/.aisquad/pin                             local PIN (0600)
-~/.aisquad/runtime.json                    work given to agents (for stall detection)
+~/.aisquad/runtime.json                    work given to agents, how each session was started
+~/.aisquad/approvals.json                  one-time auto-merge approval per Floor
+~/.aisquad/merges/<floor>.jsonl            merge log
+~/.aisquad/libraries/<name>/               clones of git template libraries
 ~/.aisquad/attachments/                    files attached to tasks (outside every repo)
 ```
 
