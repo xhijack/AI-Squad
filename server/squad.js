@@ -14,7 +14,7 @@ import * as merge from './merge.js';
 import * as sprint from './sprint.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [] }; };
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], sessions: r.sessions || {} }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
 
@@ -29,6 +29,25 @@ function setWork(floorId, agentId, item) {
   saveRuntime(r);
 }
 export function clearWork(floorId, agentId) { setWork(floorId, agentId, null); }
+const sessionInfo = (floorId, agentId) => loadRuntime().sessions[workKey(floorId, agentId)] || null;
+function setSessionInfo(floorId, agentId, info) {
+  const r = loadRuntime();
+  if (info) r.sessions[workKey(floorId, agentId)] = info; else delete r.sessions[workKey(floorId, agentId)];
+  saveRuntime(r);
+}
+
+// configured model (team.json) vs the model the session was started with vs the model seen in the transcript
+export function modelReport(eff, running, started, status) {
+  const configured = eff?.model || '';
+  const observed = status?.model || '';
+  const fam = tx.modelFamily(observed);
+  const checkable = configured && configured !== 'inherit';
+  return {
+    configured, observed, observedAt: status?.modelTs || 0, startedWith: running && started ? started.model : null,
+    mismatch: !!(checkable && fam && fam !== configured),
+    restartNeeded: !!(running && started && started.model && (started.model !== configured || started.effort !== eff?.effort)),
+  };
+}
 
 // ---------- caches ----------
 const statusCache = new Map();           // file -> { key, value }
@@ -73,7 +92,7 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
       // the screen often cuts long questions; the transcript has the full text
       dialog.question = st.ask.questions.map((q) => (q.header ? `[${q.header}] ` : '') + q.question).join('\n\n');
     }
-    return { agent: a, session: name, running, state, dialog, status: st, lastTs: st?.lastTs || 0, work: w || null, screen };
+    return { agent: a, session: name, running, state, dialog, status: st, lastTs: st?.lastTs || 0, work: w || null, screen, started: sessionInfo(entry.id, a.id) };
   });
 }
 
@@ -85,6 +104,7 @@ function agentView(root, l, cost) {
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, activity: l.status?.activity || '', lastTs: l.lastTs, session: l.session,
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
+    models: modelReport(eff, l.running, l.started, l.status),
   };
 }
 
@@ -256,7 +276,7 @@ export function deskDetail(floorId, agentId) {
   return {
     floorId, ...agentView(entry.path, l, cost), agent, effective, error,
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
-    events: (l.status?.events || []).slice(-80).reverse(), model: effective?.model, modelId: l.status?.model || '',
+    events: (l.status?.events || []).slice(-80).reverse(),
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
     attach: `tmux attach -t ${l.session}`,
   };
@@ -280,9 +300,12 @@ export async function startAgent(floorId, agentId, task = '') {
   floors.generate(entry.path);                          // agent file is current before Claude reads it
   const eff = floors.effectiveOf(entry.path, agent);
   // model comes from the agent file; effort is not read from agent files for the main session, so pass it
-  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs: ['--effort', eff.effort] });
+  // pass model and effort explicitly so the configured values win over defaults and earlier sessions
+  const extraArgs = [...(eff.model && eff.model !== 'inherit' ? ['--model', eff.model] : []), '--effort', eff.effort];
+  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
+  if (!r.already) setSessionInfo(floorId, agentId, { startedAt: Date.now(), model: eff.model, effort: eff.effort });
   invalidate();
   return { ok: true, session: name, already: !!r.already, queued: !!task };
 }
@@ -291,6 +314,7 @@ export function stopAgent(floorId, agentId) {
   const { name } = locate(floorId, agentId);
   pending.delete(workKey(floorId, agentId));
   const r = tm.stopSession(name);
+  setSessionInfo(floorId, agentId, null);
   invalidate();
   return r;
 }

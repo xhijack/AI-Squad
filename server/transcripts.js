@@ -74,7 +74,7 @@ function toolDetail(name, input = {}, root = '') {
 // status of one transcript: last activity, unanswered AskUserQuestion, last end of turn, events
 export function transcriptStatus(file, root = '', { events = false } = {}) {
   const recs = tailRecords(file);
-  let lastTs = 0, activity = '', kind = 'idle', ask = null, lastEndTurn = 0, model = '', turnOpen = false;
+  let lastTs = 0, activity = '', kind = 'idle', ask = null, lastEndTurn = 0, model = '', modelTs = 0, turnOpen = false;
   const evs = [];
   const messages = [];
   for (const r of recs) {
@@ -83,7 +83,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
     const msg = r.message || {};
     const content = Array.isArray(msg.content) ? msg.content : [];
     if (r.type === 'assistant') {
-      if (msg.model && msg.model !== '<synthetic>') model = msg.model;
+      if (msg.model && msg.model !== '<synthetic>') { model = msg.model; modelTs = ts; }
       turnOpen = msg.stop_reason !== 'end_turn';
       if (!turnOpen) lastEndTurn = ts;
       for (const c of content) {
@@ -107,7 +107,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
       }
     }
   }
-  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, model, messages, ...(events ? { events: evs.slice(-120) } : {}) };
+  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, model, modelTs, messages, ...(events ? { events: evs.slice(-120) } : {}) };
 }
 
 // ---------- session ownership ----------
@@ -209,6 +209,9 @@ export const PRICES = {
   'claude-haiku-5-5': { in: 0.1, out: 0.5, cr: 0.01 },
   'claude-fable-5-1': { in: 6, out: 30, cr: 0.3 },
 };
+// opus / sonnet / haiku / fable from an alias or a full model id ('' when unknown)
+export const modelFamily = (m) => (String(m || '').toLowerCase().match(/opus|sonnet|haiku|fable/) || [''])[0];
+
 export function priceFor(model) {
   if (PRICES[model]) return PRICES[model];
   for (const fam of ['opus', 'sonnet', 'haiku', 'fable']) if (String(model).includes(fam)) return Object.entries(PRICES).find(([k]) => k.includes(fam))[1];

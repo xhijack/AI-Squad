@@ -71,7 +71,7 @@ function agentRow(floorId, a, selected) {
     <div class="agent">${avatar(a)}<div class="meta"><div class="name"><span class="ellipsis">${esc(a.displayName)}</span>${a.lead ? '<span class="badge lead">lead</span>' : ''}${ts.updateAvailable ? '<span class="badge update">update</span>' : ''}</div>
       <div class="act"><i class="dot ${a.state}"></i> ${esc(STATE_TEXT[a.state])}${a.activity && a.state !== 'stopped' ? ` · ${esc(a.activity)}` : ''}</div></div>
       ${a.running ? `<button class="small ghost" data-act="stop" data-agent="${a.id}" title="Stop">Stop</button>` : `<button class="small ok" data-act="start" data-agent="${a.id}" title="Start">Start</button>`}</div>
-    <div class="chips"><span class="chip">${esc(a.title)}</span><span class="chip">${esc(a.model)}</span>${a.costToday ? `<span class="chip">today ${money(a.costToday)}</span>` : ''}${a.work && !a.work.doneAt ? '<span class="chip info">has work</span>' : a.work?.doneAt ? '<span class="chip ok">work done</span>' : ''}</div></div>`;
+    <div class="chips"><span class="chip">${esc(a.title)}</span><span class="chip">${esc(a.model)}</span>${a.models?.mismatch ? `<span class="chip warn" title="Last reply from ${esc(a.models.observed)}">model differs</span>` : a.models?.restartNeeded ? '<span class="chip info">restart to apply</span>' : ''}${a.costToday ? `<span class="chip">today ${money(a.costToday)}</span>` : ''}${a.work && !a.work.doneAt ? '<span class="chip info">has work</span>' : a.work?.doneAt ? '<span class="chip ok">work done</span>' : ''}</div></div>`;
 }
 
 function feedHtml(feed) {
@@ -132,13 +132,19 @@ export function deskSections(floor, d, { locked = false } = {}) {
   const ts = d.templateStatus || {};
   const o = d.agent.overrides || {};
   const dialog = d.dialog ? (floor.attentionItems || []).filter((a) => a.agentId === d.id) : [];
+  const mr = d.models || {};
+  const modelWarn = mr.mismatch
+    ? `<div class="att budget warn" style="margin-top:10px"><div class="where">Model differs</div><div class="q">Configured: <b>${esc(mr.configured)}</b>. The latest reply (${ago(mr.observedAt)}) came from <b>${esc(mr.observed)}</b>.${mr.restartNeeded ? ' The session was started with an older configuration.' : d.running ? ' The model may have been switched inside the session, or a lead spawned this agent with another model.' : ''}</div>
+      ${d.running ? `<button class="small" data-act="restart" data-agent="${d.id}">Restart with ${esc(mr.configured)}</button>` : '<div class="note">The next start uses the configured model.</div>'}</div>`
+    : mr.restartNeeded ? `<div class="att stall" style="margin-top:10px"><div class="where">Restart to apply</div><div class="q">This session started with ${esc(mr.startedWith)}; the agent is now configured for ${esc(mr.configured)} (${esc(e.effort)} effort).</div>
+      <button class="small" data-act="restart" data-agent="${d.id}">Restart</button></div>` : '';
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
-      <div class="note">${esc(e.title || '')} · ${esc(d.model || '')}${d.modelId ? ` (${esc(d.modelId)})` : ''}</div>
+      <div class="note">${esc(e.title || '')} · model ${esc(mr.configured || '?')}${mr.observed ? ` · last reply from <span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span>` : ''}</div>
       <div class="note"><i class="dot ${d.state}"></i> ${esc(STATE_TEXT[d.state])}${d.activity && d.state !== 'stopped' ? ` · ${esc(d.activity)}` : ''}</div></div>
       ${d.running ? `<button class="ghost" data-act="stop" data-agent="${d.id}">Stop</button>` : `<button class="ok" data-act="start" data-agent="${d.id}">Start</button>`}</div>`;
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">Update available</div><div class="q">${esc(e.title)} template v${d.agent.role.version} → v${ts.latestVersion}</div>
       <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">View diff</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">Update</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">Keep current</button></div></div>` : '';
-  const overview = `${head}${update}
+  const overview = `${head}${modelWarn}${update}
     ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
     <div class="section"><div class="sectionHead"><h3 class="grow">Send task</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">Queued: ${esc(d.pending.slice(0, 120))}</div>` : ''}
@@ -150,7 +156,8 @@ export function deskSections(floor, d, { locked = false } = {}) {
   const profile = `<dl class="kv">
       <dt>Agent id</dt><dd><code>${esc(d.id)}</code></dd>
       <dt>Role</dt><dd>${esc(e.title)} ${d.agent.role.detached ? '<span class="badge">detached copy</span>' : `<span class="badge">${esc(d.agent.role.template)}@${d.agent.role.version}</span>`}${ts.keptVersion ? ` <span class="note">kept (v${ts.keptVersion} available)</span>` : ''}</dd>
-      <dt>Model</dt><dd>${esc(e.model)}${o.model ? ' <span class="note">(override)</span>' : ''}</dd>
+      <dt>Model (configured)</dt><dd>${esc(e.model)}${o.model ? ' <span class="note">(override)</span>' : ''}${mr.startedWith ? ` <span class="note">· session started with ${esc(mr.startedWith)}</span>` : ''}</dd>
+      <dt>Model (observed)</dt><dd>${mr.observed ? `<span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span> <span class="note">${ago(mr.observedAt)}${mr.mismatch ? ' · differs from the configured model' : ''}</span>` : '<span class="note">no replies yet</span>'}</dd>
       <dt>Effort</dt><dd>${esc(e.effort)}${o.effort ? ' <span class="note">(override)</span>' : ''}</dd>
       <dt>Skills</dt><dd>${pills((e.skills || []).filter((s) => !(o.skills?.add || []).includes(s)))}${pills(o.skills?.add || [], 'add')}${pills(o.skills?.remove || [], 'rm')}${(e.skills || []).length || (o.skills?.remove || []).length ? '' : '<span class="note">none</span>'}</dd>
       <dt>Tools</dt><dd>${pills(e.tools || []) || '<span class="note">all</span>'}</dd>

@@ -25,6 +25,7 @@ function draw() {
   }
   process.stdout.write(s);
 }
+if (log) fs.appendFileSync(log, `START ${process.argv.slice(2).join(' ')}\n`);
 process.stdin.setRawMode(true);
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (k) => {

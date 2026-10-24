@@ -70,6 +70,7 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   const item = await wait(async () => (await call('GET', '/api/building')).body.attention.find((a) => a.agentId === 'budi-dev'));
   assert.ok(item, 'trust dialog reaches Attention');
   assert.equal(item.kind, 'permission');
+  assert.match(fs.readFileSync(LOG, 'utf8'), /START --agent budi-dev --disallowedTools .* --model sonnet --effort medium/, 'configured model and effort passed explicitly');
   assert.equal(item.answerable, true);
   const b = (await call('GET', '/api/building')).body;
   assert.equal(b.floors[0].agents.find((a) => a.id === 'budi-dev').state, 'waiting');
@@ -86,6 +87,7 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   assert.match(desk.screen, /Build the catalogue page/);
   assert.equal(desk.attach, 'tmux attach -t aisquad-acme-budi-dev');
   assert.match(desk.work.text, /catalogue/);
+  assert.deepEqual([desk.models.configured, desk.models.startedWith, desk.models.restartNeeded], ['sonnet', 'sonnet', false]);
 });
 
 test('send a task to a running agent, then stop it', async () => {

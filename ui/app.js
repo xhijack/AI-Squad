@@ -277,6 +277,12 @@ addEventListener('resize', () => { for (const id of ['left', 'right', 'sheetTabs
 // ---------- actions (event delegation on data-act / data-href / data-tab) ----------
 const actions = Object.assign(ctx.actions, {
   async start(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`, {}); toast('Starting agent…'); },
+  async restart(el) {
+    if (!confirm('Restart this agent? Its Claude Code session is closed and a fresh one starts with the configured model and effort.')) return;
+    await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {});
+    await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`, {});
+    toast('Agent restarted');
+  },
   async stop(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {}); toast('Agent stopped'); },
   async 'start-all'() { for (const a of state.floor.agents.filter((x) => !x.running)) await api('POST', `/api/floors/${state.route.floorId}/agents/${a.id}/start`, {}); toast('Starting the team…'); },
   async 'stop-all'() {

@@ -65,3 +65,20 @@ test('the watchdog tick logs each new alert once', async () => {
   squad.watchdogTick((l) => lines.push(l));
   assert.equal(lines.filter((l) => l.includes('budget')).length, 1);
 });
+
+test('configured and observed models are reported separately; a mismatch is flagged', async () => {
+  const { modelReport } = squad;
+  const eff = { model: 'opus', effort: 'high' };
+  assert.deepEqual(modelReport(eff, false, null, { model: 'claude-opus-5-5', modelTs: 5 }), { configured: 'opus', observed: 'claude-opus-5-5', observedAt: 5, startedWith: null, mismatch: false, restartNeeded: false });
+  assert.equal(modelReport(eff, false, null, { model: 'claude-sonnet-5-5' }).mismatch, true);
+  assert.equal(modelReport({ model: 'inherit', effort: 'low' }, false, null, { model: 'claude-sonnet-5-5' }).mismatch, false, 'inherit cannot differ');
+  assert.equal(modelReport(eff, true, { model: 'sonnet', effort: 'high' }, null).restartNeeded, true);
+  assert.equal(modelReport(eff, true, { model: 'opus', effort: 'medium' }, null).restartNeeded, true, 'effort changed too');
+  assert.equal(modelReport(eff, false, { model: 'sonnet' }, null).restartNeeded, false, 'stopped agents start fresh anyway');
+
+  // Budi's transcript (from the budget test) replies with sonnet; an opus override makes it differ
+  const budi = () => fresh().floors[0].agents.find((a) => a.id === 'budi-dev').models;
+  assert.deepEqual([budi().configured, budi().observed, budi().mismatch], ['sonnet', 'claude-sonnet-5-5', false]);
+  floors.updateAgent(proj, 'budi-dev', { overrides: { model: 'opus' } });
+  assert.deepEqual([budi().configured, budi().mismatch], ['opus', true]);
+});
