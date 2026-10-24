@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Headless Chrome screenshots over the DevTools protocol (no dependencies).
 //   node scripts/shot.js shots.json      shots: [{ url, out, w, h, pin?, wait?, eval? }]
+//   SHOT_OFFLINE=1 blocks every host but 127.0.0.1 (checks the UI works without a CDN)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,7 +10,7 @@ import path from 'node:path';
 const shots = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'aisquad-chrome-'));
 const chrome = spawn('google-chrome', ['--headless=new', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check',
-  '--disable-extensions', '--hide-scrollbars', '--mute-audio', `--user-data-dir=${profile}`, '--remote-debugging-port=0', 'about:blank'], { stdio: 'ignore' });
+  '--disable-extensions', '--hide-scrollbars', '--mute-audio', ...(process.env.SHOT_OFFLINE ? ['--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1'] : []), `--user-data-dir=${profile}`, '--remote-debugging-port=0', 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let port;

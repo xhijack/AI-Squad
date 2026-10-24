@@ -189,3 +189,14 @@ test('off loopback every API read needs the PIN; on loopback reads stay open', a
   } finally { open.close(); }
   assert.equal((await fetch(base + '/api/building')).status, 200, 'loopback server unchanged');
 });
+
+test('three.js is served locally from ui/vendor and cached', async () => {
+  const html = await (await fetch(base + '/')).text();
+  assert.match(html, /"three": "\.\/vendor\/three\/three\.module\.js"/);
+  assert.doesNotMatch(html, /cdn\.jsdelivr|unpkg/);
+  for (const p of ['/vendor/three/three.module.js', '/vendor/three/addons/controls/OrbitControls.js', '/vendor/three/addons/renderers/CSS2DRenderer.js', '/vendor/three/addons/geometries/RoundedBoxGeometry.js']) {
+    const r = await fetch(base + p);
+    assert.equal(r.status, 200, p);
+    assert.match(r.headers.get('cache-control'), /immutable/);
+  }
+});

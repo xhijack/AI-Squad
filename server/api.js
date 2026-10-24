@@ -39,6 +39,11 @@ function serveStatic(res, pathname) {
   const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const file = path.resolve(UI, rel);
   if (!file.startsWith(UI + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
+  if (rel.startsWith('vendor/')) {                         // vendored libraries never change: let the browser cache them
+    res.writeHead(200, { 'content-type': `${TYPES[path.extname(file)] || 'application/octet-stream'}; charset=utf-8`, 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff' });
+    res.end(fs.readFileSync(file));
+    return true;
+  }
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] || 'application/octet-stream');
   return true;
 }
