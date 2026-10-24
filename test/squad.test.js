@@ -82,3 +82,15 @@ test('configured and observed models are reported separately; a mismatch is flag
   floors.updateAgent(proj, 'budi-dev', { overrides: { model: 'opus' } });
   assert.deepEqual([budi().configured, budi().mismatch], ['opus', true]);
 });
+
+test('code window around the latest edit; never outside the repo or from .env', () => {
+  fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'src/add.js'), Array.from({ length: 40 }, (_, i) => (i === 20 ? 'export const add = (a, b) => a + b;' : `// line ${i + 1}`)).join('\n'));
+  const w = squad.codeWindow(proj, { type: 'code', path: 'src/add.js', text: 'export const add = (a, b) => a + b;', ts: 1 });
+  assert.equal(w.firstLine, 16);
+  assert.equal(w.hlFrom, 21);
+  assert.equal(w.text.split('\n').length, 18);
+  fs.writeFileSync(path.join(proj, '.env'), 'SECRET=1');
+  assert.equal(squad.codeWindow(proj, { type: 'code', path: '.env', text: 'SECRET=1' }).firstLine, undefined);
+  assert.equal(squad.codeWindow(proj, { type: 'code', path: '../../etc/passwd', text: 'root' }).firstLine, undefined);
+});

@@ -114,6 +114,7 @@ function agentView(root, l, cost) {
     state: l.state, running: l.running, activity: l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
     models: modelReport(eff, l.running, l.started, l.status),
+    peek: l.status?.peek ? codeWindow(root, (({ id, ...rest }) => rest)(l.status.peek)) : null, kindOf: sprint.roleKind(l.agent),
   };
 }
 
@@ -272,6 +273,7 @@ export function floorDetail(id) {
   return { ...sum, floor: s.cfg.floor, git: s.cfg.git, team, brief: readBriefSafe(entry.path), feed: feed.slice(0, 60), messages: messages.slice(0, 40),
     attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null,
     board: s.cfg.floor.workflow === 'squad-sprint' ? sprint.boardData(entry.path) : null,
+    shots: listShots(entry.path),
     merge: { approved: !!merge.approval(entry.id), approvedAt: merge.approval(entry.id)?.approvedAt || null, running: merge.isMerging(entry.id), last: merge.mergeLog(entry.id, 5) } };
 }
 
@@ -499,4 +501,49 @@ export function ingestEvent(body) {
   const key = hooks.ingest(body, floorsNow);
   if (key) snapCache.at = 0;
   return { ok: true, matched: key };
+}
+
+// ---------- QA screenshots (shown on QA monitors) ----------
+export const SHOT_DIRS = ['docs/squad/qa/screenshots', 'docs/qa/screenshots', '.playwright-mcp', 'test-results', 'screenshots'];
+const SHOT_EXT = /\.(png|jpe?g|webp)$/i;
+export function listShots(root, n = 8) {
+  const out = [];
+  const walk = (dir, depth) => {
+    for (const f of (() => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } })()) {
+      const full = path.join(dir, f.name);
+      if (f.isDirectory() && depth < 3) walk(full, depth + 1);
+      else if (f.isFile() && SHOT_EXT.test(f.name)) { const st = statOf(full); if (st) out.push({ file: path.relative(root, full), mtime: st.mtimeMs, size: st.size }); }
+    }
+  };
+  for (const d of SHOT_DIRS) walk(path.join(root, d), 0);
+  return out.sort((a, b) => b.mtime - a.mtime).slice(0, n);
+}
+export function shotFile(floorId, rel) {
+  const root = building.floorEntry(floorId).path;
+  const full = path.resolve(root, String(rel || ''));
+  const ok = SHOT_EXT.test(full) && SHOT_DIRS.some((d) => full.startsWith(path.join(root, d) + path.sep));
+  const st = ok && statOf(full);
+  if (!st || !st.isFile() || st.size > 8e6) throw notFound('Screenshot not found');
+  return full;
+}
+
+// the editor on the monitor: a window of the real file around the latest edit (repo files only, never .env)
+const windowCache = new Map();
+export function codeWindow(root, peek) {
+  if (peek.type !== 'code' || !peek.path) return peek;
+  const file = path.resolve(root, peek.path);
+  if (!file.startsWith(root + path.sep) || /(^|\/)\.env/.test(file)) return peek;
+  const st = statOf(file);
+  if (!st || !st.isFile() || st.size > 400000) return peek;
+  const key = `${file}:${st.mtimeMs}:${peek.ts}`;
+  if (windowCache.has(key)) return { ...peek, ...windowCache.get(key) };
+  let text; try { text = fs.readFileSync(file, 'utf8'); } catch { return peek; }
+  const lines = text.split('\n');
+  const needle = String(peek.text || '').split('\n').find((l) => l.trim().length > 3) || '';
+  const at = Math.max(0, needle ? lines.findIndex((l) => l.includes(needle.trim())) : 0);
+  const start = Math.max(0, at - 5);
+  const win = { text: lines.slice(start, start + 18).map((l) => l.slice(0, 160)).join('\n'), firstLine: start + 1, hlFrom: at + 1, hlTo: at + Math.min(12, String(peek.text || '').split('\n').length) };
+  windowCache.set(key, win);
+  if (windowCache.size > 200) windowCache.delete(windowCache.keys().next().value);
+  return { ...peek, ...win };
 }

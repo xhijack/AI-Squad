@@ -52,6 +52,14 @@ export async function getJson(url) {
   return r.json();
 }
 
+// image with the PIN header (servers off loopback lock reads); null on any failure
+export async function fetchImage(url) {
+  try {
+    const r = await fetch(url, { headers: pin ? { 'x-aisquad-pin': pin } : {} });
+    return r.ok ? await createImageBitmap(await r.blob()) : null;
+  } catch { return null; }
+}
+
 export async function api(method, url, body, { raw = null, headers = {}, quiet401 = false } = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const init = { method, headers: { 'x-aisquad-pin': pin, ...headers } };

@@ -58,6 +58,18 @@ test('create a Floor through the wizard API and read it back', async () => {
   assert.equal((await call('GET', '/api/floors/nope')).status, 404);
 });
 
+test('QA screenshots are listed and served only from screenshot folders', async () => {
+  fs.mkdirSync(path.join(proj, 'docs/squad/qa/screenshots'), { recursive: true });
+  fs.writeFileSync(path.join(proj, 'docs/squad/qa/screenshots/M01-cart-390.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  fs.writeFileSync(path.join(proj, 'secret.png'), 'x');
+  const d = (await call('GET', '/api/floors/acme')).body;
+  assert.deepEqual(d.shots.map((x) => x.file), ['docs/squad/qa/screenshots/M01-cart-390.png']);
+  const r = await fetch(`${base}/api/floors/acme/shot?f=${encodeURIComponent(d.shots[0].file)}`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /image\/png/);
+  for (const bad of ['secret.png', 'docs/squad/qa/screenshots/../../../secret.png', '.git/config', '/etc/passwd']) assert.equal((await fetch(`${base}/api/floors/acme/shot?f=${encodeURIComponent(bad)}`)).status, 404, bad);
+});
+
 test('bad input is a 400 with a message', async () => {
   const r = await call('POST', '/api/floors/acme/agents', { displayName: 'X', template: 'qa-engineer', overrides: { permissions: { allow: ['Bash(*)'] } } });
   assert.equal(r.status, 400);

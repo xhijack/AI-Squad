@@ -127,7 +127,7 @@ export function floorSections(f, deskAgentId = null) {
 }
 
 // ---------- Desk ----------
-export function deskSections(floor, d, { locked = false } = {}) {
+export function deskSections(floor, d, { locked = false, screen: routeScreen = false } = {}) {
   if (locked) return [{ id: 'desk', title: 'Desk', side: 'right', html: `<div class="empty">This desk shows the agent's live screen and transcript, so it needs the local PIN.</div><button class="gold" data-act="unlock">Enter PIN</button>` }];
   if (!d) return [{ id: 'desk', title: 'Desk', side: 'right', html: '<div class="empty">Loading…</div>' }];
   const e = d.effective || {};
@@ -143,7 +143,8 @@ export function deskSections(floor, d, { locked = false } = {}) {
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
       <div class="note">${esc(e.title || '')} · model ${esc(mr.configured || '?')}${mr.observed ? ` · last reply from <span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span>` : ''}</div>
       <div class="note"><i class="dot ${d.state}"></i> ${esc(STATE_TEXT[d.state])}${d.activity && d.state !== 'stopped' ? ` · ${esc(d.activity)}` : ''}</div></div>
-      ${d.running ? `<button class="ghost" data-act="stop" data-agent="${d.id}">Stop</button>` : `<button class="ok" data-act="start" data-agent="${d.id}">Start</button>`}</div>`;
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">${d.running ? `<button class="ghost" data-act="stop" data-agent="${d.id}">Stop</button>` : `<button class="ok" data-act="start" data-agent="${d.id}">Start</button>`}
+      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a></div></div>`;
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">Update available</div><div class="q">${esc(e.title)} template v${d.agent.role.version} → v${ts.latestVersion}</div>
       <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">View diff</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">Update</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">Keep current</button></div></div>` : '';
   const overview = `${head}${modelWarn}${update}

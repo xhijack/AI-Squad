@@ -16,7 +16,7 @@ const run = promisify(execFile);
 
 export const LAYOUTS = ['rows', 'pods', 'circle', 'open-space'];
 export const WORKFLOWS = ['free-team', 'squad-sprint'];
-export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'server-rack'];
+export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack'];
 export const DESK_DEVICES = ['laptop', 'dual-monitor'];
 export const BRANCH_STRATEGIES = ['agent-branches', 'feature-branches', 'trunk'];
 export const PUSH_POLICIES = ['never', 'after-merge', 'agents-may-push'];
@@ -38,6 +38,9 @@ export function defaultDevices() {
     { id: 'plant-2', type: 'plant', x: -6.2, z: 3.7, ry: 0 },
     { id: 'printer-1', type: 'printer', x: 6.0, z: 3.4, ry: Math.PI },
     { id: 'coffee-1', type: 'coffee', x: 4.6, z: -3.8, ry: 0 },
+    // lounge corner: idle agents go here (sofa, coffee, whiteboard)
+    { id: 'rug-1', type: 'rug', x: 5.9, z: 1.1, ry: 0 },
+    { id: 'sofa-1', type: 'sofa', x: 6.4, z: 1.1, ry: -1.571 },
   ];
 }
 

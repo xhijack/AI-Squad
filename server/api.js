@@ -14,7 +14,7 @@ import { setApproval } from './merge.js';
 import { recentEvents as hooksRecent } from './events.js';
 
 const UI = path.join(ROOT, 'ui');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json' };
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
@@ -75,6 +75,7 @@ const routes = [
   ['POST', /^\/api\/floors$/, async (p, b) => { const r = await floors.createFloor(b); squad.invalidate(); return { ok: true, id: r.entry.id, number: r.entry.number }; }, { pin: true }],
   ['POST', /^\/api\/floors\/adopt$/, (p, b) => { const e = floors.adoptFloor(String(b.path || ''), { number: b.number }); squad.invalidate(); return { ok: true, id: e.id }; }, { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)$/, ([id]) => squad.floorDetail(id)],
+  ['GET', /^\/api\/floors\/([\w-]+)\/shot$/, ([id], b, req) => ({ __file: squad.shotFile(id, new URL(req.url, 'http://x').searchParams.get('f')) })],
   ['PATCH', /^\/api\/floors\/([\w-]+)$/, ([id], b) => {
     if (b.number !== undefined) building.setFloorNumber(id, b.number);
     floors.updateFloorConfig(floorRoot(id), b);
@@ -128,7 +129,9 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (!m) continue;
         if ((opts.pin || lockReads) && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
-        return send(res, 200, await handler(m.slice(1), body, req));
+        const out = await handler(m.slice(1), body, req);
+        if (out && out.__file) return send(res, 200, fs.readFileSync(out.__file), TYPES[path.extname(out.__file).toLowerCase()] || 'image/jpeg');
+        return send(res, 200, out);
       }
       send(res, 404, { error: 'Not found' });
     } catch (e) {

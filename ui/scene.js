@@ -5,6 +5,8 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildChibi, toon, HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
 import { FW, FD, FH, floorY, desksFor } from './layout.js';
+import { makeScreen, drawScreen } from './screens.js';
+import { loungeSpots, updateLife, deskHome, seatRoot } from './life.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mat = (c, o = {}) => new THREE.MeshToonMaterial({ color: c, ...o });
@@ -57,12 +59,16 @@ const DEVICE_BUILDERS = {
     box(2, .55, .25, mat('#5b6694'), 0, .7, -.33, g, .08);
     for (const x of [-.95, .95]) box(.22, .45, .9, mat('#4b5580'), x, .55, 0, g, .08);
   },
+  rug(g) {
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, .02, 40), mat('#c86b5a')); r.position.y = .012; r.receiveShadow = true; g.add(r);
+    const i = new THREE.Mesh(new THREE.CylinderGeometry(.95, .95, .022, 40), mat('#e9a178')); i.position.y = .014; g.add(i);
+  },
   'server-rack'(g) {
     box(.8, 2, .8, mat('#2b2f3a'), 0, 1, 0, g, .02);
     for (let i = 0; i < 7; i++) box(.66, .16, .02, basic(i % 3 ? '#3a4058' : '#4fc38a'), 0, .35 + i * .23, .41, g, 0);
   },
 };
-export const DEVICE_LABELS = { plant: 'Plant', whiteboard: 'Whiteboard', printer: 'Printer', coffee: 'Coffee machine', bookshelf: 'Bookshelf', sofa: 'Sofa', 'server-rack': 'Server rack' };
+export const DEVICE_LABELS = { plant: 'Plant', whiteboard: 'Whiteboard', printer: 'Printer', coffee: 'Coffee machine', bookshelf: 'Bookshelf', sofa: 'Sofa', rug: 'Lounge rug', 'server-rack': 'Server rack' };
 
 function buildDevice(d) {
   const g = new THREE.Group();
@@ -83,43 +89,53 @@ function buildStation(agent, desk, accent) {
   box(1.5, .07, .75, mat('#e9dcc2'), 0, .92, .62, g);                         // desk
   for (const x of [-.65, .65]) box(.07, .9, .6, mat('#b59a74'), x, .46, .62, g, .02);
   const screens = [];
-  const screenMat = basic('#1d2338');
+  // a screen = dark bezel + canvas plane facing the chair (-z); clicking it opens the over-the-shoulder view
+  const screen = (x, y, z, w, h, rx, ry, part) => {
+    const grp = new THREE.Group(); grp.position.set(x, y, z); grp.rotation.set(rx, ry, 0); g.add(grp);
+    box(w, h, .03, mat('#2b2f3a'), 0, 0, 0, grp, .01);
+    const S = makeScreen(w - .04, h - .04);
+    S.mesh.position.z = -.017; S.mesh.rotation.y = Math.PI; S.mesh.userData.screen = true; S.part = part;
+    grp.add(S.mesh); screens.push(S);
+  };
   if (desk.device === 'dual-monitor') {
-    for (const x of [-.36, .36]) {
-      box(.05, .22, .05, mat('#3b4258'), x, 1.06, .78, g, .01);
-      const s = box(.62, .38, .04, screenMat, x, 1.3, .8, g, .01); s.rotation.y = -x * .5; screens.push(s);
-    }
+    for (const x of [-.36, .36]) box(.05, .22, .05, mat('#3b4258'), x, 1.06, .8, g, .01);
+    screen(-.36, 1.3, .8, .62, .38, 0, .5 * .36, 'main');
+    screen(.36, 1.3, .8, .62, .38, 0, -.5 * .36, 'side');
     box(.5, .02, .18, mat('#3b4258'), 0, .965, .45, g, .005);                 // keyboard
   } else {
-    box(.62, .04, .42, mat('#3b4258'), 0, .975, .55, g, .01);                   // laptop
-    const s = box(.6, .38, .03, screenMat, 0, 1.17, .76, g, .01); s.rotation.x = -.25; screens.push(s);
+    box(.62, .04, .42, mat('#3b4258'), 0, .975, .55, g, .01);                   // laptop base
+    screen(0, 1.17, .76, .6, .38, .25, 0, 'main');
   }
   box(.6, .1, .6, mat(accent), 0, .55, -.05, g);                                // chair
   box(.6, .6, .1, mat(accent), 0, .9, -.33, g);
   const rig = buildChibi(lookFor(agent.appearance));
-  g.add(rig.root);
-  const st = { id: agent.id, g, rig, screenMat, state: agent.state, blinkAt: Math.random() * 3, phase: Math.random() * 6 };
-  st.label = label('', 'alabel', g, 0, 2.15, 0);
-  st.bubble = label('?', 'bubble', g, .5, 2.75, 0);
-  st.zzz = label('z<small>z</small>', 'zzz', g, .45, 2.0, .2);
+  const human = new THREE.Group();                                              // the agent itself: can leave the desk
+  human.userData.agent = agent.id;
+  human.add(rig.root);
+  const st = { id: agent.id, g, human, rig, screens, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6 };
+  st.label = label('', 'alabel', human, 0, 2.15, 0);
+  st.bubble = label('?', 'bubble', human, .5, 2.75, 0);
+  st.zzz = label('z<small>z</small>', 'zzz', human, .45, 2.0, .2);
+  deskHome(st);
   updateStation(st, agent);
   return st;
 }
 
 function updateStation(st, a) {
-  st.state = a.state;
-  const html = `<i class="dot ${a.state}"></i>${esc(String(a.displayName || '').split(' - ')[0])}`;
+  st.state = a.state; st.data = a;
+  const first = esc(String(a.displayName || '').split(' - ')[0]);
+  const html = `<i class="dot ${a.state}"></i>${first}${st.away ? ` <span class="away">· ${esc(st.away)}</span>` : ''}`;
   if (st.label.element.innerHTML !== html) st.label.element.innerHTML = html;
-  st.label.element.title = `${a.displayName}: ${a.activity || a.state}`;
+  st.label.element.title = `${a.displayName}: ${st.away || a.activity || a.state}`;
   st.bubble.visible = a.state === 'waiting' && st.labelsOn;
-  st.zzz.visible = a.state === 'stopped' && st.labelsOn;
+  st.zzz.visible = a.state === 'stopped' && st.labelsOn && !st.away;
   st.label.visible = !!st.labelsOn;
 }
 
-function poseStation(st, t) {
+function poseDesk(st, t) {
   const R = st.rig, p = t + st.phase;
   resetPose(R); blink(st, t);
-  R.root.position.set(0, .62 - HIP_H + .06, 0);
+  seatRoot(R);
   sitLegs(R);
   if (st.state === 'waiting') {
     arms(R, [-.4, .2, -.6], [-.2, -2.7 - Math.sin(p * 6) * .25, -.3]);         // raise a hand
@@ -136,8 +152,6 @@ function poseStation(st, t) {
     arms(R, [-.45, .15, -.9], [-.45, -.15, -.9]);
     R.head.rotation.set(-.08, Math.sin(p * .5) * .3, 0);
   }
-  const lit = st.state === 'working' ? '#5fd3a0' : st.state === 'waiting' ? '#ef5d6b' : st.state === 'idle' ? '#7d8ab8' : '#1d2338';
-  if (st.litHex !== lit) { st.screenMat.color.set(lit); st.litHex = lit; }
 }
 
 // ---------- floors ----------
@@ -247,7 +261,9 @@ export class BuildingScene {
     const o = { g, stations: new Map(), devices: new Map(), sig: sigOf(f) };
     for (const d of f.devices || []) { const dg = buildDevice(d); g.add(dg); o.devices.set(d.id, dg); }
     const desks = desksFor(f.agents || [], f.desks, f.layout);
-    (f.agents || []).forEach((a, i) => { const st = buildStation(a, desks[i], accent); g.add(st.g); o.stations.set(a.id, st); });
+    (f.agents || []).forEach((a, i) => { const st = buildStation(a, desks[i], accent); g.add(st.g, st.human); o.stations.set(a.id, st); });
+    o.spots = loungeSpots(f.devices || []);
+    o.occupied = new Map();
     if (f.missing) label('Directory not found', 'alabel warnlabel', g, 0, 1.4, 0);
     else if (!(f.agents || []).length) o.empty = label('No agents yet. Add them in the Team panel.', 'alabel', g, 0, 1.3, 0);
     o.label = label('', 'flabel', g, 0, .05, FD / 2 + .35);
@@ -262,6 +278,8 @@ export class BuildingScene {
   // ---------- view & camera ----------
   setView(view) {
     this.view = view;
+    const fov = view.screen ? 24 : 40;                     // tighter lens for the over-the-shoulder view
+    if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     this.applyVisibility();
     this.flyTo(this.poseFor(view));
   }
@@ -326,6 +344,16 @@ export class BuildingScene {
     }
     const o = this.floors.get(v.floorId);
     const y = o ? o.g.position.y : 0;
+    if (v.mode === 'desk' && v.screen && o && o.stations.get(v.agentId)) {
+      // over the shoulder: behind the chair, looking at the main screen
+      const st = o.stations.get(v.agentId);
+      st.g.updateWorldMatrix(true, false);
+      const main = st.screens.find((x) => x.part === 'main') || st.screens[0];
+      const target = main.mesh.getWorldPosition(new THREE.Vector3());
+      const mx = main.mesh.parent.position.x;
+      const pos = st.g.localToWorld(new THREE.Vector3(mx - .15, 1.85, -.05));   // at the agent's eyes; its head is hidden in this view
+      return { pos, target };
+    }
     if (v.mode === 'desk' && o && o.stations.get(v.agentId)) {
       const st = o.stations.get(v.agentId);
       const p = new THREE.Vector3(); st.g.getWorldPosition(p);
@@ -357,6 +385,10 @@ export class BuildingScene {
     this.renderer.setSize(w, h);
     this.labels.setSize(w, h);
   }
+
+  // live tmux screen for the over-the-shoulder view (null = draw from transcript data)
+  setLiveText(text) { this.liveText = text; }
+  setShot(floorId, shot) { const o = this.floors.get(floorId); if (o) o.shot = shot; }
 
   // ---------- Edit Mode helpers ----------
   objectFor(floorId, sel) {
@@ -394,7 +426,8 @@ export class BuildingScene {
     el.addEventListener('pointerup', (e) => {
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
       const hit = this.pick(e);
-      if (hit.agent) this.handlers.onPickAgent?.(hit.floorId, hit.agent);
+      if (hit.agent && hit.screen) this.handlers.onPickScreen?.(hit.floorId, hit.agent);
+      else if (hit.agent) this.handlers.onPickAgent?.(hit.floorId, hit.agent);
       else if (hit.floorId) this.handlers.onPickFloor?.(hit.floorId);
     });
   }
@@ -409,8 +442,9 @@ export class BuildingScene {
     const hits = this.ray.intersectObjects(this.building.children.filter((c) => c.visible && c.userData.floorId), true);
     for (const h of hits) {
       let o = h.object, agent = null, device = null;
+      const screen = !!h.object.userData.screen;
       while (o && !o.userData.floorId) { if (o.userData.agent) agent = o.userData.agent; if (o.userData.device) device = o.userData.device; o = o.parent; }
-      if (o) return { floorId: o.userData.floorId, agent, device, point: h.point };
+      if (o) return { floorId: o.userData.floorId, agent, device, screen, point: h.point };
     }
     return {};
   }
@@ -424,7 +458,25 @@ export class BuildingScene {
       this.controls.target.lerpVectors(a.fromT, a.target, k);
       if (u >= 1) this.camAnim = null;
     }
-    for (const o of this.floors.values()) if (o.g.visible) for (const st of o.stations.values()) poseStation(st, t);
+    const dt = Math.min(.1, t - (this.lastT ?? t)); this.lastT = t;
+    const v = this.view;
+    for (const [fid, o] of this.floors) {
+      if (!o.g.visible) continue;
+      const near = v.mode !== 'lobby' && v.floorId === fid;
+      for (const st of o.stations.values()) {
+        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, poseDesk: () => { deskHome(st); poseDesk(st, t); } });
+        if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
+        const focus = near && v.screen && v.agentId === st.id;
+        st.rig.head.visible = !focus;                     // over the shoulder: the big chibi head would hide the screen
+        st.label.visible = !!st.labelsOn && !focus;
+        for (const S of st.screens) {
+          if (t < S.next && !(focus && S.part === 'main')) continue;
+          const every = drawScreen(S, st.data, { t, away, part: S.part, stopped: st.state === 'stopped', live: focus && S.part === 'main' && this.liveText != null ? this.liveText : null, shot: o.shot || null });
+          S.tex.needsUpdate = true;
+          S.next = t + (near ? every : Math.max(every, 6)) + Math.random() * .05;
+        }
+      }
+    }
     if (this.ring?.visible && this.selection) {
       const obj = this.objectFor(this.selection.floorId, this.selection);
       if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;

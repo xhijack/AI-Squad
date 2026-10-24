@@ -48,3 +48,10 @@ export function desksFor(agents, desks = [], layout = 'rows') {
     return d ? { ...d } : { agent: a.id, ...spots[i], device: 'laptop' };
   });
 }
+
+// lounge corner per preset (sofa + rug; coffee machine and whiteboard stay where they are)
+export function loungeFor(layout) {
+  if (layout === 'circle') return { rug: { x: 5.2, z: -2.9, ry: 0 }, sofa: { x: 5.2, z: -3.5, ry: 0 } };
+  if (layout === 'pods') return { rug: { x: -5.6, z: 1.6, ry: 0 }, sofa: { x: -6.2, z: 1.6, ry: 1.571 } };
+  return { rug: { x: 5.9, z: 1.1, ry: 0 }, sofa: { x: 6.4, z: 1.1, ry: -1.571 } };
+}

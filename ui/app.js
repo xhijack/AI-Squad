@@ -1,6 +1,6 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage } from './lib.js';
 import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -11,11 +11,11 @@ const isPhone = () => matchMedia('(max-width: 760px)').matches;
 
 // ---------- routing ----------
 function parseRoute() {
-  const m = location.hash.match(/^#\/floor\/([\w-]+)(?:\/desk\/([\w-]+))?/);
+  const m = location.hash.match(/^#\/floor\/([\w-]+)(?:\/desk\/([\w-]+)(\/screen)?)?/);
   if (!m) return { mode: 'lobby' };
-  return m[2] ? { mode: 'desk', floorId: m[1], agentId: m[2] } : { mode: 'floor', floorId: m[1] };
+  return m[2] ? { mode: 'desk', floorId: m[1], agentId: m[2], ...(m[3] ? { screen: true } : {}) } : { mode: 'floor', floorId: m[1] };
 }
-const routeKey = (r) => [r.mode, r.floorId, r.agentId].join('/');
+const routeKey = (r) => [r.mode, r.floorId, r.agentId, r.screen ? 'screen' : ''].join('/');
 
 addEventListener('hashchange', () => {
   const prev = state.route;
@@ -33,6 +33,7 @@ addEventListener('hashchange', () => {
 const scene = new BuildingScene($('scene'), {
   onPickFloor: (id) => { if (state.route.mode === 'lobby' && !ctx.editing) location.hash = `#/floor/${id}`; },
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
+  onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
 });
 ctx.scene = scene;
 window.aisquad = ctx;                     // handy in the console and for scripted UI checks
@@ -129,7 +130,7 @@ function sectionsFor() {
   const fs = floorSections(f, route.agentId);
   if (route.mode === 'floor') return fs;
   // desk: the team list stays on the left, the desk takes the right side
-  return [...fs.filter((s) => s.side === 'left'), ...deskSections(f, desk, { locked: state.locked })];
+  return [...fs.filter((s) => s.side === 'left'), ...deskSections(f, desk, { locked: state.locked, screen: !!route.screen })];
 }
 
 function tabsHtml(list, active, side) {
@@ -182,7 +183,7 @@ function layoutPanels(sections) {
   updateInsets();
 }
 
-let insetKey = '';
+let insetKey = '', shotKey = '';
 function updateInsets() {
   const phone = isPhone(), top = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top')) || 56;
   const insets = phone
@@ -234,6 +235,14 @@ function render() {
   const viewKey = routeKey(route) + (state.desk ? '' : '-');
   if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route }); }
 
+  // monitors: live tmux text in the over-the-shoulder view, latest QA screenshot on QA screens
+  scene.setLiveText(route.screen && state.desk?.running ? state.desk.screen : null);
+  const shot = state.floor?.shots?.[0];
+  if (state.floor && shot && shotKey !== `${state.floor.id}:${shot.file}:${shot.mtime}`) {
+    shotKey = `${state.floor.id}:${shot.file}:${shot.mtime}`;
+    const fid = state.floor.id;
+    fetchImage(`/api/floors/${fid}/shot?f=${encodeURIComponent(shot.file)}`).then((img) => img && scene.setShot(fid, { file: shot.file, img }));
+  }
   if (!ctx.editing) layoutPanels(lastSections = sectionsFor());
   ctx.afterRender?.();
 }
@@ -268,7 +277,8 @@ addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   if (!$('menu').hidden || !$('attPop').hidden) return closePopovers();
   if (ctx.editing) return;
-  if (state.route.mode === 'desk') location.hash = `#/floor/${state.route.floorId}`;
+  if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
+  else if (state.route.mode === 'desk') location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.mode === 'floor') location.hash = '#/';
 });
 $('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(updateInsets, 250); };

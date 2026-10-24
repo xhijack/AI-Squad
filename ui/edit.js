@@ -1,7 +1,7 @@
 // Edit Mode: drag desks and devices, rotate, add or remove devices, layout presets and appearance.
 // Everything is a draft previewed in 3D until "Save", which writes floor.json (and team.json for looks).
 import { $, esc, api, toast, avatar } from './lib.js';
-import { desksFor, presetSpots, FW, FD, LAYOUT_NAMES } from './layout.js';
+import { desksFor, presetSpots, loungeFor, FW, FD, LAYOUT_NAMES } from './layout.js';
 import { DEVICE_LABELS } from './scene.js';
 import { ctx } from './ctx.js';
 
@@ -64,6 +64,12 @@ function drawBar() {
     draft.layout = v;
     const spots = presetSpots(ctx.state.floor.agents.length, v);
     draft.desks = ctx.state.floor.agents.map((a, i) => ({ agent: a.id, ...spots[i], device: draft.desks.find((d) => d.agent === a.id)?.device || 'laptop' }));
+    // the lounge moves with the preset; it is added when the Floor has none
+    const lounge = loungeFor(v);
+    for (const type of ['rug', 'sofa']) {
+      const dev = draft.devices.find((d) => d.type === type);
+      if (dev) Object.assign(dev, lounge[type]); else draft.devices.push({ id: `${type}-1`, type, ...lounge[type] });
+    }
     rebuild();
   };
   $('eAddDev').onclick = () => {
@@ -96,7 +102,7 @@ function drawPanel() {
         <input type="color" data-k="skin" value="${esc(ap.skin || '#f6d2b0')}" title="Skin" aria-label="Skin colour"><label class="inline" style="margin:0"><input type="checkbox" data-k="glasses" ${ap.glasses ? 'checked' : ''}> Glasses</label></div></div>`;
   }).join('');
   ctx.layoutPanels([{ id: 'edit', title: 'Edit Mode', side: 'left', html: `<div class="sectionHead"><h3 class="grow">Edit Mode</h3></div>
-    <p class="note" style="margin-top:0">Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks.</p>
+    <p class="note" style="margin-top:0">Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks and the lounge. Idle agents walk to the sofa, coffee machine, whiteboard and bookshelf.</p>
     <div class="sectionHead" style="margin-top:14px"><h3 class="grow">Appearance</h3></div>${rows || '<div class="empty">No agents on this Floor.</div>'}` }]);
   const panel = ctx.isPhone() ? $('sheetBody') : $('left');
   panel.querySelectorAll('[data-look]').forEach((card) => card.addEventListener('input', (e) => {

@@ -175,6 +175,7 @@ b.ok { color: var(--ok); }
 .flabel .w { color: var(--ok); } .flabel .q { color: var(--bad); font-weight: 700; } .flabel .m { color: var(--muted); }
 .lobbylabel { cursor: default; }
 .rooflabel { background: var(--accent); color: #1b1607; border-radius: 8px; padding: 4px 12px; font-size: 14px; white-space: nowrap; }
+.alabel .away { color: #f2b544; font-weight: 400; }
 .alabel { background: rgba(15, 19, 32, .82); border-radius: 6px; padding: 1px 7px; font-size: 11px; white-space: nowrap; display: flex; gap: 5px; align-items: center; }
 .warnlabel { color: var(--bad); }
 .bubble { font-size: 18px; font-weight: 900; color: #fff; background: var(--bad); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; animation: pulse 1s infinite; }

@@ -105,3 +105,18 @@ test('a finished turn is closed; a new task opens it again', () => {
   fs.writeFileSync(f, jsonl([...done, { type: 'user', timestamp: iso(500), message: { content: 'Next task' } }]));
   assert.equal(tx.transcriptStatus(f).turnOpen, true);
 });
+
+test('peek: the code being written, or the last command with its output', () => {
+  const f = path.join(root, 'peek.jsonl');
+  fs.writeFileSync(f, jsonl([
+    { type: 'assistant', timestamp: iso(4000), message: { content: [{ type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: path.join(proj, 'src/add.js'), content: 'export const add = (a, b) => a + b;\n' } }] } },
+  ]));
+  assert.deepEqual((({ type, path: p, text }) => ({ type, p, text }))(tx.transcriptStatus(f, proj).peek), { type: 'code', p: 'src/add.js', text: 'export const add = (a, b) => a + b;\n' });
+  fs.appendFileSync(f, jsonl([
+    { type: 'assistant', timestamp: iso(3000), message: { content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: { command: 'node --test' } }] } },
+    { type: 'user', timestamp: iso(2000), message: { content: [{ type: 'tool_result', tool_use_id: 'b1', content: [{ type: 'text', text: '# pass 3\n# fail 0' }] }] } },
+    { type: 'assistant', timestamp: iso(1000), message: { content: [{ type: 'tool_use', id: 'r1', name: 'Read', input: { file_path: 'x' } }] } },
+  ]));
+  const p = tx.transcriptStatus(f, proj).peek;
+  assert.deepEqual([p.type, p.command, p.output, p.error], ['terminal', 'node --test', '# pass 3\n# fail 0', false], 'reads do not replace the monitor');
+});

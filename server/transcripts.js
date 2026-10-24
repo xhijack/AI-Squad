@@ -71,12 +71,26 @@ function toolDetail(name, input = {}, root = '') {
   return clip(JSON.stringify(input), 300);
 }
 
+const resultText = (c) => (Array.isArray(c) ? c.map((x) => x.text || '').join('\n') : String(c ?? ''));
+
+// monitor content for a tool call: code being written or a terminal command (output added from its result)
+function peekOf(c, root, ts, kind) {
+  const i = c.input || {};
+  if (/^(Edit|MultiEdit|Write)$/.test(c.name) && i.file_path) {
+    const text = c.name === 'Write' ? i.content : c.name === 'Edit' ? i.new_string : (i.edits || []).map((e) => e.new_string).join('\n');
+    return { id: c.id, type: 'code', path: rel(root, i.file_path), text: clip(String(text ?? ''), 1500), ts, kind };
+  }
+  if (c.name === 'Bash') return { id: c.id, type: 'terminal', command: clip(String(i.command || ''), 400), text: '', output: '', ts, kind };
+  return null;
+}
+
 // status of one transcript: last activity, unanswered AskUserQuestion, last end of turn, events
 export function transcriptStatus(file, root = '', { events = false } = {}) {
   const recs = tailRecords(file);
   let lastTs = 0, activity = '', kind = 'idle', ask = null, lastEndTurn = 0, model = '', modelTs = 0, turnOpen = false;
   const evs = [];
   const messages = [];
+  let peek = null;                                   // what the agent's monitor shows: latest code or command (+ output)
   for (const r of recs) {
     const ts = tsOf(r); if (!ts) continue;
     if (ts > lastTs) lastTs = ts;
@@ -92,6 +106,8 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
           if (c.name === 'AskUserQuestion') ask = { id: c.id, ts, questions: (c.input?.questions || []).map((q) => ({ header: q.header || '', question: q.question || '', options: (q.options || []).map((o) => o.label) })) };
           if (c.name === 'SendMessage') { const m = c.input?.summary ?? c.input?.message; messages.push({ ts, to: String(c.input?.to || ''), text: oneLine(typeof m === 'string' ? m : JSON.stringify(m), 160) }); }
           if (events) evs.push({ ts, kind, title: activity, tool: c.name, detail: toolDetail(c.name, c.input, root) });
+          const pk = peekOf(c, root, ts, kind);
+          if (pk) peek = pk;
         } else if (c.type === 'text' && c.text?.trim()) {
           kind = 'think'; activity = `thinking: ${oneLine(c.text, 70)}`;
           if (events) evs.push({ ts, kind: 'think', title: 'says', detail: clip(c.text.trim(), 900) });
@@ -102,12 +118,13 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
       if (typeof msg.content === 'string' && events && !r.isMeta && !msg.content.startsWith('<')) evs.push({ ts, kind: 'task', title: 'task from owner', detail: clip(msg.content, 900) });
       for (const c of content) {
         if (c.type === 'tool_result' && ask && c.tool_use_id === ask.id) ask = null;
+        if (c.type === 'tool_result' && peek && c.tool_use_id === peek.id && peek.type === 'terminal') { peek.output = clip(resultText(c.content), 1500); peek.error = !!c.is_error; }
         if (events && c.type === 'tool_result' && c.is_error) evs.push({ ts, kind: 'error', title: 'tool error', detail: clip(Array.isArray(c.content) ? c.content.map((x) => x.text || '').join(' ') : c.content, 400) });
         if (events && c.type === 'text' && c.text && !c.text.startsWith('<')) evs.push({ ts, kind: 'task', title: 'task from owner', detail: clip(c.text, 900) });
       }
     }
   }
-  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, model, modelTs, messages, ...(events ? { events: evs.slice(-120) } : {}) };
+  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, model, modelTs, messages, peek, ...(events ? { events: evs.slice(-120) } : {}) };
 }
 
 // ---------- session ownership ----------
