@@ -10,6 +10,7 @@ import { effectiveAgent, renderAgentFile, cleanOverrides, permissionViolations, 
 import { lineDiff } from './util.js';
 import * as building from './building.js';
 import { setApproval } from './merge.js';
+import * as sprint from './sprint.js';
 
 const run = promisify(execFile);
 
@@ -52,6 +53,7 @@ export function cleanFloor(f = {}, prev = {}) {
     layout: LAYOUTS.includes(pick('layout')) ? pick('layout') : 'rows',
     accent: isHex(pick('accent')) ? pick('accent') : ACCENTS[0],
     budget: { usd: Math.max(0, Number(budget.usd) || 0), period: budget.period === 'day' ? 'day' : 'month' },
+    sprint: { autoNext: !!(pick('sprint') || {}).autoNext },
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
       agent: String(d.agent), x: num(d.x), z: num(d.z), ry: num(d.ry, 0, 7), device: DESK_DEVICES.includes(d.device) ? d.device : 'laptop' })),
     devices: (Array.isArray(pick('devices')) ? pick('devices') : defaultDevices()).filter((d) => d && DEVICE_TYPES.includes(d.type)).slice(0, 60).map((d, i) => ({
@@ -132,6 +134,7 @@ export function generate(root) {
   }
   for (const f of safeReaddir(lockDir(root))) if (f.endsWith('.md') && !used.has(f)) fs.rmSync(path.join(lockDir(root), f));
   writeBrief(root, floor, team);
+  if (sprint.hasPack(root)) sprint.updateTeamBlock(root, team.agents);
 }
 
 const TEAM_START = '<!-- aisquad:team:start -->', TEAM_END = '<!-- aisquad:team:end -->';
@@ -282,6 +285,7 @@ export function updateFloorConfig(root, input) {
   floor.desks = floor.desks.filter((d) => ids.has(d.agent));
   writeFloor(root, floor);
   if (input.git) { const g = cleanGit(input.git, cur.git); writeGit(root, g); applyAttribution(root, g); }
+  if (floor.workflow === 'squad-sprint' && !sprint.hasPack(root)) sprint.scaffold(root, { git: readFloor(root).git, agents: cur.team.agents });
   generate(root);
   return readFloor(root);
 }
@@ -336,6 +340,7 @@ export async function createFloor(input) {
   writeTeam(root, { agents });
   applyAttribution(root, git);
   writeBrief(root, floor, { agents: [] }, input.goal);   // brief first, generate() then fills the team table
+  if (floor.workflow === 'squad-sprint') sprint.scaffold(root, { git, agents });
   generate(root);
   const entry = building.registerFloor(root, { name, number });
   if (input.git?.autoMergeApproved) setApproval(entry.id, true);   // approval lives in ~/.aisquad, never in the repo

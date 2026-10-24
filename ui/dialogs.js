@@ -61,6 +61,7 @@ async function floorSettings() {
     <label>Goal summary</label><textarea name="goal" rows="3" maxlength="400">${esc(c.goal)}</textarea>
     <p class="note">The full brief lives in <code>AISQUAD.md</code> in the repository.</p>
     <label>Workflow</label>${segHtml('workflow', [['free-team', 'Free Team'], ['squad-sprint', 'Squad Sprint']], c.workflow)}
+    <label class="inline"><input type="checkbox" name="autoNext" ${c.sprint?.autoNext ? 'checked' : ''}> Squad Sprint: start the next sprint automatically (fresh lead session) once a closed sprint is merged</label>
     <div class="grid2"><div><label>Budget (USD, 0 = none)</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
       <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], c.budget.period)}</div></div>
     <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
@@ -77,7 +78,7 @@ async function floorSettings() {
     const v = (n) => form.elements[n].value;
     try {
       await api('PATCH', `/api/floors/${f.id}`, { name: v('name'), number: Number(v('number')), accent: v('accent'), goal: v('goal'), workflow: segValue(form, 'workflow'),
-        budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, git: readGit(form) });
+        budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked }, git: readGit(form) });
       closeModal(); toast('Floor saved'); ctx.refresh();
     } catch (e) { fail(e); }
   };
@@ -94,7 +95,11 @@ async function loadMerges(floorId, el) {
     + `. ${m.approval ? `Approved ${esc(new Date(m.approval.approvedAt).toLocaleString())}.` : 'Not approved on this machine yet.'}${m.running ? ' <b>A merge is running.</b>' : ''}`;
   const cands = m.candidates.map((c) => `<div class="row" style="margin-top:6px"><code class="grow ellipsis">${esc(c.branch)}</code>${c.lastResult ? `<span class="chip">${esc(RESULT_TEXT[c.lastResult])}</span>` : ''}<button type="button" class="small" data-merge="${esc(c.branch)}">Merge now</button></div>`).join('');
   const log = m.log.slice(0, 8).map((e) => `<li><b class="${e.result === 'merged' ? 'ok' : ''}">${esc(RESULT_TEXT[e.result] || e.result)}</b> <code>${esc(e.branch)}</code> · ${esc(new Date(e.ts).toLocaleString())} · ${esc(e.trigger)}${e.reason ? ` · ${esc(e.reason)}` : ''}${e.push ? ` · push ${e.push.ok ? 'ok' : 'failed'}` : ''}</li>`).join('');
-  el.innerHTML = `<p style="margin-top:0">${policy}</p>
+  const sp = m.sprint;
+  const CHECK = { branch: 'branch', release: 'RELEASE.md', closingCommit: 'closing commit', cleanTree: 'clean tree', qaPass: 'final QA PASS' };
+  const sprintHtml = sp ? `<p>Sprint ${esc(sp.sprint)} (<code>${esc(sp.branch)}</code>): ${sp.closed ? '<b class="ok">closed</b>, ready for the server to merge' : 'open'} ·
+    ${Object.entries(sp.checks).map(([k, ok]) => `${ok ? '✓' : '·'} ${CHECK[k]}`).join(', ')}${sp.autoNext ? ' · next sprint starts automatically' : ''}</p>` : '';
+  el.innerHTML = `<p style="margin-top:0">${policy}</p>${sprintHtml}
     <b>Ready to merge</b>${cands || '<div class="empty">No unmerged branches for this branch strategy.</div>'}
     <b style="display:block;margin-top:10px">Last merges</b>${log ? `<ul style="padding-left:18px;margin:4px 0">${log}</ul>` : '<div class="empty">None yet.</div>'}`;
   el.querySelectorAll('[data-merge]').forEach((b) => b.onclick = async () => {

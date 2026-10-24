@@ -85,13 +85,21 @@ function messagesHtml(msgs, team) {
   return `<ul class="feed">${msgs.map((m) => `<li><span class="k talk"></span><div class="grow"><div><b>${esc(m.fromName)}</b> → <b>${esc(name(m.to))}</b></div><div class="d">${esc(m.text)}</div><div class="t">${ago(m.ts)}</div></div></li>`).join('')}</ul>`;
 }
 
+const COLUMN_TEXT = { TODO: 'To do', IN_PROGRESS: 'In progress', REVIEW: 'Review', BLOCKED: 'Blocked / bugs', DONE: 'Done' };
 function boardHtml(f) {
-  const col = (title, items) => `<div class="card"><b>${title}</b> <span class="note">${items.length}</span>${items.map((a) => `<div class="card" style="margin-top:6px"><div class="row">${avatar(a)}<div class="grow"><div class="ellipsis"><b>${esc(a.displayName)}</b></div><div class="note">${esc(a.work?.text || '')}</div></div></div></div>`).join('') || '<div class="empty">Empty</div>'}</div>`;
-  const ag = f.agents;
-  return `<p class="note" style="margin-top:0">Squad Sprint board: work given to agents from The AI Squad.</p>
-    ${col('In progress', ag.filter((a) => a.work && !a.work.doneAt))}
-    ${col('Done, to review', ag.filter((a) => a.work?.doneAt))}
-    ${col('Free', ag.filter((a) => !a.work))}`;
+  const b = f.board;
+  if (!b || !b.pack) return '<div class="empty">The Squad Sprint pack is not set up on this Floor yet. Save the Floor settings with the Squad Sprint workflow to scaffold it.</div>';
+  const name = (id) => f.agents.find((a) => a.id === id)?.displayName || id;
+  const cols = Object.keys(COLUMN_TEXT).map((c) => {
+    const items = b.tasks.filter((t) => t.column === c);
+    return `<div class="card"><div class="row"><b class="grow">${COLUMN_TEXT[c]}</b><span class="note">${items.length}</span></div>${items.map((t) => `<div class="card" style="margin-top:6px"><div><b>${esc(t.task)}</b></div>
+      <div class="note">${esc(name(t.owner))}${t.blockedBy ? ` · after ${esc(t.blockedBy)}` : ''}${t.status && t.status.toUpperCase() !== c ? ` · ${esc(t.status)}` : ''}</div></div>`).join('') || '<div class="empty">Empty</div>'}</div>`;
+  }).join('');
+  return `<div class="chips" style="margin-top:0"><span class="chip info">Sprint ${esc(b.sprint)}</span><span class="chip">${b.tasks.length} tasks</span>
+      ${b.bugs.open.length ? `<span class="chip bad">${b.bugs.open.length} open bug${b.bugs.open.length === 1 ? '' : 's'}</span>` : ''}${b.bugs.fixed.length ? `<span class="chip warn">${b.bugs.fixed.length} to retest</span>` : ''}
+      <span class="chip ok">${b.qa.pass.length} QA pass</span>${b.questions ? `<span class="chip">${b.questions} questions</span>` : ''}</div>
+    <p class="note">From <code>docs/squad/TASKS.md</code>; the lead keeps it current.</p>
+    ${b.tasks.length ? cols : '<div class="empty">No tasks yet. Start the lead and run <code>/sprint</code> to plan the sprint.</div>'}`;
 }
 
 export function floorSections(f, deskAgentId = null) {

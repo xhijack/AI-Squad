@@ -11,6 +11,7 @@ import * as tx from './transcripts.js';
 import * as tm from './tmux.js';
 import * as wd from './watchdog.js';
 import * as merge from './merge.js';
+import * as sprint from './sprint.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
 const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [] }; };
@@ -237,6 +238,7 @@ export function floorDetail(id) {
   });
   return { ...sum, floor: s.cfg.floor, git: s.cfg.git, team, brief: readBriefSafe(entry.path), feed: feed.slice(0, 60), messages: messages.slice(0, 40),
     attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null,
+    board: s.cfg.floor.workflow === 'squad-sprint' ? sprint.boardData(entry.path) : null,
     merge: { approved: !!merge.approval(entry.id), approvedAt: merge.approval(entry.id)?.approvedAt || null, running: merge.isMerging(entry.id), last: merge.mergeLog(entry.id, 5) } };
 }
 
@@ -377,9 +379,11 @@ export function saveAttachment(floorId, filename, buf) {
 // ---------- auto-merge (D3) ----------
 export async function floorMerges(floorId) {
   const entry = building.floorEntry(floorId);
-  const { git, team } = floors.readFloor(entry.path);
+  const { git, team, floor } = floors.readFloor(entry.path);
+  const sprintMode = floor.workflow === 'squad-sprint';
   return { policy: git, approval: merge.approval(floorId), running: merge.isMerging(floorId), log: merge.mergeLog(floorId, 20),
-    candidates: await merge.candidates(floorId, entry.path, git, team.agents.map((a) => a.id)) };
+    candidates: await merge.candidates(floorId, entry.path, git, team.agents.map((a) => a.id), { extraPrefixes: sprintMode ? ['sprint-'] : [] }),
+    sprint: sprintMode && sprint.hasPack(entry.path) ? { ...(await sprint.sprintStatus(entry.path)), autoNext: floor.sprint.autoNext } : null };
 }
 
 export function startMerge(floorId, branch) {
@@ -404,8 +408,10 @@ export async function mergeTick({ checkMemory = true } = {}) {
     for (const f of snap.floors) {
       if (f.missing || !merge.approval(f.id)) continue;
       const entry = building.floorEntry(f.id);
-      const { git, team } = floors.readFloor(entry.path);
-      if (git.mergePolicy !== 'auto' || git.branchStrategy === 'trunk') continue;
+      const { git, team, floor } = floors.readFloor(entry.path);
+      if (git.mergePolicy !== 'auto') continue;
+      if (floor.workflow === 'squad-sprint') { const r = await sprintTick(f, entry, git, team, floor); if (r) done.push(r); continue; }
+      if (git.branchStrategy === 'trunk') continue;
       const work = workOf(f.id);
       const openWork = Object.values(work).some((w) => !w.doneAt);
       for (const c of await merge.candidates(f.id, entry.path, git, team.agents.map((a) => a.id))) {
@@ -419,4 +425,25 @@ export async function mergeTick({ checkMemory = true } = {}) {
     }
   } finally { merging = false; if (done.length) invalidate(); }
   return done;
+}
+
+// Squad Sprint: a closed sprint is merged by the server; with "start the next sprint" on, the lead gets a
+// fresh session that runs /sprint <N+1>. Each sprint branch tip is handled once.
+async function sprintTick(f, entry, git, team, floor) {
+  if (!sprint.hasPack(entry.path)) return null;
+  const st = await sprint.sprintStatus(entry.path);
+  if (!st.closed) return null;
+  const tried = merge.mergeLog(f.id, 500).find((e) => e.branch === st.branch && e.tip === st.tip);
+  if (tried) return null;
+  const result = await merge.mergeBranch(f.id, entry.path, git, st.branch, { trigger: 'sprint' });
+  if (result.result === 'merged' && floor.sprint.autoNext) {
+    const lead = team.agents.find((a) => a.lead) || team.agents.find((a) => sprint.roleKind(a) === 'lead');
+    if (lead) {
+      const next = Number(st.sprint) + 1;
+      stopAgent(f.id, lead.id);
+      await startAgent(f.id, lead.id, `/sprint ${next}`);
+      result.nextSprint = { sprint: next, lead: lead.id };
+    }
+  }
+  return result;
 }

@@ -10,7 +10,7 @@ const root = scratch();
 
 test('default templates are seeded and parsed', () => {
   const ids = roles.listTemplates().map((t) => t.role).sort();
-  assert.deepEqual(ids, ['frappe-developer', 'fullstack-developer', 'project-manager', 'qa-engineer', 'seo-specialist', 'ui-ux-designer']);
+  assert.deepEqual(ids, ['frappe-developer', 'fullstack-developer', 'project-manager', 'qa-engineer', 'seo-specialist', 'sprint-developer', 'sprint-lead', 'sprint-qa', 'ui-ux-designer']);
   const t = roles.getTemplate('frappe-developer');
   assert.equal(t.version, 1);
   assert.ok(t.rules.length >= 3);

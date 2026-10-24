@@ -54,7 +54,7 @@ test('create a Floor through the wizard API and read it back', async () => {
   const d = (await call('GET', '/api/floors/acme')).body;
   assert.equal(d.team.length, 2);
   assert.match(d.brief, /Coffee shop/);
-  assert.equal((await call('GET', '/api/roles')).body.templates.length, 6);
+  assert.equal((await call('GET', '/api/roles')).body.templates.length, 9);
   assert.equal((await call('GET', '/api/floors/nope')).status, 404);
 });
 

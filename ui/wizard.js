@@ -37,10 +37,12 @@ function stepHtml() {
     case 'Git': return gitHtml(w.git);
     case 'Team': return `<p class="note" style="margin-top:12px">Agents are created from Role Templates. Overrides change one agent only: model and effort replace, skills add or remove, rules and prompt append, permissions can only get stricter.</p>
       <div id="wTeam">${w.team.map((m, i) => memberHtml(m, templates, { idx: i })).join('') || '<div class="empty">No agents yet. You can also add them later.</div>'}</div>
-      <div class="row wrap" style="margin-top:10px"><select id="wAddTpl" style="width:auto">${templates.map((t) => `<option value="${esc(t.role)}">${esc(t.title)}</option>`).join('')}</select><button type="button" id="wAdd">+ Add agent</button></div>`;
+      <div class="row wrap" style="margin-top:10px"><select id="wAddTpl" style="width:auto">${templates.map((t) => `<option value="${esc(t.role)}">${esc(t.title)}</option>`).join('')}</select><button type="button" id="wAdd">+ Add agent</button><button type="button" id="wSprintTeam" class="ghost">+ Squad Sprint team</button></div>`;
     case 'Workflow': return `<label>Workflow</label><div class="choice" data-choice="workflow">
         <button type="button" data-v="free-team" aria-pressed="${w.workflow === 'free-team'}"><b>Free Team</b><small>You give tasks to agents directly. Default.</small></button>
         <button type="button" data-v="squad-sprint" aria-pressed="${w.workflow === 'squad-sprint'}"><b>Squad Sprint</b><small>Lead plans a sprint board, QA gates every task.</small></button></div>
+      <label class="inline"><input type="checkbox" data-w="autoNext" ${w.autoNext ? 'checked' : ''}> Squad Sprint: start the next sprint automatically once a closed sprint is merged</label>
+      <p class="note">Squad Sprint adds <code>.claude/squad/config.sh</code>, gate hooks, a <code>/sprint</code> command and the <code>docs/squad</code> board to the project. Use the Sprint Lead, Sprint Developer and Sprint QA templates.</p>
       <div class="grid2"><div><label for="wBudget">Budget (USD, 0 = none)</label><input id="wBudget" type="number" min="0" step="1" data-w="budgetUsd" value="${w.budget.usd || 0}"></div>
         <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], w.budget.period)}</div></div>
       <p class="note">The Watchdog warns at 80 % of the budget and raises Attention at 100 % (estimated from transcript usage).</p>`;
@@ -80,6 +82,15 @@ function draw(error = '') {
     const rows = body.querySelectorAll('[data-member] [data-f="displayName"]');
     rows[rows.length - 1]?.focus();
   });
+  body.querySelector('#wSprintTeam')?.addEventListener('click', () => {
+    collect();
+    const has = (t) => w.team.some((m) => m.template === t);
+    if (!has('sprint-lead')) w.team.push({ displayName: 'Sprint Lead', template: 'sprint-lead', lead: !w.team.some((m) => m.lead), overrides: {}, appearance: {} });
+    for (let k = 0; k < 2; k++) w.team.push({ displayName: `Developer ${w.team.filter((m) => m.template === 'sprint-developer').length + 1}`, template: 'sprint-developer', overrides: {}, appearance: {} });
+    if (!has('sprint-qa')) w.team.push({ displayName: 'QA', template: 'sprint-qa', overrides: {}, appearance: {} });
+    w.workflow = 'squad-sprint';
+    draw();
+  });
   body.querySelectorAll('[data-rm-member]').forEach((b) => b.onclick = () => { collect(); w.team.splice(+b.dataset.rmMember, 1); draw(); });
   body.querySelectorAll('[data-f="template"]').forEach((s) => s.addEventListener('change', () => { collect(); draw(); }));
   body.querySelector('input,textarea')?.focus();
@@ -97,6 +108,7 @@ function collect() {
   if (step === 'Workflow') {
     w.workflow = f.querySelector('[data-choice="workflow"] [aria-pressed=true]')?.dataset.v || 'free-team';
     w.budget = { usd: Math.max(0, Number(val('budgetUsd').value) || 0), period: segValue(f, 'budgetPeriod') || 'month' };
+    w.autoNext = val('autoNext').checked;
   }
   if (step === 'Layout') { w.layout = f.querySelector('[data-choice="layout"] [aria-pressed=true]')?.dataset.v || 'rows'; w.number = Number(val('number').value) || w.number; }
 }
@@ -126,7 +138,7 @@ async function next() {
   try {
     const r = await api('POST', '/api/floors', {
       name: w.name, goal: w.goal, number: w.number, directory: { mode: w.dirMode, path: w.path, url: w.url }, git: w.git,
-      team: w.team, workflow: w.workflow, layout: w.layout, budget: w.budget,
+      team: w.team, workflow: w.workflow, layout: w.layout, budget: w.budget, sprint: { autoNext: !!w.autoNext },
     });
     closeModal();
     toast(`Floor ${r.number} created`);

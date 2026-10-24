@@ -95,7 +95,7 @@ export async function mergeBranch(floorId, root, git_, branch, { trigger = 'manu
     const base = await git(root, ['rev-parse', '--verify', '-q', `refs/heads/${main}`]);
     if (!base.ok) return finish('refused', { reason: `Main branch ${main} not found` });
     if ((await git(root, ['merge-base', '--is-ancestor', tip.out, base.out])).ok) return finish('noop', { reason: 'Already merged' });
-    if (trigger === 'auto' && !git_.qualityGate) return finish('refused', { reason: 'No quality gate configured; automatic merges need one' });
+    if (trigger !== 'manual' && !git_.qualityGate) return finish('refused', { reason: 'No quality gate configured; automatic merges need one' });
 
     // the main checkout must be clean when main is checked out there (it is fast-forwarded afterwards)
     const head = await git(root, ['symbolic-ref', '--short', '-q', 'HEAD']);
