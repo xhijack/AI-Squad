@@ -43,7 +43,7 @@ Status on 24 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 de
      - the `docs/squad` PLAN, TASKS and QUESTIONS files plus the handoff, qa-report, bug and RELEASE templates.
    - The Board tab reads `TASKS.md`.
    - A closed sprint has a RELEASE.md and the closing commit on `sprint-<N>`, a clean tree, and `FINAL-S<N>.md` with PASS. The server merges it, and if the Floor enables it, stops the lead and starts a fresh session with `/sprint <N+1>`.
-   - The hooks are tested with real `bash` + `jq`. The close → merge → next-sprint flow is tested with the fake Claude.
+   - In Phase 1.1 the hooks were bash + `jq` (replaced by Node in Phase 1.2). The close → merge → next-sprint flow is tested with the fake Claude.
 3. **Shared template libraries**: `libraries.json` entries may be git URLs, with an optional ref and subdir.
    - They are shallow-cloned into `~/.aisquad/libraries/<name>` and pulled on demand. They are read-only: the cache is reset on every pull.
    - The library's commit is shown as its version.
