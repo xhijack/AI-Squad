@@ -141,3 +141,18 @@ test('adopt a directory that already has a Floor config (cloned from a teammate)
   assert.equal(e.id, 'acme-shop-2');
   assert.ok(fs.existsSync(path.join(copy, '.claude/agents/rina-project-manager.md')));
 });
+
+test('per-agent commit identity from team.json / git.json', () => {
+  const agent = { id: 'budi-dev', displayName: 'Budi - Dev' };
+  assert.equal(floors.commitIdentity(agent, floors.cleanGit({})), null, 'repository default');
+  const git = floors.cleanGit({ commitIdentity: 'per-agent' });
+  assert.equal(git.agentEmail, '{id}@agents.aisquad.local');
+  assert.deepEqual(floors.commitIdentity(agent, git), { GIT_AUTHOR_NAME: 'Budi - Dev', GIT_AUTHOR_EMAIL: 'budi-dev@agents.aisquad.local', GIT_COMMITTER_NAME: 'Budi - Dev', GIT_COMMITTER_EMAIL: 'budi-dev@agents.aisquad.local' });
+  assert.equal(floors.commitIdentity(agent, floors.cleanGit({ commitIdentity: 'per-agent', agentEmail: 'bot+{id}@sopwer.net' })).GIT_AUTHOR_EMAIL, 'bot+budi-dev@sopwer.net');
+  assert.equal(floors.cleanGit({ agentEmail: 'no-placeholder@x.y' }).agentEmail, '{id}@agents.aisquad.local', 'template needs {id}');
+  assert.deepEqual(floors.commitIdentity({ ...agent, git: { name: 'Budi', email: 'budi@sopwer.net' } }, git).GIT_COMMITTER_EMAIL, 'budi@sopwer.net');
+  assert.throws(() => floors.cleanAgentGit({ email: 'not an email' }), /Invalid commit email/);
+  const a = floors.updateAgent(proj, 'rina-project-manager', { git: { name: 'Rina PM', email: 'rina@sopwer.net' } });
+  assert.deepEqual(a.git, { name: 'Rina PM', email: 'rina@sopwer.net' });
+  assert.equal(floors.updateAgent(proj, 'rina-project-manager', { git: {} }).git, undefined, 'cleared');
+});

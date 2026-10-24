@@ -68,6 +68,7 @@ export function cleanGit(g = {}, prev = {}) {
     mainBranch: String(pick('mainBranch', 'main') || 'main').replace(/[^\w./-]/g, '').slice(0, 60) || 'main',
     branchStrategy: BRANCH_STRATEGIES.includes(pick('branchStrategy')) ? pick('branchStrategy') : 'agent-branches',
     commitIdentity: pick('commitIdentity') === 'per-agent' ? 'per-agent' : 'repo-default',
+    agentEmail: /^[^\s@<>]*\{id\}[^\s@<>]*@[\w.-]+$/.test(String(pick('agentEmail', '') || '')) ? String(pick('agentEmail')) : '{id}@agents.aisquad.local',
     noAiAttribution: pick('noAiAttribution', true) !== false,
     pushPolicy: PUSH_POLICIES.includes(pick('pushPolicy')) ? pick('pushPolicy') : 'never',
     mergePolicy: pick('mergePolicy') === 'manual' ? 'manual' : 'auto',
@@ -187,6 +188,23 @@ export function templateDiff(root, agent) {
   return { role: latest.role, from: agent.role.version, to: latest.version, diff: lineDiff(from, renderTemplate(latest)) };
 }
 
+// ---------- commit identity ----------
+const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+export function cleanAgentGit(g) {
+  if (!g || typeof g !== 'object') return undefined;
+  const name = clip(String(g.name || '').replace(/[<>\r\n]/g, '').trim(), 80), email = String(g.email || '').trim();
+  if (email && !EMAIL.test(email)) throw bad(`Invalid commit email: ${email}`);
+  return name || email ? { ...(name ? { name } : {}), ...(email ? { email } : {}) } : undefined;
+}
+
+// git env for an agent session when git.json asks for per-agent commit identity (null = repository default)
+export function commitIdentity(agent, git) {
+  if (git.commitIdentity !== 'per-agent') return null;
+  const name = agent.git?.name || agent.displayName;
+  const email = agent.git?.email || git.agentEmail.replace('{id}', agent.id);
+  return { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email };
+}
+
 // ---------- team operations ----------
 function teamAgent(team, id) {
   const a = team.agents.find((x) => x.id === id);
@@ -205,6 +223,7 @@ function buildAgent(input, taken, index) {
   return { template: t, agent: {
     id: uniqueId(displayName, taken, 'agent'), displayName, role: { template: t.role, version: t.version }, overrides,
     appearance: { ...defaultAppearance(index, t), ...cleanAppearance(input.appearance || {}) }, ...(input.lead ? { lead: true } : {}),
+    ...(cleanAgentGit(input.git) ? { git: cleanAgentGit(input.git) } : {}),
   } };
 }
 
@@ -236,6 +255,7 @@ export function updateAgent(root, id, input) {
   }
   if (input.appearance !== undefined) a.appearance = { ...a.appearance, ...cleanAppearance(input.appearance) };
   if (input.lead !== undefined) { team.agents.forEach((x) => delete x.lead); if (input.lead) a.lead = true; }
+  if (input.git !== undefined) { const g = cleanAgentGit(input.git); if (g) a.git = g; else delete a.git; }
   writeTeam(root, team);
   generate(root);
   return a;

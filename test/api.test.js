@@ -119,6 +119,16 @@ test('send a task to a running agent, then stop it', async () => {
   assert.equal(b.floors[0].agents.find((a) => a.id === 'budi-dev').state, 'stopped');
 });
 
+test('per-agent commit identity reaches the agent session as git env', async () => {
+  assert.equal((await call('PATCH', '/api/floors/acme', { git: { commitIdentity: 'per-agent' } })).status, 200);
+  assert.equal((await call('PATCH', '/api/floors/acme/agents/rina-pm', { git: { email: 'rina@sopwer.net' } })).status, 200);
+  assert.match(fs.readFileSync(LOG, 'utf8'), /ENV AISQUAD_AGENT=acme\/budi-dev .* GIT_AUTHOR_NAME= /, 'repository default before');
+  await call('POST', '/api/floors/acme/agents/rina-pm/start', {});
+  assert.ok(await wait(() => /ENV AISQUAD_AGENT=acme\/rina-pm .*GIT_AUTHOR_NAME=Rina - PM GIT_AUTHOR_EMAIL=rina@sopwer.net GIT_COMMITTER_NAME=Rina - PM GIT_COMMITTER_EMAIL=rina@sopwer.net/.test(fs.readFileSync(LOG, 'utf8'))));
+  await call('POST', '/api/floors/acme/agents/rina-pm/stop', {});
+  await call('PATCH', '/api/floors/acme', { git: { commitIdentity: 'repo-default' } });
+});
+
 test('attachments are stored outside the repo and referenced in the task', async () => {
   const r = await fetch(`${base}/api/floors/acme/attachments`, { method: 'POST', headers: { 'x-aisquad-pin': pin, 'x-filename': 'brief.md' }, body: '# Brief' });
   const j = await r.json();

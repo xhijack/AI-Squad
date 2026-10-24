@@ -32,6 +32,10 @@ export function memberHtml(m, templates, { idx = 0, removable = true, templateLo
       <label>Extra denied tools (one per line; overrides can only be stricter)</label><textarea data-f="deny" rows="2" placeholder="Bash(npm publish*)">${esc((o.permissions?.deny || []).join('\n'))}</textarea>
       <label>Prompt addition (appended below the template prompt)</label><textarea data-f="prompt" rows="3">${esc(o.prompt || '')}</textarea>
     </details>
+    <details ${m.git ? 'open' : ''}><summary>Commit identity (used when the Floor commits per agent)</summary>
+      <div class="grid2"><div><label>Name</label><input data-f="gitName" value="${esc(m.git?.name || '')}" placeholder="${esc(m.displayName || 'Display name')}"></div>
+        <div><label>Email</label><input data-f="gitEmail" value="${esc(m.git?.email || '')}" placeholder="from the Floor's agent email template"></div></div>
+    </details>
     <details><summary>Appearance</summary>
       <div class="row wrap"><select data-f="style" style="width:auto">${STYLES.map((x) => `<option ${ap.style === x ? 'selected' : ''}>${x}</option>`).join('')}</select>
         <label class="inline">Shirt <input type="color" data-f="shirt" value="${esc(ap.shirt || '#3d82d6')}"></label>
@@ -54,6 +58,7 @@ export function readMember(el) {
   if (v('prompt').value.trim()) overrides.prompt = v('prompt').value.trim();
   return {
     displayName: v('displayName').value.trim(), template: v('template').value, lead: !!v('lead')?.checked, overrides,
+    git: { name: v('gitName').value.trim(), email: v('gitEmail').value.trim() },
     appearance: { style: v('style').value, shirt: v('shirt').value, hair: v('hair').value, skin: v('skin').value, glasses: v('glasses').checked },
   };
 }
@@ -68,6 +73,7 @@ export function gitHtml(g = {}, { approved = false } = {}) {
     </div>
     <label>Branch strategy</label>${segHtml('branchStrategy', Object.entries(BRANCH_TEXT), g.branchStrategy || 'agent-branches')}
     <label>Commit identity</label>${segHtml('commitIdentity', [['repo-default', 'Repository default'], ['per-agent', 'Per agent name']], g.commitIdentity || 'repo-default')}
+    <label>Agent commit email (per agent identity; <code>{id}</code> is the agent id)</label><input data-g="agentEmail" value="${esc(g.agentEmail || '{id}@agents.aisquad.local')}">
     <label class="inline"><input type="checkbox" data-g="noAiAttribution" ${g.noAiAttribution !== false ? 'checked' : ''}> No AI attribution in commits and PRs</label>
     <label>Push policy</label>${segHtml('pushPolicy', Object.entries(PUSH_TEXT), g.pushPolicy || 'never')}
     <label>Merge policy</label>${segHtml('mergePolicy', [['auto', 'Automatic (after quality gate)'], ['manual', 'Manual']], g.mergePolicy || 'auto')}
@@ -80,6 +86,6 @@ export function gitHtml(g = {}, { approved = false } = {}) {
 export function readGit(root) {
   const v = (k) => root.querySelector(`[data-g="${k}"]`);
   const seg = (k) => root.querySelector(`[data-seg="${k}"] [aria-pressed=true]`)?.dataset.v;
-  return { remote: v('remote').value.trim(), mainBranch: v('mainBranch').value.trim() || 'main', branchStrategy: seg('branchStrategy'), commitIdentity: seg('commitIdentity'),
+  return { remote: v('remote').value.trim(), mainBranch: v('mainBranch').value.trim() || 'main', branchStrategy: seg('branchStrategy'), commitIdentity: seg('commitIdentity'), agentEmail: v('agentEmail').value.trim(),
     noAiAttribution: v('noAiAttribution').checked, pushPolicy: seg('pushPolicy'), mergePolicy: seg('mergePolicy'), mergeMethod: seg('mergeMethod'), autoMergeApproved: v('autoMergeApproved').checked, qualityGate: v('qualityGate').value.trim() };
 }

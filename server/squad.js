@@ -316,7 +316,8 @@ export async function startAgent(floorId, agentId, task = '') {
   // pass model and effort explicitly so the configured values win over defaults and earlier sessions
   const extraArgs = [...(eff.model && eff.model !== 'inherit' ? ['--model', eff.model] : []), '--effort', eff.effort,
     ...(config.useHooks ? ['--plugin-dir', ROOT] : [])];               // our plugin hooks stream events back
-  const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home };
+  const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
+    ...floors.commitIdentity(agent, floors.readFloor(entry.path).git) };   // per-agent commit identity (git.json)
   const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs, env });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });

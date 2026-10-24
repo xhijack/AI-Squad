@@ -45,7 +45,7 @@ async function editAgent(el) {
   body.querySelector('[data-ok]').onclick = async () => {
     const m = readMember(body.querySelector('[data-member]'));
     try {
-      await api('PATCH', `/api/floors/${floorId()}/agents/${a.id}`, { displayName: m.displayName, overrides: m.overrides, appearance: m.appearance, lead: m.lead });
+      await api('PATCH', `/api/floors/${floorId()}/agents/${a.id}`, { displayName: m.displayName, overrides: m.overrides, appearance: m.appearance, lead: m.lead, git: m.git });
       closeModal(); toast('Agent saved; agent file regenerated'); ctx.refresh();
     } catch (e) { fail(e); }
   };

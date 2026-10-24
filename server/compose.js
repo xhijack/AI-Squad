@@ -70,6 +70,7 @@ function gitRules(git) {
     trunk: 'Commit small, tested changes directly to the main branch.' }[git.branchStrategy];
   if (strategy) out.push(strategy);
   out.push('Use Conventional Commits (`feat(scope): ...`, `fix(scope): ...`).');
+  if (git.commitIdentity === 'per-agent') out.push('Your commits carry your own name and email (set for your session); do not change `git config user.*`.');
   if (git.noAiAttribution !== false) out.push('No AI attribution in commits or PRs: no Co-Authored-By trailers, no "Generated with" lines.');
   if (git.pushPolicy !== 'agents-may-push') out.push('Never run `git push`. Merges and pushes are done by The AI Squad server after the quality gate passes.');
   if (git.qualityGate) out.push(`Quality gate: \`${git.qualityGate}\` must pass before you report work as done.`);
