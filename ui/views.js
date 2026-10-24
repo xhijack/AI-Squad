@@ -15,6 +15,8 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       body = `<div class="opts">${a.options.map((o) => o.free
         ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${esc(o.label)}" aria-label="Your answer" required><button class="gold">Send</button></form>`
         : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${esc(o.label)}</button>`).join('')}</div>`;
+    } else if (a.kind === 'permission' && a.live) {
+      body = `<div class="note">Reported live by Claude Code. ${a.agentId ? 'Answer it on the Desk (Screen tab) or in the agent\'s terminal.' : ''}</div>`;
     } else if (a.kind === 'question') {
       body = `${a.options?.length ? `<ol class="note">${a.options.map((o) => `<li>${esc(o.label)}</li>`).join('')}</ol>` : ''}<div class="note">Answer it in the agent's terminal (not started from The AI Squad).</div>`;
     }
@@ -68,7 +70,7 @@ export function lobbySections(b) {
 function agentRow(floorId, a, selected) {
   const ts = a.templateStatus || {};
   return `<div class="card click agentCard" data-href="#/floor/${floorId}/desk/${a.id}" ${selected ? 'style="border-color:var(--accent)"' : ''}>
-    <div class="agent">${avatar(a)}<div class="meta"><div class="name"><span class="ellipsis">${esc(a.displayName)}</span>${a.lead ? '<span class="badge lead">lead</span>' : ''}${ts.updateAvailable ? '<span class="badge update">update</span>' : ''}</div>
+    <div class="agent">${avatar(a)}<div class="meta"><div class="name"><span class="ellipsis">${esc(a.displayName)}</span>${a.lead ? '<span class="badge lead">lead</span>' : ''}${a.live ? '<span class="badge live" title="Live events from the Claude Code hooks">live</span>' : ''}${ts.updateAvailable ? '<span class="badge update">update</span>' : ''}</div>
       <div class="act"><i class="dot ${a.state}"></i> ${esc(STATE_TEXT[a.state])}${a.activity && a.state !== 'stopped' ? ` · ${esc(a.activity)}` : ''}</div></div>
       ${a.running ? `<button class="small ghost" data-act="stop" data-agent="${a.id}" title="Stop">Stop</button>` : `<button class="small ok" data-act="start" data-agent="${a.id}" title="Start">Start</button>`}</div>
     <div class="chips"><span class="chip">${esc(a.title)}</span><span class="chip">${esc(a.model)}</span>${a.models?.mismatch ? `<span class="chip warn" title="Last reply from ${esc(a.models.observed)}">model differs</span>` : a.models?.restartNeeded ? '<span class="chip info">restart to apply</span>' : ''}${a.costToday ? `<span class="chip">today ${money(a.costToday)}</span>` : ''}${a.work && !a.work.doneAt ? '<span class="chip info">has work</span>' : a.work?.doneAt ? '<span class="chip ok">work done</span>' : ''}</div></div>`;

@@ -90,6 +90,25 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   assert.deepEqual([desk.models.configured, desk.models.startedWith, desk.models.restartNeeded], ['sonnet', 'sonnet', false]);
 });
 
+test('hook events make the agent live: permission prompt in Attention, Stop ends the turn', async () => {
+  const log = fs.readFileSync(LOG, 'utf8');
+  assert.match(log, /START .*--plugin-dir \S+/, 'agents start with the plugin hooks');
+  assert.match(log, /ENV AISQUAD_AGENT=acme\/budi-dev AISQUAD_URL=http/);
+  const post = (event, payload) => call('POST', '/api/events', { event, agent: 'acme/budi-dev', payload });
+  assert.equal((await call('POST', '/api/events', { event: 'Stop' }, false)).status, 401, 'events need the PIN');
+  await post('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'npm publish', description: 'Publish' } });
+  await post('Notification', { message: 'Claude needs your permission to use Bash' });
+  let b = (await call('GET', '/api/building')).body;
+  const budi = b.floors[0].agents.find((a) => a.id === 'budi-dev');
+  assert.deepEqual([budi.state, budi.live], ['waiting', true]);
+  const item = b.attention.find((a) => a.agentId === 'budi-dev' && a.live);
+  assert.match(item.text, /permission to use Bash\nnpm publish/);
+  await post('PostToolUse', { tool_name: 'Bash' });
+  await post('Stop', {});
+  b = (await call('GET', '/api/building')).body;
+  assert.equal(b.floors[0].agents.find((a) => a.id === 'budi-dev').state, 'idle');
+});
+
 test('send a task to a running agent, then stop it', async () => {
   const r = await call('POST', '/api/floors/acme/agents/budi-dev/task', { text: 'Add a price filter' });
   assert.equal(r.status, 200, JSON.stringify(r.body));

@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { paths } from './config.js';
 import { readJson, writeJson, statOf, bad, notFound } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
@@ -12,6 +11,8 @@ import * as tm from './tmux.js';
 import * as wd from './watchdog.js';
 import * as merge from './merge.js';
 import * as sprint from './sprint.js';
+import * as hooks from './events.js';
+import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
 const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], sessions: r.sessions || {} }; };
@@ -85,14 +86,22 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
     const recent = st && st.turnOpen && now - st.lastTs < tx.ACTIVE_MS;   // finished turns are not "working"
     const busy = running && tm.isBusy(screen);
     const asking = st?.ask && (running || now - st.ask.ts < ASK_OPEN_MS);   // Claude waits for an answer indefinitely
-    const state = dialog || asking ? 'waiting' : busy || recent ? 'working' : running ? 'idle' : 'stopped';
+    // plugin hook events are live; they win over the transcript heuristic when they are newer
+    const h = hooks.agentState(entry.id, a.id, now);
+    const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
+    const hookWaiting = hookFresh && h.state === 'waiting';
+    const working = busy || (hookFresh ? h.state === 'working' : recent);
+    const state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
-    if (w && !w.doneAt && st && st.lastEndTurn > w.assignedAt && !busy && !dialog) { w.doneAt = st.lastEndTurn; setWork(entry.id, a.id, w); }
+    const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
+    if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
     if (dialog && st?.ask?.questions?.length) {
       // the screen often cuts long questions; the transcript has the full text
       dialog.question = st.ask.questions.map((q) => (q.header ? `[${q.header}] ` : '') + q.question).join('\n\n');
     }
-    return { agent: a, session: name, running, state, dialog, status: st, lastTs: st?.lastTs || 0, work: w || null, screen, started: sessionInfo(entry.id, a.id) };
+    const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
+    return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
+      hook: hookFresh ? h : null, activity };
   });
 }
 
@@ -102,7 +111,7 @@ function agentView(root, l, cost) {
   return {
     id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead,
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
-    state: l.state, running: l.running, activity: l.status?.activity || '', lastTs: l.lastTs, session: l.session,
+    state: l.state, running: l.running, activity: l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
     models: modelReport(eff, l.running, l.started, l.status),
   };
@@ -118,6 +127,10 @@ function floorAttention(entry, floor, lives, cost) {
       out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: l.dialog.question, options: l.dialog.options, answerable: true, ts: l.lastTs || Date.now() });
+    } else if (l.hook?.state === 'waiting' && l.hook.permission) {
+      const pm = l.hook.permission;
+      out.push({ id: attId(entry.id, l.agent.id, 'hook', pm.ts), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
+        text: pm.message + (pm.detail ? `\n${pm.detail}` : ''), options: [], answerable: false, live: true, ts: pm.ts });
     } else if (l.status?.ask && l.state === 'waiting') {
       const q = l.status.ask.questions;
       out.push({ id: attId(entry.id, l.agent.id, l.status.ask.id), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
@@ -301,8 +314,10 @@ export async function startAgent(floorId, agentId, task = '') {
   const eff = floors.effectiveOf(entry.path, agent);
   // model comes from the agent file; effort is not read from agent files for the main session, so pass it
   // pass model and effort explicitly so the configured values win over defaults and earlier sessions
-  const extraArgs = [...(eff.model && eff.model !== 'inherit' ? ['--model', eff.model] : []), '--effort', eff.effort];
-  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs });
+  const extraArgs = [...(eff.model && eff.model !== 'inherit' ? ['--model', eff.model] : []), '--effort', eff.effort,
+    ...(config.useHooks ? ['--plugin-dir', ROOT] : [])];               // our plugin hooks stream events back
+  const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home };
+  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs, env });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) setSessionInfo(floorId, agentId, { startedAt: Date.now(), model: eff.model, effort: eff.effort });
@@ -315,6 +330,7 @@ export function stopAgent(floorId, agentId) {
   pending.delete(workKey(floorId, agentId));
   const r = tm.stopSession(name);
   setSessionInfo(floorId, agentId, null);
+  hooks.forget(floorId, agentId);
   invalidate();
   return r;
 }
@@ -470,4 +486,16 @@ async function sprintTick(f, entry, git, team, floor) {
     }
   }
   return result;
+}
+
+// ---------- plugin hook events ----------
+export function ingestEvent(body) {
+  const floorsNow = building.loadBuilding().floors.map((e) => {
+    let agentIds = [];
+    try { agentIds = floors.readFloor(e.path).team.agents.map((a) => a.id); } catch { /* missing Floor */ }
+    return { id: e.id, path: e.path, agentIds };
+  });
+  const key = hooks.ingest(body, floorsNow);
+  if (key) snapCache.at = 0;
+  return { ok: true, matched: key };
 }

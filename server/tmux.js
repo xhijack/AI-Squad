@@ -108,9 +108,11 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 // starts `claude --agent <id>` detached; through systemd-run --user --scope when available so the
 // session survives the terminal or editor that launched the server
-export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [] }) {
+// env: extra variables for the agent (hook target, git identity), set with `env` in front of the command
+export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {} }) {
   if (isRunning(name)) return { ok: true, already: true };
-  const cmd = [claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', disallowedTools.join(',')] : []), ...extraArgs].map(shq).join(' ');
+  const vars = Object.entries(agentEnv).filter(([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null).map(([k, v]) => `${k}=${v}`);
+  const cmd = [...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', disallowedTools.join(',')] : []), ...extraArgs].map(shq).join(' ');
   const tm = ['tmux', ...tmuxArgs(['new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, cmd])];
   const env = { ...process.env, PATH: `${process.execPath.replace(/\/node$/, '')}:${process.env.PATH || ''}` };
   delete env.TMUX;

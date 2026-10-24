@@ -38,7 +38,7 @@ export function scaffold(root, { git = {}, agents = [] } = {}) {
     let text = fs.readFileSync(path.join(PACK, rel), 'utf8');
     if (rel.endsWith('config.sh')) text = text.replace('{{TEST_CMD}}', shQuote(git.qualityGate));
     writeText(dest, text);
-    if (rel.endsWith('.sh') && rel.includes('hooks')) fs.chmodSync(dest, 0o755);
+    if (rel.endsWith('.cjs') && rel.includes('hooks')) fs.chmodSync(dest, 0o755);
     created.push(rel);
   }
   mergeSettings(root);
@@ -53,13 +53,14 @@ export function mergeSettings(root) {
   if (!cur) return false;                                   // unreadable settings: leave them alone
   cur.env = { ...(cur.env || {}), CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
   cur.hooks = cur.hooks || {};
-  const add = (event, script, timeout, statusMessage) => {
-    const list = cur.hooks[event] = cur.hooks[event] || [];
-    if (JSON.stringify(list).includes(script)) return;
-    list.push({ hooks: [{ type: 'command', command: 'bash', args: [`\${CLAUDE_PROJECT_DIR}/.claude/hooks/${script}`], timeout, ...(statusMessage ? { statusMessage } : {}) }] });
+  // Node gate hooks (no jq). Entries for the older bash versions are replaced.
+  const add = (event, base, timeout, statusMessage) => {
+    const list = (cur.hooks[event] || []).filter((g) => !JSON.stringify(g).includes(`.claude/hooks/${base}.sh`));
+    if (!JSON.stringify(list).includes(`${base}.cjs`)) list.push({ hooks: [{ type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/.claude/hooks/${base}.cjs`], timeout, ...(statusMessage ? { statusMessage } : {}) }] });
+    cur.hooks[event] = list;
   };
-  add('TaskCompleted', 'task-completed.sh', 900, 'Squad Sprint: checking the quality gate...');
-  add('TeammateIdle', 'teammate-idle.sh', 30);
+  add('TaskCompleted', 'task-completed', 900, 'Squad Sprint: checking the quality gate...');
+  add('TeammateIdle', 'teammate-idle', 30);
   writeJson(p, cur);
   return true;
 }

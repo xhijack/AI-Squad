@@ -11,7 +11,9 @@ export const config = {
   claudeHome: process.env.CLAUDE_HOME || path.join(os.homedir(), '.claude'),
   tmuxSocket: process.env.AISQUAD_TMUX_SOCKET || '',     // empty = default tmux server
   claudeBin: process.env.CLAUDE_BIN || '',
-  useSystemd: process.env.AISQUAD_NO_SYSTEMD !== '1',       // systemd-run --user --scope when available
+  useSystemd: process.env.AISQUAD_NO_SYSTEMD !== '1',
+  useHooks: process.env.AISQUAD_NO_HOOKS !== '1',             // start agents with our plugin hooks (--plugin-dir)
+  serverUrl: process.env.AISQUAD_URL || `http://127.0.0.1:${process.env.AISQUAD_PORT || 8097}`,       // systemd-run --user --scope when available
   defaultRoles: path.join(ROOT, 'templates', 'roles'),
 };
 

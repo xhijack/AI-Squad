@@ -11,6 +11,7 @@ import * as libraries from './libraries.js';
 import * as squad from './squad.js';
 import { checkPin } from './pin.js';
 import { setApproval } from './merge.js';
+import { recentEvents as hooksRecent } from './events.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -50,6 +51,8 @@ const routes = [
   ['GET', /^\/api\/watchdog$/, () => squad.watchdogStatus()],
   ['PATCH', /^\/api\/building$/, (p, b) => { building.setBuildingName(b.name); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/auth$/, () => ({ ok: true }), { pin: true }],
+  ['POST', /^\/api\/events$/, (p, b) => squad.ingestEvent(b), { pin: true }],
+  ['GET', /^\/api\/events$/, () => ({ events: hooksRecent() }), { pin: true }],
 
   ['GET', /^\/api\/roles$/, () => ({ templates: roles.listTemplates(), models: roles.MODELS, efforts: roles.EFFORTS, styles: roles.STYLES })],
   ['GET', /^\/api\/roles\/([\w-]+)$/, ([role]) => ({ template: roles.getTemplate(role), versions: roles.templateVersions(role) })],
