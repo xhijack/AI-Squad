@@ -43,7 +43,7 @@ The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`
 
 The server listens on `http://127.0.0.1:8097`. Pass `--port` to change it, and `--host 0.0.0.0` only if you really want it reachable from other machines.
 
-Viewing is open on the bound address; every change and every agent screen needs the local PIN. Find it with `cat ~/.aisquad/pin`.
+On `127.0.0.1` (the default) viewing is open and every change and every agent screen needs the local PIN. Bound to any other address (for example `--host 0.0.0.0`), every API call needs the PIN, reads included; the browser asks for it once. Find it with `cat ~/.aisquad/pin`.
 
 ### Create a Floor
 

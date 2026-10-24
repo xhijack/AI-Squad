@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The AI Squad server.  node server/index.js [--port 8097] [--host 127.0.0.1]
 import http from 'node:http';
-import { createHandler } from './api.js';
+import { createHandler, isLoopback } from './api.js';
 import { loadPin } from './pin.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,11 +17,11 @@ const HOST = opt('--host', '127.0.0.1');
 
 seedDefaults();
 const pin = loadPin();
-const server = http.createServer(createHandler({ pin }));
+const server = http.createServer(createHandler({ pin, host: HOST }));
 server.listen(PORT, HOST, () => {
   console.log(`The AI Squad: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`PIN for changes: ${paths.pin()}`);
-  if (HOST !== '127.0.0.1' && HOST !== 'localhost') console.log(`Warning: listening on ${HOST}; anyone who can reach this port can see your Floors.`);
+  if (!isLoopback(HOST)) console.log(`Listening on ${HOST}: every API call, reads included, needs the PIN.`);
   fs.writeFileSync(PID_FILE, String(process.pid));
 });
 const PID_FILE = path.join(config.home, 'server.pid');

@@ -23,12 +23,19 @@ const LOG = path.join(config.home, 'server.log');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function get(p) {
-  try { const r = await fetch(BASE + p, { signal: AbortSignal.timeout(1500) }); return r.ok ? await r.json() : null; } catch { return null; }
+  // the PIN goes along so this also works when the server is bound off loopback (reads locked)
+  let pin = '';
+  try { pin = fs.readFileSync(paths.pin(), 'utf8').trim(); } catch { /* not created yet */ }
+  try {
+    const r = await fetch(BASE + p, { signal: AbortSignal.timeout(1500), headers: pin ? { 'x-aisquad-pin': pin } : {} });
+    if (r.status === 401) return { locked: true };
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
 }
 
 async function ensureServer() {
   const b = await get('/api/building');
-  if (b && b.floors) return false;
+  if (b && (b.floors || b.locked)) return false;
   fs.mkdirSync(config.home, { recursive: true });
   const out = fs.openSync(LOG, 'a');
   const server = [process.execPath, path.join(ROOT, 'server', 'index.js'), '--port', String(PORT), '--host', HOST];
@@ -40,7 +47,7 @@ async function ensureServer() {
   child.unref();
   for (let i = 0; i < 40; i++) {
     await sleep(250);
-    if (await get('/api/building')) return true;
+    if (await get('/api/building')) return true;   // any answer, also 401, means it is up
   }
   throw new Error(`The server did not start; see ${LOG}`);
 }
@@ -57,6 +64,7 @@ const gb = (b) => `${(b / 2 ** 30).toFixed(1)} GB`;
 
 async function status() {
   let s = await get('/api/watchdog');
+  if (s?.locked) s = null;
   let note = '';
   if (!s) {
     const squad = await import('../server/squad.js');       // server not running: read the same data directly

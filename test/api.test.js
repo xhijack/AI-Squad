@@ -128,3 +128,21 @@ test('diff between two template versions', async () => {
   assert.equal((await call('GET', '/api/roles/project-manager/diff?from=1&to=9')).status, 404);
   assert.ok((await call('GET', '/api/building')).body.options.projectsDir.endsWith('playground'));
 });
+
+test('off loopback every API read needs the PIN; on loopback reads stay open', async () => {
+  const { isLoopback } = await import('../server/api.js');
+  for (const h of ['127.0.0.1', 'localhost', '::1', '127.0.1.1']) assert.equal(isLoopback(h), true, h);
+  for (const h of ['0.0.0.0', '::', '192.168.1.5', '']) assert.equal(isLoopback(h), false, h);
+  const open = http.createServer(createHandler({ pin, host: '0.0.0.0' }));
+  await new Promise((ok) => open.listen(0, '127.0.0.1', ok));
+  const url = `http://127.0.0.1:${open.address().port}`;
+  try {
+    for (const p of ['/api/building', '/api/floors/acme', '/api/roles', '/api/watchdog', '/api/libraries', '/api/floors/acme/merges']) {
+      assert.equal((await fetch(url + p)).status, 401, p);
+      assert.equal((await fetch(url + p, { headers: { 'x-aisquad-pin': pin } })).status, 200, p);
+    }
+    assert.equal((await fetch(url + '/api/building', { headers: { 'x-aisquad-pin': '000000' } })).status, 401, 'wrong PIN');
+    assert.equal((await fetch(url + '/')).status, 200, 'the UI shell itself carries no data');
+  } finally { open.close(); }
+  assert.equal((await fetch(base + '/api/building')).status, 200, 'loopback server unchanged');
+});

@@ -44,6 +44,14 @@ export function askPin() {
   });
 }
 
+// reads: send the PIN too (servers bound off loopback lock every API call); 401 is reported, not prompted
+export async function getJson(url) {
+  const r = await fetch(url, { headers: pin ? { 'x-aisquad-pin': pin } : {} });
+  if (r.status === 401) throw Object.assign(new Error('PIN required'), { status: 401 });
+  if (r.status === 404) return { notFound: true };
+  return r.json();
+}
+
 export async function api(method, url, body, { raw = null, headers = {}, quiet401 = false } = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const init = { method, headers: { 'x-aisquad-pin': pin, ...headers } };

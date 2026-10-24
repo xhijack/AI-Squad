@@ -1,5 +1,5 @@
-// JSON API + static UI. GET requests are open on the bound interface (127.0.0.1 by default);
-// every mutating request and agent screens need the local PIN (header x-aisquad-pin).
+// JSON API + static UI. On a loopback address (the default) reads are open and every change and agent
+// screen needs the local PIN (header x-aisquad-pin); on any other address every /api call needs it.
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './config.js';
@@ -106,7 +106,12 @@ const routes = [
   ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text), { pin: true }],
 ];
 
-export function createHandler({ pin }) {
+// 127.0.0.0/8, ::1 and localhost; 0.0.0.0, :: and real addresses are not
+export const isLoopback = (host) => /^(localhost|127(\.\d{1,3}){3}|::1|\[::1\])$/i.test(String(host || '').trim());
+
+// host: the address the server is bound to. Off loopback every /api read needs the PIN as well.
+export function createHandler({ pin, host = '127.0.0.1' }) {
+  const lockReads = !isLoopback(host);
   return async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
@@ -118,7 +123,7 @@ export function createHandler({ pin }) {
         if (method !== req.method) continue;
         const m = url.pathname.match(re);
         if (!m) continue;
-        if (opts.pin && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
+        if ((opts.pin || lockReads) && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
         return send(res, 200, await handler(m.slice(1), body, req));
       }

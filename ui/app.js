@@ -1,6 +1,6 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson } from './lib.js';
 import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -45,9 +45,19 @@ async function refresh() {
   inflight = true;
   const r = state.route, key = routeKey(r);
   try {
-    const jobs = [fetch('/api/building').then((x) => x.json())];
-    if (r.floorId) jobs.push(fetch(`/api/floors/${r.floorId}`).then(async (x) => { if (x.status === 404) return { notFound: true }; return x.json(); }));
-    const [b, f] = await Promise.all(jobs);
+    const jobs = [getJson('/api/building')];
+    if (r.floorId) jobs.push(getJson(`/api/floors/${r.floorId}`));
+    let b, f;
+    try { [b, f] = await Promise.all(jobs); }
+    catch (e) {
+      if (e.status !== 401) throw e;
+      // server bound off loopback: reads need the PIN as well
+      inflight = false;
+      if (!document.querySelector('#pinDlg[open]') && await askPin()) return refresh();
+      toast('This server needs the PIN to show anything. Menu → Enter PIN.', 6000);
+      timer = setTimeout(refresh, 15000);
+      return;
+    }
     state.building = b;
     if (key === routeKey(state.route)) state.floor = f || null;
     if (state.floor?.notFound) { toast('That Floor no longer exists'); location.hash = '#/'; }
@@ -58,6 +68,7 @@ async function refresh() {
     state.offline = false;
   } catch { state.offline = true; }
   inflight = false;
+  if (!state.building) return void (timer = setTimeout(refresh, 4000));
   render();
   timer = setTimeout(refresh, document.hidden ? 15000 : r.mode === 'desk' ? 2000 : 3000);
 }
