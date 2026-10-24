@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, paths } from './config.js';
 import { seedDefaults } from './roles.js';
+import { ensureCloned } from './libraries.js';
 import { flushPending, watchdogTick, mergeTick } from './squad.js';
 
 const args = process.argv.slice(2);
@@ -25,6 +26,7 @@ server.listen(PORT, HOST, () => {
 });
 const PID_FILE = path.join(config.home, 'server.pid');
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { if (fs.readFileSync(PID_FILE, 'utf8') === String(process.pid)) fs.rmSync(PID_FILE); } catch { /* gone */ } process.exit(0); });
+ensureCloned().catch(() => {});
 setInterval(() => { flushPending().catch(() => {}); }, 3000).unref();
 setTimeout(() => { try { watchdogTick(); } catch { /* next tick */ } }, 5000).unref();
 setInterval(() => { try { watchdogTick(); } catch (e) { console.error('[watchdog]', e.message); } }, 60000).unref();

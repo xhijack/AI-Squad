@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, paths } from './config.js';
 import { parseFrontmatter, stringifyFrontmatter } from './frontmatter.js';
-import { safeReaddir, readText, readJson, writeText, kebab, uniq, isHex, bad, notFound } from './util.js';
+import { safeReaddir, readText, writeText, kebab, uniq, isHex, bad, notFound } from './util.js';
+import * as libraries from './libraries.js';
 
 export const MODELS = ['opus', 'sonnet', 'haiku', 'inherit'];
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -87,9 +88,28 @@ export function seedDefaults() {
 }
 
 function libraryDirs() {
-  const libs = readJson(paths.libraries(), { libraries: [] });
   return [{ name: 'local', dir: paths.roles(), writable: true },
-    ...(libs.libraries || []).filter((l) => l && l.path).map((l) => ({ name: String(l.name || path.basename(l.path)), dir: path.resolve(l.path), writable: false }))];
+    ...libraries.loadEntries().map((e) => ({ name: e.name, dir: libraries.templateDir(e), writable: false }))];
+}
+
+// every template of one library, including ones the local library shadows (for "copy to local")
+export function libraryTemplates(name) {
+  const lib = libraryDirs().find((l) => l.name === name && !l.writable);
+  if (!lib) throw notFound(`Library not found: ${name}`);
+  const out = [];
+  for (const f of safeReaddir(lib.dir)) {
+    if (!f.endsWith('.md') || /^readme\.md$/i.test(f)) continue;
+    try { out.push({ ...parseTemplate(readText(path.join(lib.dir, f)), f.slice(0, -3)), source: lib.name, writable: false }); } catch { /* skip broken */ }
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title));
+}
+
+// copy a library template into the local library (as a new local template, version 1)
+export function copyToLocal(library, role, as = role) {
+  const t = libraryTemplates(library).find((x) => x.role === role);
+  if (!t) throw notFound(`${role} is not in library ${library}`);
+  const { source, writable, version, ...rest } = t;
+  return saveTemplate({ ...rest, role: as }, { create: true });
 }
 
 export function listTemplates() {
@@ -135,8 +155,9 @@ export function templateVersions(role) {
 export function saveTemplate(input, { create = false } = {}) {
   const role = kebab(input.role);
   if (!role) throw bad('Role id is required');
-  const existing = listTemplates().find((x) => x.role === role);
-  if (create && existing) throw bad(`Role Template already exists: ${role}`);
+  let existing = listTemplates().find((x) => x.role === role);
+  if (create && existing && existing.writable) throw bad(`Role Template already exists: ${role}`);
+  if (create) existing = null;                              // a local template may shadow a library one
   if (!create && !existing) throw notFound(`Role Template not found: ${role}`);
   if (existing && !existing.writable) throw bad(`"${role}" comes from library "${existing.source}" and is read-only. Save it under a new role id.`);
   const next = parseTemplate(renderTemplate({

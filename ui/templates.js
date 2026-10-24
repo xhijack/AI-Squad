@@ -16,7 +16,8 @@ function listHtml() {
   return `<div class="tplList">${meta.templates.map((t) => `<button type="button" class="card click" data-pick="${esc(t.role)}" style="width:100%;text-align:left;${t.role === selected ? 'border-color:var(--accent)' : ''}">
       <span class="avatar" style="--shirt:${esc(t.appearance.shirt || '#3d82d6')}">${esc(t.title.slice(0, 2).toUpperCase())}</span>
       <span class="grow"><b>${esc(t.title)}</b><div class="note">${esc(t.role)} · v${t.version} · ${esc(t.model)}${t.writable ? '' : ` · ${esc(t.source)} (read-only)`}</div></span></button>`).join('')}
-    <button type="button" class="gold" data-new style="width:100%;margin-top:8px">+ New template</button></div>`;
+    <button type="button" class="gold" data-new style="width:100%;margin-top:8px">+ New template</button>
+    <button type="button" data-libs style="width:100%;margin-top:8px">Libraries</button></div>`;
 }
 
 function editorHtml(t, isNew, versions = []) {
@@ -25,7 +26,7 @@ function editorHtml(t, isNew, versions = []) {
   const dis = ro ? 'disabled' : '';
   return `<form id="tForm" novalidate>
     <div class="row"><h3 class="grow">${isNew ? 'New Role Template' : `${esc(t.title)} <span class="badge">v${t.version}</span>`}</h3></div>
-    ${ro ? `<p class="note">This template comes from the "${esc(t.source)}" library and is read-only. Change the role id to save your own copy.</p>` : ''}
+    ${ro ? `<p class="note">This template comes from the "${esc(t.source)}" library and is read-only. <button type="button" class="small" data-copy>Copy to local library</button></p>` : ''}
     <div class="grid2">
       <div><label>Role id (kebab-case)</label><input name="role" value="${esc(t.role)}" ${isNew || ro ? '' : 'readonly'} placeholder="devops-engineer" required></div>
       <div><label>Title</label><input name="title" value="${esc(t.title)}" placeholder="DevOps Engineer" required ${dis}></div>
@@ -59,6 +60,8 @@ async function draw(isNew = false) {
   body.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => closeModal());
   body.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { selected = b.dataset.pick; draw(); });
   body.querySelector('[data-new]').onclick = () => { selected = null; draw(true); };
+  body.querySelector('[data-libs]').onclick = () => drawLibraries();
+  body.querySelector('[data-copy]')?.addEventListener('click', () => copyTemplate(t.source, t.role));
   body.querySelectorAll('[data-diff]').forEach((b) => b.onclick = async () => {
     const [from, to] = b.dataset.diff.split(':');
     const d = await api('GET', `/api/roles/${selected}/diff?from=${from}&to=${to}`);
@@ -88,3 +91,62 @@ async function save(create, current) {
     ctx.refresh();
   } catch (e) { err.textContent = e.message; }
 }
+
+// ---------- shared libraries ----------
+async function copyTemplate(library, role) {
+  const local = meta.templates.some((x) => x.role === role && x.writable);
+  const as = prompt(`Role id for the local copy of ${role}`, local ? `${role}-copy` : role);
+  if (!as) return;
+  try {
+    const r = await api('POST', `/api/libraries/${library}/templates/${role}/copy`, { as: as.trim() });
+    toast(`${r.template.title} copied to the local library`);
+    meta = await api('GET', '/api/roles');
+    selected = r.template.role;
+    draw();
+  } catch (e) { toast(e.message); }
+}
+
+async function drawLibraries(openName = null) {
+  const { libraries } = await api('GET', '/api/libraries');
+  const lib = libraries.find((l) => l.name === openName);
+  const list = lib ? (await api('GET', `/api/libraries/${lib.name}/templates`)).templates : [];
+  const body = openModal(`<div class="mHead"><h3 class="grow">Role Templates</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div>
+    <div class="mBody"><div class="tplLayout">${listHtml()}<div class="tplEdit">
+      <h3>Libraries</h3>
+      <p class="note">Shared template libraries are read-only. Git libraries are cloned into <code>~/.aisquad/libraries/</code> and pulled when you ask. Copy a template to the local library to change it.</p>
+      ${libraries.map((l) => `<div class="card"><div class="row"><b class="grow">${esc(l.name)}</b><span class="chip">${l.templates} template${l.templates === 1 ? '' : 's'}</span></div>
+        <div class="note" style="word-break:break-all">${esc(l.url || l.path)}${l.ref ? ` · ${esc(l.ref)}` : ''}</div>
+        ${l.version ? `<div class="note">Version <code>${esc(l.version.commit)}</code> · ${esc(new Date(l.version.date).toLocaleString())} · ${esc(l.version.subject)}</div>` : l.kind === 'git' ? '<div class="note">Not cloned yet.</div>' : ''}
+        <div class="row wrap" style="margin-top:6px">${l.kind === 'git' ? `<button type="button" class="small" data-pull="${esc(l.name)}">Pull</button>` : ''}<button type="button" class="small" data-browse="${esc(l.name)}">Templates</button><button type="button" class="small ghost danger" data-rmlib="${esc(l.name)}">Remove</button></div>
+        ${lib && lib.name === l.name ? `<div style="margin-top:8px">${list.map((t) => `<div class="row" style="margin-top:4px"><span class="grow">${esc(t.title)} <span class="note">${esc(t.role)} · v${t.version}</span></span><button type="button" class="small" data-copylib="${esc(t.role)}">Copy</button></div>`).join('') || '<div class="empty">No templates.</div>'}</div>` : ''}</div>`).join('') || '<div class="empty">No shared libraries yet.</div>'}
+      <h3 style="margin-top:16px">Add a library</h3>
+      <form id="libForm" novalidate><div class="grid2"><div><label>Name</label><input name="name" placeholder="team" required></div><div><label>Branch (optional)</label><input name="ref" placeholder="main"></div></div>
+        <label>Git URL or absolute directory</label><input name="src" placeholder="git@github.com:org/roles.git" spellcheck="false">
+        <label>Folder inside the repository (optional; default roles/ when it exists)</label><input name="subdir" placeholder="roles">
+        <div class="actions"><button class="gold" type="submit">Add library</button></div></form>
+    </div></div></div>
+    <div class="mFoot"><div class="err grow" id="tErr"></div><button class="ghost" data-close>Close</button></div>`);
+  body.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => closeModal());
+  body.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { selected = b.dataset.pick; draw(); });
+  body.querySelector('[data-new]').onclick = () => { selected = null; draw(true); };
+  body.querySelector('[data-libs]').onclick = () => drawLibraries();
+  const err = (e) => { document.getElementById('tErr').textContent = e.message; };
+  body.querySelectorAll('[data-pull]').forEach((b) => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Pulling…';
+    try { const r = await api('POST', `/api/libraries/${b.dataset.pull}/pull`); toast(`${r.library.name} at ${r.library.version?.commit || 'latest'}`); meta = await api('GET', '/api/roles'); drawLibraries(openName); } catch (e) { err(e); b.disabled = false; b.textContent = 'Pull'; }
+  });
+  body.querySelectorAll('[data-browse]').forEach((b) => b.onclick = () => drawLibraries(b.dataset.browse === openName ? null : b.dataset.browse));
+  body.querySelectorAll('[data-copylib]').forEach((b) => b.onclick = () => copyTemplate(openName, b.dataset.copylib));
+  body.querySelectorAll('[data-rmlib]').forEach((b) => b.onclick = async () => {
+    if (!confirm(`Remove library ${b.dataset.rmlib}? Local copies of its templates stay.`)) return;
+    try { await api('DELETE', `/api/libraries/${b.dataset.rmlib}`); meta = await api('GET', '/api/roles'); drawLibraries(); } catch (e) { err(e); }
+  });
+  body.querySelector('#libForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target, src = f.elements.src.value.trim();
+    const input = { name: f.elements.name.value.trim(), ref: f.elements.ref.value.trim(), subdir: f.elements.subdir.value.trim(), ...(/^(https?:|ssh:|git@|file:)/.test(src) || src.endsWith('.git') ? { url: src } : { path: src }) };
+    const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Adding…';
+    try { await api('POST', '/api/libraries', input); meta = await api('GET', '/api/roles'); toast('Library added'); drawLibraries(kebabName(input.name)); } catch (e2) { err(e2); btn.disabled = false; btn.textContent = 'Add library'; }
+  });
+}
+const kebabName = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

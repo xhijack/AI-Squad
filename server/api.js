@@ -7,6 +7,7 @@ import { HttpError, notFound, lineDiff } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
 import * as roles from './roles.js';
+import * as libraries from './libraries.js';
 import * as squad from './squad.js';
 import { checkPin } from './pin.js';
 import { setApproval } from './merge.js';
@@ -59,6 +60,12 @@ const routes = [
     if (!from || !to) throw notFound('Unknown version');
     return { role, from: +q.get('from'), to: +q.get('to'), diff: lineDiff(from, to) };
   }],
+  ['GET', /^\/api\/libraries$/, async () => ({ libraries: await libraries.listStatus() })],
+  ['GET', /^\/api\/libraries\/([\w-]+)\/templates$/, ([name]) => ({ templates: roles.libraryTemplates(name) })],
+  ['POST', /^\/api\/libraries$/, async (p, b) => { const e = libraries.addLibrary(b); const st = e.url ? await libraries.pull(e.name) : await libraries.status(e); squad.invalidate(); return { ok: true, library: st }; }, { pin: true }],
+  ['POST', /^\/api\/libraries\/([\w-]+)\/pull$/, async ([name]) => { const st = await libraries.pull(name); squad.invalidate(); return { ok: true, library: st }; }, { pin: true }],
+  ['DELETE', /^\/api\/libraries\/([\w-]+)$/, ([name]) => { libraries.removeLibrary(name); squad.invalidate(); return { ok: true }; }, { pin: true }],
+  ['POST', /^\/api\/libraries\/([\w-]+)\/templates\/([\w-]+)\/copy$/, ([name, role], b) => roles.copyToLocal(name, role, b.as || role), { pin: true }],
   ['POST', /^\/api\/roles$/, (p, b) => roles.saveTemplate(b, { create: true }), { pin: true }],
   ['PUT', /^\/api\/roles\/([\w-]+)$/, ([role], b) => { const r = roles.saveTemplate({ ...b, role }); squad.invalidate(); return r; }, { pin: true }],
 
