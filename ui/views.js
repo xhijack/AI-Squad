@@ -3,7 +3,7 @@
 import { esc, money, ago, gb, avatar, STATE_TEXT } from './lib.js';
 
 const WORKFLOW_TEXT = { 'free-team': 'Free Team', 'squad-sprint': 'Squad Sprint' };
-const KIND_TEXT = { question: 'Question', permission: 'Permission', stall: 'Stalled', budget: 'Budget', resource: 'Resources' };
+const KIND_TEXT = { question: 'Question', permission: 'Permission', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge' };
 
 // ---------- Attention ----------
 export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
@@ -21,7 +21,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     const links = [];
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">Open desk</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">Open Floor</a>`);
-    if (a.kind === 'stall') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
+    if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
     return `<div class="att ${a.kind} ${a.level || ''}"><div class="where">${where} · ${ago(a.ts)}</div><div class="q">${esc(a.text)}</div>${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
   }).join('');
 }

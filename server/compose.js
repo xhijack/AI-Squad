@@ -73,6 +73,7 @@ function gitRules(git) {
   if (git.noAiAttribution !== false) out.push('No AI attribution in commits or PRs: no Co-Authored-By trailers, no "Generated with" lines.');
   if (git.pushPolicy !== 'agents-may-push') out.push('Never run `git push`. Merges and pushes are done by The AI Squad server after the quality gate passes.');
   if (git.qualityGate) out.push(`Quality gate: \`${git.qualityGate}\` must pass before you report work as done.`);
+  if (git.branchStrategy !== 'trunk') out.push(`Commit finished work on your branch and leave \`${git.mainBranch || 'main'}\` alone: the server ${git.mergeMethod === 'merge' ? 'merges' : 'squash-merges'} it ${git.mergePolicy === 'manual' ? 'when the owner says so' : 'once the quality gate passes'}.`);
   return out;
 }
 

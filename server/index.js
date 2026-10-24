@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, paths } from './config.js';
 import { seedDefaults } from './roles.js';
-import { flushPending, watchdogTick } from './squad.js';
+import { flushPending, watchdogTick, mergeTick } from './squad.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -28,3 +28,6 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { if (fs.re
 setInterval(() => { flushPending().catch(() => {}); }, 3000).unref();
 setTimeout(() => { try { watchdogTick(); } catch { /* next tick */ } }, 5000).unref();
 setInterval(() => { try { watchdogTick(); } catch (e) { console.error('[watchdog]', e.message); } }, 60000).unref();
+setInterval(() => {
+  mergeTick().then((done) => { for (const m of done) console.log(`[merge] ${m.branch}: ${m.result}${m.reason ? ` (${m.reason})` : ''}`); }, (e) => console.error('[merge]', e.message));
+}, 60000).unref();

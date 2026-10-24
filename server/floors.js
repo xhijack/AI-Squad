@@ -9,6 +9,7 @@ import { listTemplates, parseTemplate, renderTemplate, templateText, cleanAppear
 import { effectiveAgent, renderAgentFile, cleanOverrides, permissionViolations, GENERATED_MARK } from './compose.js';
 import { lineDiff } from './util.js';
 import * as building from './building.js';
+import { setApproval } from './merge.js';
 
 const run = promisify(execFile);
 
@@ -18,6 +19,7 @@ export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'booksh
 export const DESK_DEVICES = ['laptop', 'dual-monitor'];
 export const BRANCH_STRATEGIES = ['agent-branches', 'feature-branches', 'trunk'];
 export const PUSH_POLICIES = ['never', 'after-merge', 'agents-may-push'];
+export const MERGE_METHODS = ['squash', 'merge'];
 const ACCENTS = ['#7c5cd6', '#4fa36b', '#3d82d6', '#f2b544', '#e2574c', '#f08a24', '#2bb3a3', '#d94f8c'];
 const SHIRTS = ['#3d82d6', '#4fa36b', '#7c5cd6', '#e2574c', '#f08a24', '#2bb3a3', '#d94f8c', '#f2b544'];
 const HAIR = ['#2b2440', '#5a3418', '#8a5a2b', '#e8742c', '#1f2937', '#c9a227', '#f28bb6'];
@@ -67,7 +69,7 @@ export function cleanGit(g = {}, prev = {}) {
     noAiAttribution: pick('noAiAttribution', true) !== false,
     pushPolicy: PUSH_POLICIES.includes(pick('pushPolicy')) ? pick('pushPolicy') : 'never',
     mergePolicy: pick('mergePolicy') === 'manual' ? 'manual' : 'auto',
-    autoMergeApproved: !!pick('autoMergeApproved', false),
+    mergeMethod: pick('mergeMethod') === 'merge' ? 'merge' : 'squash',
     qualityGate: String(pick('qualityGate', '') || '').trim().slice(0, 300),
   };
 }
@@ -336,6 +338,7 @@ export async function createFloor(input) {
   writeBrief(root, floor, { agents: [] }, input.goal);   // brief first, generate() then fills the team table
   generate(root);
   const entry = building.registerFloor(root, { name, number });
+  if (input.git?.autoMergeApproved) setApproval(entry.id, true);   // approval lives in ~/.aisquad, never in the repo
   return { entry, ...readFloor(root) };
 }
 

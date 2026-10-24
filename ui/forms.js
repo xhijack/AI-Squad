@@ -61,7 +61,7 @@ export function readMember(el) {
 export const BRANCH_TEXT = { 'agent-branches': 'Branch per agent', 'feature-branches': 'Feature branches', trunk: 'Trunk (main)' };
 export const PUSH_TEXT = { never: 'Never push', 'after-merge': 'Server pushes after merge', 'agents-may-push': 'Agents may push' };
 
-export function gitHtml(g = {}) {
+export function gitHtml(g = {}, { approved = false } = {}) {
   return `<div class="grid2">
       <div><label>Remote (optional)</label><input data-g="remote" value="${esc(g.remote || '')}" placeholder="git@github.com:org/repo.git"></div>
       <div><label>Main branch</label><input data-g="mainBranch" value="${esc(g.mainBranch || 'main')}"></div>
@@ -71,14 +71,15 @@ export function gitHtml(g = {}) {
     <label class="inline"><input type="checkbox" data-g="noAiAttribution" ${g.noAiAttribution !== false ? 'checked' : ''}> No AI attribution in commits and PRs</label>
     <label>Push policy</label>${segHtml('pushPolicy', Object.entries(PUSH_TEXT), g.pushPolicy || 'never')}
     <label>Merge policy</label>${segHtml('mergePolicy', [['auto', 'Automatic (after quality gate)'], ['manual', 'Manual']], g.mergePolicy || 'auto')}
-    <label class="inline"><input type="checkbox" data-g="autoMergeApproved" ${g.autoMergeApproved ? 'checked' : ''}> I approve automatic merges on this Floor (executed by the server, never by an agent)</label>
+    <label>Merge method</label>${segHtml('mergeMethod', [['squash', 'Squash'], ['merge', 'Merge commit']], g.mergeMethod || 'squash')}
+    <label class="inline"><input type="checkbox" data-g="autoMergeApproved" ${approved ? 'checked' : ''}> I approve automatic merges on this Floor (done by the server, never by an agent; stored on this machine, not in the repo)</label>
     <label>Quality gate command</label><input data-g="qualityGate" value="${esc(g.qualityGate || '')}" placeholder="npm test">
-    <p class="note">The auto-merge executor is not part of the MVP yet; these settings are stored and given to the agents as rules.</p>`;
+    <p class="note">Finished work is merged in a temporary worktree: the quality gate runs on the merged result, and conflicts or a red gate stop the merge and show up in Attention.</p>`;
 }
 
 export function readGit(root) {
   const v = (k) => root.querySelector(`[data-g="${k}"]`);
   const seg = (k) => root.querySelector(`[data-seg="${k}"] [aria-pressed=true]`)?.dataset.v;
   return { remote: v('remote').value.trim(), mainBranch: v('mainBranch').value.trim() || 'main', branchStrategy: seg('branchStrategy'), commitIdentity: seg('commitIdentity'),
-    noAiAttribution: v('noAiAttribution').checked, pushPolicy: seg('pushPolicy'), mergePolicy: seg('mergePolicy'), autoMergeApproved: v('autoMergeApproved').checked, qualityGate: v('qualityGate').value.trim() };
+    noAiAttribution: v('noAiAttribution').checked, pushPolicy: seg('pushPolicy'), mergePolicy: seg('mergePolicy'), mergeMethod: seg('mergeMethod'), autoMergeApproved: v('autoMergeApproved').checked, qualityGate: v('qualityGate').value.trim() };
 }

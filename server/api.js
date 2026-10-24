@@ -9,6 +9,7 @@ import * as floors from './floors.js';
 import * as roles from './roles.js';
 import * as squad from './squad.js';
 import { checkPin } from './pin.js';
+import { setApproval } from './merge.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -67,9 +68,13 @@ const routes = [
   ['PATCH', /^\/api\/floors\/([\w-]+)$/, ([id], b) => {
     if (b.number !== undefined) building.setFloorNumber(id, b.number);
     floors.updateFloorConfig(floorRoot(id), b);
+    if (b.git && b.git.autoMergeApproved !== undefined) setApproval(id, !!b.git.autoMergeApproved);
     squad.invalidate();
     return { ok: true };
   }, { pin: true }],
+  ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
+  ['POST', /^\/api\/floors\/([\w-]+)\/merges$/, ([id], b) => squad.startMerge(id, b.branch), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/merge-approval$/, ([id], b) => { building.floorEntry(id); setApproval(id, !!b.approved); squad.invalidate(); return { ok: true, approved: !!b.approved }; }, { pin: true }],
   ['DELETE', /^\/api\/floors\/([\w-]+)$/, ([id]) => { building.unregisterFloor(id); squad.invalidate(); return { ok: true }; }, { pin: true }],
 
   ['POST', /^\/api\/floors\/([\w-]+)\/agents$/, ([id], b) => { const a = floors.addAgent(floorRoot(id), b); squad.invalidate(); return { ok: true, agent: a }; }, { pin: true }],

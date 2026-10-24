@@ -63,9 +63,11 @@ async function floorSettings() {
     <label>Workflow</label>${segHtml('workflow', [['free-team', 'Free Team'], ['squad-sprint', 'Squad Sprint']], c.workflow)}
     <div class="grid2"><div><label>Budget (USD, 0 = none)</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
       <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], c.budget.period)}</div></div>
-    <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git)}`,
+    <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
+    <h3 style="margin-top:18px">Merges</h3><div id="dMerges" class="note">Loading…</div>`,
   '<button class="ghost danger" data-remove>Remove Floor</button><span class="spacer"></span><button class="ghost" data-close>Cancel</button><button class="gold" data-ok>Save</button>')));
   bindSegs(body);
+  loadMerges(f.id, body.querySelector('#dMerges'));
   body.querySelector('[data-remove]').onclick = async () => {
     if (!confirm('Remove this Floor from the Building? The project directory and its files stay untouched.')) return;
     try { await api('DELETE', `/api/floors/${f.id}`); closeModal(); toast('Floor removed'); location.hash = '#/'; } catch (e) { fail(e); }
@@ -79,6 +81,27 @@ async function floorSettings() {
       closeModal(); toast('Floor saved'); ctx.refresh();
     } catch (e) { fail(e); }
   };
+}
+
+const RESULT_TEXT = { merged: 'merged', refused: 'refused', failed: 'failed', noop: 'nothing to merge', busy: 'busy' };
+async function loadMerges(floorId, el) {
+  let m;
+  try { m = await api('GET', `/api/floors/${floorId}/merges`); } catch (e) { el.textContent = e.message; return; }
+  const p = m.policy;
+  const policy = `${p.mergePolicy === 'auto' ? 'Automatic' : 'Manual'} ${p.mergeMethod === 'merge' ? 'merge commits' : 'squash merges'} into <code>${esc(p.mainBranch)}</code>`
+    + `, gate ${p.qualityGate ? `<code>${esc(p.qualityGate)}</code>` : '<b>not set</b> (automatic merges need one)'}`
+    + `, push: ${esc({ never: 'never', 'after-merge': 'after merge', 'agents-may-push': 'after merge' }[p.pushPolicy])}`
+    + `. ${m.approval ? `Approved ${esc(new Date(m.approval.approvedAt).toLocaleString())}.` : 'Not approved on this machine yet.'}${m.running ? ' <b>A merge is running.</b>' : ''}`;
+  const cands = m.candidates.map((c) => `<div class="row" style="margin-top:6px"><code class="grow ellipsis">${esc(c.branch)}</code>${c.lastResult ? `<span class="chip">${esc(RESULT_TEXT[c.lastResult])}</span>` : ''}<button type="button" class="small" data-merge="${esc(c.branch)}">Merge now</button></div>`).join('');
+  const log = m.log.slice(0, 8).map((e) => `<li><b class="${e.result === 'merged' ? 'ok' : ''}">${esc(RESULT_TEXT[e.result] || e.result)}</b> <code>${esc(e.branch)}</code> · ${esc(new Date(e.ts).toLocaleString())} · ${esc(e.trigger)}${e.reason ? ` · ${esc(e.reason)}` : ''}${e.push ? ` · push ${e.push.ok ? 'ok' : 'failed'}` : ''}</li>`).join('');
+  el.innerHTML = `<p style="margin-top:0">${policy}</p>
+    <b>Ready to merge</b>${cands || '<div class="empty">No unmerged branches for this branch strategy.</div>'}
+    <b style="display:block;margin-top:10px">Last merges</b>${log ? `<ul style="padding-left:18px;margin:4px 0">${log}</ul>` : '<div class="empty">None yet.</div>'}`;
+  el.querySelectorAll('[data-merge]').forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await api('POST', `/api/floors/${floorId}/merges`, { branch: b.dataset.merge }); toast('Merge started; the result appears here and in Attention'); setTimeout(() => loadMerges(floorId, el), 3000); }
+    catch (e) { toast(e.message); b.disabled = false; }
+  });
 }
 
 async function templateDiff(el) {

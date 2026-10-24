@@ -10,9 +10,10 @@ import * as floors from './floors.js';
 import * as tx from './transcripts.js';
 import * as tm from './tmux.js';
 import * as wd from './watchdog.js';
+import * as merge from './merge.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {} }; };
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [] }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
 
@@ -107,6 +108,10 @@ function floorAttention(entry, floor, lives, cost) {
   for (const s of wd.stallAlerts(lives.map((l) => ({ id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead, state: l.state, lastTs: l.lastTs })), work)) {
     out.push({ id: attId('stall', entry.id, s.agent || ''), kind: 'stall', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
   }
+  for (const m of merge.mergeProblems(entry.id, loadRuntime().dismissedMerges)) {
+    const what = m.result === 'merged' ? `Merged ${m.branch} but the push failed: ${m.push.error}` : `Merge of ${m.branch} ${m.result}: ${m.reason}`;
+    out.push({ id: attId('merge', m.id), mergeId: m.id, kind: 'merge', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, text: what + (m.gate && !m.gate.ok ? `\n\n${m.gate.output.split('\n').slice(-8).join('\n')}` : ''), ts: m.ts });
+  }
   const b = wd.budgetStatus(floor.budget, cost);
   if (b.level === 'over') out.push({ id: attId('budget', entry.id, floor.budget.period), kind: 'budget', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, text: `Budget reached: $${b.used.toFixed(2)} of $${floor.budget.usd} this ${floor.budget.period}`, ts: Date.now() });
   return out;
@@ -177,7 +182,7 @@ function suggestProjectsDir(b) {
 // Watchdog alerts (stall, budget, resources) are recomputed on every snapshot; remember when each
 // one first appeared so "since" stays stable, and report new ones once.
 const firstSeen = new Map();
-export const WATCH_KINDS = new Set(['stall', 'budget', 'resource']);
+export const WATCH_KINDS = new Set(['stall', 'budget', 'resource', 'merge']);
 function stampAlerts(items, onNew = null) {
   const now = Date.now(), live = new Set();
   for (const a of items) {
@@ -231,7 +236,8 @@ export function floorDetail(id) {
     return { ...a, effective, templateStatus: floors.templateStatus(entry.path, a) };
   });
   return { ...sum, floor: s.cfg.floor, git: s.cfg.git, team, brief: readBriefSafe(entry.path), feed: feed.slice(0, 60), messages: messages.slice(0, 40),
-    attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null };
+    attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null,
+    merge: { approved: !!merge.approval(entry.id), approvedAt: merge.approval(entry.id)?.approvedAt || null, running: merge.isMerging(entry.id), last: merge.mergeLog(entry.id, 5) } };
 }
 
 function readBriefSafe(root) { try { return fs.readFileSync(path.join(root, 'AISQUAD.md'), 'utf8').slice(0, 20000); } catch { return ''; } }
@@ -340,6 +346,7 @@ export function answerAttention(id, option, text = '') {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) throw notFound('This item is gone (maybe already answered)');
+  if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
   const name = tm.sessionName(item.floorId, item.agentId);
@@ -365,4 +372,51 @@ export function saveAttachment(floorId, filename, buf) {
   const file = path.join(dir, `${stamp}-${crypto.randomBytes(3).toString('hex')}-${orig.replace(/[^\w.-]+/g, '_').slice(-80)}`);
   fs.writeFileSync(file, buf, { mode: 0o640 });
   return { path: file, name: orig, size: buf.length };
+}
+
+// ---------- auto-merge (D3) ----------
+export async function floorMerges(floorId) {
+  const entry = building.floorEntry(floorId);
+  const { git, team } = floors.readFloor(entry.path);
+  return { policy: git, approval: merge.approval(floorId), running: merge.isMerging(floorId), log: merge.mergeLog(floorId, 20),
+    candidates: await merge.candidates(floorId, entry.path, git, team.agents.map((a) => a.id)) };
+}
+
+export function startMerge(floorId, branch) {
+  const entry = building.floorEntry(floorId);
+  const { git } = floors.readFloor(entry.path);
+  if (merge.isMerging(floorId)) throw bad('A merge is already running on this Floor');
+  merge.mergeBranch(floorId, entry.path, git, String(branch || ''), { trigger: 'manual' }).then(invalidate);
+  return { ok: true, started: true };
+}
+
+// finished work = the agent's current work item is done and the agent is not working (agent branches),
+// or nobody on the Floor has open work (feature branches). Each branch tip is tried once automatically.
+let merging = false;
+export async function mergeTick({ checkMemory = true } = {}) {
+  if (merging) return [];
+  merging = true;
+  const done = [];
+  try {
+    const res = wd.readResources();
+    if (checkMemory && res.mem && res.mem.available < wd.LIMITS.freeRamBytes) return done;     // quality gates are heavy; wait for memory
+    const snap = buildingSnapshot();
+    for (const f of snap.floors) {
+      if (f.missing || !merge.approval(f.id)) continue;
+      const entry = building.floorEntry(f.id);
+      const { git, team } = floors.readFloor(entry.path);
+      if (git.mergePolicy !== 'auto' || git.branchStrategy === 'trunk') continue;
+      const work = workOf(f.id);
+      const openWork = Object.values(work).some((w) => !w.doneAt);
+      for (const c of await merge.candidates(f.id, entry.path, git, team.agents.map((a) => a.id))) {
+        if (c.lastResult) continue;
+        if (c.agent) {
+          const a = f.agents.find((x) => x.id === c.agent);
+          if (!work[c.agent]?.doneAt || !a || a.state === 'working' || a.state === 'waiting') continue;
+        } else if (openWork) continue;
+        done.push(await merge.mergeBranch(f.id, entry.path, git, c.branch, { trigger: 'auto' }));
+      }
+    }
+  } finally { merging = false; if (done.length) invalidate(); }
+  return done;
 }
