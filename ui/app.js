@@ -5,6 +5,7 @@ import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
+import './perf.js';
 
 const state = ctx.state;
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -229,6 +230,10 @@ function render() {
   if (!$('attPop').hidden) patch($('attPop'), attentionPopHtml());
   if (state.offline) toast('Server not reachable, retrying…');
 
+  // dock: performance (Squad Sprint Floors only); voice and server meter join it
+  const sprintFloor = route.floorId && f && f.workflow === 'squad-sprint';
+  $('dock').hidden = !!ctx.editing;
+  patch($('dock'), [sprintFloor ? '<button class="small" data-act="performance" title="Performance and cost projection">▤ Performance</button>' : ''].join(''));
   // elevator (Floor switcher)
   const elev = $('elevator');
   elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes;

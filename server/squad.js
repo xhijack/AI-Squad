@@ -12,6 +12,7 @@ import * as wd from './watchdog.js';
 import * as merge from './merge.js';
 import * as sprint from './sprint.js';
 import * as hooks from './events.js';
+import { floorPerformance } from './performance.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -511,6 +512,21 @@ export async function startNextSprint(floorId) {
   stopAgent(floorId, p.lead);
   await startAgent(floorId, p.lead, `/sprint ${p.sprint}`);
   return { sprint: p.sprint, lead: p.lead };
+}
+
+// ---------- performance (Squad Sprint Floors only) ----------
+const perfCache = new Map();
+export function performance(floorId) {
+  const entry = building.floorEntry(floorId);
+  const { floor, team } = floors.readFloor(entry.path);
+  if (floor.workflow !== 'squad-sprint') throw bad('Performance is available on Squad Sprint Floors only');
+  const hit = perfCache.get(floorId);
+  if (hit && Date.now() - hit.at < 20000) return hit.value;
+  costFor(floorId, entry.path);                                   // scans new transcript lines
+  const tracker = costs.get(floorId).tracker;
+  const value = floorPerformance(entry.path, team.agents.map((a) => ({ id: a.id, displayName: a.displayName, kind: sprint.roleKind(a) })), (from, to) => tracker.costBetween(from, to));
+  perfCache.set(floorId, { at: Date.now(), value });
+  return value;
 }
 
 // ---------- plugin hook events ----------

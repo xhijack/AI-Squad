@@ -89,6 +89,27 @@ session(hr, 'ramdani-frappe-developer', 's-ramdani', [
   tool(10e3, 'h2', 'Edit', { file_path: `${hr}/apps/sopwer_hr/sopwer_hr/report/leave_encashment/leave_encashment.py`, old_string: 'def execute', new_string: 'def execute(filters=None)' }),
 ]);
 
+session(hr, 'agus-frappe-developer', 's-agus', [task(2 * 864e5, 'Build the Leave Policy DocType.'), tool(2 * 864e5 - 60e3, 'g1', 'Edit', { file_path: `${hr}/apps/sopwer_hr/leave_policy.py`, old_string: 'x', new_string: 'y' }, 6)]);
+session(hr, 'maya-qa-engineer', 's-maya', [task(1.5 * 864e5, 'Test M01 and M02.'), tool(1.5 * 864e5 - 60e3, 'q1', 'Bash', { command: 'bench run-tests --app sopwer_hr', description: 'Run tests' }, 3)]);
+
+// Squad Sprint history for the performance dialog: sprint 1 closed a day ago, sprint 2 running, a backlog
+const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(hr, rel)), { recursive: true }); fs.writeFileSync(path.join(hr, rel), text); };
+const plan = (rows) => `| Module | Stories | SP | Owner | Owned folders | Depends on | Status |\n|---|---|---|---|---|---|---|\n${rows.map((r) => `| ${r.join(' | ')} |`).join('\n')}\n`;
+put('docs/squad/sprint-1/PLAN.md', plan([['M01 Leave Policy', 'HR-1', '5', 'agus-frappe-developer', 'leave_policy', '—', 'DONE'], ['M02 Leave Balance', 'HR-2', '3', 'ramdani-frappe-developer', 'leave_balance', 'M01', 'DONE']]));
+put('docs/squad/sprint-1/qa/M01.md', 'STATUS: PASS\nRound: 2\nTester: maya-qa-engineer\n');
+put('docs/squad/sprint-1/qa/M02.md', 'STATUS: PASS\nRound: 1\nTester: maya-qa-engineer\n');
+put('docs/squad/sprint-1/bugs/M01-B01.md', 'STATUS: VERIFIED\nOWNER: agus-frappe-developer\nSEVERITY: Major\n');
+put('docs/squad/sprint-1/bugs/M01-B02.md', 'STATUS: VERIFIED\nOWNER: agus-frappe-developer\nSEVERITY: Minor\n');
+const { execFileSync } = await import('node:child_process');
+const when = new Date(Date.now() - 864e5).toISOString();
+const genv = { ...process.env, GIT_AUTHOR_NAME: 'Seed', GIT_AUTHOR_EMAIL: 'seed@aisquad.local', GIT_COMMITTER_NAME: 'Seed', GIT_COMMITTER_EMAIL: 'seed@aisquad.local', GIT_AUTHOR_DATE: when, GIT_COMMITTER_DATE: when };
+execFileSync('git', ['-C', hr, 'add', '-A'], { env: genv });
+execFileSync('git', ['-C', hr, 'commit', '-qm', 'docs(squad): close sprint 1'], { env: genv });
+put('.claude/squad/config.sh', fs.readFileSync(path.join(hr, '.claude/squad/config.sh'), 'utf8').replace(/^SPRINT=.*$/m, 'SPRINT="2"'));
+put('docs/squad/PLAN.md', plan([['M03 Leave Encashment report', 'HR-3', '3', 'ramdani-frappe-developer', 'report', '—', 'BUILD'], ['M04 Payroll export', 'HR-4', '5', 'agus-frappe-developer', 'payroll', 'M03', 'TODO']]));
+put('docs/squad/TASKS.md', '| Task | Owner | Blocked by | Status |\n|---|---|---|---|\n| BUILD M03 Leave Encashment report | ramdani-frappe-developer | — | IN_PROGRESS |\n| QA M03 Leave Encashment report | maya-qa-engineer | BUILD M03 | TODO |\n| BUILD M04 Payroll export | agus-frappe-developer | M03 | TODO |\n| QA M04 Payroll export | maya-qa-engineer | BUILD M04 | TODO |\n');
+put('docs/BACKLOG.md', '| Story | SP | Status |\n|---|---|---|\n| HR-1 Leave policy | 5 | DONE |\n| HR-5 Attendance import | 8 | TODO |\n| HR-6 Shift roster | 5 | TODO |\n');
+
 // a detected project that is not a Floor yet
 const other = path.join(PG, 'floors', 'mobile-app');
 fs.mkdirSync(other, { recursive: true });

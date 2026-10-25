@@ -268,7 +268,7 @@ export class CostTracker {
       const cost = costOf(m.model, m.usage);
       const prev = this.byId.get(m.id);
       if (prev && prev.cost >= cost) continue;
-      this.byId.set(m.id, { cost, day: dayKey(tsOf(r) || st.mtimeMs), agent });
+      this.byId.set(m.id, { cost, day: dayKey(tsOf(r) || st.mtimeMs), ts: tsOf(r) || st.mtimeMs, agent });
     }
   }
 
@@ -285,6 +285,13 @@ export class CostTracker {
         this.readFile(path.join(sd, f), meta.customAgentType || meta.agentType || meta.name || 'subagent');
       }
     }
+  }
+
+  // cost per agent between two times (sprint windows for the performance dialog)
+  costBetween(from, to) {
+    const out = {};
+    for (const e of this.byId.values()) if (e.ts >= from && e.ts < to) out[e.agent] = (out[e.agent] || 0) + e.cost;
+    return out;
   }
 
   summary(now = Date.now()) {
