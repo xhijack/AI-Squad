@@ -33,7 +33,7 @@ export function deskHome(st) {
   st.human.position.set(st.g.position.x, st.g.position.y, st.g.position.z);
   st.human.rotation.y = st.g.rotation.y;
 }
-const behindDesk = (st) => { const o = rot(0, -.95, st.g.rotation.y); return { x: st.g.position.x + o.x, z: st.g.position.z + o.z }; };
+const behindDesk = (st) => { const o = rot(0, -.95 * st.g.scale.x, st.g.rotation.y); return { x: st.g.position.x + o.x, z: st.g.position.z + o.z }; };
 
 function startWalk(st, points, run) { st.life.path = points.map((p) => ({ x: p.x, z: p.z })); st.life.run = run; }
 

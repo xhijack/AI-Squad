@@ -15,7 +15,7 @@ const CX = (WORK.x0 + WORK.x1) / 2;
 export function presetSpots(n, layout) {
   const out = [];
   if (layout === 'circle') {
-    const r = Math.min(3.6, 1.6 + n * .35);
+    const r = Math.min(3.8, 1.9 + n * .35);
     for (let i = 0; i < n; i++) {
       const a = i / n * Math.PI * 2 + Math.PI / 2;
       const x = CX + Math.cos(a) * r * 1.4, z = -1.5 + Math.sin(a) * r * .85;
@@ -25,21 +25,21 @@ export function presetSpots(n, layout) {
     const pods = Math.ceil(n / 4);
     for (let i = 0; i < n; i++) {
       const pod = Math.floor(i / 4), k = i % 4;
-      const px = CX + (pod - (pods - 1) / 2) * 6.6, side = k % 2 ? 1 : -1, front = k < 2;
-      out.push({ x: px + side * 1.65, z: front ? .5 : -3.6, ry: front ? Math.PI : 0 });
+      const px = CX + (pod - (pods - 1) / 2) * 7.2, side = k % 2 ? 1 : -1, front = k < 2;
+      out.push({ x: px + side * 2.1, z: front ? .8 : -4.1, ry: front ? Math.PI : 0 });
     }
   } else if (layout === 'open-space') {
     const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(n * 1.6))));
     for (let i = 0; i < n; i++) {
       const c = i % cols, r = Math.floor(i / cols);
       const jitter = ((i * 7919) % 13) / 13 - .5;                    // deterministic, looks hand-placed
-      out.push({ x: CX + (c - (cols - 1) / 2) * 3.3 + jitter * .6, z: -3.8 + r * 3 + (c % 2) * .5, ry: jitter * .6 });
+      out.push({ x: CX + (c - (cols - 1) / 2) * 3.5 + jitter * .6, z: -4 + r * 3.5 + (c % 2) * .5, ry: jitter * .6 });
     }
   } else {
     const per = Math.min(4, Math.max(1, Math.ceil(n / 2)));
     for (let i = 0; i < n; i++) {
       const r = Math.floor(i / per), c = i % per, cols = Math.min(per, n - r * per);
-      out.push({ x: CX + (c - (cols - 1) / 2) * 3.2, z: -3.9 + r * 3.1, ry: 0 });
+      out.push({ x: CX + (c - (cols - 1) / 2) * 3.4, z: -4.1 + r * 3.6, ry: 0 });
     }
   }
   return out.map((s) => ({ x: +clampX(s.x).toFixed(3), z: +clampZ(s.z).toFixed(3), ry: +s.ry.toFixed(3) }));

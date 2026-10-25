@@ -212,11 +212,13 @@ function buildRoom(g, f, accent) {
 // ---------- agents at desks ----------
 const LOOK_BASE = { eye: '#2f3a4a', pants: '#334155', shoe: '#1f2937', hat: '#f08a24', skin: '#f6d2b0', hair: '#2b2440', shirt: '#3d82d6', style: 'bob' };
 const lookFor = (a = {}) => { const l = { ...LOOK_BASE, ...a }; return { ...l, sleeve: l.shirt, overall: l.style === 'farmer' ? '#3b6fb6' : undefined }; };
+// desks and agents are a bit larger than life in the room, so agents stay big and readable (like squad-3d)
+export const STATION_SCALE = 1.3;
 const STATE_RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
 
 function buildStation(agent, desk, accent) {
   const g = new THREE.Group();
-  g.position.set(desk.x, TOP, desk.z); g.rotation.y = desk.ry || 0;
+  g.position.set(desk.x, TOP, desk.z); g.rotation.y = desk.ry || 0; g.scale.setScalar(STATION_SCALE);
   g.userData.agent = agent.id;
   const lead = agent.lead || agent.kindOf === 'lead';
   box(1.6, .07, .8, mat(lead ? '#8a5a35' : '#f4efe6', { roughness: .5 }), 0, .92, .62, g);         // desk
@@ -252,6 +254,7 @@ function buildStation(agent, desk, accent) {
   human.userData.agent = agent.id;
   human.userData.human = true;                                                  // clicking the body opens the agent's eyes
   human.add(rig.root);
+  human.scale.setScalar(STATION_SCALE);
   const st = { id: agent.id, g, human, rig, screens, ringMat, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6, accent };
   // name chip in the agent's colour above the head, its status under it, zzz when idle (as in squad-3d)
   st.label = label('<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div>', 'nlabel', human, 0, 1.95, 0);
@@ -287,19 +290,20 @@ function updateStation(st, a) {
   st.label.visible = !!st.labelsOn;
 }
 
-function poseDesk(st, t) {
+function poseDesk(st, t, awake = false) {
   const R = st.rig, p = t + st.phase;
+  const state = awake && st.state === 'stopped' ? 'idle' : st.state;   // seen through its own eyes: sit up
   resetPose(R); blink(st, t);
   seatRoot(R);
   sitLegs(R);
-  if (st.state === 'waiting') {
+  if (state === 'waiting') {
     arms(R, [-.4, .2, -.6], [-.2, -2.7 - Math.sin(p * 6) * .25, -.3]);         // raise a hand
     R.head.rotation.set(-.15, Math.sin(p * 2) * .2, 0);
-  } else if (st.state === 'working') {
+  } else if (state === 'working') {
     const tap = Math.sin(p * 16);
     arms(R, [-1.0, -.32, -.62 + tap * .1], [-1.0, .32, -.62 - tap * .1]);
     R.torso.rotation.x = .1; R.head.rotation.x = .1;
-  } else if (st.state === 'stopped') {
+  } else if (state === 'stopped') {
     R.torso.rotation.x = .55; R.head.rotation.set(.5, 0, .15);                  // asleep on the desk
     arms(R, [-1.3, -.5, -1.2], [-1.3, .5, -1.2]);
   } else {
@@ -351,7 +355,7 @@ export class BuildingScene {
     this.container = container;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     // fixed isometric angle: drag pans, the wheel zooms (smoothly)
-    Object.assign(this.controls, { enableDamping: true, dampingFactor: .12, enableRotate: false, screenSpacePanning: true, minZoom: .35, maxZoom: 9, zoomSpeed: .8 });
+    Object.assign(this.controls, { enableDamping: true, dampingFactor: .12, enableRotate: false, screenSpacePanning: true, minZoom: .04, maxZoom: 9, zoomSpeed: .8 });
     this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 
@@ -483,7 +487,7 @@ export class BuildingScene {
     }
     this.camera = persp ? this.persp : this.ortho;
     this.controls.object = this.camera;
-    const fov = view.eyes ? POV_FOV : 24;                     // tight lens for the over-the-shoulder view
+    const fov = view.eyes ? POV_FOV : 30;                     // tight lens for the over-the-shoulder view
     if (persp && this.persp.fov !== fov) { this.persp.fov = fov; this.persp.updateProjectionMatrix(); }
     this.resize();
     this.applyVisibility();
@@ -586,7 +590,7 @@ export class BuildingScene {
       const main = st.screens.find((x) => x.part === 'main') || st.screens[0];
       const target = main.mesh.getWorldPosition(new THREE.Vector3());
       const mx = main.mesh.parent.position.x;
-      const pos = st.g.localToWorld(new THREE.Vector3(mx - .15, 1.85, -.05));   // at the agent's eyes; its head is hidden in this view
+      const pos = st.g.localToWorld(new THREE.Vector3(mx - .18, 1.9, -.55));    // just behind the agent's head (hidden in this view)
       return { pos, target };
     }
     if (v.mode === 'desk' && o && o.stations.get(v.agentId)) {
@@ -749,7 +753,7 @@ export class BuildingScene {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
       for (const st of o.stations.values()) {
-        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, poseDesk: () => { deskHome(st); poseDesk(st, t); } });
+        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view

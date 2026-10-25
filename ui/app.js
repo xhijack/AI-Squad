@@ -182,6 +182,8 @@ function layoutPanels(sections) {
   }
   if (phone) {
     $('side').hidden = $('sideShow').hidden = true;
+    // the sheet opens on what the place is about (Desk, Agents, Floors); questions for the owner are the next tab
+    sections = [...sections.filter((x) => x.card === 'main'), ...sections.filter((x) => x.card === 'top'), ...sections.filter((x) => x.card !== 'main' && x.card !== 'top')];
     const sheet = $('sheet');
     sheet.hidden = !sections.length;
     const cur = state.tab.sheet, active = sections.find((x) => x.id === cur) ? cur : sections[0]?.id;
@@ -211,7 +213,8 @@ function layoutPanels(sections) {
 
 let insetKey = '', shotKey = '';
 function updateInsets() {
-  const phone = isPhone(), r = (id) => ($(id).hidden ? null : $(id).getBoundingClientRect());
+  // hidden elements, and those hidden by CSS (screen view, first person), take no room
+  const phone = isPhone(), r = (id) => { if ($(id).hidden) return null; const b = $(id).getBoundingClientRect(); return b.width && b.height ? b : null; };
   const hud = r('hud'), dock = r('dock'), side = r('side'), sheet = r('sheet'), elev = r('elevator');
   let insets;
   if (state.route.eyes) insets = {};
@@ -332,8 +335,9 @@ function render() {
     fetchImage(`/api/floors/${fid}/shot?f=${encodeURIComponent(shot.file)}`).then((img) => img && scene.setShot(fid, { file: shot.file, img }));
   }
   if (!ctx.editing) layoutPanels(lastSections = sectionsFor());
-  if (isPhone()) $('dock').style.bottom = $('sheet').hidden ? '' : `${innerHeight - $('sheet').getBoundingClientRect().top + 8}px`;
-  else $('dock').style.bottom = '';
+  // phones: the dock sits just above the bottom sheet; the camera frames the space left between them
+  const dockBottom = isPhone() && !$('sheet').hidden ? `${innerHeight - $('sheet').getBoundingClientRect().top + 8}px` : '';
+  if ($('dock').style.bottom !== dockBottom) { $('dock').style.bottom = dockBottom; updateInsets(); }
   ctx.afterRender?.();
 }
 ctx.render = render;
