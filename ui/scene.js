@@ -13,7 +13,7 @@ import { deskProps, propsFor } from './props.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
-const ISO = new THREE.Vector3(1, .82, 1).normalize();       // classic isometric: azimuth 45°, elevation ~30°
+const ISO = new THREE.Vector3(1, .95, 1).normalize();       // isometric: azimuth 45°, elevation ~34° (like squad-3d)
 const ORTHO_H = 10;                                          // half the frustum height at zoom 1
 const TOP = .36;                                             // floor surface height inside a Floor group
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -408,3 +408,8 @@ body.immersive #hud, body.immersive #dock, body.immersive #elevator { display: n
   #toast { bottom: auto; top: 64px; }
 }
 @media (max-width: 760px) { .flabel { font-size: 11px; padding: 3px 8px; } .flabel .w, .flabel .m { display: none; } }
+@media (max-width: 760px) {
+  #hud .sprintBtn { display: none; }
+  .nlabel .a, .nlabel .z { display: none !important; }
+  .nlabel .n { font-size: 10px; padding: 1px 7px; }
+}
