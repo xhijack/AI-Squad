@@ -1,6 +1,6 @@
 # Progress: The AI Squad MVP
 
-Status on 24 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions and the five Phase 1.2 items are built and committed, one Conventional Commit each. `npm test` runs 99 tests in 14 modules and all pass. During Phases 1.1 and 1.2 the tests were run one module at a time because of memory pressure on the machine.
+Status on 25 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions, the five Phase 1.2 items and Phase 2 (parts A to F of `PHASE-2.md`) are built and committed in small Conventional Commits. `npm test` runs 127 tests in 21 modules and all pass. The tests are run one module at a time (`npm test` now does that too) because of memory pressure on the machine.
 
 ## What works
 
@@ -111,6 +111,119 @@ Re-ran the same dogfood sprint three times with real Claude Code (haiku, same pl
 - The team's work passed the gate, so nothing was put back. The put-back path is tested with the real hook script, not observed live.
 
 **Cost** (estimated from transcript usage): run 2 $0.074, run 3 $0.082, run 4 $0.085, about **$0.24** in total. All sessions were stopped, no Claude, tmux or server process is left, and the runs' transcripts were removed from `~/.claude/projects`.
+
+## Phase 2 (25 Oct 2026)
+
+Built in the order of `PHASE-2.md`, one commit per step. Decisions on ambiguous points are in `QUESTIONS.md`.
+
+### A. squad-3d parity
+1. **First person view**:
+   - Clicking a character's body moves the camera to its eyes (`#/floor/<id>/desk/<agent>/eyes`). Drag to look around, scroll to zoom, Esc returns to the Floor.
+   - The name tag opens the desk.
+   - The top bar and the dock are hidden in this view and in the screen view, and a small bar offers Desk and Back.
+2. **Desk props** (`ui/props.js`):
+   - Every desk gets a keyboard with keys, a mouse and a mug in the agent's colour, plus up to two toys: lead trophy + cactus; developers rubik, duck or robot; QA ladybug + magnifier.
+   - The laptop shows the role screen: the code window for developers, a test runner (pass/fail counts from the output) or the latest screenshot for QA, and a mini board for the lead (the sprint board, or team states on Free Team Floors).
+   - `appearance.props` and `appearance.screen` in a Role Template set these per role.
+3. **Performance dialog** (`server/performance.js`, Squad Sprint Floors only, from the dock). Per agent and per sprint, read from `docs/squad` (PLAN, TASKS, qa/, bugs/ and the `sprint-<N>` archives):
+   - QA bugs per story point, weighted Blocker 5 / Major 3 / Minor 1 / Cosmetic 0.5;
+   - first-round QA pass rate;
+   - modules owned;
+   - cost per story point. Transcript cost is split by sprint windows taken from the closing commits.
+   - QA agents get bugs found per story point.
+4. **Cost projection** in the same dialog: cost per done story point × (open stories in `docs/BACKLOG.md` + the rest of the running sprint). PLAN.md has an `SP` column; Sprint Lead v4 asks for story points.
+5. **Lead shout**: when the lead runs and nobody on the Floor in view has worked or waited for 20 s, the lead shows "Boss! We are idle..." and, with voice on, says it with `speechSynthesis`. It repeats every 2 to 3 minutes, at most 6 times per idle period. The voice toggle is in the dock.
+6. **Server meter** (`server/meter.js`):
+   - `/proc` is sampled every 3 s, with 6 minutes of history.
+   - Dock chip with CPU / RAM / swap / disk, red when dangerous.
+   - The dialog has the graph, process groups and the busiest processes. Only process names are shown; command lines never leave the module.
+   - A server rack stands in the Lobby corner and in new Floors. Its LED columns follow CPU and RAM, and clicking it opens the meter.
+
+### B. Install
+- The repository is a plugin marketplace named `aisquad`: `/plugin marketplace add xhijack/AI-Squad`, then `/plugin install aisquad@aisquad`. License metadata is Apache-2.0.
+- `/aisquad` runs the server as a systemd user service (`server/service.js`):
+  - `aisquad.service` is generated from the plugin's current path and `node` binary, with `Restart=always`.
+  - `KillMode=process`, so stopping the service never kills agents.
+  - A moved or updated plugin rewrites the unit and restarts it ("Updated and restarted").
+  - Fallbacks: a launchd agent on macOS, a detached process elsewhere.
+- `/aisquad stop`, `/aisquad status` (service state and lingering) and the new `/aisquad uninstall` cover the rest.
+- The README has Install, Update, Contributors and Uninstall sections with these exact steps.
+
+### C. First-run scan and independent agents
+- Floor 1 is reserved. Squads start at Floor 2, and older Floors move up from 1 when the Building loads (order kept).
+- `server/independents.js` finds:
+  - live interactive `claude` processes;
+  - tmux panes running `claude`;
+  - projects with transcripts from the last 24 hours.
+- It skips sessions The AI Squad started and `claude -p` runs.
+- Each agent gets a desk on Floor 1 with live status, screen (tmux), transcript and Attention. tmux dialogs can be answered from the browser.
+- Ids stay stable in `~/.aisquad/independents.json`; nothing is written into their repositories.
+- **Rescan** is on Floor 1 and on its Lobby card. **Adopt** adds the agent to a squad's team.
+
+### D. Set up Squad
+A big button in the Lobby (and in the menu) opens a four-step wizard:
+1. **What**: a prompt and Blueprint cards. The recommendation uses `claude -p --model haiku --tools "" --json-schema …`, with keyword matching as the fallback. Every agent shows why it is there.
+2. **Team**: editable. "Add agent" opens the catalog, filterable by category and skill.
+3. **Folder**: an existing repository, or a new folder `~/aisquad-squads/<slug>` with `git init` (`squadsDir` in `building.json`).
+4. **Review and create**: the next free Floor (2+), all files, and the lead started on request.
+
+Ten new Role Templates: DevOps Engineer, Marketing Strategist, Content Writer, Social Media Specialist, Ads & Analytics Specialist, Sales Manager, Lead Researcher, CRM Administrator, Sales Copywriter and Sales Analyst.
+
+### E. Squad Blueprints
+- Software House, Digital Marketing and Sales & CRM are defined in `templates/blueprints/<id>/blueprint.md` (+ `pack/`) and seeded into `~/.aisquad/blueprints/` like Role Templates.
+- Each one defines: roles with min/default/max counts, the lead, the source documents, the channels, work items, handoff format, gates, definition of done, rules per role and the lead's kickoff.
+- Creating a squad:
+  - snapshots the Blueprint into `.claude/aisquad/blueprint.md`;
+  - copies the workflow pack (document skeletons with `STATUS: DRAFT`, board, questions file, handoff template; nothing is overwritten);
+  - turns on agent teams with allow rules for background teammates;
+  - writes the standard into `AISQUAD.md` and into every agent prompt, with each role's own rules.
+- The Floor shows the Blueprint and the status of every source document. Marketing and Sales squads get a Board from `docs/BOARD.md`.
+- `/sprint` refuses to start while a source document is not approved.
+
+### F. Built-in skills
+- 25 skills written by us in `skills/<name>/SKILL.md` cover the minimum set in the brief, for every role.
+- Every Role Template lists its skills. Shipped templates got a new version with skills, category and props.
+- Agent files use `aisquad:<name>` while a skill only comes from the plugin, and its own name once installed.
+- The Desk profile shows each skill as in project / in user skills / from plugin / not installed, with Install and Install all. Install copies into `.claude/skills/` and never overwrites.
+
+### Verified
+- **Tests**: 127 tests in 21 modules, run one module at a time; all pass. New modules: performance, meter, service, independents, blueprints, skills, shout.
+  - The independents test uses a real tmux pane with the fake Claude Code on the private socket and answers its dialog through Attention.
+  - The service test records `systemctl` calls; it never touches the machine.
+- **Headless Chrome** (one at a time, 1280 px wide, plus 390 px for the dock):
+  - first person view (looking ahead and turned);
+  - screen view without the top bar;
+  - desk props on lead, developer and QA desks;
+  - the Performance dialog with projection;
+  - the lead's shout bubble (fake Claude Code as lead);
+  - server meter chip, dialog and Lobby rack;
+  - Floor 1 with real detected agents and the Adopt dialog;
+  - all Set up Squad steps;
+  - a Digital Marketing squad with source document status and Board;
+  - a Desk profile before and after installing a skill.
+- **Real Claude Code** (2.1.310, haiku):
+  - **Recommendation**: "I want a software house that builds my restaurant POS" gave Software House with a PM lead, 2 developers, QA and a designer, each with a reason. It took 12.7 s.
+  - **Dogfood**: a Software House squad with the PM on haiku, started with the Blueprint kickoff.
+    - The new trust dialog (default "No, exit", because the folder pre-approves permissions) reached Attention and was answered with option 2.
+    - The lead read `AISQUAD.md`, saw all four source documents still DRAFT, refused to start a sprint, listed what it needs per document and started the interview with an AskUserQuestion ("MVP scope"). That question appeared in Attention with its options.
+    - The Floor showed the four documents as `draft`.
+    - Cost about $0.01. The session was stopped and this run's transcripts removed from `~/.claude/projects`.
+- **Real machine scan**: Floor 1 found the two VS Code sessions, this tmux session (working) and a transcript-only project.
+- **Plugin**: `claude plugin validate .` passes (one warning: CLAUDE.md at the plugin root is for contributors).
+
+### Known gaps (Phase 2)
+- **Service on a real login is not verified.** Installing `aisquad.service` was blocked here, so only the unit tests cover it. launchd is untested (no macOS).
+- **Independent agents**:
+  - several processes in the same folder share that folder's newest transcript for status;
+  - VS Code and plain terminal sessions have no live screen, and their questions are answered in their own window;
+  - Adopt does not move the running session.
+- **Source document gate**: no hook blocks work while documents are unapproved. The rules, the Blueprint text and `/sprint` do it.
+- **Marketing and Sales squads** were only dogfooded through creation, not with a real team run. They rely on Claude Code's experimental agent teams.
+- **Performance** depends on the documented conventions: the `SP` column, `OWNER` and `SEVERITY` in bug files, `Round` and `Tester` in QA reports, and closing commits. Costs are estimates.
+- **Lead shout** runs in the browser that has the Floor open; speech needs a browser with `speechSynthesis` and an earlier click on the page.
+- **Server meter** needs `/proc` (Linux). In headless screenshots CPU shows high because Chrome renders with SwiftShader.
+- **Template updates**: Floors created before Phase 2 show "Update available" for their agents (new template versions with skills).
+- **Floor 1** has no layout editing; its desks use the Open Space preset.
 
 ## How to run
 
