@@ -68,7 +68,12 @@ const DEVICE_BUILDERS = {
   },
   'server-rack'(g) {
     box(.8, 2, .8, mat('#2b2f3a'), 0, 1, 0, g, .02);
-    for (let i = 0; i < 7; i++) box(.66, .16, .02, basic(i % 3 ? '#3a4058' : '#4fc38a'), 0, .35 + i * .23, .41, g, 0);
+    // two LED columns that follow the machine load (setLoad): CPU on the left, RAM on the right
+    g.userData.rack = true; g.userData.leds = [];
+    for (let i = 0; i < 7; i++) {
+      for (const x of [-.17, .17]) g.userData.leds.push({ row: i, col: x < 0 ? 'cpu' : 'mem', mesh: box(.3, .14, .02, basic('#3a4058'), x, .35 + i * .23, .41, g, 0) });
+      box(.04, .04, .02, basic('#4fc38a'), .33, .35 + i * .23, .42, g, 0);
+    }
   },
 };
 export const DEVICE_LABELS = { plant: 'Plant', whiteboard: 'Whiteboard', printer: 'Printer', coffee: 'Coffee machine', bookshelf: 'Bookshelf', sofa: 'Sofa', rug: 'Lounge rug', 'server-rack': 'Server rack' };
@@ -227,6 +232,8 @@ export class BuildingScene {
     for (const x of [-FW / 2 + .4, FW / 2 - .4]) for (const z of [-FD / 2 + .4, FD / 2 - .4]) box(.35, FH, .35, mat('#3a4366'), x, FH / 2 + .3, z, g);
     for (const x of [-5.6, 5.6]) { const p = new THREE.Group(); DEVICE_BUILDERS.plant(p); p.position.set(x, .36, 3); g.add(p); }
     const sofa = new THREE.Group(); DEVICE_BUILDERS.sofa(sofa); sofa.position.set(-4, .36, -2.6); g.add(sofa);
+    const rack = new THREE.Group(); DEVICE_BUILDERS['server-rack'](rack); rack.position.set(FW / 2 - 1, .36, -FD / 2 + 1); rack.rotation.y = -.5; g.add(rack);
+    this.lobbyRack = rack;
   }
 
   // ---------- data sync ----------
@@ -248,6 +255,7 @@ export class BuildingScene {
     const top = Math.max(0, ...floors.map((f) => f.number));
     this.roof.position.y = floorY(top + 1) - .2;
     this.top = top;
+    this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))];
     this.applyVisibility();
     if (!this.placed) { this.placed = true; this.snapTo(this.poseFor(this.view)); }
   }
@@ -435,6 +443,22 @@ export class BuildingScene {
     if (!st) return;
     st.say.element.textContent = text; st.sayUntil = performance.now() + ms;
   }
+  // machine load for the server racks: { cpu, mem: { used, total }, levels }
+  setLoad(load) { this.load = load; }
+  updateRacks(t) {
+    if (!this.load || t < (this.rackNext || 0)) return;
+    this.rackNext = t + .25;
+    const L = this.load, memPct = L.mem?.total ? L.mem.used / L.mem.total * 100 : 0;
+    const color = { cpu: { ok: '#4fc38a', warn: '#f2b544', bad: '#ef5d6b' }[L.levels?.cpu || 'ok'], mem: { ok: '#6aa5ff', warn: '#f2b544', bad: '#ef5d6b' }[L.levels?.ram || 'ok'] };
+    const lit = { cpu: Math.max(1, Math.round(L.cpu / 100 * 7)), mem: Math.max(1, Math.round(memPct / 100 * 7)) };
+    for (const r of this.racks || []) {
+      if (!r?.visible && r !== this.lobbyRack) continue;
+      for (const led of r.userData.leds) {
+        const on = led.row < lit[led.col] && !(led.row === lit[led.col] - 1 && L.cpu > 5 && Math.random() < .3);   // the top LED flickers
+        led.mesh.material.color.set(on ? color[led.col] : '#2a3044');
+      }
+    }
+  }
   setBoard(floorId, board) { const o = this.floors.get(floorId); if (o) o.board = board; }
 
   // ---------- Edit Mode helpers ----------
@@ -484,7 +508,10 @@ export class BuildingScene {
     el.addEventListener('pointerup', (e) => {
       if (this.view.eyes) { if (this.look) this.look.drag = null; return; }
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+      this.ray.setFromCamera(this.ndc(e), this.camera);
+      if (this.lobby.visible && this.ray.intersectObject(this.lobbyRack, true).length) return this.handlers.onPickRack?.();
       const hit = this.pick(e);
+      if (hit.rack) return this.handlers.onPickRack?.();
       if (hit.agent && hit.screen) this.handlers.onPickScreen?.(hit.floorId, hit.agent);
       else if (hit.agent && hit.human) this.handlers.onPickEyes?.(hit.floorId, hit.agent);
       else if (hit.agent) this.handlers.onPickAgent?.(hit.floorId, hit.agent);
@@ -501,10 +528,10 @@ export class BuildingScene {
     this.ray.setFromCamera(this.ndc(e), this.camera);
     const hits = this.ray.intersectObjects(this.building.children.filter((c) => c.visible && c.userData.floorId), true);
     for (const h of hits) {
-      let o = h.object, agent = null, device = null, human = false;
+      let o = h.object, agent = null, device = null, human = false, rack = false;
       const screen = !!h.object.userData.screen;
-      while (o && !o.userData.floorId) { if (o.userData.agent) agent = o.userData.agent; if (o.userData.human) human = true; if (o.userData.device) device = o.userData.device; o = o.parent; }
-      if (o) return { floorId: o.userData.floorId, agent, device, screen, human, point: h.point };
+      while (o && !o.userData.floorId) { if (o.userData.agent) agent = o.userData.agent; if (o.userData.human) human = true; if (o.userData.rack) rack = true; if (o.userData.device) device = o.userData.device; o = o.parent; }
+      if (o) return { floorId: o.userData.floorId, agent, device, screen, human, rack, point: h.point };
     }
     return {};
   }
@@ -543,6 +570,7 @@ export class BuildingScene {
       const obj = this.objectFor(this.selection.floorId, this.selection);
       if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;
     }
+    this.updateRacks(t);
     this.handlers.onFrame?.(t);
     if (v.eyes) this.updatePov(dt); else this.controls.update();
     this.renderer.render(this.scene, this.camera);

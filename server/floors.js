@@ -41,6 +41,7 @@ export function defaultDevices() {
     // lounge corner: idle agents go here (sofa, coffee, whiteboard)
     { id: 'rug-1', type: 'rug', x: 5.9, z: 1.1, ry: 0 },
     { id: 'sofa-1', type: 'sofa', x: 6.4, z: 1.1, ry: -1.571 },
+    { id: 'server-rack-1', type: 'server-rack', x: -6.35, z: -1.6, ry: 1.571 },   // LEDs follow the machine load
   ];
 }
 

@@ -230,7 +230,7 @@ body.immersive { --top: 0px; }
 @media (max-width: 760px) {
   :root { --top: 52px; }
   #topbar { gap: 6px; padding: 0 8px; }
-  .brandName, .hideSm, #resChip { display: none; }
+  .brandName, .hideSm { display: none; }
   #crumbs .sep { display: none; }
   #costChip { font-size: 11px; padding: 3px 8px; }
   #crumbs { font-size: 13px; }
@@ -265,3 +265,19 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid #222a44; white-space:
 @media (max-width: 760px) { #dock { left: auto; right: 8px; transform: none; top: calc(var(--top) + 6px); bottom: auto; } }
 .say { background: #fff; color: #1f2937; font-weight: 700; font-size: 13px; line-height: 1.35; padding: 8px 12px; border-radius: 14px; max-width: 220px; white-space: normal; box-shadow: 0 4px 14px #0006; position: relative; }
 .say::after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: #fff; }
+/* server meter */
+.meterChip { gap: 8px !important; }
+.meterChip .m.warn { color: var(--warn); }
+.meterChip .m.bad { color: #fff; background: var(--bad); border-radius: 6px; padding: 0 5px; }
+.meterChip .hideSm { display: inline-flex; gap: 8px; }
+.meterBar { margin-top: 10px; }
+.meterBar .track { height: 8px; background: var(--bg3); border-radius: 6px; overflow: hidden; margin-top: 4px; }
+.meterBar .track i { display: block; height: 100%; background: var(--ok); }
+.meterBar.warn .track i { background: var(--warn); } .meterBar.bad .track i { background: var(--bad); }
+.meterGraph { width: 100%; height: 160px; background: var(--bg3); border-radius: 10px; }
+.meterGraph polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.meterGraph .cpu { stroke: var(--ok); } .meterGraph .mem { stroke: var(--info); } .meterGraph .swap { stroke: var(--warn); stroke-dasharray: 4 3; }
+.meterGraph .grid { stroke: #2a3150; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.key { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin: 0 3px 0 8px; }
+.key.cpu { background: var(--ok); } .key.mem { background: var(--info); } .key.swap { background: var(--warn); }
+@media (max-width: 760px) { .meterChip .hideSm { display: none; } }

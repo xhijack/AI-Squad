@@ -1,11 +1,12 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, STATE_TEXT } from './lib.js';
+import { $, esc, money, toast, api, askPin, hasPin, getJson, fetchImage, STATE_TEXT } from './lib.js';
 import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
 import './perf.js';
+import { meterChip } from './meter.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
@@ -36,6 +37,7 @@ const scene = new BuildingScene($('scene'), {
   onPickFloor: (id) => { if (state.route.mode === 'lobby' && !ctx.editing) location.hash = `#/floor/${id}`; },
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
+  onPickRack: () => { if (!ctx.editing) ctx.actions.meter(); },
   onPickEyes: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/eyes`; },
 });
 ctx.scene = scene;
@@ -221,11 +223,7 @@ function render() {
   patch($('crumbs'), shown.map(([href, text], i) => (i === shown.length - 1
     ? `<span class="cur">${esc(text)}</span>` : `<a href="${href}"${text === '‹' ? ' aria-label="Back" class="back"' : ''}>${esc(text)}</a>`)).join('<span class="sep">›</span>'));
   $('costChip').textContent = `today ${money(b.costToday)}`;
-  const r = b.resources;
-  $('resChip').className = `chip ${r.warnings.length ? 'warn' : ''}`;
-  const swapPct = r.swap?.total ? Math.round(r.swap.used / r.swap.total * 100) : 0;
-  $('resChip').textContent = r.warnings.length ? r.warnings[0].replace(/\s*\(.*\)$/, '') : `RAM ${gb(r.mem.available)} free · swap ${swapPct} %`;
-  $('resChip').title = r.warnings.join('\n') || 'Machine resources are fine';
+  scene.setLoad(b.meter);
   $('attCount').textContent = b.attention.length;
   $('attBtn').classList.toggle('on', b.attention.length > 0);
   if (!$('attPop').hidden) patch($('attPop'), attentionPopHtml());
@@ -235,7 +233,7 @@ function render() {
   const sprintFloor = route.floorId && f && f.workflow === 'squad-sprint';
   $('dock').hidden = !!ctx.editing;
   const voice = voiceOn();
-  patch($('dock'), [sprintFloor ? '<button class="small" data-act="performance" title="Performance and cost projection">▤ Performance</button>' : '',
+  patch($('dock'), [meterChip(b.meter), sprintFloor ? '<button class="small" data-act="performance" title="Performance and cost projection">▤ Performance</button>' : '',
     `<button class="small" data-act="voice" aria-pressed="${voice}" title="Lead voice: ${voice ? 'on' : 'off'}">${voice ? '🔊' : '🔈'}<span class="hideSm"> Voice ${voice ? 'on' : 'off'}</span></button>`].join(''));
   // lead shout when the whole team of the Floor in view is idle
   if (state.floor && !state.floor.missing && route.floorId === state.floor.id) {

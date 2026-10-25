@@ -13,6 +13,7 @@ import * as merge from './merge.js';
 import * as sprint from './sprint.js';
 import * as hooks from './events.js';
 import { floorPerformance } from './performance.js';
+import { meter } from './meter.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -207,6 +208,7 @@ export function buildingSnapshot() {
     name: b.name, now: Date.now(), floors: floorsOut, attention, detected,
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
+    meter: meter.summary(),
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
       projectsDir: suggestProjectsDir(b) },

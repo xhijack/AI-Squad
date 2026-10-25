@@ -9,6 +9,7 @@ import { config, paths, configure } from './config.js';
 import { seedDefaults } from './roles.js';
 import { ensureCloned } from './libraries.js';
 import { flushPending, watchdogTick, mergeTick } from './squad.js';
+import { meter } from './meter.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -28,6 +29,7 @@ server.listen(PORT, HOST, () => {
 const PID_FILE = path.join(config.home, 'server.pid');
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { if (fs.readFileSync(PID_FILE, 'utf8') === String(process.pid)) fs.rmSync(PID_FILE); } catch { /* gone */ } process.exit(0); });
 ensureCloned().catch(() => {});
+meter.start();                                           // /proc every 3 s for the dock meter
 setInterval(() => { flushPending().catch(() => {}); }, 3000).unref();
 setTimeout(() => { try { watchdogTick(); } catch { /* next tick */ } }, 5000).unref();
 setInterval(() => { try { watchdogTick(); } catch (e) { console.error('[watchdog]', e.message); } }, 60000).unref();

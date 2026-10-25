@@ -12,6 +12,7 @@ import * as squad from './squad.js';
 import { checkPin } from './pin.js';
 import { setApproval } from './merge.js';
 import { recentEvents as hooksRecent } from './events.js';
+import { meter } from './meter.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json' };
@@ -54,6 +55,7 @@ const floorRoot = (id) => building.floorEntry(id).path;
 const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
   ['GET', /^\/api\/watchdog$/, () => squad.watchdogStatus()],
+  ['GET', /^\/api\/meter$/, () => meter.detail()],
   ['PATCH', /^\/api\/building$/, (p, b) => { building.setBuildingName(b.name); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/auth$/, () => ({ ok: true }), { pin: true }],
   ['POST', /^\/api\/events$/, (p, b) => squad.ingestEvent(b), { pin: true }],
