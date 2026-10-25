@@ -10,5 +10,5 @@
     "test": "node --test 'test/*.test.js'"
   },
   "engines": { "node": ">=22" },
-  "license": "UNLICENSED"
+  "license": "Apache-2.0"
 }

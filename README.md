@@ -150,3 +150,9 @@ templates/roles/   default Role Templates
 bin/aisquad.js     command line used by /aisquad
 commands/aisquad.md   the Claude Code command
 ```
+
+## License
+
+Apache License 2.0. Free for personal and commercial use, as long as you keep the
+`LICENSE` and `NOTICE` files and credit the original source:
+https://github.com/xhijack/AI-Squad. See `NOTICE` for bundled third-party code.
