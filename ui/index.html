@@ -16,16 +16,29 @@
 </script>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V6l8-3 8 3v15M2 21h20M9 21v-4h6v4M8 9h.01M12 9h.01M16 9h.01M8 13h.01M12 13h.01M16 13h.01"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3.5" y="4" width="4.5" height="16" rx="1.2"/><rect x="9.75" y="4" width="4.5" height="10" rx="1.2"/><rect x="16" y="4" width="4.5" height="13" rx="1.2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18M6.5 20v-6M11 20V6M15.5 20v-9M20 20V9"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.4c-.5-.9-1.5-1.4-2.8-1.4-1.7 0-2.8.8-2.8 1.9s1.1 1.6 2.8 2 2.8.9 2.8 2-1.1 2-2.8 2c-1.3 0-2.4-.5-2.9-1.4M12 6.5v11"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2.5 21c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5M19 8v6M16 11h6"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="3.2"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.2h.01"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 18.5l-1.5 3 4.2-1.8A9 9 0 1 0 5 18.5z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></symbol>
+</svg>
 <div id="scene"></div>
 
-<header id="topbar">
-  <a class="brand" href="#/" title="Back to the Lobby"><span class="logo" aria-hidden="true"></span><span class="brandName">The AI Squad</span></a>
-  <nav id="crumbs" aria-label="Location"></nav>
-  <div class="spacer"></div>
-  <span id="costChip" class="chip" title="Estimated cost today, all Floors"></span>
-  <button id="attBtn" class="attBtn" aria-haspopup="true" aria-expanded="false"><span class="pulse"></span><span id="attCount">0</span><span class="hideSm"> Attention</span></button>
-  <button id="menuBtn" class="ghost iconBtn" aria-haspopup="true" aria-expanded="false" title="Menu">☰</button>
-</header>
+<header id="hud" aria-label="Status"></header>
 <div id="menu" class="popover" role="menu" hidden>
   <button role="menuitem" data-menu="setup-squad">Set up Squad</button>
   <button role="menuitem" data-menu="new-floor">New Floor</button>
@@ -34,10 +47,15 @@
   <button role="menuitem" data-menu="theme">Theme: <span id="themeName">Light</span></button>
   <button role="menuitem" data-menu="pin">Enter PIN</button>
 </div>
+<div id="floorMenu" class="popover" role="menu" hidden></div>
 <div id="attPop" class="popover attPop" hidden></div>
 
-<aside id="left" class="panel" hidden></aside>
-<aside id="right" class="panel" hidden></aside>
+<aside id="side" hidden>
+  <section class="card sideCard" id="sideTop" hidden></section>
+  <section class="card sideCard" id="sideMain" hidden></section>
+  <section class="card sideCard grow" id="sideTabs" hidden></section>
+</aside>
+<button id="sideShow" class="floatBtn" hidden title="Show the panel" aria-label="Show the panel"><svg><use href="#i-left"/></svg></button>
 <section id="sheet" class="sheet" hidden>
   <button class="grip" id="grip" aria-label="Resize panel"></button>
   <div class="tabs" id="sheetTabs" role="tablist"></div>
@@ -45,6 +63,7 @@
 </section>
 <nav id="elevator" aria-label="Elevator" hidden></nav>
 <nav id="dock" aria-label="Dock"></nav>
+<div id="legendPop" class="popover legend" hidden></div>
 <div id="editBar" hidden></div>
 <div id="povBar" hidden><span id="povText"></span><span class="note hideSm">Drag to look around · scroll to zoom</span><button class="small" data-povdesk>Desk</button><button class="small gold" data-povback>Back (Esc)</button></div>
 

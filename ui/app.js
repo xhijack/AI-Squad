@@ -1,14 +1,15 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, toast, api, askPin, hasPin, getJson, fetchImage, STATE_TEXT } from './lib.js';
-import { lobbySections, floorSections, deskSections } from './views.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT } from './lib.js';
+import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
 import './perf.js';
 import './independents.js';
 import './setup.js';
-import { meterChip } from './meter.js';
+import './meter.js';
+import './cost.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
@@ -133,15 +134,16 @@ function sectionsFor() {
   if (!building) return [];
   if (route.mode === 'lobby') return lobbySections(building);
   const f = floor && !floor.notFound ? floor : null;
-  if (!f) return [{ id: 'loading', title: 'Floor', side: 'left', html: '<div class="empty">Loading…</div>' }];
+  if (!f) return [{ id: 'loading', title: 'Floor', card: 'main', html: '<div class="empty">Loading…</div>' }];
   const fs = floorSections(f, route.agentId);
   if (route.mode === 'floor') return fs;
-  // desk: the team list stays on the left, the desk takes the right side
-  return [...fs.filter((s) => s.side === 'left'), ...deskSections(f, desk, { locked: state.locked, screen: !!route.screen })];
+  // desk: the desk card replaces the agent list; questions for the owner stay on top
+  return [...fs.filter((s) => s.card === 'top'), ...deskSections(f, desk, { locked: state.locked, screen: !!route.screen })];
 }
 
-function tabsHtml(list, active, side) {
-  return list.map((s) => `<button role="tab" data-tab="${side}:${s.id}" aria-selected="${s.id === active}">${esc(s.title)}${s.count ? `<span class="count ${s.countClass || ''}">${s.count}</span>` : ''}</button>`).join('');
+const icon = (name) => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
+function tabsHtml(list, active, group) {
+  return list.map((s) => `<button role="tab" data-tab="${group}:${s.id}" aria-selected="${s.id === active}">${s.icon ? icon(s.icon) : ''}${esc(s.title)}${s.count ? `<span class="count ${s.countClass || ''}">${s.count}</span>` : ''}</button>`).join('');
 }
 
 // set innerHTML only when it changed and the user is not typing inside; keep scroll positions and slots
@@ -151,106 +153,167 @@ function patch(el, html) {
   if (active && el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName) && !active.closest('[data-slot]')) return;
   const scrolls = {};
   el.querySelectorAll('[data-scroll]').forEach((s) => { scrolls[s.dataset.scroll] = { top: s.scrollTop, bottom: s.scrollHeight - s.scrollTop - s.clientHeight < 24 }; });
+  const bodies = [...el.querySelectorAll('.cardBody')].map((x) => x.scrollTop);
   const bodyTop = el.scrollTop;
   for (const slot of el.querySelectorAll('[data-slot]')) for (const c of [...slot.children]) c.remove();   // keep slot nodes alive
   el.innerHTML = html;
   el._html = html;
   el.querySelectorAll('[data-slot="task"]').forEach((s) => s.appendChild(getTaskForm()));
   el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p || p.bottom ? s.scrollHeight : p.top; });
+  el.querySelectorAll('.cardBody').forEach((x, i) => { x.scrollTop = bodies[i] || 0; });
   el.scrollTop = bodyTop;
+}
+
+// one floating card: an optional back link, tabs when it holds several sections, the active section's body
+function cardHtml(list, group) {
+  const pick = () => { const cur = state.tab[group]; return list.find((s) => s.id === cur) ? cur : list[0]?.id; };
+  const active = pick(), sec = list.find((s) => s.id === active);
+  const back = list[0]?.back ? `<a class="backLink" href="${list[0].back}">${icon('left')}All agents</a>` : '';
+  const head = list.length > 1 ? `<div class="tabs" role="tablist">${tabsHtml(list, active, group)}</div>` : sec.head || `<div class="cardHead"><h3>${esc(sec.title)}</h3>${sec.count ? `<span class="count ${sec.countClass || ''}">${sec.count}</span>` : ''}</div>`;
+  const hide = group === 'main' ? `<button class="ib collapse" data-act="hide-side" title="Hide the panel" aria-label="Hide the panel">${icon('right')}</button>` : '';
+  return `${hide}${back}${head}<div class="cardBody">${sec.html}</div>`;
 }
 
 function layoutPanels(sections) {
   const phone = isPhone();
   if (state.route.eyes) {                                  // first person: only the 3D view and the small bar
-    $('left').hidden = $('right').hidden = $('sheet').hidden = true;
+    $('side').hidden = $('sheet').hidden = $('sideShow').hidden = true;
     return updateInsets();
   }
-  const left = sections.filter((s) => s.side === 'left'), right = sections.filter((s) => s.side === 'right');
-  const pick = (list, side) => { const cur = state.tab[side]; return list.find((s) => s.id === cur) ? cur : list[0]?.id; };
   if (phone) {
-    $('left').hidden = $('right').hidden = true;
-    const all = state.route.mode === 'desk' ? [...right, ...left] : [...left, ...right];
+    $('side').hidden = $('sideShow').hidden = true;
     const sheet = $('sheet');
-    sheet.hidden = !all.length;
-    const active = pick(all, 'sheet');
-    patch($('sheetTabs'), tabsHtml(all, active, 'sheet'));
-    patch($('sheetBody'), all.find((s) => s.id === active)?.html || '');
+    sheet.hidden = !sections.length;
+    const cur = state.tab.sheet, active = sections.find((x) => x.id === cur) ? cur : sections[0]?.id;
+    patch($('sheetTabs'), tabsHtml(sections, active, 'sheet'));
+    const sec = sections.find((x) => x.id === active);
+    patch($('sheetBody'), sec ? `${sec.back ? `<a class="backLink" href="${sec.back}">${icon('left')}All agents</a>` : ''}${sec.head || ''}${sec.html}` : '');
   } else {
     $('sheet').hidden = true;
-    for (const [side, list] of [['left', left], ['right', right]]) {
-      const el = $(side);
-      el.hidden = !list.length;
-      if (!list.length) continue;
-      if (!el._built) { el.innerHTML = '<div class="tabs" role="tablist"></div><div class="panelBody"></div>'; el._built = true; }
-      const active = pick(list, side);
-      const tabs = el.querySelector('.tabs');
-      tabs.hidden = list.length < 2;
-      patch(tabs, tabsHtml(list, active, side));
-      patch(el.querySelector('.panelBody'), list.find((s) => s.id === active)?.html || '');
+    const hidden = state.sideHidden && !ctx.editing;
+    $('side').hidden = hidden || !sections.length;
+    $('sideShow').hidden = !hidden;
+    const groups = { top: sections.filter((x) => x.card === 'top'), main: sections.filter((x) => x.card === 'main'), tabs: sections.filter((x) => !x.card || x.card === 'tabs') };
+    // each "top" section is its own card (questions for the owner); main and tabs are one card each
+    const topEl = $('sideTop');
+    topEl.hidden = !groups.top.length;
+    if (groups.top.length) patch(topEl, groups.top.map((x) => `<div class="cardHead"><h3 class="bad">${icon('alert')}${esc(x.title)}</h3><span class="count bad">${x.count}</span></div><div class="cardBody">${x.html}</div>`).join(''));
+    for (const [id, list, group] of [['sideMain', groups.main, 'main'], ['sideTabs', groups.tabs, 'tabs']]) {
+      $(id).hidden = !list.length;
+      if (list.length) patch($(id), cardHtml(list, group));
     }
-    $('right').classList.toggle('wide', state.route.mode === 'desk');
+    // without a tabs card the main card takes the height; with one, the main card shrinks to its content
+    $('sideMain').classList.toggle('grow', !groups.tabs.length);
+    $('side').classList.toggle('wide', state.route.mode === 'desk');
   }
   updateInsets();
 }
 
 let insetKey = '', shotKey = '';
 function updateInsets() {
-  const phone = isPhone(), top = document.body.classList.contains('immersive') ? 0 : parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top')) || 56;
-  const insets = state.route.eyes ? {} : phone
-    ? { top: top + ($('elevator').hidden ? 0 : 44), bottom: $('sheet').hidden ? 0 : $('sheet').getBoundingClientRect().height }
-    : { top: top + 10, left: $('left').hidden ? 0 : $('left').offsetWidth + 12, right: ($('right').hidden ? 0 : $('right').offsetWidth + 12) + ($('elevator').hidden ? 0 : 56) };
+  const phone = isPhone(), r = (id) => ($(id).hidden ? null : $(id).getBoundingClientRect());
+  const hud = r('hud'), dock = r('dock'), side = r('side'), sheet = r('sheet'), elev = r('elevator');
+  let insets;
+  if (state.route.eyes) insets = {};
+  else if (phone) insets = { top: (hud ? hud.bottom : 0) + 8, bottom: (sheet ? innerHeight - sheet.top : 0) + (dock ? dock.height + 14 : 0) };
+  else insets = { top: (hud ? hud.bottom : 0) + 12, bottom: (dock ? innerHeight - dock.top : 0) + 12, right: side ? innerWidth - side.left + 12 : 0, left: elev ? elev.right + 12 : 0 };
   const k = JSON.stringify(insets);
   if (k !== insetKey) { insetKey = k; scene.setInsets(insets); }
 }
+
+// ---------- hud (top-left status pill) ----------
+function hudHtml(b, route, f) {
+  const att = b.attention.length;
+  const attPill = att ? `<button class="hpill alert" data-pop="attPop" aria-haspopup="true" aria-expanded="false">${icon('alert')}${att} need${att === 1 ? 's' : ''} you</button>` : '';
+  const menu = `<button class="iconBtn" data-pop="menu" aria-haspopup="true" aria-expanded="false" title="Menu" aria-label="Menu">${icon('menu')}</button>`;
+  if (route.mode === 'lobby' || !f) {
+    const working = b.floors.reduce((n, x) => n + (x.counts?.working || 0), 0), agents = b.floors.reduce((n, x) => n + (x.agents?.length || 0), 0);
+    return `<div class="bar"><span class="brandMark" aria-hidden="true"></span><b class="brand">${esc(b.name || 'The AI Squad')}</b><span class="sep"></span>
+      <span class="meta"><b>${b.floors.length}</b> Floors · <b>${working}</b>/${agents} working</span>${menu}</div>${attPill}`;
+  }
+  const c = f.counts || {}, active = (c.working || 0) + (c.waiting || 0), board = state.floor?.id === f.id ? state.floor.board : null;
+  const tasks = board?.tasks || [], done = tasks.filter((t) => t.column === 'DONE').length;
+  const progress = tasks.length ? `<span class="sep"></span><button class="sprintBtn" data-act="board" title="Open the board">${board.sprint ? `<b>Sprint ${esc(board.sprint)}</b>` : '<b>Board</b>'}<span class="prog"><i style="width:${Math.round(done / tasks.length * 100)}%"></i></span><span class="meta">${done}/${tasks.length}</span></button>` : '';
+  let warn = '';
+  if (!f.independent && !f.missing) {
+    if (f.budget?.level === 'over') warn = `<span class="hpill warn">${icon('alert')}Budget reached</span>`;
+    else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<button class="hpill warn" data-act="start-all" title="Start every agent of this Floor">${icon('alert')}Squad not running</button>`;
+    else if (f.budget?.level === 'warn') warn = `<span class="hpill warn">${icon('alert')}Budget ${Math.round(f.budget.pct)} %</span>`;
+  }
+  return `<div class="bar"><a class="iconBtn" href="#/" title="Lobby" aria-label="Back to the Lobby">${icon('building')}</a><span class="lamp ${f.lamp}"></span>
+    <b class="brand ellipsis">${f.number} · ${esc(f.name)}</b>${progress}<span class="sep"></span><span class="meta"><b>${active}</b>/${f.agents.length} active</span>
+    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="Floor menu" aria-label="Floor menu">${icon('more')}</button>`}${menu}</div>${warn}${attPill}`;
+}
+
+function floorMenuHtml(f) {
+  const any = (fn) => f.agents.some(fn);
+  return [['floor-settings', 'Floor settings'], ['edit-mode', 'Edit layout and looks'], ['add-agent', 'Add agent'],
+    ...(any((a) => !a.running) ? [['start-all', 'Start all agents']] : []), ...(any((a) => a.running) ? [['stop-all', 'Stop all agents']] : []),
+    ...(f.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost']]
+    .map(([act, text]) => `<button role="menuitem" data-act="${act}">${text}</button>`).join('');
+}
+
+// ---------- dock (icons, bottom centre) ----------
+const WORST = (m) => {
+  if (!m) return { level: 'ok', text: '–' };
+  const L = m.levels || {}, pct = (u, t) => (t ? Math.round(u / t * 100) : 0);
+  const items = [['cpu', `CPU ${Math.round(m.cpu)}%`, m.cpu], ['ram', `RAM ${pct(m.mem.used, m.mem.total)}%`, pct(m.mem.used, m.mem.total)], ['swap', `Swap ${pct(m.swap.used, m.swap.total)}%`, pct(m.swap.used, m.swap.total)],
+    ['disk', m.disk ? `Disk ${gb(m.disk.free)}` : 'Disk', m.disk ? 100 - pct(m.disk.free, m.disk.total) : 0]];
+  const rank = { bad: 2, warn: 1, ok: 0 };
+  items.sort((x, y) => (rank[L[y[0]]] || 0) - (rank[L[x[0]]] || 0) || y[2] - x[2]);
+  return { level: L.overall || 'ok', text: items[0][1] };
+};
+function dockHtml(b, route, f) {
+  const btn = (act, ic, tip, extra = '', label = '') => `<button class="dk" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(ic)}${label ? `<span>${label}</span>` : ''}</button>`;
+  const w = WORST(b.meter), voice = voiceOn(), floor = route.mode !== 'lobby' && f && !f.missing;
+  const out = [];
+  if (!floor) out.push(btn('setup-squad', 'spark', 'Set up Squad', '', 'Set up Squad'), '<span class="dsep"></span>');
+  if (floor && state.floor?.board) out.push(btn('board', 'board', 'Board'));
+  if (floor && f.workflow === 'squad-sprint') out.push(btn('performance', 'chart', 'Performance and cost projection'));
+  out.push(btn('cost', 'coin', floor ? 'Cost of this Floor' : 'Cost of all Floors', '', money(floor ? f.cost.today : b.costToday)));
+  out.push(`<button class="dk ${w.level}" data-act="meter" data-tip="Server meter: CPU, RAM, swap and disk" aria-label="Server meter, ${esc(w.text)}">${icon('server')}<i class="sdot ${w.level}"></i><span>${esc(w.text)}</span></button>`);
+  out.push('<span class="dsep"></span>');
+  if (floor && !f.independent) out.push(btn('add-agent', 'user-plus', 'Add agent'));
+  out.push(btn('voice', voice ? 'vol' : 'mute', `Lead voice: ${voice ? 'on' : 'off'}`, `aria-pressed="${voice}"`));
+  out.push(`<button class="dk" data-pop="legendPop" data-tip="Legend and controls" aria-label="Legend and controls" aria-expanded="false">${icon('info')}</button>`);
+  return out.join('');
+}
+
+const LEGEND = `<div class="lgGrid"><span><i class="st working">working</i></span><span><i class="st waiting">needs you</i></span><span><i class="st idle">idle</i></span><span><i class="st stopped">stopped</i></span></div>
+  <ul class="lgList"><li><b>Click a character</b> to look through its eyes</li><li><b>Click a name chip</b> for the desk</li><li><b>Click a monitor</b> for the screen view</li>
+  <li><b>Drag</b> to move around, <b>scroll</b> to zoom</li><li><b>Esc</b> goes back one level</li></ul>`;
 
 // ---------- render ----------
 function render() {
   const { building: b, route } = state;
   if (!b) return;
-  // screen view and first person view: no top bar or dock, just the scene
+  // screen view and first person view: no hud or dock, just the scene
   document.body.classList.toggle('immersive', !!(route.screen || route.eyes));
   document.body.classList.toggle('pov', !!route.eyes);
-  // top bar
   const f = b.floors.find((x) => x.id === route.floorId);
   const desk = f && route.agentId ? f.agents.find((a) => a.id === route.agentId) : null;
-  const trail = [['#/', route.mode === 'lobby' && b.name !== 'The AI Squad' ? b.name : 'Lobby']];
-  if (f) trail.push([`#/floor/${f.id}`, `${f.number} · ${f.name}`]);
-  if (desk) trail.push([null, desk.displayName]);
   $('povBar').hidden = !route.eyes;
   if (route.eyes) patch($('povText'), desk ? `<i class="dot ${desk.state}"></i> Through the eyes of <b>${esc(desk.displayName)}</b> · ${esc(desk.activity && desk.state !== 'stopped' ? desk.activity : STATE_TEXT[desk.state] || '')}` : 'First person view');
-  const last = trail.length - 1;
-  // phones get "‹ parent  current", desktops the whole trail
-  const shown = isPhone() && last > 0 ? [[trail[last - 1][0], '‹'], trail[last]] : trail;
-  patch($('crumbs'), shown.map(([href, text], i) => (i === shown.length - 1
-    ? `<span class="cur">${esc(text)}</span>` : `<a href="${href}"${text === '‹' ? ' aria-label="Back" class="back"' : ''}>${esc(text)}</a>`)).join('<span class="sep">›</span>'));
-  $('costChip').textContent = `today ${money(b.costToday)}`;
+  patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
-  $('attCount').textContent = b.attention.length;
-  $('attBtn').classList.toggle('on', b.attention.length > 0);
-  if (!$('attPop').hidden) patch($('attPop'), attentionPopHtml());
+  if (!$('attPop').hidden) patch($('attPop'), `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${b.attention.length}</span></div>${attentionHtml(b.attention)}`);
+  if (!$('floorMenu').hidden && f) patch($('floorMenu'), floorMenuHtml(f));
   if (state.offline) toast('Server not reachable, retrying…');
 
-  // dock: performance (Squad Sprint Floors only); voice and server meter join it
-  const sprintFloor = route.floorId && f && f.workflow === 'squad-sprint';
   $('dock').hidden = !!ctx.editing;
-  const voice = voiceOn();
-  patch($('dock'), [meterChip(b.meter), sprintFloor ? '<button class="small" data-act="performance" title="Performance and cost projection">▤ Performance</button>' : '',
-    `<button class="small" data-act="voice" aria-pressed="${voice}" title="Lead voice: ${voice ? 'on' : 'off'}">${voice ? '🔊' : '🔈'}<span class="hideSm"> Voice ${voice ? 'on' : 'off'}</span></button>`].join(''));
+  patch($('dock'), dockHtml(b, route, f));
   // lead shout when the whole team of the Floor in view is idle
   if (state.floor && !state.floor.missing && route.floorId === state.floor.id) {
     const { idle, lead } = floorIdle(state.floor);
     const text = shoutStep(shouts[state.floor.id] ||= {}, idle, Date.now());
     if (text && lead) { scene.say(state.floor.id, lead.id, text); speak(text); }
   }
-  // elevator (Floor switcher)
+  // elevator (Floor switcher): a slim card on the left
   const elev = $('elevator');
-  elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes;
+  elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes || isPhone();
   if (!elev.hidden) {
     const floors = [...b.floors].sort((x, y) => y.number - x.number);
-    patch(elev, `<div class="cap">Floor</div>${floors.map((x) => `<button data-href="#/floor/${x.id}" aria-current="${x.id === route.floorId}" title="${x.number} · ${esc(x.name)}">${x.number}<i class="l lamp ${x.lamp}"></i></button>`).join('')}<button data-href="#/" title="Lobby">L</button>`);
-    if (isPhone()) Object.assign(elev.style, { top: `calc(var(--top) + 6px)`, left: '8px', right: 'auto' });
-    else Object.assign(elev.style, { top: `calc(var(--top) + 10px)`, right: `${($('right').hidden ? 0 : $('right').offsetWidth + 12) + 18}px`, left: 'auto' });
+    patch(elev, `${floors.map((x) => `<button data-href="#/floor/${x.id}" aria-current="${x.id === route.floorId}" data-tip="${x.number} · ${esc(x.name)}" aria-label="Floor ${x.number}: ${esc(x.name)}">${x.number}<i class="l lamp ${x.lamp}"></i></button>`).join('')}<button data-href="#/" data-tip="Lobby" aria-label="Lobby">L</button>`);
   }
 
   // 3D
@@ -269,38 +332,44 @@ function render() {
     fetchImage(`/api/floors/${fid}/shot?f=${encodeURIComponent(shot.file)}`).then((img) => img && scene.setShot(fid, { file: shot.file, img }));
   }
   if (!ctx.editing) layoutPanels(lastSections = sectionsFor());
+  if (isPhone()) $('dock').style.bottom = $('sheet').hidden ? '' : `${innerHeight - $('sheet').getBoundingClientRect().top + 8}px`;
+  else $('dock').style.bottom = '';
   ctx.afterRender?.();
 }
 ctx.render = render;
 ctx.layoutPanels = layoutPanels;
 ctx.updateInsets = () => { insetKey = ''; updateInsets(); };
 ctx.isPhone = isPhone;
+ctx.panelBody = () => (isPhone() ? $('sheetBody') : $('sideMain'));
 
-function attentionPopHtml() {
-  return lobbySections(state.building).find((s) => s.id === 'attention').html;
-}
-
-// ---------- popovers ----------
+// ---------- popovers (menu, Floor menu, attention, legend) ----------
+const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop'];
 function closePopovers() {
-  $('menu').hidden = true; $('attPop').hidden = true;
-  $('menuBtn').setAttribute('aria-expanded', 'false'); $('attBtn').setAttribute('aria-expanded', 'false');
+  for (const id of POPS) $(id).hidden = true;
+  document.querySelectorAll('[data-pop]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
 }
-$('attBtn').onclick = (e) => {
-  e.stopPropagation();
-  const open = $('attPop').hidden;
+function openPopover(id, anchor) {
+  const was = !$(id).hidden;
   closePopovers();
-  if (open && state.building) { $('attPop').hidden = false; $('attBtn').setAttribute('aria-expanded', 'true'); $('attPop')._html = null; render(); }
-};
-$('menuBtn').onclick = (e) => {
-  e.stopPropagation();
-  const open = $('menu').hidden;
-  closePopovers();
-  if (open) { $('menu').hidden = false; $('menuBtn').setAttribute('aria-expanded', 'true'); }
-};
-document.addEventListener('click', (e) => { if (!e.target.closest('.popover') && !e.target.closest('#attBtn') && !e.target.closest('#menuBtn')) closePopovers(); });
+  if (was) return;
+  const el = $(id), r = anchor.getBoundingClientRect();
+  if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
+  if (id === 'attPop') { el._html = null; patch(el, `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${state.building.attention.length}</span></div>${attentionHtml(state.building.attention)}`); }
+  if (id === 'legendPop') patch(el, LEGEND);
+  el.hidden = false;
+  anchor.setAttribute('aria-expanded', 'true');
+  // under hud buttons, above dock buttons, kept on screen
+  const below = r.top < innerHeight / 2, w = el.offsetWidth;
+  Object.assign(el.style, { left: `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - (below ? 24 : w / 2)))}px`, top: below ? `${r.bottom + 8}px` : 'auto', bottom: below ? 'auto' : `${innerHeight - r.top + 8}px`, right: 'auto' });
+}
+document.addEventListener('click', (e) => {
+  const p = e.target.closest('[data-pop]');
+  if (p) { e.stopPropagation(); openPopover(p.dataset.pop, p); return; }
+  if (!e.target.closest('.popover')) closePopovers();
+}, true);
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
-  if (!$('menu').hidden || !$('attPop').hidden) return closePopovers();
+  if (POPS.some((id) => !$(id).hidden)) return closePopovers();
   if (ctx.editing) return;
   if (state.route.eyes) location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
@@ -309,12 +378,21 @@ addEventListener('keydown', (e) => {
 });
 document.querySelector('[data-povback]').onclick = () => { location.hash = `#/floor/${state.route.floorId}`; };
 document.querySelector('[data-povdesk]').onclick = () => { location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`; };
-$('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(updateInsets, 250); };
-addEventListener('resize', () => { for (const id of ['left', 'right', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
+$('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(() => { render(); updateInsets(); }, 250); };
+$('sideShow').onclick = () => { state.sideHidden = false; try { localStorage.removeItem('aisquad.sideHidden'); } catch { /* private mode */ } render(); };
+try { state.sideHidden = localStorage.getItem('aisquad.sideHidden') === '1'; } catch { /* private mode */ }
+addEventListener('resize', () => { for (const id of ['hud', 'dock', 'sideTop', 'sideMain', 'sideTabs', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 
 // ---------- actions (event delegation on data-act / data-href / data-tab) ----------
 const shouts = {};
 const actions = Object.assign(ctx.actions, {
+  'hide-side'() { state.sideHidden = true; try { localStorage.setItem('aisquad.sideHidden', '1'); } catch { /* private mode */ } render(); },
+  board() {
+    const f = state.floor; if (!f) return;
+    const body = openModal(`<div class="mHead"><h3 class="grow">Board · ${esc(f.name)}</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div><div class="mBody">${boardHtml(f)}</div>`);
+    body.closest('dialog').classList.add('xwide');
+    body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
+  },
   voice() { const on = !voiceOn(); setVoice(on); if (on) speak('Voice is on, boss.'); render(); },
   async start(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`, {}); toast('Starting agent…'); },
   async restart(el) {
@@ -353,7 +431,7 @@ const actions = Object.assign(ctx.actions, {
 
 document.addEventListener('click', async (e) => {
   const tab = e.target.closest('[data-tab]');
-  if (tab) { const [side, id] = tab.dataset.tab.split(':'); state.tab[side] = id; layoutPanels(lastSections); return; }
+  if (tab) { const [group, id] = tab.dataset.tab.split(':'); state.tab[group] = id; layoutPanels(lastSections); return; }
   const act = e.target.closest('[data-act]');
   if (act && act.tagName !== 'FORM') {
     const fn = actions[act.dataset.act];
@@ -366,6 +444,11 @@ document.addEventListener('click', async (e) => {
   }
   const nav = e.target.closest('[data-href]');
   if (nav && !e.target.closest('button[data-act], a, input, label')) location.hash = nav.dataset.href;
+});
+// rows with data-href work with the keyboard too
+document.addEventListener('keydown', (e) => {
+  const nav = (e.key === 'Enter' || e.key === ' ') && e.target.closest?.('[data-href][role=button]');
+  if (nav) { e.preventDefault(); location.hash = nav.dataset.href; }
 });
 document.addEventListener('submit', async (e) => {
   const f = e.target.closest('form[data-act="answer-free"]');

@@ -564,8 +564,9 @@ export class BuildingScene {
     if (v.mode === 'desk' && o && o.stations.get(v.agentId)) {
       const st = o.stations.get(v.agentId);
       st.g.updateWorldMatrix(true, false);
-      const pts = corners(-1.6, 1.6, 0, 2.6, -1.4, 1.6).map((q) => st.g.localToWorld(q));
-      return this.fitIso(pts, .08);
+      // the desk and its neighbourhood, about a third of the room, so the agent is big but still in its office
+      const pts = corners(-3.4, 3.4, 0, 2.4, -3, 3.4).map((q) => st.g.localToWorld(q));
+      return this.fitIso(pts, .04);
     }
     return this.fitIso(corners(-FW / 2 - .3, FW / 2 + .3, y + .2, y + TOP + FH, -FD / 2 - .3, FD / 2 + .3), .02);
   }

@@ -38,7 +38,7 @@ function exit() {
   ctx.scene._viewKey = null;
   $('editBar').hidden = true;
   bindPointer(false);
-  for (const id of ['left', 'right', 'sheetTabs', 'sheetBody']) $(id)._html = null;
+  for (const id of ['sideTop', 'sideMain', 'sideTabs', 'sheetTabs', 'sheetBody']) $(id)._html = null;
   ctx.render();
   ctx.updateInsets();
 }
@@ -101,10 +101,10 @@ function drawPanel() {
         <input type="color" data-k="shirt" value="${esc(ap.shirt || '#3d82d6')}" title="Shirt" aria-label="Shirt colour"><input type="color" data-k="hair" value="${esc(ap.hair || '#2b2440')}" title="Hair" aria-label="Hair colour">
         <input type="color" data-k="skin" value="${esc(ap.skin || '#f6d2b0')}" title="Skin" aria-label="Skin colour"><label class="inline" style="margin:0"><input type="checkbox" data-k="glasses" ${ap.glasses ? 'checked' : ''}> Glasses</label></div></div>`;
   }).join('');
-  ctx.layoutPanels([{ id: 'edit', title: 'Edit Mode', side: 'left', html: `<div class="sectionHead"><h3 class="grow">Edit Mode</h3></div>
-    <p class="note" style="margin-top:0">Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks and the lounge. Idle agents walk to the sofa, coffee machine, whiteboard and bookshelf.</p>
+  ctx.layoutPanels([{ id: 'edit', title: 'Edit Mode', card: 'main', html: `
+    <p class="note" style="margin-top:0">Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks and the lounge. Idle agents walk to the sofa, beanbags, pantry, ping-pong table and whiteboard.</p>
     <div class="sectionHead" style="margin-top:14px"><h3 class="grow">Appearance</h3></div>${rows || '<div class="empty">No agents on this Floor.</div>'}` }]);
-  const panel = ctx.isPhone() ? $('sheetBody') : $('left');
+  const panel = ctx.panelBody();
   panel.querySelectorAll('[data-look]').forEach((card) => card.addEventListener('input', (e) => {
     const k = e.target.dataset.k; if (!k) return;
     const id = card.dataset.look;
