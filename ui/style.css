@@ -271,10 +271,23 @@ body:has(#side.wide:not([hidden])) #dock { left: calc((100% - 452px) / 2); }
 .flabel b { font-size: 13px; font-weight: 800; }
 .flabel .w { color: var(--ok); } .flabel .q { color: var(--bad); font-weight: 800; } .flabel .m { color: var(--muted); }
 .rooflabel { background: var(--accent); color: var(--on-accent); border-radius: 10px; padding: 5px 13px; font-size: 14px; white-space: nowrap; font-weight: 800; box-shadow: var(--shadow-sm); }
+/* agent name chip + status line + zzz (squad-3d) */
+.nlabel { pointer-events: none; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.nlabel .n { display: inline-block; font-weight: 800; font-size: 12px; padding: 2px 10px; border-radius: 999px; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); white-space: nowrap; }
+.nlabel .a { margin-top: 3px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; background: rgba(255, 255, 255, .95); color: #1f2937; border-left: 3px solid #9ca3af;
+  max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
+.nlabel.working .a { border-left-color: #16a34a; } .nlabel.waiting .a { border-left-color: #dc2626; color: #b91c1c; font-weight: 800; } .nlabel.idle .a { border-left-color: #d97706; opacity: .85; } .nlabel.stopped .a { opacity: .7; }
+.nlabel.away .a { border-left-color: #b7852a; opacity: 1; }
+.nlabel .q { display: none; font-size: 15px; font-weight: 900; color: #fff; background: var(--bad); width: 24px; height: 24px; border-radius: 50%; place-items: center; margin-bottom: 4px; animation: pulse 1s infinite; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.nlabel.waiting .q { display: grid; }
+.nlabel .z { font: 700 12px var(--mono); color: #6b7280; height: 0; overflow: visible; transform: translate(14px, -16px); animation: zz 2.4s infinite; display: none; }
+.nlabel.idle .z, .nlabel.stopped .z { display: block; }
+.nlabel.away .z { display: none; }
+@keyframes zz { 0% { opacity: 0; transform: translate(10px, -6px); } 50% { opacity: 1; } 100% { opacity: 0; transform: translate(22px, -22px); } }
 .alabel { background: var(--panel); color: var(--text); box-shadow: var(--shadow-sm); border-radius: 999px; padding: 2px 9px; font-size: 11.5px; white-space: nowrap; display: flex; gap: 5px; align-items: center; font-weight: 700; }
 .alabel .away { color: var(--accent); font-weight: 500; }
 .warnlabel { color: var(--bad); }
-.bubble { font-size: 18px; font-weight: 900; color: #fff; background: var(--bad); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; animation: pulse 1s infinite; }
+.bubble { font-size: 16px; font-weight: 900; color: #fff; background: var(--bad); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; animation: pulse 1s infinite; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 .zzz { color: var(--muted); font-weight: 800; font-size: 16px; font-style: italic; }
 .zzz small { font-size: 11px; }
 .say { background: #fff; color: #1f2937; font-weight: 800; font-size: 13px; line-height: 1.35; padding: 8px 12px; border-radius: 14px; border: 2px solid #1f2937; max-width: 240px; white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,.18); position: relative; }

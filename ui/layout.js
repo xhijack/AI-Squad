@@ -24,8 +24,8 @@ export function presetSpots(n, layout) {
     const pods = Math.ceil(n / 4);
     for (let i = 0; i < n; i++) {
       const pod = Math.floor(i / 4), k = i % 4;
-      const px = CX + (pod - (pods - 1) / 2) * 5.2, side = k % 2 ? 1 : -1, front = k < 2;
-      out.push({ x: px + side * 1.05, z: front ? .1 : -2.9, ry: front ? Math.PI : 0 });
+      const px = CX + (pod - (pods - 1) / 2) * 6.6, side = k % 2 ? 1 : -1, front = k < 2;
+      out.push({ x: px + side * 1.65, z: front ? .5 : -3.6, ry: front ? Math.PI : 0 });
     }
   } else if (layout === 'open-space') {
     const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(n * 1.6))));

@@ -253,24 +253,37 @@ function buildStation(agent, desk, accent) {
   human.userData.human = true;                                                  // clicking the body opens the agent's eyes
   human.add(rig.root);
   const st = { id: agent.id, g, human, rig, screens, ringMat, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6, accent };
-  st.label = label('', 'alabel', human, 0, 2.15, 0);
-  st.bubble = label('?', 'bubble', human, .5, 2.75, 0);
-  st.zzz = label('z<small>z</small>', 'zzz', human, .45, 2.0, .2);
-  st.say = label('', 'say', human, 0, 2.55, 0); st.say.visible = false;   // lead shout
+  // name chip in the agent's colour above the head, its status under it, zzz when idle (as in squad-3d)
+  st.label = label('<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div>', 'nlabel', human, 0, 1.95, 0);
+  st.label.center.set(.5, 1);
+  const color = (agent.appearance && agent.appearance.shirt) || '#3d82d6';
+  Object.assign(st.label.element.querySelector('.n').style, { background: color, color: inkOn(color) });
+  st.say = label('', 'say', human, 0, 2.75, 0); st.say.center.set(.5, 1); st.say.visible = false;   // lead shout
   deskHome(st);
   updateStation(st, agent);
   return st;
 }
 
+// readable text on a coloured chip: dark ink on light colours, white on dark ones
+function inkOn(hex) {
+  const n = parseInt(String(hex).slice(1), 16), [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255].map((v) => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+  return .2126 * r + .7152 * g + .0722 * b > .4 ? '#1f2937' : '#ffffff';
+}
+const STATUS_TEXT = { working: 'working', waiting: 'needs you', idle: 'idle', stopped: 'stopped' };
+const shortActivity = (s) => { s = String(s || '').replace(/^(terminal|thinking): /, ''); return s.length > 30 ? `${s.slice(0, 29)}…` : s; };
+
 function updateStation(st, a) {
   st.state = a.state; st.data = a;
-  const first = esc(String(a.displayName || '').split(' - ')[0]);
-  const html = `<i class="dot ${a.state}"></i>${first}${st.away ? ` <span class="away">· ${esc(st.away)}</span>` : ''}`;
-  if (st.label.element.innerHTML !== html) st.label.element.innerHTML = html;
-  st.label.element.title = `${a.displayName}: ${st.away || a.activity || a.state}`;
+  const el = st.label.element;
+  const name = String(a.displayName || '').split(' - ')[0];
+  const status = st.away || (a.state === 'working' && a.activity ? shortActivity(a.activity) : STATUS_TEXT[a.state] || a.state || '');
+  const cls = `nlabel ${a.state || 'stopped'}${st.away ? ' away' : ''}`;
+  if (el.className !== cls) el.className = cls;
+  const n = el.querySelector('.n'), s = el.querySelector('.a');
+  if (n.textContent !== name) n.textContent = name;
+  if (s.textContent !== status) s.textContent = status;
+  el.title = `${a.displayName}: ${st.away || a.activity || a.state}`;
   st.ringMat.color.set(STATE_RING[a.state] || STATE_RING.stopped);
-  st.bubble.visible = a.state === 'waiting' && st.labelsOn;
-  st.zzz.visible = a.state === 'stopped' && st.labelsOn && !st.away;
   st.label.visible = !!st.labelsOn;
 }
 
@@ -428,8 +441,9 @@ export class BuildingScene {
       const st = buildStation(a, desks[i], accent);
       g.add(st.g, st.human); o.stations.set(a.id, st);
       // the name tag opens the desk; the body itself opens the first person view
-      st.label.element.style.pointerEvents = 'auto'; st.label.element.style.cursor = 'pointer';
-      st.label.element.addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
+      const chip = st.label.element.querySelector('.n');
+      chip.style.pointerEvents = 'auto'; chip.style.cursor = 'pointer';
+      chip.addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
     });
     o.spots = loungeSpots(f.devices || []);
     o.occupied = new Map();
