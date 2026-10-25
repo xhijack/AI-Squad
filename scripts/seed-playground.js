@@ -22,6 +22,8 @@ const floors = await import('../server/floors.js');
 const { projectDir } = await import('../server/transcripts.js');
 seedDefaults();
 fs.writeFileSync(path.join(PG, 'home', 'pin'), '123456\n', { mode: 0o600 });
+(await import('../server/building.js')).setPrefs({ squadsDir: path.join(PG, 'squads') });   // Set up Squad creates folders here, never in the real home
+fs.rmSync(path.join(PG, 'squads'), { recursive: true, force: true });
 
 const dir = (n) => path.join(PG, 'floors', n);
 await floors.createFloor({

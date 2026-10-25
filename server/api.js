@@ -13,6 +13,9 @@ import { checkPin } from './pin.js';
 import { setApproval } from './merge.js';
 import { recentEvents as hooksRecent } from './events.js';
 import { meter } from './meter.js';
+import * as blueprints from './blueprints.js';
+import { recommend } from './recommend.js';
+import { createSquad, squadsDir } from './setup.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json' };
@@ -56,7 +59,20 @@ const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
   ['GET', /^\/api\/watchdog$/, () => squad.watchdogStatus()],
   ['GET', /^\/api\/meter$/, () => meter.detail()],
-  ['PATCH', /^\/api\/building$/, (p, b) => { building.setBuildingName(b.name); squad.invalidate(); return { ok: true }; }, { pin: true }],
+  ['PATCH', /^\/api\/building$/, (p, b) => {
+    if (b.name !== undefined) building.setBuildingName(b.name);
+    if (b.squadsDir !== undefined) { if (!path.isAbsolute(String(b.squadsDir))) throw new HttpError(400, 'The squads folder must be an absolute path'); building.setPrefs({ squadsDir: path.resolve(String(b.squadsDir)) }); }
+    squad.invalidate(); return { ok: true };
+  }, { pin: true }],
+  ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => b), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber() })],
+  ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
+  ['POST', /^\/api\/squads\/recommend$/, (p, b) => recommend({ prompt: b.prompt, blueprint: b.blueprint, useClaude: b.useClaude !== false }), { pin: true }],
+  ['POST', /^\/api\/squads$/, async (p, b) => {
+    const r = await createSquad(b);
+    if (b.startLead && r.lead) { try { await squad.startAgent(r.id, r.lead, b.kickoff || ''); r.leadStarted = true; } catch (e) { r.leadError = e.message; } }
+    squad.invalidate();
+    return r;
+  }, { pin: true }],
   ['POST', /^\/api\/auth$/, () => ({ ok: true }), { pin: true }],
   ['POST', /^\/api\/events$/, (p, b) => squad.ingestEvent(b), { pin: true }],
   ['GET', /^\/api\/events$/, () => ({ events: hooksRecent() }), { pin: true }],

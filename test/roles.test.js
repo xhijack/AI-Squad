@@ -10,7 +10,9 @@ const root = scratch();
 
 test('default templates are seeded and parsed', () => {
   const ids = roles.listTemplates().map((t) => t.role).sort();
-  assert.deepEqual(ids, ['frappe-developer', 'fullstack-developer', 'project-manager', 'qa-engineer', 'seo-specialist', 'sprint-developer', 'sprint-lead', 'sprint-qa', 'ui-ux-designer']);
+  assert.deepEqual(ids, ['ads-analytics-specialist', 'content-writer', 'crm-administrator', 'devops-engineer', 'frappe-developer', 'fullstack-developer', 'lead-researcher', 'marketing-strategist',
+    'project-manager', 'qa-engineer', 'sales-analyst', 'sales-copywriter', 'sales-manager', 'seo-specialist', 'social-media-specialist', 'sprint-developer', 'sprint-lead', 'sprint-qa', 'ui-ux-designer']);
+  assert.equal(roles.getTemplate('sales-manager').category, 'sales');
   const t = roles.getTemplate('frappe-developer');
   assert.equal(t.version, 1);
   assert.ok(t.rules.length >= 3);
@@ -45,14 +47,14 @@ test('create rejects duplicates; update needs an existing role', () => {
 test('extra libraries are listed read-only and local wins', () => {
   const lib = path.join(root, 'team-lib');
   fs.mkdirSync(lib);
-  fs.writeFileSync(path.join(lib, 'devops-engineer.md'), '---\nrole: devops-engineer\ntitle: DevOps Engineer\nversion: 4\n---\n## Prompt\nShip it.\n');
+  fs.writeFileSync(path.join(lib, 'release-manager.md'), '---\nrole: release-manager\ntitle: Release Manager\nversion: 4\n---\n## Prompt\nShip it.\n');
   fs.writeFileSync(path.join(lib, 'qa-engineer.md'), '---\nrole: qa-engineer\ntitle: Other QA\nversion: 9\n---\n');
   fs.writeFileSync(paths.libraries(), JSON.stringify({ libraries: [{ name: 'team', path: lib }] }));
-  const d = roles.getTemplate('devops-engineer');
+  const d = roles.getTemplate('release-manager');
   assert.equal(d.source, 'team');
   assert.equal(d.version, 4);
   assert.equal(roles.getTemplate('qa-engineer').title, 'QA Engineer');
-  assert.throws(() => roles.saveTemplate({ role: 'devops-engineer', title: 'X' }), /read-only/);
+  assert.throws(() => roles.saveTemplate({ role: 'release-manager', title: 'X' }), /read-only/);
 });
 
 test('shipped default upgrades replace only untouched local copies', () => {

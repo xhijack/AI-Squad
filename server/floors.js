@@ -58,6 +58,8 @@ export function cleanFloor(f = {}, prev = {}) {
     accent: isHex(pick('accent')) ? pick('accent') : ACCENTS[0],
     budget: { usd: Math.max(0, Number(budget.usd) || 0), period: budget.period === 'day' ? 'day' : 'month' },
     sprint: { autoNext: !!(pick('sprint') || {}).autoNext },
+    // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
+    ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
       agent: String(d.agent), x: num(d.x), z: num(d.z), ry: num(d.ry, 0, 7), device: DESK_DEVICES.includes(d.device) ? d.device : 'laptop' })),
     devices: (Array.isArray(pick('devices')) ? pick('devices') : defaultDevices()).filter((d) => d && DEVICE_TYPES.includes(d.type)).slice(0, 60).map((d, i) => ({

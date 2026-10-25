@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, paths, configure } from './config.js';
 import { seedDefaults } from './roles.js';
+import { seedBlueprints } from './blueprints.js';
 import { ensureCloned } from './libraries.js';
 import { flushPending, watchdogTick, mergeTick } from './squad.js';
 import { meter } from './meter.js';
@@ -17,6 +18,7 @@ const PORT = Number(opt('--port', process.env.AISQUAD_PORT || 8097));
 const HOST = opt('--host', '127.0.0.1');
 
 seedDefaults();
+seedBlueprints();
 configure({ serverUrl: `http://${isLoopback(HOST) ? HOST.replace(/^::1$/, '[::1]') : '127.0.0.1'}:${PORT}` });   // where agent hooks post events
 const pin = loadPin();
 const server = http.createServer(createHandler({ pin, host: HOST }));

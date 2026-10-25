@@ -73,6 +73,12 @@ export function setFloorNumber(id, number) {
   return f;
 }
 
+export function setPrefs(over) {
+  const b = loadBuilding();
+  b.prefs = { ...b.prefs, ...over };
+  saveBuilding(b);
+}
+
 export function setBuildingName(name) {
   const b = loadBuilding();
   b.name = String(name || '').trim().slice(0, 60) || b.name;

@@ -58,7 +58,8 @@ export function lobbySections(b) {
       <div class="chips"><span class="chip">${p.sessions} session${p.sessions === 1 ? '' : 's'}</span><span class="chip">active ${ago(p.lastActive)}</span>${p.team ? `<span class="chip info">team ${esc(p.team)}</span>` : ''}${p.agentDefs.length ? `<span class="chip">${p.agentDefs.length} agent file${p.agentDefs.length === 1 ? '' : 's'}</span>` : ''}${p.hasFloorConfig ? '<span class="chip ok">has Floor config</span>' : ''}</div></div>`).join('');
   return [
     { id: 'floors', title: 'Floors', side: 'left', count: b.floors.length, html: `
-      <div class="sectionHead"><h3 class="grow">Floors</h3><button class="small gold" data-act="new-floor">+ New Floor</button></div>
+      <button class="gold setupBtn" data-act="setup-squad"><b>Set up Squad</b><small>Describe what you want to build; get a team and how it communicates</small></button>
+      <div class="sectionHead"><h3 class="grow">Floors</h3><button class="small ghost" data-act="new-floor" title="A Floor without a Blueprint, set up by hand">+ New Floor</button></div>
       ${floorCards || '<div class="empty">No Floors yet. Create one, or turn a detected project into a Floor.</div>'}` },
     { id: 'attention', title: 'Attention', side: 'right', count: b.attention.length, countClass: b.attention.length ? 'bad' : '', html: `
       <div class="sectionHead"><h3 class="grow">Attention</h3></div>${attentionHtml(b.attention)}

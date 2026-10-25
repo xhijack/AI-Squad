@@ -14,7 +14,7 @@ export const STYLES = ['farmer', 'bob', 'pony', 'spiky', 'buns'];
 // desk props and the role screen on the desk laptop (part of the appearance, so every role can set its own)
 export const PROPS = ['trophy', 'cactus', 'rubik', 'duck', 'robot', 'ladybug', 'magnifier', 'megaphone', 'books', 'headphones'];
 export const SCREENS = ['code', 'tests', 'board'];
-const KNOWN = ['role', 'title', 'version', 'description', 'model', 'effort', 'skills', 'tools', 'permissions', 'appearance'];
+const KNOWN = ['role', 'title', 'version', 'description', 'category', 'model', 'effort', 'skills', 'tools', 'permissions', 'appearance'];
 
 const list = (v) => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(',')).map((x) => String(x).trim()).filter(Boolean);
 
@@ -59,6 +59,7 @@ export function parseTemplate(text, fallbackRole = '') {
     title: String(data.title || role),
     version: Math.max(1, parseInt(data.version, 10) || 1),
     description: data.description ? String(data.description) : '',
+    ...(data.category ? { category: kebab(data.category) } : {}),
     model: MODELS.includes(data.model) ? data.model : 'sonnet',
     effort: EFFORTS.includes(data.effort) ? data.effort : 'medium',
     skills: uniq(list(data.skills)),
@@ -74,6 +75,7 @@ export function parseTemplate(text, fallbackRole = '') {
 export function renderTemplate(t) {
   const fm = { role: t.role, title: t.title, version: t.version };
   if (t.description) fm.description = t.description;
+  if (t.category) fm.category = t.category;
   Object.assign(fm, { model: t.model, effort: t.effort, skills: t.skills, tools: t.tools, permissions: t.permissions, appearance: t.appearance }, t.extra || {});
   const rules = t.rules.length ? t.rules.map((r) => `- ${r}`).join('\n') : '- (none)';
   return stringifyFrontmatter(fm, `## Rules\n${rules}\n\n## Prompt\n${String(t.prompt || '').trim()}\n`);

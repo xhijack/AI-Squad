@@ -281,3 +281,15 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid #222a44; white-space:
 .key { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin: 0 3px 0 8px; }
 .key.cpu { background: var(--ok); } .key.mem { background: var(--info); } .key.swap { background: var(--warn); }
 @media (max-width: 760px) { .meterChip .hideSm { display: none; } }
+/* Set up Squad */
+.setupBtn { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; margin-bottom: 12px; border-radius: 12px; text-align: left; }
+.setupBtn b { font-size: 16px; }
+.setupBtn small { font-weight: 500; opacity: .8; }
+.bpCards { grid-template-columns: 1fr !important; }
+.bpCards button small.note { margin-top: 4px; }
+.memberCard { margin-top: 8px; }
+.memberCard input[data-name] { font-weight: 600; }
+.catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; margin-top: 8px; max-height: 360px; overflow: auto; }
+.catalog .card { margin: 0; }
+.bpCards small { display: block; }
+#modalBody > .steps { flex: none; }

@@ -7,6 +7,7 @@ import './dialogs.js';
 import './edit.js';
 import './perf.js';
 import './independents.js';
+import './setup.js';
 import { meterChip } from './meter.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
