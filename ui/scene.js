@@ -183,8 +183,7 @@ export class BuildingScene {
     this.top = 0;
     this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color('#0f1320');
-    this.scene.fog = new THREE.Fog('#0f1320', 80, 190);
+    this.scene.background = new THREE.Color('#efe9df');
     this.camera = new THREE.PerspectiveCamera(40, 1, .1, 500);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -432,6 +431,12 @@ export class BuildingScene {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.labels.setSize(w, h);
+  }
+
+  // light (default) or dark page: the scene backdrop follows the theme's --scene colour
+  setTheme(dark, color) {
+    this.dark = dark;
+    this.scene.background = new THREE.Color(color || (dark ? '#141a2b' : '#efe9df'));
   }
 
   // live tmux screen for the over-the-shoulder view (null = draw from transcript data)

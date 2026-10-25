@@ -374,10 +374,25 @@ document.addEventListener('submit', async (e) => {
   try { await api('POST', `/api/attention/${f.dataset.id}/answer`, { option: +f.dataset.n, text: f.elements.text.value }); toast('Answer sent'); } catch (err) { toast(err.message); }
   refresh();
 });
+// theme: light (default) → dark → auto (follows the system), remembered per browser
+const THEMES = { light: 'Light', dark: 'Dark', auto: 'Auto (system)' };
+export function applyTheme() {
+  const t = document.documentElement.dataset.theme || 'light';
+  $('themeName').textContent = THEMES[t] || 'Light';
+  const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  scene.setTheme(dark, getComputedStyle(document.documentElement).getPropertyValue('--scene').trim());
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+applyTheme();
 $('menu').addEventListener('click', (e) => {
   const b = e.target.closest('[data-menu]'); if (!b) return;
   closePopovers();
-  if (b.dataset.menu === 'pin') askPin().then((ok) => ok && refresh());
+  if (b.dataset.menu === 'theme') {
+    const order = Object.keys(THEMES), next = order[(order.indexOf(document.documentElement.dataset.theme) + 1) % order.length];
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('aisquad.theme', next); } catch { /* private mode */ }
+    applyTheme(); toast(`Theme: ${THEMES[next]}`);
+  } else if (b.dataset.menu === 'pin') askPin().then((ok) => ok && refresh());
   else if (b.dataset.menu === 'rename') {
     const name = prompt('Building name', state.building?.name || 'The AI Squad');
     if (name) api('PATCH', '/api/building', { name }).then(refresh, (err) => toast(err.message));
