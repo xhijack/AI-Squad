@@ -15,6 +15,7 @@ import * as hooks from './events.js';
 import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
+import * as blueprintsLib from './blueprints.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -284,10 +285,24 @@ export function floorDetail(id) {
   });
   return { ...sum, floor: s.cfg.floor, git: s.cfg.git, team, brief: readBriefSafe(entry.path), feed: feed.slice(0, 60), messages: messages.slice(0, 40),
     attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null,
-    board: s.cfg.floor.workflow === 'squad-sprint' ? sprint.boardData(entry.path) : null,
+    board: s.cfg.floor.workflow === 'squad-sprint' ? sprint.boardData(entry.path) : blueprintBoard(entry.path),
+    blueprint: blueprintInfo(entry.path, s.cfg.floor.blueprint),
     shots: listShots(entry.path),
     merge: { approved: !!merge.approval(entry.id), approvedAt: merge.approval(entry.id)?.approvedAt || null, running: merge.isMerging(entry.id), last: merge.mergeLog(entry.id, 5) } };
 }
+
+// Blueprint squads without Squad Sprint keep their board in docs/BOARD.md (same table as TASKS.md)
+function blueprintBoard(root) {
+  const text = readTextSafe(path.join(root, 'docs', 'BOARD.md'));
+  if (!text) return null;
+  return { pack: true, sprint: '', tasks: sprint.parseTasks(text), handoffs: [], bugs: { open: [], fixed: [] }, qa: { pass: [], fail: [] },
+    questions: (readTextSafe(path.join(root, 'docs', 'QUESTIONS.md')) || '').split('\n').filter((l) => /^\s*\d+\.\s+\S/.test(l)).length, source: 'docs/BOARD.md' };
+}
+function blueprintInfo(root, ref) {
+  const bp = blueprintsLib.floorBlueprint(root, ref);
+  return bp ? { id: bp.id, title: bp.title, version: bp.version, gates: bp.gates, sourceDocs: blueprintsLib.sourceDocsStatus(root, bp) } : null;
+}
+const readTextSafe = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
 
 function readBriefSafe(root) { try { return fs.readFileSync(path.join(root, 'AISQUAD.md'), 'utf8').slice(0, 20000); } catch { return ''; } }
 

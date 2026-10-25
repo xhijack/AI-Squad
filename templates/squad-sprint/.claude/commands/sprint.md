@@ -4,6 +4,9 @@ argument-hint: <sprint number>
 ---
 New sprint: **$ARGUMENTS**.
 
+0. If `AISQUAD.md` has a "Squad standard" with source documents, check that each one starts with `STATUS: APPROVED`.
+   If one is missing or still `DRAFT`, do not start the sprint: run the source document intake with the owner first
+   (ask for it, or interview the owner and draft it for approval).
 1. Set the `SPRINT=` line in `.claude/squad/config.sh` to `SPRINT="$ARGUMENTS"`.
 2. Check that the previous sprint is closed (`docs/squad/sprint-<previous>/RELEASE.md` exists and its closing
    commit `docs(squad): close sprint <previous>` is merged into main). If not, tell the owner what is left

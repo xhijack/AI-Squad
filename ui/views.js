@@ -103,10 +103,10 @@ function boardHtml(f) {
     return `<div class="card"><div class="row"><b class="grow">${COLUMN_TEXT[c]}</b><span class="note">${items.length}</span></div>${items.map((t) => `<div class="card" style="margin-top:6px"><div><b>${esc(t.task)}</b></div>
       <div class="note">${esc(name(t.owner))}${t.blockedBy ? ` · after ${esc(t.blockedBy)}` : ''}${t.status && t.status.toUpperCase() !== c ? ` · ${esc(t.status)}` : ''}</div></div>`).join('') || '<div class="empty">Empty</div>'}</div>`;
   }).join('');
-  return `<div class="chips" style="margin-top:0"><span class="chip info">Sprint ${esc(b.sprint)}</span><span class="chip">${b.tasks.length} tasks</span>
+  return `<div class="chips" style="margin-top:0">${b.sprint ? `<span class="chip info">Sprint ${esc(b.sprint)}</span>` : ''}<span class="chip">${b.tasks.length} tasks</span>
       ${b.bugs.open.length ? `<span class="chip bad">${b.bugs.open.length} open bug${b.bugs.open.length === 1 ? '' : 's'}</span>` : ''}${b.bugs.fixed.length ? `<span class="chip warn">${b.bugs.fixed.length} to retest</span>` : ''}
-      <span class="chip ok">${b.qa.pass.length} QA pass</span>${b.questions ? `<span class="chip">${b.questions} questions</span>` : ''}</div>
-    <p class="note">From <code>docs/squad/TASKS.md</code>; the lead keeps it current.</p>
+      ${b.sprint ? `<span class="chip ok">${b.qa.pass.length} QA pass</span>` : ''}${b.questions ? `<span class="chip">${b.questions} questions</span>` : ''}</div>
+    <p class="note">From <code>${esc(b.source || 'docs/squad/TASKS.md')}</code>; the lead keeps it current.</p>
     ${b.tasks.length ? cols : '<div class="empty">No tasks yet. Start the lead and run <code>/sprint</code> to plan the sprint.</div>'}`;
 }
 
@@ -126,6 +126,16 @@ function independentFloorSections(f, deskAgentId) {
   return sections;
 }
 
+// the Blueprint this squad follows and the state of its source documents
+const DOC_STATE = { approved: ['ok', 'approved'], draft: ['warn', 'draft'], missing: ['bad', 'missing'] };
+function standardHtml(bp) {
+  if (!bp) return '';
+  const pending = bp.sourceDocs.filter((d) => d.status !== 'approved').length;
+  return `<div class="section"><div class="sectionHead"><h3 class="grow">Squad standard</h3><span class="chip info">${esc(bp.title)} v${bp.version}</span></div>
+    <p class="note" style="margin-top:0">Roles, channels, gates and the definition of done are in <code>AISQUAD.md</code> and in every agent's prompt.${pending ? ` The lead collects the source documents from you first: ${pending} not approved yet.` : ''}</p>
+    ${bp.sourceDocs.map((d) => `<div class="docRow"><span class="grow"><code>${esc(d.path)}</code> <span class="note">${esc(d.purpose)}</span></span><span class="chip ${DOC_STATE[d.status][0]}">${DOC_STATE[d.status][1]}</span></div>`).join('')}</div>`;
+}
+
 export function floorSections(f, deskAgentId = null) {
   if (f.independent) return independentFloorSections(f, deskAgentId);
   if (f.missing) return [{ id: 'team', title: 'Team', side: 'left', html: `<div class="empty">${esc(f.error)}: <code>${esc(f.path)}</code></div><button class="danger" data-act="remove-floor" data-floor="${f.id}">Remove this Floor</button>` }];
@@ -137,13 +147,14 @@ export function floorSections(f, deskAgentId = null) {
       <div class="chips"><span class="chip">${WORKFLOW_TEXT[f.workflow]}</span><span class="chip">today ${money(f.cost.today)}</span><span class="chip">month ${money(f.cost.month)}</span>${b.usd > 0 ? `<span class="chip ${b.level === 'over' ? 'bad' : b.level === 'warn' ? 'warn' : ''}">budget ${money(b.used)} / ${money(b.usd)} per ${b.period}</span>` : ''}${f.teamName ? `<span class="chip info">Agent Team ${esc(f.teamName)}</span>` : ''}</div>
       <div class="row wrap" style="margin-top:10px"><button class="small" data-act="floor-settings">Settings</button><button class="small" data-act="edit-mode">Edit layout</button><span class="spacer"></span>
         ${f.agents.some((a) => !a.running) ? '<button class="small ok" data-act="start-all">Start all</button>' : ''}${f.agents.some((a) => a.running) ? '<button class="small ghost" data-act="stop-all">Stop all</button>' : ''}</div>
+      ${standardHtml(f.blueprint)}
       <div class="section"><div class="sectionHead"><h3 class="grow">Team</h3><button class="small gold" data-act="add-agent">+ Add agent</button></div>
       ${team || '<div class="empty">No agents yet. Add one from a Role Template.</div>'}</div>
       <div class="note" style="margin-top:12px;word-break:break-all">${esc(f.path)}</div>` },
     { id: 'activity', title: 'Activity', side: 'right', html: feedHtml(f.feed || []) },
     { id: 'messages', title: 'Messages', side: 'right', count: (f.messages || []).length, html: messagesHtml(f.messages || [], f.agents) },
   ];
-  if (f.workflow === 'squad-sprint') sections.push({ id: 'board', title: 'Board', side: 'right', html: boardHtml(f) });
+  if (f.workflow === 'squad-sprint' || f.board) sections.push({ id: 'board', title: 'Board', side: 'right', html: boardHtml(f) });
   const att = f.attentionItems || [];
   if (att.length) sections.unshift({ id: 'f-attention', title: 'Attention', side: 'right', count: att.length, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
   return sections;

@@ -5,8 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, config } from './config.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { safeReaddir, readText, writeText, kebab, uniq, notFound } from './util.js';
+import { safeReaddir, readText, writeText, readJson, writeJson, kebab, uniq, notFound } from './util.js';
 import { listTemplates } from './roles.js';
+import { SECRET_DENY } from './sprint.js';
 
 export const SHIPPED = path.join(ROOT, 'templates', 'blueprints');
 export const libraryDir = () => path.join(config.home, 'blueprints');
@@ -81,4 +82,80 @@ export function catalog() {
     return { role: t.role, title: t.title, version: t.version, description: t.description, model: t.model, effort: t.effort, skills: t.skills,
       appearance: t.appearance, category: t.category || used[0]?.category || 'general', blueprints: used.map((b) => b.id), source: t.source };
   });
+}
+
+// ---------- the communication standard in the repo ----------
+// body sections by "## " heading; "Rules per role" holds "### role-a, role-b" subsections
+export function sections(body) {
+  const out = [];
+  for (const part of String(body).split(/^## /m).slice(1)) {
+    const nl = part.indexOf('\n');
+    out.push({ title: part.slice(0, nl < 0 ? undefined : nl).trim(), text: nl < 0 ? '' : part.slice(nl + 1).trim() });
+  }
+  return out;
+}
+export function roleRules(bp, role) {
+  const sec = sections(bp.body).find((s) => /^rules per role$/i.test(s.title));
+  if (!sec) return '';
+  for (const part of sec.text.split(/^### /m).slice(1)) {
+    const nl = part.indexOf('\n');
+    if (part.slice(0, nl).split(',').map((x) => x.trim()).includes(role)) return part.slice(nl + 1).trim();
+  }
+  return '';
+}
+const fill = (text, lead) => String(text).replace(/\{\{lead\}\}/g, lead ? `${lead.displayName} (\`${lead.id}\`)` : 'the lead');
+
+// the standard every agent follows (without the per-role rules), for AISQUAD.md and agent files
+export function standardText(bp, lead) {
+  return sections(bp.body).filter((s) => !/^rules per role$/i.test(s.title)).map((s) => `### ${s.title}\n${fill(s.text, lead)}`).join('\n\n');
+}
+
+export const STANDARD_START = '<!-- aisquad:standard:start -->', STANDARD_END = '<!-- aisquad:standard:end -->';
+export function standardBlock(bp, lead) {
+  return `${STANDARD_START}\n## Squad standard: ${bp.title} v${bp.version}\nThis squad follows the **${bp.title}** Blueprint. Every agent treats this section as binding; it is generated from \`.claude/aisquad/blueprint.md\`.\n\n**Lead:** ${lead ? `${lead.displayName} (\`${lead.id}\`)` : 'not set'}. Gates: ${bp.gates.join(', ') || 'see below'}.\n\n${standardText(bp, lead)}\n${STANDARD_END}`;
+}
+
+// snapshot in the repo (self-contained, like roles.lock); the Floor reads its Blueprint from here
+export const snapshotPath = (root) => path.join(root, '.claude', 'aisquad', 'blueprint.md');
+export function floorBlueprint(root, ref) {
+  if (!ref?.id) return null;
+  const text = readText(snapshotPath(root)) || blueprintText(ref.id);
+  try { return text ? parseBlueprint(text, ref.id) : null; } catch { return null; }
+}
+
+// copy the Blueprint into the repo: snapshot + workflow pack (existing files are never overwritten)
+export function applyToRepo(root, bp) {
+  writeText(snapshotPath(root), blueprintText(bp.id));
+  const created = [];
+  for (const f of packFiles(bp)) {
+    const dest = path.join(root, f.rel);
+    if (fs.existsSync(dest)) continue;
+    writeText(dest, fs.readFileSync(f.abs, 'utf8'));
+    created.push(f.rel);
+  }
+  return created;
+}
+
+// source documents and their status from the STATUS line: missing | draft | approved
+export function sourceDocsStatus(root, bp) {
+  return (bp?.sourceDocs || []).filter((d) => d && d.path).map((d) => {
+    const text = readText(path.join(root, String(d.path)));
+    const st = text == null ? 'missing' : /^STATUS:\s*APPROVED/mi.test(text) ? 'approved' : 'draft';
+    return { path: String(d.path), title: String(d.title || d.path), purpose: String(d.purpose || ''), owner: String(d.owner || ''), status: st };
+  });
+}
+
+// .claude/settings.json for a Blueprint squad: the lead spawns teammates (agent teams), background teammates
+// need allow rules for writing (they cannot answer prompts), and secrets stay denied (merged, idempotent)
+export const TEAM_ALLOW = ['Edit', 'Write', 'Bash(ls*)', 'Bash(mkdir *)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)', 'Bash(git add *)', 'Bash(git commit *)', 'Bash(git switch *)', 'Bash(git branch*)'];
+export function mergeTeamSettings(root) {
+  const p = path.join(root, '.claude', 'settings.json');
+  const cur = fs.existsSync(p) ? readJson(p, null) : {};
+  if (!cur) return false;                                      // unreadable settings: leave them alone
+  cur.env = { ...(cur.env || {}), CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' };
+  cur.permissions = { ...(cur.permissions || {}) };
+  cur.permissions.allow = [...new Set([...(cur.permissions.allow || []), ...TEAM_ALLOW])];
+  cur.permissions.deny = [...new Set([...(cur.permissions.deny || []), ...SECRET_DENY, 'Bash(git push*)', 'Bash(rm -rf *)'])];
+  writeJson(p, cur);
+  return true;
 }

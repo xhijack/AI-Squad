@@ -80,7 +80,8 @@ function gitRules(git) {
 
 // Standard Claude Code agent file. Permissions are enforced at start time (--disallowedTools);
 // they are also listed here so the agent knows its limits.
-export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team' } = {}) {
+// standard: the Floor's Blueprint ({ title, version, text, roleRules, lead }), written into every agent prompt
+export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null } = {}) {
   const fm = {
     name: eff.id,
     description: `${eff.displayName} (${eff.title}) on ${floorName || 'this Floor'}. ${eff.description || ''}`.trim(),
@@ -101,6 +102,10 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
       + ` Read \`AISQUAD.md\` first: it holds the project brief, goal and team.`
       + (workflow === 'squad-sprint' ? ' This Floor runs the Squad Sprint workflow: take work from the sprint board and hand finished work to QA.' : ''),
   ];
+  if (standard) {
+    const lead = standard.lead && standard.lead.id !== eff.id ? `Your lead is **${standard.lead.displayName}** (\`${standard.lead.id}\`): talk to the owner only through the lead and the questions file.` : 'You are the lead: you are the only agent who talks to the owner.';
+    sections.push(`## Squad standard: ${standard.title} v${standard.version}\nThis squad follows the ${standard.title} Blueprint. ${lead}\n\n${standard.text}${standard.roleRules ? `\n\n### Your rules in this squad\n${standard.roleRules}` : ''}`);
+  }
   if (eff.rules.length) sections.push(`## Rules\n${eff.rules.map((r) => `- ${r}`).join('\n')}`);
   const g = gitRules(git);
   if (g.length) sections.push(`## Git\n${g.map((r) => `- ${r}`).join('\n')}`);

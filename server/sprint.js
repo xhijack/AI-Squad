@@ -51,7 +51,9 @@ export function scaffold(root, { git = {}, agents = [] } = {}) {
 export const SQUAD_ALLOW = ['Edit', 'Write', 'Bash(node *)', 'Bash(npm test*)', 'Bash(npm run test*)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)',
   'Bash(git show*)', 'Bash(git add *)', 'Bash(git commit *)', 'Bash(git switch *)', 'Bash(git branch*)', 'Bash(git rev-parse*)', 'Bash(git mv *)',
   'Bash(ls*)', 'Bash(mkdir *)', 'Bash(mv docs/squad/*)', 'Bash(cp *)', 'Bash(cat *)'];
-export const SQUAD_DENY = ['Read(./.env)', 'Read(./.env.*)', 'Bash(git push*)', 'Bash(git reset --hard*)', 'Bash(rm -rf *)', 'Bash(* --force*)'];
+// real env files by name, so .env.example (variable names only, owned by DevOps) stays readable
+export const SECRET_DENY = ['Read(./.env)', 'Read(./.env.local)', 'Read(./.env.*.local)', 'Read(./.env.prod*)', 'Read(./.env.stag*)', 'Read(./.env.dev*)', 'Read(./.env.test*)', 'Read(./.env.secret*)'];
+export const SQUAD_DENY = [...SECRET_DENY, 'Bash(git push*)', 'Bash(git reset --hard*)', 'Bash(rm -rf *)', 'Bash(* --force*)'];
 
 // .claude/settings.json: agent teams on, permission rules, TaskCompleted / TeammateIdle gate hooks (merged, idempotent)
 export function mergeSettings(root, { qualityGate = '' } = {}) {
@@ -63,7 +65,7 @@ export function mergeSettings(root, { qualityGate = '' } = {}) {
   const allow = [...SQUAD_ALLOW, ...(gate && !/[;&|`$<>]/.test(gate) ? [`Bash(${gate}*)`] : [])];
   cur.permissions = { ...(cur.permissions || {}) };
   cur.permissions.allow = [...new Set([...(cur.permissions.allow || []), ...allow])];
-  cur.permissions.deny = [...new Set([...(cur.permissions.deny || []), ...SQUAD_DENY])];
+  cur.permissions.deny = [...new Set([...(cur.permissions.deny || []).filter((d) => d !== 'Read(./.env.*)'), ...SQUAD_DENY])];   // the broad rule of older packs blocked .env.example
   cur.hooks = cur.hooks || {};
   // Node gate hooks (no jq). Entries for the older bash versions are replaced.
   const add = (event, base, timeout, statusMessage, matcher) => {
@@ -134,8 +136,8 @@ function splitRow(line) {
 export const COLUMNS = ['TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED', 'DONE'];
 function statusColumn(s) {
   const u = s.toUpperCase().replace(/[\s-]+/g, '_');
-  if (u.startsWith('DONE') || u.startsWith('VERIFIED') || u.startsWith('PASS')) return 'DONE';
-  if (u.startsWith('IN_PROGRESS') || u.startsWith('BUILD') || u.startsWith('FIXED')) return 'IN_PROGRESS';
+  if (u.startsWith('DONE') || u.startsWith('VERIFIED') || u.startsWith('PASS') || u.startsWith('PUBLISHED') || u.startsWith('APPROVED')) return 'DONE';
+  if (u.startsWith('IN_PROGRESS') || u.startsWith('BUILD') || u.startsWith('FIXED') || u.startsWith('DRAFT')) return 'IN_PROGRESS';
   if (u.startsWith('REVIEW') || u.startsWith('QA')) return 'REVIEW';
   if (u.startsWith('BLOCKED') || u.startsWith('OPEN')) return 'BLOCKED';
   return 'TODO';

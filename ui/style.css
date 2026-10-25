@@ -293,3 +293,5 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid #222a44; white-space:
 .catalog .card { margin: 0; }
 .bpCards small { display: block; }
 #modalBody > .steps { flex: none; }
+.docRow { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid #222a44; font-size: 12px; }
+.docRow .note { display: block; }

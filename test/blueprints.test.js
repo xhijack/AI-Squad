@@ -90,3 +90,48 @@ test('Set up Squad: next free Floor from 2, a new folder under the squads folder
   await assert.rejects(createSquad({ blueprint: 'sales-crm', name: 'Leads', team: [{ template: 'sales-manager' }] }), /already exists/);
   await assert.rejects(createSquad({ blueprint: 'nope', name: 'X', team: [] }), /Blueprint not found/);
 });
+
+test('the standard is written into AISQUAD.md and every agent file, with the rules of each role', async () => {
+  const r = await createSquad({ blueprint: 'software-house', name: 'Kiosk', goal: 'A self-service kiosk', team: [
+    { template: 'project-manager', displayName: 'Rina - PM', lead: true }, { template: 'fullstack-developer', displayName: 'Budi - Dev' }, { template: 'devops-engineer', displayName: 'Ops' }] });
+  const read = (f) => fs.readFileSync(path.join(r.path, f), 'utf8');
+  const brief = read('AISQUAD.md');
+  assert.match(brief, /## Squad standard: Software House v1/);
+  assert.match(brief, /only the lead \(Rina - PM \(`rina-pm`\)\) talks to the owner/);
+  assert.match(brief, /\| `docs\/PRD\.md` \| What and why/);
+  assert.doesNotMatch(brief, /Rules per role/, 'role rules go to the agents, not the brief');
+  const pm = read('.claude/agents/rina-pm.md'), dev = read('.claude/agents/budi-dev.md');
+  assert.match(pm, /You are the lead: you are the only agent who talks to the owner/);
+  assert.match(pm, /### Your rules in this squad\n- Before the first sprint you \*\*must ask the owner\*\* for the PRD/);
+  assert.match(dev, /Your lead is \*\*Rina - PM\*\* \(`rina-pm`\)/);
+  assert.match(dev, /Cite the PRD story and the TECH section in every handoff/);
+  assert.doesNotMatch(dev, /must ask the owner/);
+  // workflow pack, snapshot, settings
+  assert.match(read('docs/PRD.md'), /^STATUS: DRAFT$/m);
+  assert.ok(fs.existsSync(path.join(r.path, '.env.example')));
+  assert.equal(read('.claude/aisquad/blueprint.md'), fs.readFileSync(path.join(bp.libraryDir(), 'software-house', 'blueprint.md'), 'utf8'));
+  const settings = JSON.parse(read('.claude/settings.json'));
+  assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
+  assert.ok(settings.permissions.deny.includes('Read(./.env)') && settings.permissions.deny.includes('Read(./.env.local)'));
+  assert.ok(!settings.permissions.deny.includes('Read(./.env.*)'), '.env.example stays readable for DevOps');
+  // source document status follows the STATUS line
+  const f = bp.floorBlueprint(r.path, { id: 'software-house' });
+  assert.deepEqual(bp.sourceDocsStatus(r.path, f).map((d) => d.status), ['draft', 'draft', 'draft', 'draft']);
+  fs.writeFileSync(path.join(r.path, 'docs/PRD.md'), read('docs/PRD.md').replace('STATUS: DRAFT', 'STATUS: APPROVED'));
+  fs.rmSync(path.join(r.path, 'docs/ENVIRONMENTS.md'));
+  assert.deepEqual(bp.sourceDocsStatus(r.path, f).map((d) => d.status), ['approved', 'draft', 'draft', 'missing']);
+  // regenerating keeps exactly one standard block and does not overwrite the owner's documents
+  const { addAgent } = await import('../server/floors.js');
+  addAgent(r.path, { displayName: 'Quinn - QA', template: 'qa-engineer' });
+  assert.equal(read('AISQUAD.md').split('aisquad:standard:start').length, 2);
+  assert.match(read('.claude/agents/quinn-qa.md'), /Report per acceptance criterion, with evidence/);
+  assert.match(read('docs/PRD.md'), /STATUS: APPROVED/);
+});
+
+test('Blueprint body sections and per-role rules', () => {
+  const b = bp.getBlueprint('digital-marketing');
+  assert.deepEqual(bp.sections(b.body).map((s) => s.title), ['Purpose', 'Source documents', 'Channels', 'Work items', 'Handoff', 'Gates', 'Definition of done', 'Rules per role']);
+  assert.match(bp.roleRules(b, 'social-media-specialist'), /Follow `docs\/BRAND\.md` exactly/);
+  assert.equal(bp.roleRules(b, 'frappe-developer'), '');
+  assert.match(b.kickoff, /marketing brief, the brand rules and the channel plan/);
+});
