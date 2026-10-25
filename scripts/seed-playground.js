@@ -40,8 +40,10 @@ await floors.createFloor({
   name: 'Sopwer HR', goal: 'Frappe HR customisations for leave and payroll.', number: 3, layout: 'rows', workflow: 'squad-sprint',
   directory: { mode: 'new', path: dir('sopwer-hr') },
   team: [
+    { displayName: 'Lina - Sprint Lead', template: 'sprint-lead', lead: true },
     { displayName: 'Ramdani - Frappe Developer', template: 'frappe-developer', overrides: { model: 'opus', rules: ['Work only in apps/sopwer_hr.'] } },
     { displayName: 'Agus - Frappe Developer', template: 'frappe-developer' },
+    { displayName: 'Dian - Frappe Developer', template: 'frappe-developer' },
     { displayName: 'Maya - QA Engineer', template: 'qa-engineer' },
   ],
 });
