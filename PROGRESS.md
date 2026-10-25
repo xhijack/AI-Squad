@@ -1,6 +1,6 @@
 # Progress: The AI Squad MVP
 
-Status on 25 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions, the five Phase 1.2 items and Phase 2 (parts A to F of `PHASE-2.md`) are built and committed in small Conventional Commits. `npm test` runs 127 tests in 21 modules and all pass. The tests are run one module at a time (`npm test` now does that too) because of memory pressure on the machine.
+Status on 25 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions, the five Phase 1.2 items, Phase 2 (parts A to F of `PHASE-2.md`) and the Phase 2.1 visual rebuild (`PHASE-2.1-VISUAL.md`) are built and committed in small Conventional Commits. `npm test` runs 128 tests in 21 modules and all pass. The tests are run one module at a time (`npm test` now does that too) because of memory pressure on the machine.
 
 ## What works
 
@@ -224,6 +224,60 @@ Ten new Role Templates: DevOps Engineer, Marketing Strategist, Content Writer, S
 - **Server meter** needs `/proc` (Linux). In headless screenshots CPU shows high because Chrome renders with SwiftShader.
 - **Template updates**: Floors created before Phase 2 show "Update available" for their agents (new template versions with skills).
 - **Floor 1** has no layout editing; its desks use the Open Space preset.
+
+## Phase 2.1: visual quality (25 Oct 2026)
+
+The owner found Phase 2 "messy and below squad-3d". This phase rebuilt how The AI Squad looks; every feature stayed. One commit per step; decisions in `QUESTIONS.md` (14, 15).
+
+### What changed
+1. **Theme and font**:
+   - Every UI colour is a token in `:root`. Light, the squad-3d palette (cream page, white cards, ink text, deep gold accent), is the default; dark and auto (system) remain in the menu.
+   - Plus Jakarta Sans (latin, variable 400-800) is vendored in `ui/vendor/fonts` with its OFL license, no CDN; monospace only for logs and code.
+2. **Office scene**:
+   - Every Floor, Floor 1 included, is a 16 x 13 m isometric office: honey wood planks, two light walls with baseboards and three windows, and a brand wall with the Floor name and a tagline (new `floor.json` field, editable in Floor settings).
+   - Lighting: warm sun with soft shadows, hemisphere fill, ACES tone mapping.
+   - Furniture stays movable devices; new types: wall whiteboard with sticky notes, pantry, TV, beanbags, ping-pong table.
+   - New Floors get the full office. Untouched pre-2.1 default sets upgrade; arranged rooms are kept.
+   - Idle agents also sit on beanbags, play ping-pong and fetch coffee at the pantry.
+   - Desks have state rings, and desks and agents are 1.3 times larger so agents stay readable.
+3. **Camera**:
+   - An orthographic isometric camera (squad-3d angle), framed to the canvas left free by the floating cards; drag pans, scroll zooms.
+   - The Desk view frames the desk and its neighbourhood. The first person and screen views keep a perspective camera.
+4. **Layout** (V4, V5, V6): the top bar and the left team panel are gone.
+   - **Status pill**, top left: Floor, sprint progress, active agents, Floor menu, main menu, plus warning chips (squad not running, budget) and one red "needs you" pill.
+   - **Right panel**, collapsible: questions for the owner, the agent list with one status chip per agent (details moved to the Desk), then Activity / Messages / Standard. The Desk replaces the list.
+   - **Icon dock** with tooltips: board (now a dialog), performance, cost (new dialog), server meter with its worst metric, add agent, voice, legend.
+   - A slim elevator on the left.
+   - Phones: the office on top, a bottom sheet (opens on Desk, Agents or Floors), and one row of dock icons above it.
+5. **Name chips** (V7): as in squad-3d, a chip in the agent's colour (text colour by contrast), a status line with a state-coloured edge (what it is doing, needs you, idle, stopped, where it is in the lounge), z z z when idle or stopped, and a red ? when it waits. Phones show the chip only.
+6. **Lobby** (V8): a light cutaway dollhouse. The Floors are stacked with air between them so each is a visible mini office with its colour stripe. Slim columns and a roof hold the stack together, the ground only takes a soft shadow, labels sit beside each Floor without overlap, and questions for the owner are one floating card.
+
+### Verified
+- **Tests**: 128 tests in 21 modules, one module at a time, all pass. New: the untouched-defaults upgrade and the tagline.
+- **Acceptance screenshots**: `scripts/acceptance.sh` seeds the playground and puts agents in every state (working via hook events, idle via fake Claude Code sessions, waiting, stopped). It captures Lobby, a Squad Sprint Floor, Floor 1, a Desk and Set up Squad step 1 at 1440 x 900 and 390 x 844 into `playground/reference/after-*.png` (gitignored, not committed), one headless Chrome at a time.
+- **Comparison with `dt-office.png`**: the Floor at 1440 now has the same building blocks:
+  - a warm isometric office filling the canvas, with walls, windows and a brand wall;
+  - lounge, ping-pong, pantry, whiteboard and plants;
+  - coloured name chips with status lines;
+  - a status pill top left, an agent list with Activity / Messages on the right, an icon dock at the bottom.
+  The owner judges the final result by eye.
+- **Other checks**:
+  - first person and screen views (perspective camera);
+  - Edit Mode in the new panel;
+  - the board, performance, cost, legend and Floor menu popovers;
+  - the dark theme;
+  - every phone screen.
+- **Design review** using the critique and elevation ideas from `design-skills` (read only). Fixed before finishing:
+  - Medium: status and soft chips below AA contrast (darker ink tokens), gold buttons below AA (deeper gold), a sparse room with small agents (larger stations, wider presets), phone labels piling up, the phone pill hiding the Floor name.
+  - Defects found on the way: the screen view off-centre (CSS-hidden elements counted as insets), first person into a sleeping agent's desk, the phone Lobby cut off (zoom floor), the Board missing from the Floor menu, the Performance table clipped.
+  - No critical findings remained.
+
+### Known gaps (Phase 2.1)
+- **Judged in headless Chrome only** (SwiftShader). Rendering speed on the owner's GPU and on low-end laptops is not measured; shadows use a 2048 map.
+- **Old Floors with arranged furniture** keep their rooms. The new pieces (TV, beanbags, pantry, ping-pong) are added by hand in Edit Mode. Saved desk positions from the old, smaller room may look denser until a layout preset is applied again.
+- **Many agents**: with more than 8 desks the third row can reach the lounge, and at small zoom the name chips of neighbouring desks can still touch.
+- **Lobby**: the dollhouse spreads the Floors apart, so a building with many Floors gets tall; the camera zooms out to fit and the offices get small.
+- **Font source**: see QUESTIONS 14.
 
 ## How to run
 
