@@ -247,6 +247,7 @@ function render() {
 
   // monitors: live tmux text in the over-the-shoulder view, latest QA screenshot on QA screens
   scene.setLiveText(route.screen && state.desk?.running ? state.desk.screen : null);
+  if (state.floor && !state.floor.missing) scene.setBoard(state.floor.id, { board: state.floor.board, agents: state.floor.agents.map((x) => ({ name: x.displayName, state: x.state, activity: x.activity })) });
   const shot = state.floor?.shots?.[0];
   if (state.floor && shot && shotKey !== `${state.floor.id}:${shot.file}:${shot.mtime}`) {
     shotKey = `${state.floor.id}:${shot.file}:${shot.mtime}`;

@@ -11,6 +11,9 @@ import * as libraries from './libraries.js';
 export const MODELS = ['opus', 'sonnet', 'haiku', 'inherit'];
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 export const STYLES = ['farmer', 'bob', 'pony', 'spiky', 'buns'];
+// desk props and the role screen on the desk laptop (part of the appearance, so every role can set its own)
+export const PROPS = ['trophy', 'cactus', 'rubik', 'duck', 'robot', 'ladybug', 'magnifier', 'megaphone', 'books', 'headphones'];
+export const SCREENS = ['code', 'tests', 'board'];
 const KNOWN = ['role', 'title', 'version', 'description', 'model', 'effort', 'skills', 'tools', 'permissions', 'appearance'];
 
 const list = (v) => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(',')).map((x) => String(x).trim()).filter(Boolean);
@@ -26,6 +29,8 @@ export function cleanAppearance(a = {}) {
   if (STYLES.includes(a.style)) out.style = a.style;
   for (const k of ['shirt', 'hair', 'skin']) if (isHex(a[k])) out[k] = a[k];
   if (a.glasses !== undefined) out.glasses = !!a.glasses;
+  if (a.props !== undefined) out.props = uniq(list(a.props)).filter((p) => PROPS.includes(p)).slice(0, 2);
+  if (SCREENS.includes(a.screen)) out.screen = a.screen;
   return out;
 }
 

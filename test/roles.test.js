@@ -74,3 +74,11 @@ test('shipped default upgrades replace only untouched local copies', () => {
   assert.equal(roles.getTemplate('helper').prompt, 'My own prompt.', 'edited copy left alone');
   configure({ defaultRoles: before });
 });
+
+test('appearance keeps known desk props (at most two) and the role screen', () => {
+  const { cleanAppearance, parseTemplate } = roles;
+  assert.deepEqual(cleanAppearance({ props: ['trophy', 'cactus', 'duck'], screen: 'board' }), { props: ['trophy', 'cactus'], screen: 'board' });
+  assert.deepEqual(cleanAppearance({ props: 'ladybug, spaceship', screen: 'tv' }), { props: ['ladybug'] });
+  const t = parseTemplate('---\nrole: qa\nappearance: { style: pony, props: [ladybug, magnifier], screen: tests }\n---\n## Prompt\nx\n');
+  assert.deepEqual(t.appearance, { style: 'pony', props: ['ladybug', 'magnifier'], screen: 'tests' });
+});

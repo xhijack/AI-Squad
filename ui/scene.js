@@ -7,6 +7,7 @@ import { buildChibi, toon, HIP_H, resetPose, blink, sitLegs, arms } from './chib
 import { FW, FD, FH, floorY, desksFor } from './layout.js';
 import { makeScreen, drawScreen } from './screens.js';
 import { loungeSpots, updateLife, deskHome, seatRoot } from './life.js';
+import { deskProps, propsFor } from './props.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -108,6 +109,7 @@ function buildStation(agent, desk, accent) {
     box(.62, .04, .42, mat('#3b4258'), 0, .975, .55, g, .01);                   // laptop base
     screen(0, 1.17, .76, .6, .38, .25, 0, 'main');
   }
+  deskProps(g, agent, desk.device);
   box(.6, .1, .6, mat(accent), 0, .55, -.05, g);                                // chair
   box(.6, .6, .1, mat(accent), 0, .9, -.33, g);
   const rig = buildChibi(lookFor(agent.appearance));
@@ -426,6 +428,7 @@ export class BuildingScene {
   // live tmux screen for the over-the-shoulder view (null = draw from transcript data)
   setLiveText(text) { this.liveText = text; }
   setShot(floorId, shot) { const o = this.floors.get(floorId); if (o) o.shot = shot; }
+  setBoard(floorId, board) { const o = this.floors.get(floorId); if (o) o.board = board; }
 
   // ---------- Edit Mode helpers ----------
   objectFor(floorId, sel) {
@@ -521,7 +524,8 @@ export class BuildingScene {
         st.label.visible = !!st.labelsOn && !focus;
         for (const S of st.screens) {
           if (t < S.next && !(focus && S.part === 'main')) continue;
-          const every = drawScreen(S, st.data, { t, away, part: S.part, stopped: st.state === 'stopped', live: focus && S.part === 'main' && this.liveText != null ? this.liveText : null, shot: o.shot || null });
+          const every = drawScreen(S, st.data, { t, away, part: S.part, stopped: st.state === 'stopped', live: focus && S.part === 'main' && this.liveText != null ? this.liveText : null,
+            shot: o.shot || null, role: propsFor(st.data).screen, board: o.board || null });
           S.tex.needsUpdate = true;
           S.next = t + (near ? every : Math.max(every, 6)) + Math.random() * .05;
         }

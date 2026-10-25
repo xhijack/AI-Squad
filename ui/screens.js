@@ -112,20 +112,72 @@ function drawLive(ctx, text) {
   rows.forEach((l, i) => { ctx.fillStyle = /^\s*❯/.test(l) ? '#86efac' : /^⏺|^●/.test(l) ? '#e2e8f0' : '#aab4cc'; ctx.fillText(l.slice(0, 104), 10, 18 + i * 14); });
 }
 
+// lead screen: the sprint board (counts + first tasks per column), or the team's states on Free Team Floors
+const BOARD_COLS = [['TODO', 'To do', '#94a3b8'], ['IN_PROGRESS', 'Building', '#6aa5ff'], ['REVIEW', 'QA', '#b388ff'], ['DONE', 'Done', '#4fc38a']];
+const STATE_COLOR = { working: '#4fc38a', waiting: '#ef5d6b', idle: '#f2b544', stopped: '#4b5068' };
+function drawBoard(ctx, info) {
+  ctx.fillStyle = '#141826'; ctx.fillRect(0, 0, SCR_W, SCR_H);
+  const tasks = info?.board?.tasks;
+  if (tasks?.length) {
+    titleBar(ctx, `▦ Sprint ${info.board.sprint || ''} board`, '#fdba74');
+    const w = (SCR_W - 50) / 4;
+    BOARD_COLS.forEach(([key, name, color], i) => {
+      const x = 10 + i * (w + 10), items = tasks.filter((t) => (key === 'TODO' ? t.column === 'TODO' || t.column === 'BLOCKED' : t.column === key));
+      ctx.fillStyle = '#1d2236'; ctx.fillRect(x, 46, w, SCR_H - 56);
+      ctx.fillStyle = color; ctx.fillRect(x, 46, w, 5);
+      ctx.font = `600 18px ${SANS}`; ctx.fillText(`${name} ${items.length}`, x + 10, 78);
+      ctx.font = `14px ${SANS}`;
+      items.slice(0, 8).forEach((t, k) => {
+        ctx.fillStyle = t.column === 'BLOCKED' ? '#3a1f2a' : '#262c44'; ctx.fillRect(x + 8, 92 + k * 44, w - 16, 38);
+        ctx.fillStyle = '#e2e8f0'; ctx.fillText(String(t.task).slice(0, 22), x + 14, 116 + k * 44);
+      });
+    });
+    return;
+  }
+  titleBar(ctx, '▦ Team board', '#fdba74');
+  ctx.font = `20px ${SANS}`;
+  (info?.agents || []).slice(0, 9).forEach((a, i) => {
+    const y = 80 + i * 44;
+    ctx.fillStyle = STATE_COLOR[a.state] || '#94a3b8'; ctx.beginPath(); ctx.arc(34, y - 7, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e2e8f0'; ctx.fillText(String(a.name).slice(0, 30), 56, y);
+    ctx.fillStyle = '#94a3b8'; ctx.fillText(String(a.activity || a.state).slice(0, 34), 400, y);
+  });
+}
+
+// QA screen while tests run: a test runner with pass / fail counts read from the output
+function drawTests(ctx, peek) {
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, SCR_W, SCR_H);
+  titleBar(ctx, '✓ test runner', '#b388ff');
+  const out = String(peek.output || '');
+  const num = (re) => { const m = out.match(re); return m ? +m[1] : null; };
+  const pass = num(/#\s*pass\s+(\d+)/i) ?? num(/(\d+)\s+pass(?:ed|ing)?/i), fail = num(/#\s*fail\s+(\d+)/i) ?? num(/(\d+)\s+fail(?:ed|ing|ures?)?/i);
+  ctx.font = `16px ${MONO}`; ctx.fillStyle = '#e2e8f0'; ctx.fillText(`❯ ${lines(peek.command, 1)[0] || ''}`, 16, 64);
+  ctx.font = `700 44px ${SANS}`;
+  ctx.fillStyle = '#4fc38a'; ctx.fillText(pass == null ? (peek.output ? '…' : 'running') : `${pass} passed`, 16, 130);
+  if (fail) { ctx.fillStyle = '#ef5d6b'; ctx.fillText(`${fail} failed`, 380, 130); }
+  ctx.font = `15px ${MONO}`;
+  lines(out, 60).filter((l) => /✔|✓|✖|✗|ok |not ok|pass|fail/i.test(l)).slice(-15).forEach((l, i) => {
+    ctx.fillStyle = /✖|✗|not ok|fail/i.test(l) ? '#fca5a5' : '#86efac'; ctx.fillText(l, 16, 176 + i * 20);
+  });
+}
+
 const KIND_COLOR = { write: '#4fc38a', test: '#b388ff', run: '#6aa5ff', read: '#7dd3fc', talk: '#f2b544', plan: '#fdba74', git: '#a3e635', think: '#94a3b8' };
 
 // mode: what to show; returns the redraw interval in seconds
-export function drawScreen(S, a, { t, away = '', live = null, shot = null, part = 'main', stopped = false }) {
+// role: the role screen (code | tests | board); board: { board, agents } of the Floor for lead screens
+export function drawScreen(S, a, { t, away = '', live = null, shot = null, part = 'main', stopped = false, role = 'code', board = null }) {
   const ctx = S.ctx;
   if (live !== null && part === 'main') { drawLive(ctx, live); return .1; }
   if (stopped) { ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, SCR_W, SCR_H); return 30; }
   if (a.state === 'waiting') { drawWaiting(ctx, a); return 2; }
+  if (role === 'board' && part === 'main' && !away) { drawBoard(ctx, board); return 3; }
+  if (role === 'tests' && part === 'main' && a.state === 'working' && a.peek?.type === 'terminal' && a.peek.kind === 'test') { drawTests(ctx, a.peek); return .6; }
   if (away || a.state !== 'working') {
-    if (a.kindOf === 'qa' && shot && !away && part === 'main') { drawShot(ctx, shot.img, shot.file); return 5; }
+    if (role === 'tests' && shot && !away && part === 'main') { drawShot(ctx, shot.img, shot.file); return 5; }
     drawIdle(ctx, a, away); return 5;
   }
   const p = a.peek;
-  if (a.kindOf === 'qa' && shot && part === 'main' && (!p || p.type !== 'code')) { drawShot(ctx, shot.img, shot.file); return 3; }
+  if (role === 'tests' && shot && part === 'main' && (!p || p.type !== 'code')) { drawShot(ctx, shot.img, shot.file); return 3; }
   if (part === 'side') {                                   // second monitor: terminal or activity
     if (p && p.type === 'terminal') drawTerminal(ctx, p); else drawBars(ctx, t, KIND_COLOR[a.peek?.kind] || '#6aa5ff');
     return .6;

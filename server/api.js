@@ -59,7 +59,7 @@ const routes = [
   ['POST', /^\/api\/events$/, (p, b) => squad.ingestEvent(b), { pin: true }],
   ['GET', /^\/api\/events$/, () => ({ events: hooksRecent() }), { pin: true }],
 
-  ['GET', /^\/api\/roles$/, () => ({ templates: roles.listTemplates(), models: roles.MODELS, efforts: roles.EFFORTS, styles: roles.STYLES })],
+  ['GET', /^\/api\/roles$/, () => ({ templates: roles.listTemplates(), models: roles.MODELS, efforts: roles.EFFORTS, styles: roles.STYLES, props: roles.PROPS, screens: roles.SCREENS })],
   ['GET', /^\/api\/roles\/([\w-]+)$/, ([role]) => ({ template: roles.getTemplate(role), versions: roles.templateVersions(role) })],
   ['GET', /^\/api\/roles\/([\w-]+)\/versions\/(\d+)$/, ([role, v]) => { const t = roles.templateText(role, +v); if (!t) throw notFound('Unknown version'); return { text: t }; }],
   ['GET', /^\/api\/roles\/([\w-]+)\/diff$/, ([role], b, req) => {
