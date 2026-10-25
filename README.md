@@ -19,6 +19,8 @@ Floor 1 shows the **independent agents** already running on your machine (termin
 
 ## Install
 
+Step-by-step guide (requirements, remote access, first steps, troubleshooting): [INSTALL.md](INSTALL.md).
+
 The GitHub repository is also a Claude Code plugin marketplace. In Claude Code:
 
 ```
