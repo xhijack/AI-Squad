@@ -252,7 +252,7 @@ function floorMenuHtml(f) {
   const any = (fn) => f.agents.some(fn);
   return [['floor-settings', 'Floor settings'], ['edit-mode', 'Edit layout and looks'], ['add-agent', 'Add agent'],
     ...(any((a) => !a.running) ? [['start-all', 'Start all agents']] : []), ...(any((a) => a.running) ? [['stop-all', 'Stop all agents']] : []),
-    ...(f.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost']]
+    ...(state.floor?.id === f.id && state.floor.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost']]
     .map(([act, text]) => `<button role="menuitem" data-act="${act}">${text}</button>`).join('');
 }
 

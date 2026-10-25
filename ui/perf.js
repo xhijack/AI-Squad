@@ -41,6 +41,7 @@ function draw() {
       ${agentTable(d.agents, pick)}
       <p class="note">Bug weights: Blocker 5, Major 3, Minor 1, Cosmetic 0.5. Read from <code>docs/squad</code> (PLAN, TASKS, qa/, bugs/ and the <code>sprint-&lt;N&gt;</code> archives).</p>
     </div>`);
+  body.closest('dialog').classList.add('wide');
   body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   body.querySelector('[data-pick]').onchange = (e) => { pick = e.target.value; draw(); };
 }

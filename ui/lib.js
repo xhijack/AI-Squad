@@ -82,6 +82,7 @@ export async function api(method, url, body, { raw = null, headers = {}, quiet40
 export function openModal(html, { onClose } = {}) {
   const d = $('modal');
   $('modalBody').innerHTML = html;
+  d.className = '';                                   // a wide dialog (board, performance) never leaks into the next one
   if (!d.open) d.showModal();
   d.onclose = () => { $('modalBody').innerHTML = ''; onClose?.(); };
   return $('modalBody');

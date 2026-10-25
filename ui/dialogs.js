@@ -58,6 +58,7 @@ async function floorSettings() {
   const body = wire(openModal(frame(`Floor ${f.number} settings`, `
     <div class="grid2"><div><label>Name</label><input name="name" value="${esc(c.name)}" maxlength="60"></div>
       <div class="row"><div class="grow"><label>Floor number</label><input name="number" type="number" min="2" max="99" value="${f.number}"></div><div><label>Colour</label><input name="accent" type="color" value="${esc(c.accent)}"></div></div></div>
+    <label>Tagline (under the name on the brand wall)</label><input name="tagline" value="${esc(c.tagline || '')}" maxlength="48" placeholder="ship it, together">
     <label>Goal summary</label><textarea name="goal" rows="3" maxlength="400">${esc(c.goal)}</textarea>
     <p class="note">The full brief lives in <code>AISQUAD.md</code> in the repository.</p>
     <label>Workflow</label>${segHtml('workflow', [['free-team', 'Free Team'], ['squad-sprint', 'Squad Sprint']], c.workflow)}
@@ -77,7 +78,7 @@ async function floorSettings() {
     const form = body.querySelector('#dForm');
     const v = (n) => form.elements[n].value;
     try {
-      await api('PATCH', `/api/floors/${f.id}`, { name: v('name'), number: Number(v('number')), accent: v('accent'), goal: v('goal'), workflow: segValue(form, 'workflow'),
+      await api('PATCH', `/api/floors/${f.id}`, { name: v('name'), number: Number(v('number')), accent: v('accent'), tagline: v('tagline'), goal: v('goal'), workflow: segValue(form, 'workflow'),
         budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked }, git: readGit(form) });
       closeModal(); toast('Floor saved'); ctx.refresh();
     } catch (e) { fail(e); }
