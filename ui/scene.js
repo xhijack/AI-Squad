@@ -363,7 +363,8 @@ export class BuildingScene {
     this.scene.add(sun, sun.target);
     this.aimSun(0, 1);
 
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(80, 64), mat('#e4dacb', { roughness: 1 }));
+    // the ground only receives shadows, so the building stands on the page colour with no visible edge
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ color: '#5b4630', opacity: .1 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -.01; ground.receiveShadow = true; this.scene.add(ground);
     this.ground = ground;
     this.building = new THREE.Group(); this.scene.add(this.building);
@@ -385,9 +386,11 @@ export class BuildingScene {
 
   // shadows cover the area in view: one Floor (sharp), or the whole building in the Lobby
   aimSun(y, floorsHigh) {
-    const s = this.sun, half = Math.max(FW, FD) * .75 + floorsHigh * 2.2;
-    s.position.set(-10, y + 24 + floorsHigh * 4, 12); s.target.position.set(0, y + floorsHigh * 2, 0);
-    Object.assign(s.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 1, far: 90 + floorsHigh * 10 });
+    const s = this.sun, half = Math.max(FW, FD) * .75 + floorsHigh * 3.5;
+    // one Floor: light from above-left; the Lobby: low light through the open front so the slab above does not darken a Floor
+    if (floorsHigh > 1) { s.position.set(16, y + 24, 30); s.target.position.set(0, y, 0); }
+    else { s.position.set(-10, y + 24, 12); s.target.position.set(0, y + 2, 0); }
+    Object.assign(s.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 1, far: 120 + floorsHigh * 10 });
     s.shadow.camera.updateProjectionMatrix();
   }
 
@@ -402,6 +405,15 @@ export class BuildingScene {
     const rug = new THREE.Group(); DEVICE_BUILDERS.rug(rug); rug.position.set(-3.6, TOP, -3.2); g.add(rug);
     const rack = new THREE.Group(); DEVICE_BUILDERS['server-rack'](rack); rack.position.set(FW / 2 - 1, TOP, -FD / 2 + 1); g.add(rack);
     this.lobbyRack = rack;
+  }
+
+  // slim columns at the three open corners hold the stacked Floors together as one building (Lobby only)
+  buildColumns(top) {
+    if (this.columns) dispose(this.columns);
+    const g = new THREE.Group(), h = floorY(top + 1) - 1.6;
+    for (const [x, z] of [[FW / 2 + .1, -FD / 2 - .1], [-FW / 2 - .1, FD / 2 + .1]]) box(.24, h, .24, mat('#d6ccbb'), x, h / 2, z, g, .05);
+    this.building.add(g);
+    this.columns = g;
   }
 
   // ---------- data sync ----------
@@ -421,7 +433,8 @@ export class BuildingScene {
     }
     for (const [id, o] of this.floors) if (!seen.has(id)) { dispose(o.g); this.floors.delete(id); }
     const top = Math.max(0, ...floors.map((f) => f.number));
-    this.roof.position.y = floorY(top + 1);
+    this.roof.position.y = floorY(top + 1) - 1.6;
+    if (this.top !== top || !this.columns) this.buildColumns(top);
     this.top = top;
     this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))];
     this.applyVisibility();
@@ -519,6 +532,7 @@ export class BuildingScene {
       if (o.empty) o.empty.visible = id === focus;
     }
     this.lobby.visible = !focus;
+    if (this.columns) this.columns.visible = !focus;
     this.roof.visible = !focus;
     this.roofSign.visible = !focus;
     this.ground.visible = !focus;
@@ -560,8 +574,8 @@ export class BuildingScene {
 
   poseFor(v) {
     if (v.mode === 'lobby') {
-      const h = floorY(this.top + 1) + 1.4;                   // roof sign included
-      return this.fitIso(corners(-FW / 2 - .3, FW / 2 + 6, 0, h, -FD / 2 - .3, FD / 2 + .3), .04);
+      const h = floorY(this.top + 1);                         // roof sign included
+      return this.fitIso(corners(-FW / 2 - .3, FW / 2 + 5, 0, h, -FD / 2 - .3, FD / 2 + .3), .04);
     }
     const o = this.floors.get(v.floorId);
     const y = o ? o.g.position.y : 0;
@@ -614,7 +628,7 @@ export class BuildingScene {
   setTheme(dark, color) {
     this.dark = dark;
     this.scene.background = new THREE.Color(color || (dark ? '#141a2b' : '#efe9df'));
-    this.ground?.material.color.set(dark ? '#1d2338' : '#e4dacb');
+    if (this.ground) this.ground.material.opacity = dark ? .3 : .1;
   }
 
   // live tmux screen for the over-the-shoulder view (null = draw from transcript data)

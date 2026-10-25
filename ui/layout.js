@@ -1,7 +1,8 @@
 // Floor geometry and desk layout presets (Rows, Pods, Circle, Open Space). Units are metres; the office spans
 // x -8..8 and z -6.5..6.5. The isometric camera looks from +x +z, so the back wall (z -6.5) and the left wall
 // (x -8) are the two walls you see; the front half holds the lounge (right) and the ping-pong table (left).
-export const FW = 16, FD = 13, FH = 3.4, SLAB = .4, GAP = .5;
+export const FW = 16, FD = 13, FH = 3.4, SLAB = .4, GAP = 3.2;
+// the Lobby stacks the Floors with air between them (a cutaway dollhouse) so every office stays visible
 export const floorY = (n) => n * (FH + SLAB + GAP);
 export const LAYOUT_NAMES = { rows: 'Rows', pods: 'Pods', circle: 'Circle', 'open-space': 'Open Space' };
 
