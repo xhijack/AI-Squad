@@ -121,6 +121,7 @@ function buildStation(agent, desk, accent) {
   st.label = label('', 'alabel', human, 0, 2.15, 0);
   st.bubble = label('?', 'bubble', human, .5, 2.75, 0);
   st.zzz = label('z<small>z</small>', 'zzz', human, .45, 2.0, .2);
+  st.say = label('', 'say', human, 0, 2.55, 0); st.say.visible = false;   // lead shout
   deskHome(st);
   updateStation(st, agent);
   return st;
@@ -428,6 +429,12 @@ export class BuildingScene {
   // live tmux screen for the over-the-shoulder view (null = draw from transcript data)
   setLiveText(text) { this.liveText = text; }
   setShot(floorId, shot) { const o = this.floors.get(floorId); if (o) o.shot = shot; }
+  // speech bubble over an agent for ms milliseconds
+  say(floorId, agentId, text, ms = 7000) {
+    const st = this.floors.get(floorId)?.stations.get(agentId);
+    if (!st) return;
+    st.say.element.textContent = text; st.sayUntil = performance.now() + ms;
+  }
   setBoard(floorId, board) { const o = this.floors.get(floorId); if (o) o.board = board; }
 
   // ---------- Edit Mode helpers ----------
@@ -522,6 +529,7 @@ export class BuildingScene {
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view
         st.label.visible = !!st.labelsOn && !focus;
+        st.say.visible = !!st.labelsOn && !focus && (st.sayUntil || 0) > performance.now();
         for (const S of st.screens) {
           if (t < S.next && !(focus && S.part === 'main')) continue;
           const every = drawScreen(S, st.data, { t, away, part: S.part, stopped: st.state === 'stopped', live: focus && S.part === 'main' && this.liveText != null ? this.liveText : null,

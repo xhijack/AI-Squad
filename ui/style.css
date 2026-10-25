@@ -263,3 +263,5 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid #222a44; white-space:
 .kpis span { display: block; font-size: 11px; color: var(--muted); }
 .kpis b { font-size: 18px; }
 @media (max-width: 760px) { #dock { left: auto; right: 8px; transform: none; top: calc(var(--top) + 6px); bottom: auto; } }
+.say { background: #fff; color: #1f2937; font-weight: 700; font-size: 13px; line-height: 1.35; padding: 8px 12px; border-radius: 14px; max-width: 220px; white-space: normal; box-shadow: 0 4px 14px #0006; position: relative; }
+.say::after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: #fff; }

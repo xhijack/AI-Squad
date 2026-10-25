@@ -6,6 +6,7 @@ import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
 import './perf.js';
+import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -233,7 +234,15 @@ function render() {
   // dock: performance (Squad Sprint Floors only); voice and server meter join it
   const sprintFloor = route.floorId && f && f.workflow === 'squad-sprint';
   $('dock').hidden = !!ctx.editing;
-  patch($('dock'), [sprintFloor ? '<button class="small" data-act="performance" title="Performance and cost projection">▤ Performance</button>' : ''].join(''));
+  const voice = voiceOn();
+  patch($('dock'), [sprintFloor ? '<button class="small" data-act="performance" title="Performance and cost projection">▤ Performance</button>' : '',
+    `<button class="small" data-act="voice" aria-pressed="${voice}" title="Lead voice: ${voice ? 'on' : 'off'}">${voice ? '🔊' : '🔈'}<span class="hideSm"> Voice ${voice ? 'on' : 'off'}</span></button>`].join(''));
+  // lead shout when the whole team of the Floor in view is idle
+  if (state.floor && !state.floor.missing && route.floorId === state.floor.id) {
+    const { idle, lead } = floorIdle(state.floor);
+    const text = shoutStep(shouts[state.floor.id] ||= {}, idle, Date.now());
+    if (text && lead) { scene.say(state.floor.id, lead.id, text); speak(text); }
+  }
   // elevator (Floor switcher)
   const elev = $('elevator');
   elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes;
@@ -304,7 +313,9 @@ $('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(upda
 addEventListener('resize', () => { for (const id of ['left', 'right', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 
 // ---------- actions (event delegation on data-act / data-href / data-tab) ----------
+const shouts = {};
 const actions = Object.assign(ctx.actions, {
+  voice() { const on = !voiceOn(); setVoice(on); if (on) speak('Voice is on, boss.'); render(); },
   async start(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`, {}); toast('Starting agent…'); },
   async restart(el) {
     if (!confirm('Restart this agent? Its Claude Code session is closed and a fresh one starts with the configured model and effort.')) return;
