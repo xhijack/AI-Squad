@@ -161,6 +161,17 @@ export function floorSections(f, deskAgentId = null) {
 }
 
 // ---------- Desk ----------
+const SKILL_STATE = { project: ['ok', 'in project'], user: ['ok', 'in user skills'], bundled: ['info', 'from plugin'], missing: ['warn', 'not installed'] };
+function skillsHtml(d) {
+  const list = d.skills || [];
+  if (!list.length) return '';
+  const added = new Set(d.agent?.overrides?.skills?.add || []);
+  const installable = list.filter((s) => s.installable).map((s) => s.name);
+  return `<div class="skillList">${list.map((s) => `<div class="skillRow" title="${esc(s.description)}"><span class="pill ${added.has(s.name) ? 'add' : ''}">${esc(s.name)}</span>
+      <span class="chip ${SKILL_STATE[s.status][0]}">${SKILL_STATE[s.status][1]}</span>${s.installable ? `<button class="small ghost" data-act="install-skill" data-skill="${esc(s.name)}" title="Copy the bundled skill into .claude/skills of this project">Install</button>` : ''}</div>`).join('')}</div>
+    ${installable.length > 1 ? `<button class="small" data-act="install-skill" data-skill="${esc(installable.join(','))}">Install all ${installable.length} into the project</button>` : ''}
+    <div class="note">Plugin skills work in sessions The AI Squad starts; installing copies them into <code>.claude/skills/</code> so every session of this project has them.</div>`;
+}
 function independentDeskSections(floor, d, routeScreen) {
   const dialog = d.dialog ? (floor.attentionItems || []).filter((a) => a.agentId === d.id) : [];
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
@@ -218,7 +229,7 @@ export function deskSections(floor, d, { locked = false, screen: routeScreen = f
       <dt>Model (configured)</dt><dd>${esc(e.model)}${o.model ? ' <span class="note">(override)</span>' : ''}${mr.startedWith ? ` <span class="note">· session started with ${esc(mr.startedWith)}</span>` : ''}</dd>
       <dt>Model (observed)</dt><dd>${mr.observed ? `<span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span> <span class="note">${ago(mr.observedAt)}${mr.mismatch ? ' · differs from the configured model' : ''}</span>` : '<span class="note">no replies yet</span>'}</dd>
       <dt>Effort</dt><dd>${esc(e.effort)}${o.effort ? ' <span class="note">(override)</span>' : ''}</dd>
-      <dt>Skills</dt><dd>${pills((e.skills || []).filter((s) => !(o.skills?.add || []).includes(s)))}${pills(o.skills?.add || [], 'add')}${pills(o.skills?.remove || [], 'rm')}${(e.skills || []).length || (o.skills?.remove || []).length ? '' : '<span class="note">none</span>'}</dd>
+      <dt>Skills</dt><dd>${skillsHtml(d)}${pills(o.skills?.remove || [], 'rm')}${(e.skills || []).length || (o.skills?.remove || []).length ? '' : '<span class="note">none</span>'}</dd>
       <dt>Tools</dt><dd>${pills(e.tools || []) || '<span class="note">all</span>'}</dd>
       <dt>Not allowed</dt><dd>${pills(e.permissions?.deny || [])}</dd>
       <dt>Rules</dt><dd>${(e.rules || []).length ? `<ul style="margin:0;padding-left:18px">${e.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : '<span class="note">none</span>'}${o.rules?.length ? `<div class="note">${o.rules.length} added by override</div>` : ''}</dd>

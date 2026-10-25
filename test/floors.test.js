@@ -30,12 +30,12 @@ test('New Floor wizard: new directory, git init, all files generated, registered
   assert.equal(execFileSync('git', ['-C', proj, 'status', '--porcelain'], { encoding: 'utf8' }), '');
   const team = json('.claude/aisquad/team.json');
   assert.deepEqual(team.agents.map((a) => a.id), ['rina-project-manager', 'ramdani-frappe-developer', 'ramdani-frappe-developer-2']);
-  assert.deepEqual(team.agents[1].role, { template: 'frappe-developer', version: 1 });
+  assert.deepEqual(team.agents[1].role, { template: 'frappe-developer', version: 2 });
   assert.equal(team.agents[0].lead, true);
   assert.equal(json('.claude/aisquad/floor.json').layout, 'pods');
   assert.equal(json('.claude/aisquad/git.json').mergePolicy, 'auto');
-  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@1.md')));
-  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/project-manager@1.md')));
+  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@2.md')));
+  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/project-manager@2.md')));
   const agentFile = parseFrontmatter(read('.claude/agents/ramdani-frappe-developer.md'));
   assert.equal(agentFile.data.model, 'opus');
   assert.match(agentFile.data.skills, /playwright/);
@@ -72,33 +72,33 @@ test('template update: Update available, diff, then update / keep / detach per a
   roles.saveTemplate({ role: 'frappe-developer', rules: [...roles.getTemplate('frappe-developer').rules, 'Prefer Server Scripts for small hooks.'] });
   const { team } = floors.readFloor(proj);
   const [, a1, a2] = team.agents;
-  assert.deepEqual(floors.templateStatus(proj, a1), { latestVersion: 2, updateAvailable: true, keptVersion: null });
+  assert.deepEqual(floors.templateStatus(proj, a1), { latestVersion: 3, updateAvailable: true, keptVersion: null });
   const d = floors.templateDiff(proj, a1);
-  assert.equal(d.from, 1); assert.equal(d.to, 2);
+  assert.equal(d.from, 2); assert.equal(d.to, 3);
   assert.ok(d.diff.some((l) => l.op === '+' && l.text.includes('Prefer Server Scripts')));
-  assert.ok(d.diff.some((l) => l.op === '-' && l.text === 'version: 1'));
+  assert.ok(d.diff.some((l) => l.op === '-' && l.text === 'version: 2'));
 
   floors.templateAction(proj, a1.id, 'update');
   let t = floors.readFloor(proj).team.agents;
-  assert.equal(t[1].role.version, 2);
+  assert.equal(t[1].role.version, 3);
   assert.equal(t[1].overrides.model, 'opus', 'overrides survive the update');
   assert.match(read('.claude/agents/ramdani-frappe-developer.md'), /Prefer Server Scripts/);
   assert.match(read('.claude/agents/ramdani-frappe-developer.md'), /Only touch apps\/acme/);
 
   floors.templateAction(proj, a2.id, 'keep');
   t = floors.readFloor(proj).team.agents;
-  assert.equal(t[2].role.version, 1);
+  assert.equal(t[2].role.version, 2);
   assert.equal(floors.templateStatus(proj, t[2]).updateAvailable, false);
   assert.doesNotMatch(read('.claude/agents/ramdani-frappe-developer-2.md'), /Prefer Server Scripts/);
   // both versions are locked while in use
-  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@1.md')));
   assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@2.md')));
+  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@3.md')));
 
   floors.templateAction(proj, a2.id, 'detach');
   t = floors.readFloor(proj).team.agents;
   assert.equal(t[2].role.detached, true);
   assert.equal(t[2].definition.role, 'frappe-developer');
-  assert.ok(!fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@1.md')), 'unused lock pruned');
+  assert.ok(!fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@2.md')), 'unused lock pruned');
   assert.match(read('.claude/agents/ramdani-frappe-developer-2.md'), /detached copy/);
   assert.equal(floors.templateStatus(proj, t[2]).detached, true);
 });

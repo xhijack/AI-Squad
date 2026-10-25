@@ -81,7 +81,8 @@ function gitRules(git) {
 // Standard Claude Code agent file. Permissions are enforced at start time (--disallowedTools);
 // they are also listed here so the agent knows its limits.
 // standard: the Floor's Blueprint ({ title, version, text, roleRules, lead }), written into every agent prompt
-export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null } = {}) {
+// skillName(name): the name the skill is known by in Claude Code (aisquad:<name> for our plugin's copy)
+export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n } = {}) {
   const fm = {
     name: eff.id,
     description: `${eff.displayName} (${eff.title}) on ${floorName || 'this Floor'}. ${eff.description || ''}`.trim(),
@@ -93,7 +94,8 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
   // Pattern rules are enforced with --disallowedTools when The AI Squad starts the agent.
   const wholeTools = eff.permissions.deny.filter((d) => /^\w+$/.test(d));
   if (wholeTools.length) fm.disallowedTools = wholeTools.join(', ');
-  if (eff.skills.length) fm.skills = eff.skills.join(', ');
+  const usable = eff.skills.map(skillName).filter(Boolean);
+  if (usable.length) fm.skills = usable.join(', ');
   const source = eff.detached ? 'a detached copy' : `${eff.role}@${eff.version} + overrides`;
   const sections = [
     `${GENERATED_MARK} from ${source}. Edit the Floor in The AI Squad (or .claude/aisquad/team.json), not this file. -->`,
@@ -109,7 +111,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
   if (eff.rules.length) sections.push(`## Rules\n${eff.rules.map((r) => `- ${r}`).join('\n')}`);
   const g = gitRules(git);
   if (g.length) sections.push(`## Git\n${g.map((r) => `- ${r}`).join('\n')}`);
-  if (eff.skills.length) sections.push(`## Skills\nUse these skills through the Skill tool when relevant: ${eff.skills.map((s) => `\`${s}\``).join(', ')}.`);
+  if (usable.length) sections.push(`## Skills\nUse these skills through the Skill tool when relevant: ${usable.map((s) => `\`${s}\``).join(', ')}.`);
   if (eff.permissions.deny.length) sections.push(`## Not allowed\n${eff.permissions.deny.map((d) => `- \`${d}\``).join('\n')}`);
   if (eff.prompt) sections.push(`## Prompt\n${eff.prompt}`);
   return stringifyFrontmatter(fm, '\n' + sections.join('\n\n') + '\n');

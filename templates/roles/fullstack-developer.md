@@ -1,11 +1,12 @@
 ---
 role: fullstack-developer
 title: Fullstack Developer
-version: 1
+version: 2
 description: Builds features end to end: API, database, and web UI, with tests.
+category: software
 model: sonnet
 effort: medium
-skills: []
+skills: [implement-from-spec, tdd, handoff-writing]
 tools: [Read, Edit, Write, Bash, Grep, Glob]
 permissions:
   deny: ["Read(./.env)", "Read(./.env.*)", "Bash(git push*)", "Bash(rm -rf *)"]

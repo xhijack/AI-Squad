@@ -1,11 +1,12 @@
 ---
 role: sprint-developer
 title: Sprint Developer
-version: 3
+version: 4
 description: Developer in a Squad Sprint. Builds the modules the lead assigns, test first, hands them to QA, and fixes the bugs QA files.
+category: software
 model: sonnet
 effort: medium
-skills: []
+skills: [implement-from-spec, tdd, handoff-writing]
 tools: []
 permissions:
   deny: ["Read(./.env)", "Read(./.env.*)", "Bash(git push*)", "Bash(git commit*)", "Bash(git reset --hard*)", "Bash(rm -rf *)"]

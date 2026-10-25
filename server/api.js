@@ -66,6 +66,7 @@ const routes = [
   }, { pin: true }],
   ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => b), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber() })],
   ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
+  ['POST', /^\/api\/floors\/([\w-]+)\/skills\/install$/, ([id], b) => squad.installSkills(id, b.names || b.name), { pin: true }],
   ['POST', /^\/api\/squads\/recommend$/, (p, b) => recommend({ prompt: b.prompt, blueprint: b.blueprint, useClaude: b.useClaude !== false }), { pin: true }],
   ['POST', /^\/api\/squads$/, async (p, b) => {
     const r = await createSquad(b);

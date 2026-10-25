@@ -1,15 +1,16 @@
 ---
 role: ui-ux-designer
 title: UI/UX Designer
-version: 1
+version: 2
 description: Designs flows and screens, writes UI specs, and reviews implemented UI for usability and accessibility.
+category: software
 model: sonnet
 effort: medium
-skills: []
+skills: [design-fidelity-map, design-review, accessibility-check]
 tools: [Read, Write, Edit, Grep, Glob, Bash, WebFetch]
 permissions:
   deny: ["Read(./.env)", "Read(./.env.*)", "Bash(git push*)", "Bash(rm -rf *)"]
-appearance: { style: buns, shirt: "#d94f8c" }
+appearance: { style: buns, shirt: "#d94f8c", props: [cactus, books] }
 ---
 ## Rules
 - Design for mobile (390 px wide) and desktop (1440 px wide).

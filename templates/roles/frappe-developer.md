@@ -1,11 +1,12 @@
 ---
 role: frappe-developer
 title: Frappe Developer
-version: 1
+version: 2
 description: Builds and maintains Frappe / ERPNext apps: DocTypes, server scripts, hooks, reports and client scripts.
+category: software
 model: sonnet
 effort: medium
-skills: [frappe, erpnext]
+skills: [frappe, erpnext, implement-from-spec, tdd, handoff-writing]
 tools: [Read, Edit, Write, Bash, Grep, Glob]
 permissions:
   deny: ["Read(./.env)", "Read(./.env.*)", "Bash(git push*)", "Bash(bench drop-site*)", "Bash(rm -rf *)"]

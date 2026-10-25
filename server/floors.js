@@ -12,6 +12,7 @@ import * as building from './building.js';
 import { setApproval } from './merge.js';
 import * as sprint from './sprint.js';
 import * as blueprints from './blueprints.js';
+import * as skills from './skills.js';
 
 const run = promisify(execFile);
 
@@ -136,7 +137,7 @@ export function generate(root) {
     if (!a.role.detached) { used.add(lockName(a.role.template, a.role.version)); lockTemplate(root, templateOf(root, a)); }
     wanted.add(a.id + '.md');
     const standard = bp ? { title: bp.title, version: bp.version, text: blueprints.standardText(bp, lead), roleRules: blueprints.roleRules(bp, a.role.template), lead } : null;
-    writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard }));
+    writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard, skillName: (n) => skills.agentSkillName(root, n) }));
   }
   // remove generated files of agents that left the team (hand-written agent files are never touched)
   for (const f of safeReaddir(agentsDir(root))) {
@@ -385,6 +386,7 @@ export async function createFloor(input) {
   writeBrief(root, floor, { agents: [] }, input.goal);   // brief first, generate() then fills the team table
   if (floor.blueprint) { blueprints.applyToRepo(root, blueprints.getBlueprint(floor.blueprint.id)); blueprints.mergeTeamSettings(root); }
   if (floor.workflow === 'squad-sprint') sprint.scaffold(root, { git, agents });
+  if (input.installSkills) for (const name of new Set(templates.flatMap((t) => t.skills))) if (skills.skillStatus(root, name).installable) skills.install(root, name);
   generate(root);
   if (mode === 'new') await initialCommit(root);          // main must exist for sprints and merges
   const entry = building.registerFloor(root, { name, number });

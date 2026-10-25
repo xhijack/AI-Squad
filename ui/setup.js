@@ -14,7 +14,7 @@ ctx.actions['setup-squad'] = async () => {
   const order = ['software-house', 'digital-marketing', 'sales-crm'];
   blueprints.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
-    dirMode: 'new', path: '', pathTouched: false, startLead: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
+    dirMode: 'new', path: '', pathTouched: false, startLead: true, installSkills: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
   draw();
 };
 
@@ -78,6 +78,7 @@ function reviewHtml() {
       <dt>Lead</dt><dd>${esc(lead?.displayName || '')}</dd>
       <dt>Team</dt><dd>${s.team.map((m) => `${esc(m.displayName)} <span class="note">(${esc(tplOf(m.template).title)})</span>`).join(', ')}</dd></dl></div>
     <p class="note">Creates the Floor files in <code>.claude/aisquad/</code>, an agent file per member in <code>.claude/agents/</code>, <code>AISQUAD.md</code> with the goal, the team and the Blueprint's communication standard, and the Blueprint's workflow pack.</p>
+    <label class="inline"><input type="checkbox" id="ssSkills" ${s.installSkills ? 'checked' : ''}> Install the team's skills into <code>.claude/skills/</code> (${[...new Set(s.team.flatMap((m) => tplOf(m.template).skills || []))].length} skills)</label>
     <label class="inline"><input type="checkbox" id="ssStart" ${s.startLead ? 'checked' : ''}> Start the lead after creating (it asks you for the source documents first)</label>`;
 }
 
@@ -124,7 +125,7 @@ function collect() {
     if (lead) s.team.forEach((m, i) => { m.lead = i === +lead.dataset.lead; });
   }
   if (s.step === 2) s.path = v('ssPath').value.trim();
-  if (s.step === 3) s.startLead = v('ssStart').checked;
+  if (s.step === 3) { s.startLead = v('ssStart').checked; s.installSkills = v('ssSkills').checked; }
 }
 
 async function next() {
@@ -149,7 +150,7 @@ async function next() {
   if (s.step < STEPS.length - 1) { s.step++; return draw(); }
   s.busy = true; draw();
   try {
-    const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead });
+    const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead, installSkills: s.installSkills });
     closeModal();
     toast(`Floor ${r.number} created${r.leadStarted ? '; the lead is starting' : r.leadError ? `; the lead did not start: ${r.leadError}` : ''}`, 5000);
     location.hash = r.lead ? `#/floor/${r.id}/desk/${r.lead}` : `#/floor/${r.id}`;

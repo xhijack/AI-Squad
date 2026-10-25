@@ -342,6 +342,12 @@ const actions = Object.assign(ctx.actions, {
     const r = await api('POST', '/api/floors/adopt', { path: p.root }); toast('Floor registered'); location.hash = `#/floor/${r.id}`;
   },
   async unlock() { if (await askPin()) refresh(); },
+  async 'install-skill'(el) {
+    const names = el.dataset.skill.split(',');
+    const r = await api('POST', `/api/floors/${state.route.floorId}/skills/install`, { names });
+    const n = r.results.filter((x) => x.installed).length;
+    toast(n ? `Installed ${n} skill${n === 1 ? '' : 's'} into .claude/skills` : 'Already installed');
+  },
   async copy(el) { try { await navigator.clipboard.writeText(el.dataset.text); toast('Copied'); } catch { toast(el.dataset.text, 6000); } },
 });
 

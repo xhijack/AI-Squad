@@ -16,6 +16,7 @@ import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as blueprintsLib from './blueprints.js';
+import * as skillsLib from './skills.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -318,6 +319,7 @@ export function deskDetail(floorId, agentId) {
   try { effective = floors.effectiveOf(entry.path, agent); } catch (e) { error = e.message; }
   return {
     floorId, ...agentView(entry.path, l, cost), agent, effective, error,
+    skills: (effective?.skills || []).map((n) => skillsLib.skillStatus(entry.path, n)),
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(),
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
@@ -620,6 +622,16 @@ export function adoptIndependent(id, { floorId, template, displayName }) {
   ind.adopt(id, { floorId, agentId: member.id });
   invalidate();
   return { ok: true, floorId, agent: member };
+}
+
+// ---------- built-in skills ----------
+// install bundled skills into the Floor's repo (.claude/skills) and regenerate the agent files
+export function installSkills(floorId, names) {
+  const root = building.floorEntry(floorId).path;
+  const out = (Array.isArray(names) ? names : [names]).map((n) => skillsLib.install(root, String(n)));
+  floors.generate(root);
+  invalidate();
+  return { ok: true, results: out };
 }
 
 // ---------- performance (Squad Sprint Floors only) ----------

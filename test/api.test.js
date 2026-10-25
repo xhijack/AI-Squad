@@ -156,19 +156,19 @@ test('edit floor layout and number, template update flow over HTTP', async () =>
   assert.equal(d.number, 3);
   assert.equal(d.floor.layout, 'circle');
   const t = (await call('GET', '/api/roles/project-manager')).body.template;
-  assert.equal((await call('PUT', '/api/roles/project-manager', { ...t, prompt: t.prompt + '\nAlways write a weekly report.' })).body.template.version, 2);
+  assert.equal((await call('PUT', '/api/roles/project-manager', { ...t, prompt: t.prompt + '\nAlways write a weekly report.' })).body.template.version, 3);
   const b = (await call('GET', '/api/building')).body;
   assert.equal(b.floors.find((f) => f.id === 'acme').updates, 1);
   const diff = (await call('GET', '/api/floors/acme/agents/rina-pm/diff')).body;
   assert.ok(diff.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
-  assert.equal((await call('POST', '/api/floors/acme/agents/rina-pm/template', { action: 'update' })).body.agent.role.version, 2);
+  assert.equal((await call('POST', '/api/floors/acme/agents/rina-pm/template', { action: 'update' })).body.agent.role.version, 3);
 });
 
 test('diff between two template versions', async () => {
-  const r = await call('GET', '/api/roles/project-manager/diff?from=1&to=2');
+  const r = await call('GET', '/api/roles/project-manager/diff?from=2&to=3');
   assert.equal(r.status, 200);
   assert.ok(r.body.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
-  assert.equal((await call('GET', '/api/roles/project-manager/diff?from=1&to=9')).status, 404);
+  assert.equal((await call('GET', '/api/roles/project-manager/diff?from=2&to=9')).status, 404);
   assert.ok((await call('GET', '/api/building')).body.options.projectsDir.endsWith('playground'));
 });
 

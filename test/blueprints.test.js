@@ -39,7 +39,8 @@ test('catalog: every Role Template with its category (from the template or the B
   assert.equal(of('sales-copywriter').category, 'sales');
   assert.equal(of('qa-engineer').category, 'software');
   assert.deepEqual(of('ui-ux-designer').blueprints, ['digital-marketing', 'software-house']);
-  assert.equal(of('frappe-developer').category, 'general');
+  assert.equal(of('frappe-developer').category, 'software');
+  assert.equal(of('seo-specialist').category, 'marketing');
 });
 
 test('keyword fallback picks the Blueprint and explains the match', async () => {
