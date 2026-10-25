@@ -47,10 +47,10 @@ test('create a Floor through the wizard API and read it back', async () => {
     team: [{ displayName: 'Rina - PM', template: 'project-manager', lead: true }, { displayName: 'Budi - Dev', template: 'fullstack-developer' }] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const b = (await call('GET', '/api/building')).body;
-  assert.equal(b.floors.length, 1);
-  assert.equal(b.floors[0].name, 'Acme');
-  assert.deepEqual(b.floors[0].agents.map((a) => a.state), ['stopped', 'stopped']);
-  assert.equal(b.floors[0].lamp, 'stopped');
+  assert.deepEqual(b.floors.map((f) => [f.number, f.id]), [[1, 'independents'], [2, 'acme']], 'Floor 1 holds the independent agents');
+  assert.equal(b.floors.find((f) => f.id === 'acme').name, 'Acme');
+  assert.deepEqual(b.floors.find((f) => f.id === 'acme').agents.map((a) => a.state), ['stopped', 'stopped']);
+  assert.equal(b.floors.find((f) => f.id === 'acme').lamp, 'stopped');
   const d = (await call('GET', '/api/floors/acme')).body;
   assert.equal(d.team.length, 2);
   assert.match(d.brief, /Coffee shop/);
@@ -85,8 +85,8 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   assert.match(fs.readFileSync(LOG, 'utf8'), /START --agent budi-dev --disallowedTools Read\(\.\/\.env\) Read\(\.\/\.env\.\*\) Bash\(git push\*\) Bash\(rm -rf \*\) --model sonnet --effort medium/, 'configured model and effort passed explicitly');
   assert.equal(item.answerable, true);
   const b = (await call('GET', '/api/building')).body;
-  assert.equal(b.floors[0].agents.find((a) => a.id === 'budi-dev').state, 'waiting');
-  assert.equal(b.floors[0].lamp, 'attention');
+  assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'waiting');
+  assert.equal(b.floors.find((f) => f.id === 'acme').lamp, 'attention');
   await flushPending();
   assert.ok(!fs.existsSync(LOG) || !fs.readFileSync(LOG, 'utf8').includes('TASK'), 'task is never typed into a dialog');
 
@@ -111,14 +111,14 @@ test('hook events make the agent live: permission prompt in Attention, Stop ends
   await post('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'npm publish', description: 'Publish' } });
   await post('Notification', { message: 'Claude needs your permission to use Bash' });
   let b = (await call('GET', '/api/building')).body;
-  const budi = b.floors[0].agents.find((a) => a.id === 'budi-dev');
+  const budi = b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev');
   assert.deepEqual([budi.state, budi.live], ['waiting', true]);
   const item = b.attention.find((a) => a.agentId === 'budi-dev' && a.live);
   assert.match(item.text, /permission to use Bash\nnpm publish/);
   await post('PostToolUse', { tool_name: 'Bash' });
   await post('Stop', {});
   b = (await call('GET', '/api/building')).body;
-  assert.equal(b.floors[0].agents.find((a) => a.id === 'budi-dev').state, 'idle');
+  assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'idle');
 });
 
 test('send a task to a running agent, then stop it', async () => {
@@ -128,7 +128,7 @@ test('send a task to a running agent, then stop it', async () => {
   assert.ok(await wait(() => fs.readFileSync(LOG, 'utf8').includes('TASK Add a price filter')));
   assert.equal((await call('POST', '/api/floors/acme/agents/budi-dev/stop', {})).status, 200);
   const b = (await call('GET', '/api/building')).body;
-  assert.equal(b.floors[0].agents.find((a) => a.id === 'budi-dev').state, 'stopped');
+  assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'stopped');
 });
 
 test('per-agent commit identity reaches the agent session as git env', async () => {
@@ -158,7 +158,7 @@ test('edit floor layout and number, template update flow over HTTP', async () =>
   const t = (await call('GET', '/api/roles/project-manager')).body.template;
   assert.equal((await call('PUT', '/api/roles/project-manager', { ...t, prompt: t.prompt + '\nAlways write a weekly report.' })).body.template.version, 2);
   const b = (await call('GET', '/api/building')).body;
-  assert.equal(b.floors[0].updates, 1);
+  assert.equal(b.floors.find((f) => f.id === 'acme').updates, 1);
   const diff = (await call('GET', '/api/floors/acme/agents/rina-pm/diff')).body;
   assert.ok(diff.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
   assert.equal((await call('POST', '/api/floors/acme/agents/rina-pm/template', { action: 'update' })).body.agent.role.version, 2);

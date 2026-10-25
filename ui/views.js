@@ -43,6 +43,10 @@ export function lobbySections(b) {
     if (f.missing) return `<div class="card floor" style="--c:#5d6687"><div class="row"><span class="num">${f.number}</span><span class="grow"><span class="title">${esc(f.name)}</span><div class="sub ellipsis">${esc(f.error)}: ${esc(f.path)}</div></span>
       <button class="small danger ghost" data-act="remove-floor" data-floor="${f.id}">Remove</button></div></div>`;
     const c = f.counts;
+    if (f.independent) return `<a class="card floor click" style="--c:${esc(f.accent)};display:block;color:inherit;text-decoration:none" href="#/floor/${f.id}">
+      <div class="row"><span class="num">${f.number}</span><span class="grow"><span class="title">${esc(f.name)}</span><div class="sub">Agents already running on this machine on their own</div></span><span class="lamp ${f.lamp}"></span></div>
+      <div class="chips"><span class="chip">${f.agents.length} agent${f.agents.length === 1 ? '' : 's'}</span>${f.agents.some((a) => a.running) ? `<span class="chip ok">${f.agents.filter((a) => a.running).length} live</span>` : ''}${c.waiting ? `<span class="chip bad">${c.waiting} waiting</span>` : ''}
+        <span class="chip">scanned ${ago(f.scannedAt)}</span><button class="small ghost" data-act="rescan">Rescan</button></div></a>`;
     const budget = f.budget?.usd > 0 ? `<span class="chip ${f.budget.level === 'over' ? 'bad' : f.budget.level === 'warn' ? 'warn' : ''}">budget ${Math.round(f.budget.pct)} %</span>` : '';
     return `<a class="card floor click" style="--c:${esc(f.accent)};display:block;color:inherit;text-decoration:none" href="#/floor/${f.id}">
       <div class="row"><span class="num">${f.number}</span><span class="grow"><span class="title">${esc(f.name)}</span><div class="sub ellipsis">${esc(f.goal || f.path)}</div></span><span class="lamp ${f.lamp}" title="${esc(f.lamp)}"></span></div>
@@ -72,8 +76,9 @@ function agentRow(floorId, a, selected) {
   return `<div class="card click agentCard" data-href="#/floor/${floorId}/desk/${a.id}" ${selected ? 'style="border-color:var(--accent)"' : ''}>
     <div class="agent">${avatar(a)}<div class="meta"><div class="name"><span class="ellipsis">${esc(a.displayName)}</span>${a.lead ? '<span class="badge lead">lead</span>' : ''}${a.live ? '<span class="badge live" title="Live events from the Claude Code hooks">live</span>' : ''}${ts.updateAvailable ? '<span class="badge update">update</span>' : ''}</div>
       <div class="act"><i class="dot ${a.state}"></i> ${esc(STATE_TEXT[a.state])}${a.activity && a.state !== 'stopped' ? ` · ${esc(a.activity)}` : ''}</div></div>
-      ${a.running ? `<button class="small ghost" data-act="stop" data-agent="${a.id}" title="Stop">Stop</button>` : `<button class="small ok" data-act="start" data-agent="${a.id}" title="Start">Start</button>`}</div>
-    <div class="chips"><span class="chip">${esc(a.title)}</span><span class="chip">${esc(a.model)}</span>${a.models?.mismatch ? `<span class="chip warn" title="Last reply from ${esc(a.models.observed)}">model differs</span>` : a.models?.restartNeeded ? '<span class="chip info">restart to apply</span>' : ''}${a.costToday ? `<span class="chip">today ${money(a.costToday)}</span>` : ''}${a.work && !a.work.doneAt ? '<span class="chip info">has work</span>' : a.work?.doneAt ? '<span class="chip ok">work done</span>' : ''}</div></div>`;
+      ${a.independent ? `<button class="small" data-act="adopt-agent" data-agent="${a.id}" title="Move this agent into a squad">Adopt</button>`
+        : a.running ? `<button class="small ghost" data-act="stop" data-agent="${a.id}" title="Stop">Stop</button>` : `<button class="small ok" data-act="start" data-agent="${a.id}" title="Start">Start</button>`}</div>
+    <div class="chips"><span class="chip">${esc(a.title)}</span>${a.model ? `<span class="chip">${esc(a.model)}</span>` : ''}${a.models?.mismatch ? `<span class="chip warn" title="Last reply from ${esc(a.models.observed)}">model differs</span>` : a.models?.restartNeeded ? '<span class="chip info">restart to apply</span>' : ''}${a.costToday ? `<span class="chip">today ${money(a.costToday)}</span>` : ''}${a.work && !a.work.doneAt ? '<span class="chip info">has work</span>' : a.work?.doneAt ? '<span class="chip ok">work done</span>' : ''}</div></div>`;
 }
 
 function feedHtml(feed) {
@@ -104,7 +109,24 @@ function boardHtml(f) {
     ${b.tasks.length ? cols : '<div class="empty">No tasks yet. Start the lead and run <code>/sprint</code> to plan the sprint.</div>'}`;
 }
 
+function independentFloorSections(f, deskAgentId) {
+  const team = f.agents.map((a) => agentRow(f.id, a, a.id === deskAgentId)).join('');
+  const sections = [
+    { id: 'team', title: 'Agents', side: 'left', count: f.agents.length, html: `
+      <div class="row" style="align-items:flex-start"><div class="grow"><h2 style="font-size:18px">1 · ${esc(f.name)}</h2><div class="note">${esc(f.goal)}</div></div><span class="lamp ${f.lamp}" style="margin-top:6px"></span></div>
+      <div class="chips"><span class="chip">today ${money(f.cost.today)}</span><span class="chip">scanned ${ago(f.scannedAt)}</span></div>
+      <div class="row wrap" style="margin-top:10px"><button class="small" data-act="rescan">Rescan</button><span class="spacer"></span><button class="small gold" data-act="setup-squad">Set up Squad</button></div>
+      <p class="note">Found from live Claude Code processes, tmux panes running <code>claude</code> and projects with transcripts from the last 24 hours. The AI Squad only watches them: nothing is written into their repositories. <b>Adopt</b> moves one into a squad's team.</p>
+      <div class="section">${team || '<div class="empty">No independent agents right now. Agents you run yourself in a terminal, tmux or VS Code show up here.</div>'}</div>` },
+    { id: 'activity', title: 'Activity', side: 'right', html: feedHtml(f.feed || []) },
+  ];
+  const att = f.attentionItems || [];
+  if (att.length) sections.unshift({ id: 'f-attention', title: 'Attention', side: 'right', count: att.length, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
+  return sections;
+}
+
 export function floorSections(f, deskAgentId = null) {
+  if (f.independent) return independentFloorSections(f, deskAgentId);
   if (f.missing) return [{ id: 'team', title: 'Team', side: 'left', html: `<div class="empty">${esc(f.error)}: <code>${esc(f.path)}</code></div><button class="danger" data-act="remove-floor" data-floor="${f.id}">Remove this Floor</button>` }];
   const team = f.agents.map((a) => agentRow(f.id, a, a.id === deskAgentId)).join('');
   const b = f.budget || {};
@@ -127,9 +149,31 @@ export function floorSections(f, deskAgentId = null) {
 }
 
 // ---------- Desk ----------
+function independentDeskSections(floor, d, routeScreen) {
+  const dialog = d.dialog ? (floor.attentionItems || []).filter((a) => a.agentId === d.id) : [];
+  const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
+      <div class="note">${esc(d.title)}${d.models?.observed ? ` · last reply from ${esc(d.models.observed)}` : ''}</div>
+      <div class="note"><i class="dot ${d.state}"></i> ${esc(STATE_TEXT[d.state])}${d.activity && d.state !== 'stopped' ? ` · ${esc(d.activity)}` : ''}</div></div>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:6px"><button class="gold" data-act="adopt-agent" data-agent="${d.id}">Adopt into a squad</button>
+      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a></div></div>`;
+  const overview = `${head}
+    ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
+    <dl class="kv" style="margin-top:12px"><dt>Directory</dt><dd><code>${esc(d.root)}</code></dd><dt>Runs in</dt><dd>${esc(d.via)}${d.pid ? ` <span class="note">pid ${d.pid}</span>` : ''}</dd><dt>Cost today</dt><dd>${money(d.costToday)}</dd></dl>
+    <p class="note">An independent agent: The AI Squad shows its status, screen, transcript and questions, but does not start, stop or give it tasks. Adopt it to make it a member of a squad.</p>
+    ${d.attach ? `<div class="section note">Terminal: <code>${esc(d.attach)}</code> <button class="small ghost" data-act="copy" data-text="${esc(d.attach)}">Copy</button></div>` : ''}`;
+  const screen = d.screen ? `<pre class="screen" data-scroll="screen">${esc(d.screen)}</pre>` : `<div class="empty">${d.running ? 'This agent does not run in tmux, so its screen cannot be shown. Its transcript is in the Transcript tab.' : 'No Claude Code process is running for this agent.'}</div>`;
+  const events = d.events.length ? `<ul class="feed">${d.events.map((ev) => `<li><span class="k ${ev.kind}"></span><div class="grow"><div><b>${esc(ev.title)}</b>${ev.tool ? ` <span class="note">${esc(ev.tool)}</span>` : ''}</div><div class="d ${ev.kind === 'think' || ev.kind === 'task' ? '' : 'mono'}">${esc(ev.detail)}</div><div class="t">${ago(ev.ts)}</div></div></li>`).join('')}</ul>` : '<div class="empty">No transcript yet.</div>';
+  return [
+    { id: 'desk', title: 'Desk', side: 'right', count: dialog.length || undefined, countClass: 'bad', html: overview },
+    { id: 'screen', title: 'Screen', side: 'right', html: screen },
+    { id: 'transcript', title: 'Transcript', side: 'right', html: events },
+  ];
+}
+
 export function deskSections(floor, d, { locked = false, screen: routeScreen = false } = {}) {
   if (locked) return [{ id: 'desk', title: 'Desk', side: 'right', html: `<div class="empty">This desk shows the agent's live screen and transcript, so it needs the local PIN.</div><button class="gold" data-act="unlock">Enter PIN</button>` }];
   if (!d) return [{ id: 'desk', title: 'Desk', side: 'right', html: '<div class="empty">Loading…</div>' }];
+  if (d.independent) return independentDeskSections(floor, d, routeScreen);
   const e = d.effective || {};
   const ts = d.templateStatus || {};
   const o = d.agent.overrides || {};

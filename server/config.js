@@ -10,6 +10,8 @@ export const config = {
   home: process.env.AISQUAD_HOME || path.join(os.homedir(), '.aisquad'),
   claudeHome: process.env.CLAUDE_HOME || path.join(os.homedir(), '.claude'),
   tmuxSocket: process.env.AISQUAD_TMUX_SOCKET || '',     // empty = default tmux server
+  scanTmuxSocket: process.env.AISQUAD_SCAN_TMUX_SOCKET || '',   // where the first-run scan looks for claude panes
+  procDir: process.env.AISQUAD_PROC || '/proc',
   claudeBin: process.env.CLAUDE_BIN || '',
   useSystemd: process.env.AISQUAD_NO_SYSTEMD !== '1',
   useHooks: process.env.AISQUAD_NO_HOOKS !== '1',             // start agents with our plugin hooks (--plugin-dir)
@@ -26,6 +28,7 @@ export const paths = {
   libraries: () => path.join(config.home, 'libraries.json'),
   pin: () => path.join(config.home, 'pin'),
   runtime: () => path.join(config.home, 'runtime.json'),
+  independents: () => path.join(config.home, 'independents.json'),
   attachments: () => path.join(config.home, 'attachments'),
   claudeProjects: () => path.join(config.claudeHome, 'projects'),
   claudeTeams: () => path.join(config.claudeHome, 'teams'),

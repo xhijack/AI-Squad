@@ -8,7 +8,8 @@ import { seedDefaults } from '../server/roles.js';
 
 export function scratch({ seed = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aisquad-test-'));
-  configure({ home: path.join(root, 'home'), claudeHome: path.join(root, 'claude'), tmuxSocket: `aisquad-test-${process.pid}` });
+  // the first-run scan looks at a scratch /proc and the private tmux server, never at the real machine
+  configure({ home: path.join(root, 'home'), claudeHome: path.join(root, 'claude'), tmuxSocket: `aisquad-test-${process.pid}`, scanTmuxSocket: `aisquad-test-${process.pid}`, procDir: path.join(root, 'proc') });
   fs.mkdirSync(path.join(root, 'claude', 'projects'), { recursive: true });
   if (seed) seedDefaults();
   after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -6,6 +6,7 @@ import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
 import './perf.js';
+import './independents.js';
 import { meterChip } from './meter.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 

@@ -57,7 +57,7 @@ async function floorSettings() {
   const c = f.floor;
   const body = wire(openModal(frame(`Floor ${f.number} settings`, `
     <div class="grid2"><div><label>Name</label><input name="name" value="${esc(c.name)}" maxlength="60"></div>
-      <div class="row"><div class="grow"><label>Floor number</label><input name="number" type="number" min="1" max="99" value="${f.number}"></div><div><label>Colour</label><input name="accent" type="color" value="${esc(c.accent)}"></div></div></div>
+      <div class="row"><div class="grow"><label>Floor number</label><input name="number" type="number" min="2" max="99" value="${f.number}"></div><div><label>Colour</label><input name="accent" type="color" value="${esc(c.accent)}"></div></div></div>
     <label>Goal summary</label><textarea name="goal" rows="3" maxlength="400">${esc(c.goal)}</textarea>
     <p class="note">The full brief lives in <code>AISQUAD.md</code> in the repository.</p>
     <label>Workflow</label>${segHtml('workflow', [['free-team', 'Free Team'], ['squad-sprint', 'Squad Sprint']], c.workflow)}

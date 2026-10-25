@@ -14,6 +14,7 @@ import * as sprint from './sprint.js';
 import * as hooks from './events.js';
 import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
+import * as ind from './independents.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -203,7 +204,9 @@ export function buildingSnapshot() {
   stampAlerts(attention);
   const floorPaths = new Set(b.floors.map((f) => f.path));
   const detected = tx.discoverProjects().filter((p) => !floorPaths.has(p.root)).slice(0, 30);
-  const floorsOut = states.map(summary).sort((x, y) => x.number - y.number);
+  const independent = independentState(b);
+  attention.push(...independent.attention);
+  const floorsOut = [independent.summary, ...states.map(summary)].sort((x, y) => x.number - y.number);
   const value = {
     name: b.name, now: Date.now(), floors: floorsOut, attention, detected,
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
@@ -264,6 +267,7 @@ export function watchdogStatus() {
 export const invalidate = () => { snapCache.at = 0; tx.resetDiscoveryCache(); for (const c of costs.values()) c.at = 0; };
 
 export function floorDetail(id) {
+  if (id === ind.FLOOR_ID) return independentDetail();
   const entry = building.floorEntry(id);
   const s = floorState(entry, { events: true });
   if (s.missing) return { ...summary(s) };
@@ -288,6 +292,7 @@ export function floorDetail(id) {
 function readBriefSafe(root) { try { return fs.readFileSync(path.join(root, 'AISQUAD.md'), 'utf8').slice(0, 20000); } catch { return ''; } }
 
 export function deskDetail(floorId, agentId) {
+  if (floorId === ind.FLOOR_ID) return independentDesk(agentId);
   const entry = building.floorEntry(floorId);
   const cfg = floors.readFloor(entry.path);
   const agent = cfg.team.agents.find((a) => a.id === agentId);
@@ -402,6 +407,14 @@ export function answerAttention(id, option, text = '') {
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
+  if (item.independent) {
+    const dialog = tm.parsePrompt(tm.capturePane(item.target, config.scanTmuxSocket));
+    if (!dialog) throw notFound('The dialog is gone (maybe already answered)');
+    const r = tm.answerDialog('', dialog, Number(option), text, { target: item.target, socket: config.scanTmuxSocket });
+    if (!r.ok) throw bad(r.error);
+    ind.resetCache(); invalidate();
+    return r;
+  }
   const name = tm.sessionName(item.floorId, item.agentId);
   const dialog = tm.parsePrompt(tm.capture(name));
   if (!dialog) throw notFound('The dialog is gone (maybe already answered)');
@@ -456,7 +469,7 @@ export async function mergeTick({ checkMemory = true } = {}) {
     const res = wd.readResources();
     if (checkMemory && res.mem && res.mem.available < wd.LIMITS.freeRamBytes) return done;     // quality gates are heavy; wait for memory
     const snap = buildingSnapshot();
-    for (const f of snap.floors) {
+    for (const f of snap.floors.filter((x) => !x.independent)) {
       if (!f.missing) { const n = await startNextSprint(f.id); if (n) done.push({ branch: '', result: 'next-sprint', nextSprint: n }); }
       if (f.missing || !merge.approval(f.id)) continue;
       const entry = building.floorEntry(f.id);
@@ -514,6 +527,84 @@ export async function startNextSprint(floorId) {
   stopAgent(floorId, p.lead);
   await startAgent(floorId, p.lead, `/sprint ${p.sprint}`);
   return { sprint: p.sprint, lead: p.lead };
+}
+
+// ---------- Floor 1: independent agents ----------
+const INDEPENDENT_NAME = 'Independent agents';
+function independentLives({ events = false } = {}) {
+  const now = Date.now();
+  return ind.current({ floorRoots: building.loadBuilding().floors.map((f) => f.path) }).map((a) => {
+    const screen = a.tmux ? tm.capturePane(a.tmux.target, config.scanTmuxSocket) : '';
+    const dialog = a.tmux && a.live ? tm.parsePrompt(screen) : null;
+    const file = tx.sessionsOf(a.root)[0]?.file;
+    const st = file ? statusOf(file, a.root, events) : null;
+    const asking = a.live && st?.ask;
+    const working = a.live && ((a.tmux && tm.isBusy(screen)) || (!a.tmux && st?.turnOpen && now - st.lastTs < tx.ACTIVE_MS));
+    const state = !a.live ? 'stopped' : dialog || asking ? 'waiting' : working ? 'working' : 'idle';
+    if (dialog && st?.ask?.questions?.length) dialog.question = st.ask.questions.map((q) => q.question).join('\n\n');
+    return { a, st, screen, dialog, state };
+  });
+}
+function independentView(l, costToday) {
+  const { a, st } = l;
+  return {
+    id: a.id, displayName: ind.displayNameOf(a), independent: true, root: a.root, via: a.via, live: false, tmux: a.tmux?.target || null, pid: a.pid,
+    lead: false, running: !!a.live, state: l.state, activity: st?.activity || (a.live ? '' : 'no Claude Code process running'), lastTs: st?.lastTs || 0,
+    title: `Claude Code · ${a.via}`, model: tx.modelFamily(st?.model) || '', appearance: ind.appearanceFor(a.id), kindOf: 'dev',
+    models: { configured: '', observed: st?.model || '', observedAt: st?.modelTs || 0, mismatch: false, restartNeeded: false },
+    peek: st?.peek ? codeWindow(a.root, (({ id, ...rest }) => rest)(st.peek)) : null, costToday: +(costToday || 0).toFixed(2), templateStatus: {}, work: null,
+  };
+}
+function independentState(b) {
+  const lives = independentLives();
+  let today = 0;
+  const agents = lives.map((l) => { const c = costFor(`ind:${l.a.root}`, l.a.root).today; today += c; return independentView(l, c); });
+  const attention = [];
+  for (const l of lives) {
+    const base = { floorId: ind.FLOOR_ID, floorNumber: building.INDEPENDENT_FLOOR, floorName: INDEPENDENT_NAME, agentId: l.a.id, agentName: ind.displayNameOf(l.a), independent: true };
+    if (l.dialog) attention.push({ ...base, id: attId('ind', l.a.key, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
+      text: l.dialog.question, options: l.dialog.options, answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
+    else if (l.state === 'waiting' && l.st?.ask) attention.push({ ...base, id: attId('ind', l.a.key, l.st.ask.id), kind: 'question', text: l.st.ask.questions.map((q) => q.question).join('\n\n'),
+      options: (l.st.ask.questions[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.st.ask.ts });
+  }
+  const count = (st) => agents.filter((a) => a.state === st).length;
+  const reg = ind.loadRegistry();
+  return { attention, lives, summary: {
+    id: ind.FLOOR_ID, number: building.INDEPENDENT_FLOOR, independent: true, name: INDEPENDENT_NAME, path: '',
+    goal: 'Claude Code agents already running on this machine on their own. Adopt one into a squad to make it part of a team.',
+    accent: '#5d6687', layout: 'open-space', workflow: 'independent', desks: [], devices: floors.defaultDevices(), agents,
+    lamp: attention.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped',
+    counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped') },
+    cost: { today: round2(today), month: 0 }, budget: { usd: 0, level: 'none', used: 0, pct: 0 }, attention: attention.length, updates: 0, scannedAt: reg.scannedAt,
+  } };
+}
+export function independentDetail() {
+  const lives = independentLives({ events: true });
+  const st = independentState(building.loadBuilding());
+  const feed = [];
+  for (const l of lives) for (const e of l.st?.events || []) if (e.kind !== 'read') feed.push({ ...e, agentId: l.a.id, agentName: ind.displayNameOf(l.a), detail: e.detail.slice(0, 200) });
+  feed.sort((a, b) => b.ts - a.ts);
+  return { ...st.summary, feed: feed.slice(0, 60), messages: [], attentionItems: st.attention, team: [], board: null, shots: [] };
+}
+function independentDesk(agentId) {
+  const l = independentLives({ events: true }).find((x) => x.a.id === agentId);
+  if (!l) throw notFound(`Agent not found: ${agentId}`);
+  return {
+    floorId: ind.FLOOR_ID, ...independentView(l, costFor(`ind:${l.a.root}`, l.a.root).today),
+    screen: l.a.tmux ? tm.capturePane(l.a.tmux.target, config.scanTmuxSocket, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
+    events: (l.st?.events || []).slice(-80).reverse(), attach: l.a.tmux ? `tmux attach -t ${l.a.tmux.target.slice(1)}` : '',
+  };
+}
+export function rescanIndependents() { ind.resetCache(); invalidate(); const list = ind.current({ maxAgeMs: 0, floorRoots: building.loadBuilding().floors.map((f) => f.path) }); return { ok: true, found: list.length }; }
+// adopt: the agent joins a squad Floor's team (a new team member from a Role Template); it leaves Floor 1
+export function adoptIndependent(id, { floorId, template, displayName }) {
+  const a = ind.current().find((x) => x.id === id);
+  if (!a) throw notFound('That independent agent is gone; rescan first');
+  const entry = building.floorEntry(floorId);
+  const member = floors.addAgent(entry.path, { displayName: String(displayName || '').trim() || ind.displayNameOf(a).replace(/\W+/g, ' ').trim(), template });
+  ind.adopt(id, { floorId, agentId: member.id });
+  invalidate();
+  return { ok: true, floorId, agent: member };
 }
 
 // ---------- performance (Squad Sprint Floors only) ----------

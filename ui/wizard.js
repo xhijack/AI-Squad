@@ -14,7 +14,7 @@ export async function openWizard(prefill = {}) {
   const opts = ctx.state.building?.options || {};
   w = {
     step: 0, name: prefill.name || '', goal: '', dirMode: prefill.path ? 'existing' : 'new', path: prefill.path || '', pathTouched: !!prefill.path, url: '',
-    git: {}, team: [], workflow: 'free-team', budget: { usd: 0, period: 'month' }, layout: 'rows', number: opts.nextFloorNumber || 1, projectsDir: opts.projectsDir || '',
+    git: {}, team: [], workflow: 'free-team', budget: { usd: 0, period: 'month' }, layout: 'rows', number: opts.nextFloorNumber || 2, projectsDir: opts.projectsDir || '',
   };
   draw();
 }
@@ -47,7 +47,7 @@ function stepHtml() {
         <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], w.budget.period)}</div></div>
       <p class="note">The Watchdog warns at 80 % of the budget and raises Attention at 100 % (estimated from transcript usage).</p>`;
     case 'Layout': return `<label>Layout preset</label><div class="choice" data-choice="layout">${LAYOUTS.map(([v, t, d]) => `<button type="button" data-v="${v}" aria-pressed="${w.layout === v}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
-      <label for="wNum">Floor number</label><input id="wNum" type="number" min="1" max="99" data-w="number" value="${w.number}" style="max-width:120px">
+      <label for="wNum">Floor number</label><input id="wNum" type="number" min="2" max="99" data-w="number" value="${w.number}" style="max-width:120px">
       <div class="card" style="margin-top:14px"><b>Summary</b><dl class="kv" style="margin-top:6px">
         <dt>Project</dt><dd>${esc(w.name)}</dd><dt>Directory</dt><dd>${esc(w.path)} <span class="note">(${w.dirMode === 'new' ? 'new, git init' : w.dirMode === 'clone' ? `clone ${esc(w.url)}` : 'existing'})</span></dd>
         <dt>Team</dt><dd>${w.team.length ? w.team.map((m) => esc(m.displayName || '(unnamed)')).join(', ') : 'none yet'}</dd>
@@ -124,7 +124,7 @@ function validate() {
     if (w.team.some((m) => !m.displayName)) return 'Every agent needs a display name.';
     if (w.team.filter((m) => m.lead).length > 1) return 'Only one agent can be the lead.';
   }
-  if (step === 'Layout' && !(w.number >= 1 && w.number <= 99)) return 'Floor number must be 1 to 99.';
+  if (step === 'Layout' && !(w.number >= 2 && w.number <= 99)) return 'Floor number must be 2 to 99 (Floor 1 is for independent agents).';
   return '';
 }
 

@@ -8,10 +8,21 @@ const SESSION_PREFIX = 'aisquad-';
 export const sessionName = (floorId, agentId) => `${SESSION_PREFIX}${floorId}-${agentId}`.replace(/[^\w-]/g, '-').slice(0, 120);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function tmuxArgs(args) { return config.tmuxSocket ? ['-L', config.tmuxSocket, ...args] : args; }
-export function tmux(args) {
-  try { return execFileSync('tmux', tmuxArgs(args), { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; }
+// socket: tmux -L name; '' = the default tmux server (where independent agents usually run)
+function tmuxArgs(args, socket = config.tmuxSocket) { return socket ? ['-L', socket, ...args] : args; }
+export function tmux(args, socket = config.tmuxSocket) {
+  try { return execFileSync('tmux', tmuxArgs(args, socket), { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; }
 }
+
+// every pane of a tmux server: { session, pane ("1.0"), target ("=session:1.0"), pid, command, path }
+export function listPanes(socket) {
+  const out = tmux(['list-panes', '-a', '-F', '#{session_name}\t#{window_index}.#{pane_index}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}'], socket);
+  return (out || '').split('\n').filter(Boolean).map((l) => {
+    const [session, pane, pid, command, cwd] = l.split('\t');
+    return { session, pane, target: `=${session}:${pane}`, pid: +pid, command, path: cwd, aisquad: session.startsWith(SESSION_PREFIX) };
+  });
+}
+export const capturePane = (target, socket, history = 0) => tmux(['capture-pane', '-p', '-J', '-t', target, ...(history ? ['-S', `-${history}`] : [])], socket) || '';
 
 export function listSessions() {
   const out = tmux(['list-sessions', '-F', '#{session_name}']);
@@ -161,14 +172,16 @@ export async function typeTask(name, text, { settleMs = 600, verifyMs = 1500 } =
   return { ok: false, error: 'Task text is still in the input box' };
 }
 
-// choose option n of the open dialog (arrow keys + Enter); free-text options get the typed text
-export function answerDialog(name, dialog, n, text = '') {
+// choose option n of the open dialog (arrow keys + Enter); free-text options get the typed text.
+// opts.target / opts.socket address a pane outside our own sessions (independent agents).
+export function answerDialog(name, dialog, n, text = '', { target = `=${name}:`, socket } = {}) {
   const opt = dialog.options.find((o) => o.n === n);
   if (!opt) return { ok: false, error: 'Unknown option' };
   if (opt.free && !String(text).trim()) return { ok: false, error: 'Type an answer first' };
   const diff = n - dialog.selected;
-  for (let k = 0; k < Math.abs(diff); k++) tmux(['send-keys', '-t', `=${name}:`, diff > 0 ? 'Down' : 'Up']);
-  if (opt.free) tmux(['send-keys', '-t', `=${name}:`, '-l', String(text).replace(/[\r\n]+/g, ' ')]);
-  tmux(['send-keys', '-t', `=${name}:`, 'Enter']);
+  const keys = (...k) => tmux(['send-keys', '-t', target, ...k], socket);
+  for (let k = 0; k < Math.abs(diff); k++) keys(diff > 0 ? 'Down' : 'Up');
+  if (opt.free) keys('-l', String(text).replace(/[\r\n]+/g, ' '));
+  keys('Enter');
   return { ok: true };
 }

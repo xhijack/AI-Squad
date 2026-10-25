@@ -24,7 +24,7 @@ test('New Floor wizard: new directory, git init, all files generated, registered
       { displayName: 'Ramdani - Frappe Developer', template: 'frappe-developer' },
     ],
   });
-  assert.equal(r.entry.number, 1);
+  assert.equal(r.entry.number, 2);
   assert.ok(fs.existsSync(path.join(proj, '.git')));
   assert.equal(execFileSync('git', ['-C', proj, 'log', '--format=%s', 'main'], { encoding: 'utf8' }).trim(), 'chore: set up The AI Squad Floor', 'main exists with the scaffold');
   assert.equal(execFileSync('git', ['-C', proj, 'status', '--porcelain'], { encoding: 'utf8' }), '');
@@ -65,7 +65,7 @@ test('clone mode clones a repository and remembers the remote', async () => {
   await floors.createFloor({ name: 'Acme Clone', directory: { mode: 'clone', path: dest, url: proj }, team: [] });
   assert.ok(fs.existsSync(path.join(dest, '.git')));
   assert.equal(JSON.parse(fs.readFileSync(path.join(dest, '.claude/aisquad/git.json'), 'utf8')).remote, proj);
-  assert.equal(building.loadBuilding().floors.find((f) => f.path === dest).number, 2);
+  assert.equal(building.loadBuilding().floors.find((f) => f.path === dest).number, 3);
 });
 
 test('template update: Update available, diff, then update / keep / detach per agent', () => {

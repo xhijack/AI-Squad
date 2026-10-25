@@ -25,7 +25,7 @@ fs.writeFileSync(path.join(PG, 'home', 'pin'), '123456\n', { mode: 0o600 });
 
 const dir = (n) => path.join(PG, 'floors', n);
 await floors.createFloor({
-  name: 'Acme Coffee Shop', goal: 'Online shop for single-origin coffee beans with subscriptions.', number: 1, layout: 'pods',
+  name: 'Acme Coffee Shop', goal: 'Online shop for single-origin coffee beans with subscriptions.', number: 2, layout: 'pods',
   directory: { mode: 'new', path: dir('acme-shop') }, git: { qualityGate: 'npm test' }, budget: { usd: 40, period: 'month' },
   team: [
     { displayName: 'Rina - Project Manager', template: 'project-manager', lead: true },
@@ -35,7 +35,7 @@ await floors.createFloor({
   ],
 });
 await floors.createFloor({
-  name: 'Sopwer HR', goal: 'Frappe HR customisations for leave and payroll.', number: 2, layout: 'rows', workflow: 'squad-sprint',
+  name: 'Sopwer HR', goal: 'Frappe HR customisations for leave and payroll.', number: 3, layout: 'rows', workflow: 'squad-sprint',
   directory: { mode: 'new', path: dir('sopwer-hr') },
   team: [
     { displayName: 'Ramdani - Frappe Developer', template: 'frappe-developer', overrides: { model: 'opus', rules: ['Work only in apps/sopwer_hr.'] } },
@@ -44,7 +44,7 @@ await floors.createFloor({
   ],
 });
 await floors.createFloor({
-  name: 'Landing Page', goal: 'Marketing site and SEO.', number: 3, layout: 'circle',
+  name: 'Landing Page', goal: 'Marketing site and SEO.', number: 4, layout: 'circle',
   directory: { mode: 'new', path: dir('landing') },
   team: [{ displayName: 'Tono - SEO Specialist', template: 'seo-specialist' }, { displayName: 'Lia - UI/UX Designer', template: 'ui-ux-designer' }],
 });

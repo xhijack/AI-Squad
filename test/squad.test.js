@@ -20,7 +20,7 @@ test('no alerts for a quiet Floor without work', () => {
   writeWork({});
   const s = fresh();
   assert.deepEqual(s.attention.filter((a) => a.kind !== 'resource'), []);
-  assert.equal(s.floors[0].lamp, 'stopped');
+  assert.equal(s.floors.find((f) => f.id === 'acme').lamp, 'stopped');
 });
 
 test('pending work with everyone idle for 10 minutes is a Floor stall', () => {
@@ -29,7 +29,7 @@ test('pending work with everyone idle for 10 minutes is a Floor stall', () => {
   const stall = s.attention.find((a) => a.kind === 'stall');
   assert.ok(stall, 'stall alert');
   assert.match(stall.text, /lead and all agents idle for 11 min/);
-  assert.equal(s.floors[0].lamp, 'attention');
+  assert.equal(s.floors.find((f) => f.id === 'acme').lamp, 'attention');
   const t1 = stall.ts;
   const again = fresh().attention.find((a) => a.kind === 'stall');
   assert.equal(again.ts, t1, 'first-seen time is stable');
@@ -56,7 +56,7 @@ test('budget: warning at 80 %, Attention at 100 %', () => {
   const over = fresh().attention.filter((a) => a.kind === 'budget');
   assert.equal(over.length, 1);
   assert.match(over[0].text, /Budget reached: \$1\.15 of \$1 this day/);
-  assert.equal(fresh().floors[0].budget.level, 'over');
+  assert.equal(fresh().floors.find((f) => f.id === 'acme').budget.level, 'over');
 });
 
 test('the watchdog tick logs each new alert once', async () => {
@@ -77,7 +77,7 @@ test('configured and observed models are reported separately; a mismatch is flag
   assert.equal(modelReport(eff, false, { model: 'sonnet' }, null).restartNeeded, false, 'stopped agents start fresh anyway');
 
   // Budi's transcript (from the budget test) replies with sonnet; an opus override makes it differ
-  const budi = () => fresh().floors[0].agents.find((a) => a.id === 'budi-dev').models;
+  const budi = () => fresh().floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').models;
   assert.deepEqual([budi().configured, budi().observed, budi().mismatch], ['sonnet', 'claude-sonnet-5-5', false]);
   floors.updateAgent(proj, 'budi-dev', { overrides: { model: 'opus' } });
   assert.deepEqual([budi().configured, budi().mismatch], ['opus', true]);

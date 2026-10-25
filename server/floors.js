@@ -328,6 +328,7 @@ export async function createFloor(input) {
   const b = building.loadBuilding();
   if (b.floors.some((f) => f.path === root)) throw bad('This directory is already a Floor');
   const number = input.number ? Number(input.number) : building.nextFloorNumber(b);
+  if (!(number >= building.FIRST_SQUAD_FLOOR && number <= building.MAX_FLOOR)) throw bad(`Floor number must be ${building.FIRST_SQUAD_FLOOR}-${building.MAX_FLOOR}; Floor 1 is for independent agents`);
   if (b.floors.some((f) => f.number === number)) throw bad(`Floor ${number} is already taken`);
   const teamIn = Array.isArray(input.team) ? input.team : [];
   // validate the team before touching the disk

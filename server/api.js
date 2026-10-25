@@ -115,6 +115,8 @@ const routes = [
     return { ok: true, ...squad.saveAttachment(id, decodeURIComponent(String(req.headers['x-filename'] || '')), buf) };
   }, { pin: true, raw: true }],
 
+  ['POST', /^\/api\/independents\/rescan$/, () => squad.rescanIndependents(), { pin: true }],
+  ['POST', /^\/api\/independents\/([\w-]+)\/adopt$/, ([id], b) => squad.adoptIndependent(id, b), { pin: true }],
   ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text), { pin: true }],
 ];
 
