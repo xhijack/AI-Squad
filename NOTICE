@@ -9,3 +9,7 @@ source code came from.
 
 This product includes three.js (https://threejs.org), Copyright 2010-2024 three.js authors,
 licensed under the MIT License (see ui/vendor/three/LICENSE).
+
+This product includes the Plus Jakarta Sans font (https://github.com/tokotype/PlusJakartaSans),
+Copyright 2020 The Plus Jakarta Sans Project Authors, licensed under the SIL Open Font License 1.1
+(see ui/vendor/fonts/OFL.txt).

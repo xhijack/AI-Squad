@@ -116,6 +116,15 @@ Every Role Template lists its skills, and 25 skills ship with the plugin in `ski
 
 ### In the office
 
+Every Floor is a warm isometric office: honey wood floor, two walls with windows, a brand wall with the Floor name and its tagline (Floor settings), a whiteboard, a pantry, a lounge with sofa, TV and beanbags, and a ping-pong table. Drag to move around and scroll to zoom. The Lobby stacks the Floors as a cutaway dollhouse.
+
+The screen stays clear for the office:
+- a **status pill** top left: the Floor, sprint progress, active agents, the Floor menu (settings, edit layout, start / stop all, add agent, board, performance, cost) and the main menu (Set up Squad, Role Templates, theme, PIN);
+- one **panel on the right**: questions for you on top, the agents with one status chip each, then Activity / Messages / Standard; a Desk replaces the agent list (hide the panel with its arrow);
+- the **dock** at the bottom: board, performance, cost, server meter, add agent, voice and a legend.
+
+On phones the office is on top, the lists are in a bottom sheet, and the dock is one row of icons. The light theme is the default; the menu switches to dark or to the system setting.
+
 - Click a character to look **through its eyes** (drag to look around, Esc to return); click its name tag for its desk, its monitor for the screen view.
 - Desks carry a keyboard, mouse, mug and a toy per role; the laptop shows the role's screen (code, test runner, mini board). Templates can set `props` and `screen` in their appearance.
 - When the whole team is idle for 20 s, the lead shouts for work; turn its **voice** on in the dock.
@@ -221,6 +230,8 @@ npm test                         # node --test, all modules, one at a time
 node scripts/seed-playground.js  # scratch Building with three Floors under ./playground
 scripts/dev.sh start             # dev server on :8097 against the playground (PIN 123456)
 node scripts/shot.js shots.json  # headless Chrome screenshots: [{ url, out, w, h, pin?, eval? }]
+scripts/acceptance.sh            # visual acceptance: every agent state, Lobby / Floor / Floor 1 / Desk / Set up Squad
+                                 # at 1440x900 and 390x844 into playground/reference/after-*.png
 ```
 
 `AISQUAD_HOME`, `CLAUDE_HOME`, `AISQUAD_TMUX_SOCKET`, `CLAUDE_BIN` and `AISQUAD_NO_SYSTEMD=1` point the server at scratch directories, a private tmux server and a fake Claude Code (`test/fixtures/fake-claude.cjs`), which is how the tests run. `AISQUAD_SCAN_TMUX_SOCKET` and `AISQUAD_PROC` point the independent-agent scan at another tmux server and a fake `/proc`; `AISQUAD_SERVICE=detached` skips the systemd user service.

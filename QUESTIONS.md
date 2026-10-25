@@ -34,3 +34,9 @@ Decisions taken with the safest default while building Phase 2 (25 Oct 2026). Ea
 12. **Template versions.** The shipped templates got a new version (skills, category, desk props; the Project Manager also learned the Squad Sprint flow). Floors created earlier will show "Update available" for their agents.
 
 13. **Marketplace name.** The marketplace is now named `aisquad` (it was `sopwer`), so the install command is `/plugin install aisquad@aisquad` as the brief says.
+
+## Phase 2.1 (visual quality)
+
+14. **Font source.** Downloading Plus Jakarta Sans (npm or GitHub) was blocked in this session, so the vendored file is the official latin variable woff2 (weights 400 to 800) found on this machine. It is the font only, with no DTamu branding. Its SIL Open Font License is in `ui/vendor/fonts/OFL.txt`, and NOTICE mentions it. If you prefer, replace it with a copy fetched from the font's own repository.
+
+15. **Old Floors get the new office only if untouched.** A Floor whose devices are still the old default set, at the old default spots, is shown with the new office furniture; the new set is written on the next save. Floors whose furniture you arranged keep it; add the new pieces (TV, beanbags, pantry, ping-pong) in Edit Mode. Saved desk positions are kept, so old Floors may look denser until you pick a layout preset again.
