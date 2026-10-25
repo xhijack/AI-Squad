@@ -1,6 +1,6 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, STATE_TEXT } from './lib.js';
 import { lobbySections, floorSections, deskSections } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -11,11 +11,11 @@ const isPhone = () => matchMedia('(max-width: 760px)').matches;
 
 // ---------- routing ----------
 function parseRoute() {
-  const m = location.hash.match(/^#\/floor\/([\w-]+)(?:\/desk\/([\w-]+)(\/screen)?)?/);
+  const m = location.hash.match(/^#\/floor\/([\w-]+)(?:\/desk\/([\w-]+)(?:\/(screen|eyes))?)?/);
   if (!m) return { mode: 'lobby' };
-  return m[2] ? { mode: 'desk', floorId: m[1], agentId: m[2], ...(m[3] ? { screen: true } : {}) } : { mode: 'floor', floorId: m[1] };
+  return m[2] ? { mode: 'desk', floorId: m[1], agentId: m[2], ...(m[3] ? { [m[3]]: true } : {}) } : { mode: 'floor', floorId: m[1] };
 }
-const routeKey = (r) => [r.mode, r.floorId, r.agentId, r.screen ? 'screen' : ''].join('/');
+const routeKey = (r) => [r.mode, r.floorId, r.agentId, r.screen ? 'screen' : r.eyes ? 'eyes' : ''].join('/');
 
 addEventListener('hashchange', () => {
   const prev = state.route;
@@ -34,6 +34,7 @@ const scene = new BuildingScene($('scene'), {
   onPickFloor: (id) => { if (state.route.mode === 'lobby' && !ctx.editing) location.hash = `#/floor/${id}`; },
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
+  onPickEyes: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/eyes`; },
 });
 ctx.scene = scene;
 window.aisquad = ctx;                     // handy in the console and for scripted UI checks
@@ -155,6 +156,10 @@ function patch(el, html) {
 
 function layoutPanels(sections) {
   const phone = isPhone();
+  if (state.route.eyes) {                                  // first person: only the 3D view and the small bar
+    $('left').hidden = $('right').hidden = $('sheet').hidden = true;
+    return updateInsets();
+  }
   const left = sections.filter((s) => s.side === 'left'), right = sections.filter((s) => s.side === 'right');
   const pick = (list, side) => { const cur = state.tab[side]; return list.find((s) => s.id === cur) ? cur : list[0]?.id; };
   if (phone) {
@@ -185,8 +190,8 @@ function layoutPanels(sections) {
 
 let insetKey = '', shotKey = '';
 function updateInsets() {
-  const phone = isPhone(), top = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top')) || 56;
-  const insets = phone
+  const phone = isPhone(), top = document.body.classList.contains('immersive') ? 0 : parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top')) || 56;
+  const insets = state.route.eyes ? {} : phone
     ? { top: top + ($('elevator').hidden ? 0 : 44), bottom: $('sheet').hidden ? 0 : $('sheet').getBoundingClientRect().height }
     : { top: top + 10, left: $('left').hidden ? 0 : $('left').offsetWidth + 12, right: ($('right').hidden ? 0 : $('right').offsetWidth + 12) + ($('elevator').hidden ? 0 : 56) };
   const k = JSON.stringify(insets);
@@ -197,12 +202,17 @@ function updateInsets() {
 function render() {
   const { building: b, route } = state;
   if (!b) return;
+  // screen view and first person view: no top bar or dock, just the scene
+  document.body.classList.toggle('immersive', !!(route.screen || route.eyes));
+  document.body.classList.toggle('pov', !!route.eyes);
   // top bar
   const f = b.floors.find((x) => x.id === route.floorId);
   const desk = f && route.agentId ? f.agents.find((a) => a.id === route.agentId) : null;
   const trail = [['#/', route.mode === 'lobby' && b.name !== 'The AI Squad' ? b.name : 'Lobby']];
   if (f) trail.push([`#/floor/${f.id}`, `${f.number} · ${f.name}`]);
   if (desk) trail.push([null, desk.displayName]);
+  $('povBar').hidden = !route.eyes;
+  if (route.eyes) patch($('povText'), desk ? `<i class="dot ${desk.state}"></i> Through the eyes of <b>${esc(desk.displayName)}</b> · ${esc(desk.activity && desk.state !== 'stopped' ? desk.activity : STATE_TEXT[desk.state] || '')}` : 'First person view');
   const last = trail.length - 1;
   // phones get "‹ parent  current", desktops the whole trail
   const shown = isPhone() && last > 0 ? [[trail[last - 1][0], '‹'], trail[last]] : trail;
@@ -221,7 +231,7 @@ function render() {
 
   // elevator (Floor switcher)
   const elev = $('elevator');
-  elev.hidden = route.mode === 'lobby' || ctx.editing;
+  elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes;
   if (!elev.hidden) {
     const floors = [...b.floors].sort((x, y) => y.number - x.number);
     patch(elev, `<div class="cap">Floor</div>${floors.map((x) => `<button data-href="#/floor/${x.id}" aria-current="${x.id === route.floorId}" title="${x.number} · ${esc(x.name)}">${x.number}<i class="l lamp ${x.lamp}"></i></button>`).join('')}<button data-href="#/" title="Lobby">L</button>`);
@@ -277,10 +287,13 @@ addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   if (!$('menu').hidden || !$('attPop').hidden) return closePopovers();
   if (ctx.editing) return;
-  if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
+  if (state.route.eyes) location.hash = `#/floor/${state.route.floorId}`;
+  else if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
   else if (state.route.mode === 'desk') location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.mode === 'floor') location.hash = '#/';
 });
+document.querySelector('[data-povback]').onclick = () => { location.hash = `#/floor/${state.route.floorId}`; };
+document.querySelector('[data-povdesk]').onclick = () => { location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`; };
 $('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(updateInsets, 250); };
 addEventListener('resize', () => { for (const id of ['left', 'right', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 

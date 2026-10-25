@@ -8,6 +8,8 @@ import { FW, FD, FH, floorY, desksFor } from './layout.js';
 import { makeScreen, drawScreen } from './screens.js';
 import { loungeSpots, updateLife, deskHome, seatRoot } from './life.js';
 
+const UP = new THREE.Vector3(0, 1, 0);
+export const POV_FOV = 72;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mat = (c, o = {}) => new THREE.MeshToonMaterial({ color: c, ...o });
 const basic = (c, o = {}) => new THREE.MeshBasicMaterial({ color: c, ...o });
@@ -111,6 +113,7 @@ function buildStation(agent, desk, accent) {
   const rig = buildChibi(lookFor(agent.appearance));
   const human = new THREE.Group();                                              // the agent itself: can leave the desk
   human.userData.agent = agent.id;
+  human.userData.human = true;                                                  // clicking the body opens the agent's eyes
   human.add(rig.root);
   const st = { id: agent.id, g, human, rig, screens, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6 };
   st.label = label('', 'alabel', human, 0, 2.15, 0);
@@ -261,7 +264,13 @@ export class BuildingScene {
     const o = { g, stations: new Map(), devices: new Map(), sig: sigOf(f) };
     for (const d of f.devices || []) { const dg = buildDevice(d); g.add(dg); o.devices.set(d.id, dg); }
     const desks = desksFor(f.agents || [], f.desks, f.layout);
-    (f.agents || []).forEach((a, i) => { const st = buildStation(a, desks[i], accent); g.add(st.g, st.human); o.stations.set(a.id, st); });
+    (f.agents || []).forEach((a, i) => {
+      const st = buildStation(a, desks[i], accent);
+      g.add(st.g, st.human); o.stations.set(a.id, st);
+      // the name tag opens the desk; the body itself opens the first person view
+      st.label.element.style.pointerEvents = 'auto'; st.label.element.style.cursor = 'pointer';
+      st.label.element.addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
+    });
     o.spots = loungeSpots(f.devices || []);
     o.occupied = new Map();
     if (f.missing) label('Directory not found', 'alabel warnlabel', g, 0, 1.4, 0);
@@ -277,11 +286,39 @@ export class BuildingScene {
 
   // ---------- view & camera ----------
   setView(view) {
+    const wasEyes = this.view.eyes;
     this.view = view;
-    const fov = view.screen ? 24 : 40;                     // tighter lens for the over-the-shoulder view
+    const fov = view.eyes ? POV_FOV : view.screen ? 24 : 40;   // tighter lens for the over-the-shoulder view
     if (this.camera.fov !== fov) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     this.applyVisibility();
-    this.flyTo(this.poseFor(view));
+    this.controls.enabled = !view.eyes;
+    if (view.eyes) {
+      // first person: at the desk look down at the hands and keyboard, elsewhere straight ahead
+      const st = this.floors.get(view.floorId)?.stations.get(view.agentId);
+      this.look = { yaw: 0, pitch: !st?.life || st.life.mode === 'desk' ? -.42 : -.08, fov: POV_FOV, drag: null };
+      this.povReady = false; this.camAnim = null;
+      return;
+    }
+    this.flyTo(this.poseFor(view), wasEyes ? 700 : 900);
+  }
+
+  // camera at the agent's eyes (inside its hidden head), turned by the owner's drag; follows walking and sitting
+  updatePov(dt) {
+    const st = this.floors.get(this.view.floorId)?.stations.get(this.view.agentId);
+    if (!st) return;
+    const head = st.rig.head, L = this.look;
+    head.updateWorldMatrix(true, false);
+    const eye = new THREE.Vector3(0, .25, .18).applyMatrix4(head.matrixWorld);
+    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
+    dir.applyAxisAngle(UP, L.yaw);
+    dir.applyAxisAngle(new THREE.Vector3().crossVectors(dir, UP).normalize(), L.pitch).normalize();
+    const k = this.povReady ? Math.min(1, dt * 12) : 1;     // smooth the head bob
+    this.camera.position.lerp(eye, k);
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(this.camera.position, this.camera.position.clone().add(dir), UP));
+    if (this.povReady) this.camera.quaternion.slerp(q, Math.min(1, dt * 10)); else this.camera.quaternion.copy(q);
+    this.povReady = true;
+    if (Math.abs(this.camera.fov - L.fov) > .01) { this.camera.fov += (L.fov - this.camera.fov) * .2; this.camera.updateProjectionMatrix(); }
+    this.controls.target.copy(this.camera.position).add(dir);
   }
 
   applyVisibility() {
@@ -422,11 +459,24 @@ export class BuildingScene {
   bindPointer() {
     const el = this.renderer.domElement;
     let down = null;
-    el.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; this.handlers.onPointerDown?.(e); });
+    el.addEventListener('pointerdown', (e) => {
+      down = [e.clientX, e.clientY];
+      if (this.view.eyes) { this.look.drag = { x: e.clientX, y: e.clientY, yaw: this.look.yaw, pitch: this.look.pitch }; el.setPointerCapture(e.pointerId); return; }
+      this.handlers.onPointerDown?.(e);
+    });
+    el.addEventListener('pointermove', (e) => {          // first person: drag to look around
+      const d = this.view.eyes && this.look?.drag;
+      if (!d) return;
+      this.look.yaw = Math.max(-1.6, Math.min(1.6, d.yaw - (e.clientX - d.x) * .004));
+      this.look.pitch = Math.max(-.9, Math.min(.6, d.pitch - (e.clientY - d.y) * .003));
+    });
+    el.addEventListener('wheel', (e) => { if (!this.view.eyes) return; e.preventDefault(); this.look.fov = Math.max(30, Math.min(95, this.look.fov + e.deltaY * .02)); }, { passive: false });
     el.addEventListener('pointerup', (e) => {
+      if (this.view.eyes) { if (this.look) this.look.drag = null; return; }
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
       const hit = this.pick(e);
       if (hit.agent && hit.screen) this.handlers.onPickScreen?.(hit.floorId, hit.agent);
+      else if (hit.agent && hit.human) this.handlers.onPickEyes?.(hit.floorId, hit.agent);
       else if (hit.agent) this.handlers.onPickAgent?.(hit.floorId, hit.agent);
       else if (hit.floorId) this.handlers.onPickFloor?.(hit.floorId);
     });
@@ -441,10 +491,10 @@ export class BuildingScene {
     this.ray.setFromCamera(this.ndc(e), this.camera);
     const hits = this.ray.intersectObjects(this.building.children.filter((c) => c.visible && c.userData.floorId), true);
     for (const h of hits) {
-      let o = h.object, agent = null, device = null;
+      let o = h.object, agent = null, device = null, human = false;
       const screen = !!h.object.userData.screen;
-      while (o && !o.userData.floorId) { if (o.userData.agent) agent = o.userData.agent; if (o.userData.device) device = o.userData.device; o = o.parent; }
-      if (o) return { floorId: o.userData.floorId, agent, device, screen, point: h.point };
+      while (o && !o.userData.floorId) { if (o.userData.agent) agent = o.userData.agent; if (o.userData.human) human = true; if (o.userData.device) device = o.userData.device; o = o.parent; }
+      if (o) return { floorId: o.userData.floorId, agent, device, screen, human, point: h.point };
     }
     return {};
   }
@@ -452,7 +502,7 @@ export class BuildingScene {
   // ---------- loop ----------
   frame() {
     const t = this.clock.getElapsedTime();
-    if (this.camAnim) {
+    if (this.camAnim && !this.view.eyes) {
       const a = this.camAnim, u = Math.min(1, (performance.now() - a.start) / a.ms), k = 1 - Math.pow(1 - u, 3);
       this.camera.position.lerpVectors(a.fromP, a.pos, k);
       this.controls.target.lerpVectors(a.fromT, a.target, k);
@@ -466,8 +516,8 @@ export class BuildingScene {
       for (const st of o.stations.values()) {
         const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, poseDesk: () => { deskHome(st); poseDesk(st, t); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
-        const focus = near && v.screen && v.agentId === st.id;
-        st.rig.head.visible = !focus;                     // over the shoulder: the big chibi head would hide the screen
+        const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
+        st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view
         st.label.visible = !!st.labelsOn && !focus;
         for (const S of st.screens) {
           if (t < S.next && !(focus && S.part === 'main')) continue;
@@ -482,7 +532,7 @@ export class BuildingScene {
       if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;
     }
     this.handlers.onFrame?.(t);
-    this.controls.update();
+    if (v.eyes) this.updatePov(dt); else this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
   }

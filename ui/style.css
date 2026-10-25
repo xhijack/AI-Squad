@@ -216,6 +216,12 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin:
 /* edit mode */
 #editBar { position: fixed; left: 50%; transform: translateX(-50%); width: max-content; bottom: 16px; z-index: 7; background: var(--panel); border: 1px solid var(--accent); border-radius: 14px; padding: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); }
 #editBar .lbl { font-weight: 700; color: var(--accent); padding: 0 6px; }
+/* screen view and first person view: no top bar, no dock */
+body.immersive #topbar, body.immersive #dock { display: none !important; }
+body.immersive { --top: 0px; }
+#povBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 7; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 6px 8px 6px 14px; display: flex; gap: 10px; align-items: center; max-width: calc(100vw - 24px); }
+#povBar button { white-space: nowrap; }
+#povText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #editBar .chip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
 #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; z-index: 30; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: calc(100vw - 24px); }
