@@ -6,7 +6,9 @@ The AI Squad turns a machine running Claude Code into a 3D **Building**. Every p
 - **Floor**: a 3D office with a desk per agent (working, idle, waiting, stopped), the team panel, an activity feed, messages between agents, and a board when the Floor uses the Squad Sprint workflow.
 - **Desk**: one agent: send a task (with attachments), answer its questions and permission prompts, its live terminal screen, transcript and profile (role, template version, overrides, skills, model), start and stop.
 
-Agents are Claude Code sessions in tmux, created from **Role Templates** with per-agent **overrides**. Six templates ship with the plugin: Project Manager, Frappe Developer, Fullstack Developer, QA Engineer, UI/UX Designer and SEO Specialist.
+Agents are Claude Code sessions in tmux, created from **Role Templates** with per-agent **overrides**. A **Squad Blueprint** turns a group of agents into a team: it sets the roles, the source documents every agent works from, who talks to whom, the gates and the definition of done. Blueprints ship for a Software House, Digital Marketing and Sales & CRM, with 19 Role Templates and 25 built-in skills.
+
+Floor 1 shows the **independent agents** already running on your machine (terminal, tmux, VS Code); squads start at Floor 2.
 
 ## Requirements
 
@@ -73,6 +75,50 @@ The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`
 The server listens on `http://127.0.0.1:8097`. Pass `--port` to change it, and `--host 0.0.0.0` only if you really want it reachable from other machines.
 
 On `127.0.0.1` (the default) viewing is open and every change and every agent screen needs the local PIN. Bound to any other address (for example `--host 0.0.0.0`), every API call needs the PIN, reads included; the browser asks for it once. Find it with `cat ~/.aisquad/pin`.
+
+### Set up Squad
+
+The big **Set up Squad** button in the Lobby walks through four steps:
+
+1. **What do you want to build?** Describe it ("I want a software house that builds my restaurant POS") or pick a Blueprint card. Claude Code (`claude -p` on haiku, no tools) recommends a Blueprint and a team and says why each agent is there. Without Claude Code, keyword matching picks the Blueprint.
+2. **Team**: edit names, the lead and the members; **Add agent** opens the Role Template catalog, filterable by category and skill.
+3. **Folder**: one squad = one project folder. Use an existing repository, or let The AI Squad create `~/aisquad-squads/<slug>` with `git init` (change the default with "Change the default"; it is `squadsDir` in `~/.aisquad/building.json`).
+4. **Review and create**: the next free Floor (2 and up), the Floor files, the agent files, the Blueprint's documents and the team's skills. The lead can start right away; its first job is to collect the source documents from you.
+
+### Squad Blueprints
+
+A Blueprint is a versioned template for a whole squad (`templates/blueprints/<id>/blueprint.md` plus a `pack/` of document skeletons, seeded into `~/.aisquad/blueprints/` where you may edit them). It defines:
+
+- the **roles**, how many of each (min / default / max) and the **lead**;
+- the **source documents** every agent treats as the main reference, their owner and their status (`STATUS: DRAFT` or `APPROVED`);
+- the **channels**: only the lead talks to you; teammates reach the lead with SendMessage, hand work over in handoff files, and put questions for you in the questions file;
+- the **work items**, the **handoff** format, the **gates** and the **definition of done**, plus rules per role.
+
+The standard is written into `AISQUAD.md` and into every generated agent prompt, and the Blueprint itself is kept in `.claude/aisquad/blueprint.md`. The Floor shows each source document with its status.
+
+| Blueprint | Lead | Team | Source documents |
+|---|---|---|---|
+| Software House | Project Manager | Developers (1-4), QA Engineer, UI/UX Designer, DevOps Engineer | `docs/PRD.md`, `docs/TECH.md`, `docs/DESIGN.md`, `docs/ENVIRONMENTS.md` |
+| Digital Marketing | Marketing Strategist | SEO Specialist, Content Writer, Social Media Specialist, Ads & Analytics Specialist, Designer (optional) | `docs/MARKETING-BRIEF.md`, `docs/BRAND.md`, `docs/CHANNELS.md` |
+| Sales & CRM | Sales Manager | Lead Researcher, CRM Administrator, Sales Copywriter, Sales Analyst | `docs/ICP.md`, `docs/OFFER.md`, `docs/PIPELINE.md` |
+
+Software House runs on the Squad Sprint workflow; `/sprint` refuses to start while a source document is not approved. The other two keep their board in `docs/BOARD.md`.
+
+### Independent agents (Floor 1)
+
+On start and with **Rescan**, The AI Squad looks for Claude Code agents that already run on the machine: live `claude` processes, tmux panes running `claude`, and projects with transcripts from the last 24 hours. Each gets a desk on Floor 1 with its live status, screen (for tmux), transcript and questions in Attention. Nothing is written into their repositories (the registry is `~/.aisquad/independents.json`). **Adopt** moves one into a squad's team as a new member. Floors created before Phase 2 move up from Floor 1 to 2 automatically.
+
+### Built-in skills
+
+Every Role Template lists its skills, and 25 skills ship with the plugin in `skills/<name>/SKILL.md` (PM: `source-docs-intake`, `sprint-planning`, `handoff-review`; developers: `implement-from-spec`, `tdd`, `handoff-writing`; QA: `test-plan-from-acceptance`, `ui-evidence`, `bug-report`; designer: `design-fidelity-map`, `design-review`, `accessibility-check`; DevOps: `environment-matrix`, `deploy-and-rollback`, `secrets-hygiene`; marketing and sales skills for their roles). The Desk profile shows where each skill comes from (project, user, plugin, missing); **Install** copies a bundled skill into the project's `.claude/skills/`.
+
+### In the office
+
+- Click a character to look **through its eyes** (drag to look around, Esc to return); click its name tag for its desk, its monitor for the screen view.
+- Desks carry a keyboard, mouse, mug and a toy per role; the laptop shows the role's screen (code, test runner, mini board). Templates can set `props` and `screen` in their appearance.
+- When the whole team is idle for 20 s, the lead shouts for work; turn its **voice** on in the dock.
+- The dock's **server meter** shows CPU, RAM, swap and disk (red when dangerous); click it, or the server rack, for a 6 minute graph and the busiest processes.
+- On Squad Sprint Floors, **Performance** shows per agent and sprint the QA bugs per story point (Blocker 5, Major 3, Minor 1, Cosmetic 0.5), the first-round pass rate, modules owned and cost per story point, plus the **cost projection** for the remaining backlog (`docs/BACKLOG.md` with an SP column).
 
 ### Create a Floor
 
@@ -147,7 +193,9 @@ Checked every minute and shown in the Lobby:
 <repo>/.claude/aisquad/git.json            branch strategy, merge policy, quality gate, commit rules
 <repo>/.claude/aisquad/roles.lock/<role>@<version>.md   snapshot of every template version in use
 <repo>/.claude/agents/<agent-id>.md        generated Claude Code agent file (do not edit by hand)
-<repo>/AISQUAD.md                          project brief, goal and team
+<repo>/.claude/aisquad/blueprint.md        the Squad Blueprint this Floor follows (snapshot)
+<repo>/.claude/skills/<name>/SKILL.md      skills installed from the plugin
+<repo>/AISQUAD.md                          project brief, goal, team and the squad standard
 ~/.aisquad/building.json                   Floors on this machine (absolute paths live only here)
 ~/.aisquad/roles/<role>.md                 local Role Template library (+ .history/ for old versions)
 ~/.aisquad/libraries.json                  optional extra template libraries
@@ -157,6 +205,9 @@ Checked every minute and shown in the Lobby:
 ~/.aisquad/merges/<floor>.jsonl            merge log
 ~/.aisquad/libraries/<name>/               clones of git template libraries
 ~/.aisquad/attachments/                    files attached to tasks (outside every repo)
+~/.aisquad/blueprints/<id>/                local Squad Blueprint library
+~/.aisquad/independents.json               independent agents found by the scan (stable ids, adoptions)
+~/.config/systemd/user/aisquad.service     the server as a user service (generated by /aisquad)
 ```
 
 Floor and team configuration is meant to be committed, so the whole team shares it. No secrets, personal data or absolute paths are written to the repository, and agents are told never to read `.env` files.
@@ -164,18 +215,22 @@ Floor and team configuration is meant to be committed, so the whole team shares 
 ## Develop
 
 ```
-npm test                         # node --test, all server modules
+npm test                         # node --test, all modules, one at a time
 node scripts/seed-playground.js  # scratch Building with three Floors under ./playground
 scripts/dev.sh start             # dev server on :8097 against the playground (PIN 123456)
 node scripts/shot.js shots.json  # headless Chrome screenshots: [{ url, out, w, h, pin?, eval? }]
 ```
 
-`AISQUAD_HOME`, `CLAUDE_HOME`, `AISQUAD_TMUX_SOCKET`, `CLAUDE_BIN` and `AISQUAD_NO_SYSTEMD=1` point the server at scratch directories, a private tmux server and a fake Claude Code (`test/fixtures/fake-claude.cjs`), which is how the tests run.
+`AISQUAD_HOME`, `CLAUDE_HOME`, `AISQUAD_TMUX_SOCKET`, `CLAUDE_BIN` and `AISQUAD_NO_SYSTEMD=1` point the server at scratch directories, a private tmux server and a fake Claude Code (`test/fixtures/fake-claude.cjs`), which is how the tests run. `AISQUAD_SCAN_TMUX_SOCKET` and `AISQUAD_PROC` point the independent-agent scan at another tmux server and a fake `/proc`; `AISQUAD_SERVICE=detached` skips the systemd user service.
 
 ```
-server/   building, floors, roles, compose (overrides), transcripts, tmux, watchdog, squad (live state), api
-ui/       index.html, app.js (routing, panels), scene.js (3D), chibi.js, views.js, wizard.js, templates.js, dialogs.js, edit.js
-templates/roles/   default Role Templates
+server/   building, floors, roles, compose (overrides), transcripts, tmux, watchdog, squad (live state), api,
+          blueprints, recommend, setup (Set up Squad), independents (Floor 1), skills, performance, meter, service
+ui/       index.html, app.js (routing, panels), scene.js (3D), chibi.js, props.js, screens.js, views.js, wizard.js, setup.js,
+          templates.js, dialogs.js, edit.js, perf.js, meter.js, shout.js, independents.js
+templates/roles/        default Role Templates
+templates/blueprints/   Squad Blueprints (blueprint.md + pack/)
+skills/                 built-in skills (SKILL.md)
 bin/aisquad.js     command line used by /aisquad
 commands/aisquad.md   the Claude Code command
 ```
