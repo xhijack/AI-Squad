@@ -12,23 +12,51 @@ Agents are Claude Code sessions in tmux, created from **Role Templates** with pe
 
 - Node.js 22 or newer (no npm packages needed: the server has zero dependencies)
 - Claude Code (`claude` on the PATH, or next to the `node` binary as with nvm)
-- tmux; `systemd-run --user` is used when available so agents and the server survive the terminal that started them
+- tmux; on Linux, systemd (user services) keeps the server and agents running after the terminal that started them closes
 - A browser with WebGL. three.js 0.160.0 is vendored in `ui/vendor/three`, so the UI works offline.
 
 ## Install
 
-As a Claude Code plugin, from this repository:
+The GitHub repository is also a Claude Code plugin marketplace. In Claude Code:
 
 ```
-/plugin marketplace add <path-or-git-url-of-this-repo>
-/plugin install aisquad@sopwer
+/plugin marketplace add xhijack/AI-Squad
+/plugin install aisquad@aisquad
+/aisquad
 ```
 
-Or run it straight from a checkout:
+`/aisquad` starts the server and opens the Building. On Linux it installs and starts a **systemd user service**, `aisquad.service`, generated with the plugin's current path and `node` binary and `Restart=always`, so the server keeps running after you close the terminal or VS Code. On macOS it uses a launchd agent; where neither exists it starts a detached process. The PIN for changes is in `~/.aisquad/pin`.
+
+A user service stops when you log out unless lingering is on for your account (`/aisquad status` tells you). To keep it running without a login session: `loginctl enable-linger $USER`.
+
+### Update
 
 ```
-node bin/aisquad.js            # start the server in the background and open the browser
+/plugin marketplace update aisquad
+/plugin update aisquad@aisquad
+/aisquad
 ```
+
+The plugin moves to a new path when it updates; the next `/aisquad` notices that the service points to the old path, rewrites `aisquad.service` and restarts it ("Updated and restarted"). Agents keep running.
+
+### Contributors
+
+```
+git clone git@github.com:xhijack/AI-Squad.git
+cd AI-Squad
+node bin/aisquad.js              # same as /aisquad, from the checkout
+claude --plugin-dir .            # or load the checkout as a plugin
+```
+
+### Uninstall
+
+```
+/aisquad uninstall                # stops the server and removes aisquad.service (or the launchd agent)
+/plugin uninstall aisquad@aisquad
+/plugin marketplace remove aisquad
+```
+
+Your Floors and their repositories are not touched. To remove The AI Squad's machine-local data as well (Building registry, Role Template library, PIN, logs), delete `~/.aisquad`. Agents that are still running stay in tmux: stop them on their Desks first, or with `tmux kill-session -t aisquad-<floor>-<agent>`.
 
 ## Use
 
@@ -36,8 +64,9 @@ node bin/aisquad.js            # start the server in the background and open the
 |---|---|
 | `/aisquad` | Start the server (if it is not running) and open the Building |
 | `/aisquad new-floor` | Same, straight into the New Floor wizard |
-| `/aisquad status` | Floors, agent states, Attention and machine resources as text |
+| `/aisquad status` | Floors, agent states, Attention, machine resources and the service state as text |
 | `/aisquad stop` | Stop the server; agents keep running in tmux |
+| `/aisquad uninstall` | Stop the server and remove the systemd user service or launchd agent |
 
 The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`); Claude Code accepts the short `/aisquad` when no other command uses that name. In `claude -p`, use the full name.
 

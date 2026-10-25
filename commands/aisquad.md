@@ -1,6 +1,6 @@
 ---
-description: Open The AI Squad (your Claude Code teams as a 3D building), create a Floor, or show the status
-argument-hint: "[new-floor | status | stop]"
+description: Open The AI Squad (your Claude Code teams as a 3D building), create a Floor, show the status, or stop the server
+argument-hint: "[new-floor | status | stop | uninstall]"
 allowed-tools: Bash(node:*)
 ---
 
@@ -12,6 +12,8 @@ Tell the user the result in a few short lines:
 
 - No argument or `new-floor`: give the address from the output and say the PIN is in `~/.aisquad/pin` (`cat ~/.aisquad/pin`). With `new-floor` the New Floor wizard opens in the browser.
 - `status`: show the Floors, agents, Attention and machine resources from the output and point out anything that needs the user.
-- `stop`: confirm the server stopped; agents keep running in tmux.
+- No argument: the server runs as a systemd user service (`aisquad.service`), a launchd agent on macOS, or a detached process, so it keeps running after this terminal or editor closes. Mention "Updated and restarted" when the output says so (the plugin was updated).
+- `stop`: confirm the server stopped; agents keep running in tmux. `/aisquad` starts it again.
+- `uninstall`: confirm the service was removed; `~/.aisquad` and the Floors stay.
 
 If the output shows an error, explain it and suggest checking `~/.aisquad/server.log`. Do not start agents or change any Floor yourself; the user does that in the browser.

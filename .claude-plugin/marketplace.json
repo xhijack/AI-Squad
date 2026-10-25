@@ -1,16 +1,17 @@
 {
-  "name": "sopwer",
+  "name": "aisquad",
   "owner": {
     "name": "PT Sopwer Teknologi Indonesia"
   },
   "metadata": {
-    "description": "Claude Code plugins by PT Sopwer Teknologi Indonesia."
+    "description": "The AI Squad by PT Sopwer Teknologi Indonesia: Claude Code agent teams as Floors of a 3D building."
   },
   "plugins": [
     {
       "name": "aisquad",
       "source": "./",
-      "description": "The AI Squad: Claude Code agent teams as Floors of a 3D building."
+      "description": "The AI Squad: Claude Code agent teams as Floors of a 3D building, with Squad Blueprints and built-in skills.",
+      "version": "0.2.0"
     }
   ]
 }
