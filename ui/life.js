@@ -16,14 +16,17 @@ export function loungeSpots(devices = []) {
     out.push({ id: `${d.id}:${lx}`, act, x: d.x + o.x, z: d.z + o.z, face: (d.ry || 0) + (faceBack ? Math.PI : 0), label: LABEL[act], ...extra });
   };
   for (const d of devices) {
-    if (d.type === 'sofa') { at(d, -.5, .12, 'sofa', false); at(d, .5, .12, 'sofa', false); }
+    if (d.type === 'sofa') { at(d, -.6, .12, 'sofa', false); at(d, .6, .12, 'sofa', false); }
     else if (d.type === 'coffee') at(d, 0, .85, 'coffee', true);
+    else if (d.type === 'pantry') { at(d, -1.1, 1.0, 'coffee', true); at(d, .6, 1.0, 'coffee', true); }
+    else if (d.type === 'beanbag') at(d, 0, 0, 'beanbag', false);
+    else if (d.type === 'pingpong') { at(d, -1.75, 0, 'pingpong', false, { face: (d.ry || 0) + Math.PI / 2 }); at(d, 1.75, 0, 'pingpong', false, { face: (d.ry || 0) - Math.PI / 2 }); }
     else if (d.type === 'whiteboard') { at(d, -.35, .95, 'whiteboard', true); at(d, .45, 1.05, 'whiteboard', true); }
     else if (d.type === 'bookshelf') at(d, 0, .85, 'read', true);
   }
   return out;
 }
-const LABEL = { sofa: 'on the sofa', coffee: 'getting coffee', whiteboard: 'at the whiteboard', read: 'reading' };
+const LABEL = { sofa: 'on the sofa', coffee: 'getting coffee', whiteboard: 'at the whiteboard', read: 'reading', beanbag: 'on a beanbag', pingpong: 'playing ping-pong' };
 
 // station st: { g (desk group, floor coords), human (group in floor coords), rig, life, phase }
 export function deskHome(st) {
@@ -65,7 +68,18 @@ function poseActivity(st, spot, t) {
   const R = st.rig, p = t + st.phase;
   resetPose(R); blink(st, t);
   R.root.position.set(0, 0, 0);
-  if (spot.act === 'sofa') {
+  if (spot.act === 'beanbag') {
+    R.root.position.set(0, .5 - HIP_H, 0);
+    sitLegs(R, -1.2, 1.1, .25);
+    R.torso.rotation.x = -.35;
+    arms(R, [-.9, -.35, -1.1], [-.9, .35, -1.1 + Math.sin(p * 2) * .05]);   // phone in both hands
+    R.head.rotation.set(.3, Math.sin(p * .4) * .1, 0);
+  } else if (spot.act === 'pingpong') {
+    const hit = Math.sin(p * 4.2);
+    arms(R, [-.2, .15, -.3], [-1.1 - hit * .5, -.6 - hit * .3, -.7]);         // racket arm swings
+    R.torso.rotation.y = hit * .2;
+    R.hips.position.y = HIP_H - .04 + Math.abs(Math.cos(p * 4.2)) * .03;
+  } else if (spot.act === 'sofa') {
     R.root.position.set(0, .48 - HIP_H + .06, 0);
     sitLegs(R);
     arms(R, [-.9, -.35, -1.1], [-.9, .35, -1.1 + Math.sin(p * 2) * .05]);   // phone in both hands

@@ -18,7 +18,7 @@ const run = promisify(execFile);
 
 export const LAYOUTS = ['rows', 'pods', 'circle', 'open-space'];
 export const WORKFLOWS = ['free-team', 'squad-sprint'];
-export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack'];
+export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack', 'pantry', 'tv', 'beanbag', 'pingpong'];
 export const DESK_DEVICES = ['laptop', 'dual-monitor'];
 export const BRANCH_STRATEGIES = ['agent-branches', 'feature-branches', 'trunk'];
 export const PUSH_POLICIES = ['never', 'after-merge', 'agents-may-push'];
@@ -33,18 +33,34 @@ const lockDir = (root) => path.join(dirOf(root), 'roles.lock');
 const agentsDir = (root) => path.join(root, '.claude', 'agents');
 
 // ---------- defaults & cleaning ----------
+// the office of every new Floor (16 x 13 m, like the squad-3d office): whiteboard on the back wall, pantry on the
+// left wall, a lounge (rug, sofa, TV, beanbags) front right, ping-pong front left, plants in the corners
 export function defaultDevices() {
   return [
-    { id: 'whiteboard-1', type: 'whiteboard', x: -5.2, z: -3.9, ry: 0 },
-    { id: 'plant-1', type: 'plant', x: 6.2, z: -3.7, ry: 0 },
-    { id: 'plant-2', type: 'plant', x: -6.2, z: 3.7, ry: 0 },
-    { id: 'printer-1', type: 'printer', x: 6.0, z: 3.4, ry: Math.PI },
-    { id: 'coffee-1', type: 'coffee', x: 4.6, z: -3.8, ry: 0 },
-    // lounge corner: idle agents go here (sofa, coffee, whiteboard)
-    { id: 'rug-1', type: 'rug', x: 5.9, z: 1.1, ry: 0 },
-    { id: 'sofa-1', type: 'sofa', x: 6.4, z: 1.1, ry: -1.571 },
-    { id: 'server-rack-1', type: 'server-rack', x: -6.35, z: -1.6, ry: 1.571 },   // LEDs follow the machine load
+    { id: 'whiteboard-1', type: 'whiteboard', x: 3.4, z: -6.3, ry: 0 },
+    { id: 'server-rack-1', type: 'server-rack', x: 7.25, z: -5.85, ry: 0 },   // LEDs follow the machine load
+    { id: 'pantry-1', type: 'pantry', x: -7.45, z: 1.4, ry: 1.571 },
+    { id: 'plant-1', type: 'plant', x: -7.3, z: -5.8, ry: 0 },
+    { id: 'plant-2', type: 'plant', x: .4, z: -5.95, ry: 0 },
+    { id: 'plant-3', type: 'plant', x: -7.3, z: 5.8, ry: 0 },
+    { id: 'plant-4', type: 'plant', x: 7.3, z: 2.4, ry: 0 },
+    // lounge corner: idle agents go here (sofa, beanbags, TV, coffee, ping-pong, whiteboard)
+    { id: 'rug-1', type: 'rug', x: 4.6, z: 4.4, ry: 0 },
+    { id: 'sofa-1', type: 'sofa', x: 4.6, z: 5.75, ry: 3.142 },
+    { id: 'tv-1', type: 'tv', x: 4.6, z: 2.9, ry: 0 },
+    { id: 'beanbag-1', type: 'beanbag', x: 2.3, z: 4.1, ry: .4 },
+    { id: 'beanbag-2', type: 'beanbag', x: 7, z: 4, ry: -.4 },
+    { id: 'pingpong-1', type: 'pingpong', x: -3.6, z: 4.4, ry: 0 },
   ];
+}
+
+// Floors made before Phase 2.1 still carry the old default set (7 or 8 devices at their default spots). As long as
+// nobody moved them, they get the new office; anything the owner arranged is kept as it is.
+const LEGACY_DEFAULTS = { 'whiteboard-1': [-5.2, -3.9], 'plant-1': [6.2, -3.7], 'plant-2': [-6.2, 3.7], 'printer-1': [6, 3.4], 'coffee-1': [4.6, -3.8], 'rug-1': [5.9, 1.1], 'sofa-1': [6.4, 1.1], 'server-rack-1': [-6.35, -1.6] };
+export function upgradeDevices(devices) {
+  if (!Array.isArray(devices) || devices.length < 7) return devices;
+  const legacy = devices.every((d) => LEGACY_DEFAULTS[d.id] && Math.abs(LEGACY_DEFAULTS[d.id][0] - d.x) < .01 && Math.abs(LEGACY_DEFAULTS[d.id][1] - d.z) < .01);
+  return legacy ? defaultDevices() : devices;
 }
 
 const num = (v, d = 0, lim = 20) => { const n = Number(v); return Number.isFinite(n) ? Math.max(-lim, Math.min(lim, +n.toFixed(3))) : d; };
@@ -55,6 +71,8 @@ export function cleanFloor(f = {}, prev = {}) {
   return {
     name: clip(String(pick('name') || 'Untitled Floor').trim(), 60),
     goal: clip(String(pick('goal') || '').trim(), 400),
+    // the short line under the Floor name on the brand wall
+    tagline: clip(String(pick('tagline') || '').replace(/[\r\n]+/g, ' ').trim(), 48),
     workflow: WORKFLOWS.includes(pick('workflow')) ? pick('workflow') : 'free-team',
     layout: LAYOUTS.includes(pick('layout')) ? pick('layout') : 'rows',
     accent: isHex(pick('accent')) ? pick('accent') : ACCENTS[0],
@@ -64,7 +82,7 @@ export function cleanFloor(f = {}, prev = {}) {
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
       agent: String(d.agent), x: num(d.x), z: num(d.z), ry: num(d.ry, 0, 7), device: DESK_DEVICES.includes(d.device) ? d.device : 'laptop' })),
-    devices: (Array.isArray(pick('devices')) ? pick('devices') : defaultDevices()).filter((d) => d && DEVICE_TYPES.includes(d.type)).slice(0, 60).map((d, i) => ({
+    devices: (Array.isArray(pick('devices')) ? upgradeDevices(pick('devices')) : defaultDevices()).filter((d) => d && DEVICE_TYPES.includes(d.type)).slice(0, 60).map((d, i) => ({
       id: String(d.id || `${d.type}-${i + 1}`).slice(0, 40), type: d.type, x: num(d.x), z: num(d.z), ry: num(d.ry, 0, 7) })),
   };
 }

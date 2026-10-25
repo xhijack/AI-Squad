@@ -66,7 +66,7 @@ function drawBar() {
     draft.desks = ctx.state.floor.agents.map((a, i) => ({ agent: a.id, ...spots[i], device: draft.desks.find((d) => d.agent === a.id)?.device || 'laptop' }));
     // the lounge moves with the preset; it is added when the Floor has none
     const lounge = loungeFor(v);
-    for (const type of ['rug', 'sofa']) {
+    for (const type of Object.keys(lounge)) {
       const dev = draft.devices.find((d) => d.type === type);
       if (dev) Object.assign(dev, lounge[type]); else draft.devices.push({ id: `${type}-1`, type, ...lounge[type] });
     }

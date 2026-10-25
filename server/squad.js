@@ -182,7 +182,7 @@ function summary(fs_) {
   const count = (s) => agents.filter((a) => a.state === s).length;
   const lamp = fs_.attention.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
   return {
-    id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, accent: cfg.floor.accent, layout: cfg.floor.layout,
+    id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, tagline: cfg.floor.tagline, accent: cfg.floor.accent, layout: cfg.floor.layout,
     workflow: cfg.floor.workflow, desks: cfg.floor.desks, devices: cfg.floor.devices, agents, lamp,
     counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped') },
     cost: { today: round2(cost.today), month: round2(cost.month) }, budget: { ...cfg.floor.budget, ...fs_.budget, used: round2(fs_.budget.used) },
@@ -587,7 +587,7 @@ function independentState(b) {
   const count = (st) => agents.filter((a) => a.state === st).length;
   const reg = ind.loadRegistry();
   return { attention, lives, summary: {
-    id: ind.FLOOR_ID, number: building.INDEPENDENT_FLOOR, independent: true, name: INDEPENDENT_NAME, path: '',
+    id: ind.FLOOR_ID, number: building.INDEPENDENT_FLOOR, independent: true, name: INDEPENDENT_NAME, tagline: 'agents on their own', path: '',
     goal: 'Claude Code agents already running on this machine on their own. Adopt one into a squad to make it part of a team.',
     accent: '#5d6687', layout: 'open-space', workflow: 'independent', desks: [], devices: floors.defaultDevices(), agents,
     lamp: attention.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped',
