@@ -408,6 +408,14 @@ Brief: `PHASE-2.5-RITUALS.md` (concepts from CLAW3D and gstack, our own text and
 - The Needs you popover is an index with a one-line preview; for dialogs the preview shows the question, not the dialog's header.
 - Tests: `test/convo.test.js` (previews, bubbles, actions per kind, n of m, markdown and safe links). Screenshots (swap 73 %): `playground/reference/convo-finished-1440.png`, `convo-question-1440.png`, `convo-finished-390.png`, `convo-index-1440.png`.
 
+### 0.5.3: office rituals in 3D
+- **Meeting table** (`meeting-table` device with six chairs): in the default office, and added once to arranged offices (`upgradeDevices`), never twice.
+- **Meetings from the Log** (`server/rituals.js`): `sprint.planned` and `retro.done` gather the whole team, `plan.reviewed` the lead plus designer, security and QA, `task.delegated` from the lead to a teammate is a briefing (two agents), and `standup.held` the team. The log tick keeps the current meeting per Floor and the Floor summary carries it. In 3D the agents involved walk to the seats, sit and talk in turns, then walk back (`ui/life.js`). An agent waiting for the owner stays at its desk.
+- **Standup**: daily at the Floor's time (default 09:30, `floor.json` `standup`), from the Log since the last standup plus the live state. It lists done (commits, DONE rows, QA passes, closed bugs, reports), doing (IN_PROGRESS rows, the current activity) and blocked by (open bugs, escalations, unanswered questions, waiting for the owner). It is logged as `standup.held` (a quiet day is recorded but nobody meets), shown in the Standup tab, and available live at `GET /api/floors/:id/standup`. The optional haiku summary from the brief is not built: the standup needs no model.
+- **Follow agent**: `#/floor/<id>/desk/<agent>/follow`, a perspective chase camera that eases after the agent (desk, lounge, meetings), with a bar for previous and next agent, Desk and Back (Esc).
+- **Diffs on screens**: an Edit or MultiEdit peek keeps the replaced lines (`old`), and the server keeps the edit's own lines next to the file window (`added`). Developer monitors draw the diff. The lead's board screen and QA's screens have a strip "QA n/m passed · sprint-N → main · last merge …" (`ui/screen-model.js`).
+- Tests: `test/rituals.test.js` (meetings, standup due, standup content), retro-squad (a planned sprint gathers the team, the standup is held once a day), floors (the meeting table upgrade), transcripts (edit peeks keep the replaced lines), convo (diff lines, merge strip). Screenshots (swap 72 %): `playground/reference/meeting-1440.png`, `meeting-390.png`, `standup-390.png`, `follow-1440.png`.
+
 ## How to run
 
 ```
