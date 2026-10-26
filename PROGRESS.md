@@ -512,6 +512,45 @@ Not the default look: the office is unchanged unless the URL says `?look=realist
   - conversation portraits with the polished chibi (`portrait.js` already builds it under `?look=realistic`);
   - a real GPU frame-time check.
 
+## 0.8.1: lighter in the browser (Phase 3.3 item 1, 26 Oct 2026)
+
+Measured first with `scripts/measure.js` (headless Chrome, read only). The owner's 8097 service needs the PIN even for reads, and I did not use the owner's PIN. So the owner's Floor was rebuilt in the playground as "DTamu replica" from its `floor.json`: `pods` layout, the same 13 devices plus the meeting table, and nine agents in the same roles.
+
+Numbers per frame (draw calls and triangles over all passes: shadow, main, AO normals):
+
+| Page | Before | After |
+|---|---|---|
+| Owner Floor replica, idle, default look | 3,379 calls · 1.10 M triangles · drew 1 tick in 3 (≈20 fps on a 60 Hz screen) | 1,341 calls · 0.68 M triangles (1,879 / 0.89 M when the shadow map is redrawn) · 0.2–0.3 frames/s idle |
+| Same, 7 agents working | drew 1 tick in 3 | every 2nd tick (30 fps), shadow map twice a second |
+| Same, realistic look | 6,395 calls · 8.4 M triangles · 143 textures · 279–565 MB heap | 2,431 calls · 6.7 M triangles · 59 textures · 320 MB heap |
+| Lobby | 10,399 calls · 3.1 M triangles | 3,760 calls · 1.56 M triangles |
+| Polls | 34 KB every 3 s | the same size, then every 6 s, then 10 s while nothing changes; open reads answer 304 when unchanged |
+
+DOM and scene work per poll was already small (2–4 ms) and stays so. Milliseconds per frame from headless Chrome are SwiftShader (CPU) numbers and are not shown as frame times. A real-GPU measurement is still to do.
+
+- **Render on demand** (`ui/scene.js`):
+  - every display frame while something moves (camera, input in the last 1.5 s, walking, first person, follow);
+  - every 2nd while agents type, wait or talk;
+  - none when everyone sits still.
+  - The office life still ticks twice a second without drawing, and hidden tabs draw nothing.
+  - A poll with identical data changes nothing.
+  - A stopped agent's dark screen is not redrawn.
+  - Rack LEDs only ask for a frame when the load changes.
+  - The camera counts as moved only when it really moved (OrbitControls kept reporting damping residue).
+- **Shadows:** the shadow map is redrawn only when the layout changes or a view opens, every 3rd frame while someone walks, and twice a second while agents type.
+- **Fewer draw calls:**
+  - A chibi's parts are merged per joint and material, outline shells included (≈76 meshes down to ≈30; mouth and cup stay separate).
+  - Stations, devices and the room are merged per material (`ui/merge.js`; screens, LEDs and instanced keys stay separate).
+  - The realistic look's textures are cached per set and loaded once per file.
+- **Quality:** pixel ratio 1.5 on High and 1 on Low. Auto decides from 30 back-to-back frames and stays on Low once it drops. No ambient occlusion in the Lobby.
+- **Polls:** open reads (building, Floors) carry an ETag (`no-cache`, 304 when unchanged); reads behind the PIN stay `no-store`. The UI polls every 3 s, then 6 s, then 10 s while nothing but the machine meter changes, and is back to 3 s on any change, click or key.
+- **Not done in this release:**
+  - KTX2 and meshopt: gltfpack is refused by the permission check.
+  - LODs and simplified Lobby Floors beyond switching AO off.
+  - Patching only changed panels: the DOM work is already 2–4 ms per poll.
+- New counters: `scene.stats` (frames drawn, JS ms, screen redraws) and `ctx.stats` (poll fetch and render ms), read by `scripts/measure.js`.
+- Tests: `test/static-merge.test.js` (static merge in place, indices kept, screens and kept meshes untouched; a chibi under 45 meshes with its joints, mouth and cup) and an api test for the ETag and 304 (and no ETag behind the PIN). The `three` resolve hook for UI tests is in `test/three-hook.js`.
+
 ## How to run
 
 ```
