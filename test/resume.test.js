@@ -69,7 +69,7 @@ test('a lead killed by systemd-oomd: crashed on the Desk and in Attention; its t
   assert.equal(dev.standby, null);
   assert.equal(dev.crash.withLead, 'rina-pm');
   assert.match(dev.stopNote, /^stopped with the lead \(out of memory at \d\d:\d\d\) · last: editing src\/app\.js$/);
-  assert.equal(f.waitingFor, null, 'the docs gate is behind the squad');
+  assert.equal(f.waitingFor.kind, 'docs', 'the pending documents stay on the pill (the owner still approves them)');
   const att = squad.attentionItems().filter((a) => a.floorId === FLOOR && a.kind === 'crash');
   assert.equal(att.length, 1, 'one item for the lead, none for the teammate');
   assert.deepEqual(att[0].options.map((o) => o.label), ['Resume', 'Start fresh']);

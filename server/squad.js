@@ -142,11 +142,11 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
     // the turn ended with a plain-text message asking the owner for something: waiting for the owner's reply
-    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking, isLead: a === lead }) : null;
+    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead }) : null;
     if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
     if (reply) state = 'waiting';
     // teammates the lead has not spawned yet are not "stopped": they wait for the sprint (or the source documents)
-    const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking ? 'docs' : 'sprint') : null;
+    const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking && !squad.gate.passed ? 'docs' : 'sprint') : null;
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
     if (dialog && st?.ask?.questions?.length) {
@@ -175,8 +175,9 @@ function squadOf(root, floor) {
   const bp = blueprintsLib.floorBlueprint(root, floor.blueprint);
   if (floor.workflow !== 'squad-sprint' && !bp) return null;
   const gate = bp ? blueprintsLib.docsGate(root, bp) : { blocking: false, pending: [] };
-  // once a sprint has started the gate is behind the squad, even if a later document is still a draft
-  return { gate: gate.blocking && sprint.sprintStarted(root) ? { ...gate, blocking: false, passed: true } : gate };
+  // once a sprint has started the gate no longer holds the squad (passed), even if a later document is still a draft;
+  // the pending documents stay on the Floor pill until the owner approves them
+  return { gate: gate.blocking && sprint.sprintStarted(root) ? { ...gate, passed: true } : gate };
 }
 export const STANDBY_TEXT = { sprint: 'not started: the lead starts them when the sprint begins', docs: 'waiting for source documents' };
 
