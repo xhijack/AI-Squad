@@ -22,6 +22,8 @@ import * as voice from './voice.js';
 import * as backup from './backup.js';
 import { runDoctor } from './doctor.js';
 import * as service from './service.js';
+import * as auth from './auth.js';
+import * as jobs from './jobs.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -91,6 +93,15 @@ const routes = [
   ['GET', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); return { settings: s, defaultDir: backup.defaultDir(), status: backup.readStatus(), encrypted: !!backup.storedPassphrase(), backups: backup.listBackups(s.dir || backup.defaultDir()).slice(0, 30) }; }, { pin: true }],
   ['POST', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const r = backup.createBackup({ out: s.dir || backup.defaultDir(), passphrase: backup.storedPassphrase(), logs: s.logs }); return { ok: true, ...r }; }, { pin: true }],
   ['POST', /^\/api\/backups\/verify$/, (p, b) => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const dir = s.dir || backup.defaultDir(); const f = backup.listBackups(dir).find((x) => x.name === String(b.name || '')); if (!f) throw notFound('Backup not found'); return backup.verifyBackup(f.file, { passphrase: backup.storedPassphrase() }); }, { pin: true }],
+  // Claude sign-in of background runs (docs/BILLING.md); the API key is write-only
+  ['GET', /^\/api\/auth$/, () => ({ ...auth.cleanAuth(building.loadBuilding().prefs.auth), key: auth.keyStatus(), modes: auth.MODES }), { pin: true }],
+  ['PATCH', /^\/api\/auth$/, (p, b) => { building.setPrefs({ auth: auth.cleanAuth(b) }); return { ...auth.cleanAuth(building.loadBuilding().prefs.auth), key: auth.keyStatus() }; }, { pin: true }],
+  ['PUT', /^\/api\/auth\/key$/, (p, b) => ({ key: auth.setApiKey(b.key) }), { pin: true }],
+  ['DELETE', /^\/api\/auth\/key$/, () => ({ key: auth.clearApiKey() }), { pin: true }],
+  // background jobs (headless runner)
+  ['GET', /^\/api\/jobs$/, (p, b, req) => { const q = new URL(req.url, 'http://x').searchParams; return { jobs: jobs.listJobs({ floorId: q.get('floor') || '', agentId: q.get('agent') || '', limit: 50 }).map(({ prompt, ...j }) => j) }; }, { pin: true }],
+  ['GET', /^\/api\/jobs\/(j-[\w-]+)$/, ([id]) => jobs.jobDetail(id), { pin: true }],
+  ['POST', /^\/api\/jobs\/(j-[\w-]+)\/stop$/, ([id]) => { const j = jobs.stopJob(id); squad.logJobEnded(j); return { ok: true, job: j }; }, { pin: true }],
   ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => b), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber() })],
   ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
   ['POST', /^\/api\/floors\/([\w-]+)\/skills\/install$/, ([id], b) => squad.installSkills(id, b.names || b.name), { pin: true }],
@@ -184,6 +195,7 @@ const routes = [
   ['POST', /^\/api\/floors\/([\w-]+)\/docs\/changes$/, ([id], b) => squad.requestDocChanges(id, b.path, b.text), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/resume$/, ([id, a], b) => squad.resumeAgent(id, a, { guard: !b.force }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/stop$/, ([id, a]) => squad.stopAgent(id, a), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/jobs$/, ([id, a], b) => ({ ok: true, job: squad.startAgentJob(id, a, squad.withAttachments(String(b.prompt || '').trim(), b.attachments), { budgetUsd: b.budgetUsd, permissionMode: b.permissionMode, guard: !b.force }) }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/task$/, ([id, a], b) => squad.sendTask(id, a, b.text, b.attachments), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/work-done$/, ([id, a]) => { squad.clearWork(id, a); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/attachments$/, async ([id], b, req) => {

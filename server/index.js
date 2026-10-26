@@ -16,6 +16,8 @@ import { loadBuilding } from './building.js';
 import { meter } from './meter.js';
 import { migrate } from './schema.js';
 import * as backup from './backup.js';
+import * as jobs from './jobs.js';
+import { logJobEnded } from './squad.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -52,6 +54,9 @@ setInterval(() => { autoResumeTick().then((done) => { for (const r of done) cons
 const rotateLogs = () => { try { maintainLogs({ retentionDays: Number(loadBuilding().prefs.logRetentionDays) || DEFAULT_RETENTION_DAYS }); } catch (e) { console.error('[log]', e.message); } };
 setTimeout(rotateLogs, 10000).unref();
 setInterval(rotateLogs, 3600e3).unref();
+// background jobs (headless runner): an ended job goes to the Squad Log; old jobs are cleared once a day
+setInterval(() => { try { for (const j of jobs.jobsTick()) { logJobEnded(j); console.log(`[job] ${j.id} ${j.status}${j.error ? `: ${j.error}` : ''}`); } } catch (e) { console.error('[job]', e.message); } }, 3000).unref();
+setInterval(() => { try { jobs.pruneJobs(); } catch { /* next day */ } }, 864e5).unref();
 // nightly backup (Building settings → Backups) and a monthly read-back check of the newest one
 setInterval(() => {
   try { const r = backup.backupTick(loadBuilding().prefs.backup); if (r.backup) console.log(`[backup] ${r.backup.ok ? r.backup.file : `failed: ${r.backup.error}`}`); if (r.verify) console.log(`[backup] check of ${r.verify.file}: ${r.verify.ok ? 'ok' : r.verify.errors.join('; ')}`); }

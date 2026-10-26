@@ -36,6 +36,9 @@ import * as design from './design.js';
 import * as voice from './voice.js';
 import * as usageLib from './usage.js';
 import * as backupLib from './backup.js';
+import * as jobsLib from './jobs.js';
+import * as auth from './auth.js';
+import { runnerFor } from './runner.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -387,7 +390,7 @@ function floorState(entry, opts = {}) {
   const squad = squadOf(entry.path, cfg.floor);
   const lives = liveAgents(entry, cfg.team, sessions, { ...opts, squad });
   const cost = costFor(entry.id, entry.path);
-  return { entry, cfg, lives, cost, squad, usage: opts.usage || null, attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
+  return { entry, cfg, lives, cost, squad, usage: opts.usage || null, jobs: (opts.jobs || []).filter((j) => j.floorId === entry.id), attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
 }
 
 const round2 = (n) => +(+n || 0).toFixed(2);
@@ -399,6 +402,13 @@ function summary(fs_) {
   const repoList = reposLib.readRepos(entry.path);
   const agents = lives.map((l) => ({ ...agentView(entry.path, l, cost), repos: repoList.filter((r) => r.access === 'write' && r.agents.includes(l.agent.id)).map((r) => r.id),
     usage: (l.running && fs_.usage?.get(l.session)) || null }));      // RAM and CPU of its processes (server/usage.js)
+  // a background job (headless runner) makes a stopped agent "working" and says what it does
+  for (const a of agents) {
+    const j = (fs_.jobs || []).find((x) => x.agentId === a.id);
+    if (!j) continue;
+    a.job = { id: j.id, title: j.title, startedAt: j.startedAt, activity: j.activity };
+    if (!a.running && a.state !== 'waiting') { a.state = 'working'; a.activity = `background: ${j.activity || j.title}`; }
+  }
   const count = (s) => agents.filter((a) => a.state === s).length;
   const asks = fs_.attention.filter((a) => !a.muted);
   const lamp = asks.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
@@ -431,7 +441,8 @@ export function buildingSnapshot() {
   const b = building.loadBuilding();
   const sessions = tm.listSessions();
   const usage = usageLib.sessionsUsage(sessions, meter.state.tree, tm.panePids);
-  const states = b.floors.map((e) => floorState(e, { sessions, usage }));
+  const running = jobsLib.runningJobs();
+  const states = b.floors.map((e) => floorState(e, { sessions, usage, jobs: running }));
   const res = wd.readResources();
   const attention = [
     ...wd.resourceWarnings(res).map((w) => ({ id: attId('resource', w.key), kind: 'resource', floorId: null, text: w.text, ts: res.ts })),
@@ -451,7 +462,7 @@ export function buildingSnapshot() {
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
     // agents running at once on this machine and what one session needs in RAM (measured)
-    limits: { maxAgents: recovery.buildingMax(b.prefs), running: sessions.length, session: usageLib.summary() },
+    limits: { maxAgents: recovery.buildingMax(b.prefs), running: sessions.length + running.length, sessions: sessions.length, jobs: running.length, session: usageLib.summary() },
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
       projectsDir: suggestProjectsDir(b), autopilot: { levels: autopilot.LEVELS, text: autopilot.LEVEL_TEXT, hardStop: autopilot.hardStopList(), defaultLevel: autopilot.DEFAULT_LEVEL } },
@@ -577,6 +588,7 @@ export function deskDetail(floorId, agentId) {
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(),
     usage: l.running && l.own ? usageLib.usageOf(meter.state.tree, tm.panePids(l.session)) : null,     // RAM and CPU of its processes
+    jobs: jobsLib.listJobs({ floorId, agentId, limit: 6 }).map(({ prompt, ...j }) => j),             // its background jobs
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
     attach: tm.attachCommand(l.session),
   };
@@ -618,7 +630,7 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
   // linked repositories: --add-dir for each, and every write denied in the read-only ones (Phase 3.4)
   const repos = floors.agentReposOf(entry.path, agentId);
   extraArgs.push(...reposLib.addDirArgs(repos));
-  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], extraArgs, env });
+  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], extraArgs, env });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -641,6 +653,38 @@ export async function resumeAgent(floorId, agentId, { guard = false, via = 'aisq
   const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
   const note = squadOf(entry.path, cfg.floor) && lead === agent ? recovery.recoveryMessage({ end, maxAgents: cfg.floor.recovery.maxAgents }) : '';
   return startAgent(floorId, agentId, note, { resume: sessionId, guard, via });
+}
+
+// a background job for an agent (headless runner): the same agent file, model, effort, denied tools and linked
+// repositories as on its Desk, a budget cap, no permission prompts (dontAsk, or acceptEdits when allowed).
+// guard: warn first (409) when the machine already runs its maximum of agents
+export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', guard = false, via = 'aisquad', kind = 'task', title = '', resume = '' } = {}) {
+  const { entry, cfg, agent } = locate(floorId, agentId);
+  if (!String(prompt || '').trim()) throw bad('The job needs a prompt');
+  const b = building.loadBuilding();
+  if (guard) {
+    snapCache.at = 0;
+    const snap = buildingSnapshot();
+    const warnings = recovery.startWarnings({ res: wd.readResources(), running: 0, maxAgents: 99, buildingRunning: snap.limits.running, buildingMax: snap.limits.maxAgents });
+    if (warnings.length) throw Object.assign(new HttpError(409, `${warnings.join(' ')} Start anyway?`), { data: { warnings } });
+  }
+  const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
+    ...floors.commitIdentity(agent, cfg.git), ...auth.backgroundEnv(b.prefs.auth) };
+  floors.generate(entry.path);
+  const eff = floors.effectiveOf(entry.path, agent);
+  const repos = floors.agentReposOf(entry.path, agentId);
+  const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume,
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], pluginDir: config.useHooks ? ROOT : '', extraArgs: reposLib.addDirArgs(repos) });
+  const job = runnerFor('headless').start({ floorId, agentId, kind, title, prompt, cwd: entry.path, args, env, model: eff.model, budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via });
+  logEvent(floorId, { type: 'job.started', agent: agentId, model: eff.model, data: { job: job.id, kind, title: job.title, budgetUsd: job.budgetUsd, permissionMode, via } });
+  invalidate();
+  return job;
+}
+// from the server's job tick: an ended job goes to the Squad Log
+export function logJobEnded(job) {
+  if (!job.floorId) return;
+  logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}) } });
+  invalidate();
 }
 
 const criticalWaiting = (floorId) => (snapCache.value?.attention || []).filter((a) => a.floorId === floorId && a.autopilot?.critical).length;
