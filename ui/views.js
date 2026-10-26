@@ -3,7 +3,7 @@
 // panel (desktop) or as tabs of the bottom sheet (phone).
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 
-const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge', crash: 'Stopped unexpectedly' };
+const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge', crash: 'Stopped unexpectedly', decided: 'Decided by autopilot' };
 
 // ---------- Attention ----------
 export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
@@ -15,6 +15,11 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       const who = esc(String(a.agentName || 'the agent').split(' - ')[0]);
       body = `<form class="replyForm" data-act="reply" data-id="${a.id}"><textarea name="text" rows="3" data-draft="${a.id}" placeholder="Reply to ${who}…" aria-label="Your reply to ${who}" required>${esc(drafts.get(a.id) || '')}</textarea>
         <div class="row"><span class="note grow">Sent to ${who} as the next task.</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}" title="Hide this until the agent asks again">Dismiss</button><button class="small gold">Send reply</button></div></form>`;
+    } else if (a.kind === 'decided') {
+      // a muted card: what Autopilot chose, the other options to change it, OK to keep it
+      body = `<div class="note">Decided automatically: <b>${esc(a.chosen)}</b></div>
+        <div class="row wrap" style="margin-top:8px">${a.options.length ? `<span class="note">Change answer:</span>${a.options.map((o) => `<button class="small" data-act="answer" data-id="${a.id}" data-n="${o.n}">${esc(o.label)}</button>`).join('')}` : ''}
+        <span class="spacer"></span><button class="small ghost" data-act="dismiss" data-id="${a.id}" title="Keep this decision">OK</button></div>`;
     } else if (a.kind === 'crash') {
       // Resume continues the agent's last session (the default after a crash); Start fresh loses its context
       body = `<div class="row wrap">${a.options.map((o) => `<button class="small ${o.n === 1 ? 'gold' : 'ghost'}" data-act="crash-answer" data-id="${a.id}" data-n="${o.n}">${o.n === 1 ? 'Resume' : 'Start fresh'}</button>`).join('')}
@@ -32,10 +37,23 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">Open desk</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">Open Floor</a>`);
     if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
+    body = apNote(a) + body;
     const text = a.kind === 'reply' ? `<div class="replyMsg md" data-scroll="reply-${a.id}" tabindex="0" aria-label="Message from ${esc(a.agentName || 'the agent')}">${mdLite(a.text)}</div>` : `<div class="q">${esc(a.text)}</div>`;
-    return `<div class="att ${a.kind} ${a.level || ''}"><div class="where">${where} · ${ago(a.ts)}</div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
+    return `<div class="att ${a.kind} ${a.level || ''}${a.muted ? ' muted' : ''}"><div class="where">${where} · ${ago(a.ts)}</div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
   }).join('');
 }
+
+// what Autopilot does with an item: critical ones wait for the owner; others are answered or nudged after the timeout
+function apNote(a) {
+  const ap = a.autopilot;
+  if (!ap) return '';
+  if (ap.critical) return `<div class="apNote crit">Critical${ap.reasons?.length && ap.reasons[0] !== 'unclear' ? ` (${esc(ap.reasons.join(', ').replace(/-/g, ' '))})` : ''}: Autopilot leaves this to you.</div>`;
+  if (!ap.auto) return '';
+  const min = Math.max(0, Math.ceil((ap.autoAt - Date.now()) / 60e3));
+  const what = a.kind === 'question' ? `answers "${esc(String(a.options.find((o) => o.n === ap.recommended)?.label || '').replace(/\s*\(recommended\)\s*/i, ''))}"` : 'asks the agent to decide';
+  return `<div class="apNote">Autopilot ${what} ${min ? `in ${min} min` : 'now'} if you do not.</div>`;
+}
+export const needsYou = (list) => (list || []).filter((a) => !a.muted);
 
 // ---------- Lobby ----------
 // one row per Floor: number badge in the Floor's colour, name, one status line, the lamp
@@ -57,13 +75,14 @@ export function lobbySections(b) {
   const out = [
     { id: 'floors', title: 'Floors', card: 'main', count: b.floors.length, html: `
       <button class="setupBtn" data-act="setup-squad"><svg><use href="#i-spark"/></svg><span><b>Set up Squad</b><small>Describe what you want to build; get a team and how it works together</small></span></button>
+      ${b.autopilotToday ? `<p class="note apDigest">Decided by autopilot today: <b>${b.autopilotToday}</b> <span class="note">(see each Floor's Squad Log)</span></p>` : ''}
       <div class="list">${floors.map(floorRow).join('') || '<div class="empty">No Floors yet.</div>'}</div>
       <div class="row" style="margin-top:8px"><span class="spacer"></span><button class="small ghost" data-act="new-floor" title="A Floor without a Blueprint, set up by hand">+ New Floor by hand</button></div>` },
     { id: 'detected', title: 'Detected', card: 'main', count: b.detected.length, html: `
       <p class="note" style="margin-top:0">Directories with Claude Code activity that are not Floors yet.</p>
       <div class="list">${detected || '<div class="empty">Nothing new detected.</div>'}</div>` },
   ];
-  if (b.attention.length) out.unshift({ id: 'attention', title: 'Needs you', card: 'top', count: b.attention.length, countClass: 'bad', html: attentionHtml(b.attention) });
+  if (b.attention.length) out.unshift({ id: 'attention', title: 'Needs you', card: 'top', count: needsYou(b.attention).length || undefined, countClass: 'bad', html: attentionHtml(b.attention) });
   return out;
 }
 
@@ -132,7 +151,7 @@ function independentFloorSections(f, deskAgentId) {
     { id: 'activity', title: 'Activity', icon: 'activity', card: 'tabs', html: feedHtml(f.feed || []) },
   ];
   const att = f.attentionItems || [];
-  if (att.length) sections.unshift({ id: 'f-attention', title: 'Needs you', card: 'top', count: att.length, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
+  if (att.length) sections.unshift({ id: 'f-attention', title: 'Needs you', card: 'top', count: needsYou(att).length || undefined, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
   return sections;
 }
 
@@ -147,7 +166,7 @@ export function floorSections(f, deskAgentId = null) {
   ];
   if (f.blueprint) sections.push({ id: 'standard', title: 'Standard', icon: 'doc', card: 'tabs', html: standardHtml(f.blueprint) });
   const att = f.attentionItems || [];
-  if (att.length) sections.unshift({ id: 'f-attention', title: 'Needs you', card: 'top', count: att.length, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
+  if (att.length) sections.unshift({ id: 'f-attention', title: 'Needs you', card: 'top', count: needsYou(att).length || undefined, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
   return sections;
 }
 

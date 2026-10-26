@@ -500,3 +500,18 @@ body.immersive #hud, body.immersive #dock, body.immersive #elevator { display: n
 .srcDoc .docText:focus-visible { outline: 2px solid var(--info); }
 .srcDoc .docChanges { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .srcDoc .docChanges textarea { width: 100%; }
+
+/* Autopilot: the level chip, notes on Attention items, decided items in a muted style */
+.hpill.ap { background: var(--card); color: var(--muted); border: 1px solid var(--line2); font-weight: 600; }
+.hpill.ap.balanced, .hpill.ap.full { color: var(--info); border-color: var(--info); }
+.hpill.ap.crit { color: var(--bad); border-color: var(--bad); }
+button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
+.att.decided { border-left-color: var(--line2); }
+.att.muted { background: var(--chip); }
+.att.muted .q { font-weight: 500; color: var(--muted); }
+.apNote { font-size: 12px; color: var(--info); margin: 2px 0 6px; }
+.apNote.crit { color: var(--bad); font-weight: 600; }
+.apLevels { margin: 6px 0 0; padding-left: 18px; }
+.apHard summary { cursor: pointer; font-size: 13px; margin-top: 8px; }
+.apDigest { margin: 0 0 8px; }
+@media (max-width: 760px) { .hpill.ap:not(.crit) { display: none; } }

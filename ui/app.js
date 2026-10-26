@@ -1,7 +1,7 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
 import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts } from './lib.js';
-import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml } from './views.js';
+import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
@@ -230,7 +230,7 @@ function updateInsets() {
 
 // ---------- hud (top-left status pill) ----------
 function hudHtml(b, route, f) {
-  const att = b.attention.length;
+  const att = needsYou(b.attention).length;
   const attPill = att ? `<button class="hpill alert" data-pop="attPop" aria-haspopup="true" aria-expanded="false">${icon('alert')}${att} need${att === 1 ? 's' : ''} you</button>` : '';
   const menu = `<button class="iconBtn" data-pop="menu" aria-haspopup="true" aria-expanded="false" title="Menu" aria-label="Menu">${icon('menu')}</button>`;
   if (route.mode === 'lobby' || !f) {
@@ -251,7 +251,15 @@ function hudHtml(b, route, f) {
   }
   return `<div class="bar"><a class="iconBtn" href="#/" title="Lobby" aria-label="Back to the Lobby">${icon('building')}</a><span class="lamp ${f.lamp}"></span>
     <b class="brand ellipsis">${f.number} · ${esc(f.name)}</b>${progress}<span class="sep"></span><span class="meta"><b>${active}</b>/${f.agents.length} active</span>
-    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="Floor menu" aria-label="Floor menu">${icon('more')}</button>`}${menu}</div>${warn}${attPill}`;
+    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="Floor menu" aria-label="Floor menu">${icon('more')}</button>`}${menu}</div>${warn}${apChip(f)}${attPill}`;
+}
+
+// the Floor's Autopilot level; when a critical item waits it says so (opens the Floor settings)
+function apChip(f) {
+  const ap = f.autopilot;
+  if (!ap || f.independent || f.missing) return '';
+  const name = ap.level[0].toUpperCase() + ap.level.slice(1);
+  return `<button class="hpill ap ${ap.level}${ap.critical ? ' crit' : ''}" data-act="floor-settings" title="${esc(ap.level === 'off' ? 'Autopilot is off: every question waits for you' : `Autopilot ${name}: non-critical questions are decided after ${Math.round(ap.timeoutSec / 60)} min`)}">Autopilot: ${name}${ap.critical ? ` · ${ap.critical} critical wait${ap.critical === 1 ? 's' : ''} for you` : ''}</button>`;
 }
 
 function floorMenuHtml(f) {
@@ -308,8 +316,8 @@ function render() {
   if (route.eyes) patch($('povText'), desk ? `<i class="dot ${desk.state}"></i> Through the eyes of <b>${esc(desk.displayName)}</b> · ${esc(desk.activity && desk.state !== 'stopped' ? desk.activity : STATE_TEXT[desk.state] || '')}` : 'First person view');
   patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
-  announceAttention(b.attention, route);
-  if (!$('attPop').hidden) patch($('attPop'), `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${b.attention.length}</span></div>${attentionHtml(b.attention)}`);
+  announceAttention(needsYou(b.attention), route);
+  if (!$('attPop').hidden) patch($('attPop'), `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${needsYou(b.attention).length}</span></div>${attentionHtml(b.attention)}`);
   if (!$('floorMenu').hidden && f) patch($('floorMenu'), floorMenuHtml(f));
   if (state.offline) toast('Server not reachable, retrying…');
 
@@ -402,7 +410,7 @@ function openPopover(id, anchor) {
   const el = $(id), r = anchor.getBoundingClientRect();
   if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
   if (id === 'attPop' && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch { /* unsupported */ } }
-  if (id === 'attPop') { el._html = null; patch(el, `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${state.building.attention.length}</span></div>${attentionHtml(state.building.attention)}`); }
+  if (id === 'attPop') { el._html = null; patch(el, `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${needsYou(state.building.attention).length}</span></div>${attentionHtml(state.building.attention)}`); }
   if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');

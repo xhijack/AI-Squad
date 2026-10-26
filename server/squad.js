@@ -334,7 +334,7 @@ export function buildingSnapshot() {
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
-      projectsDir: suggestProjectsDir(b) },
+      projectsDir: suggestProjectsDir(b), autopilot: { levels: autopilot.LEVELS, text: autopilot.LEVEL_TEXT, hardStop: autopilot.hardStopList(), defaultLevel: autopilot.DEFAULT_LEVEL } },
   };
   snapCache = { at: Date.now(), value };
   return value;

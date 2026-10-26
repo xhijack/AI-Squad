@@ -13,7 +13,7 @@ ctx.actions['setup-squad'] = async () => {
   const [{ blueprints, squadsDir, nextFloorNumber }, { templates }] = await Promise.all([api('GET', '/api/blueprints'), api('GET', '/api/catalog')]);
   const order = ['software-house', 'digital-marketing', 'sales-crm'];
   blueprints.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-  s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
+  s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, autopilot: 'balanced', prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
     dirMode: 'new', path: '', pathTouched: false, startLead: true, installSkills: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
   draw();
 };
@@ -69,6 +69,7 @@ function folderHtml() {
     ${s.dirMode === 'new' ? `<p class="note">New squads go to <code>${esc(s.squadsDir)}</code> by default (a setting in <code>~/.aisquad/building.json</code>). <button type="button" class="small ghost" data-squadsdir>Change the default</button></p>` : ''}`;
 }
 
+const AUTOPILOT = [['balanced', 'Balanced (recommended)'], ['full', 'Full'], ['off', 'Off']];
 function reviewHtml() {
   const bp = bpOf(), lead = s.team.find((m) => m.lead);
   return `<div class="card" style="margin-top:12px"><dl class="kv">
@@ -79,7 +80,9 @@ function reviewHtml() {
       <dt>Team</dt><dd>${s.team.map((m) => `${esc(m.displayName)} <span class="note">(${esc(tplOf(m.template).title)})</span>`).join(', ')}</dd></dl></div>
     <p class="note">Creates the Floor files in <code>.claude/aisquad/</code>, an agent file per member in <code>.claude/agents/</code>, <code>AISQUAD.md</code> with the goal, the team and the Blueprint's communication standard, and the Blueprint's workflow pack.</p>
     <label class="inline"><input type="checkbox" id="ssSkills" ${s.installSkills ? 'checked' : ''}> Install the team's skills into <code>.claude/skills/</code> (${[...new Set(s.team.flatMap((m) => tplOf(m.template).skills || []))].length} skills)</label>
-    <label class="inline"><input type="checkbox" id="ssStart" ${s.startLead ? 'checked' : ''}> Start the lead after creating (it asks you for the source documents first)</label>`;
+    <label class="inline"><input type="checkbox" id="ssStart" ${s.startLead ? 'checked' : ''}> Start the lead after creating (it asks you for the source documents first)</label>
+    <label for="ssAutopilot">Autopilot</label><select id="ssAutopilot">${AUTOPILOT.map(([k, t]) => `<option value="${k}" ${s.autopilot === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <p class="note">${esc(ctx.state.building?.options?.autopilot?.text?.[s.autopilot] || '')} Critical items (money, legal, production, deleting data, scope) always wait for you.</p>`;
 }
 
 function draw(error = '') {
@@ -125,7 +128,7 @@ function collect() {
     if (lead) s.team.forEach((m, i) => { m.lead = i === +lead.dataset.lead; });
   }
   if (s.step === 2) s.path = v('ssPath').value.trim();
-  if (s.step === 3) { s.startLead = v('ssStart').checked; s.installSkills = v('ssSkills').checked; }
+  if (s.step === 3) { s.startLead = v('ssStart').checked; s.installSkills = v('ssSkills').checked; s.autopilot = v('ssAutopilot').value; }
 }
 
 async function next() {
@@ -150,7 +153,7 @@ async function next() {
   if (s.step < STEPS.length - 1) { s.step++; return draw(); }
   s.busy = true; draw();
   try {
-    const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead, installSkills: s.installSkills });
+    const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead, installSkills: s.installSkills, autopilot: s.autopilot });
     closeModal();
     toast(`Floor ${r.number} created${r.leadStarted ? '; the lead is starting' : r.leadError ? `; the lead did not start: ${r.leadError}` : ''}`, 5000);
     location.hash = r.lead ? `#/floor/${r.id}/desk/${r.lead}` : `#/floor/${r.id}`;
