@@ -94,7 +94,7 @@ async function show(id) { S.current = await api('GET', `/api/floors/${S.floorId}
 async function refresh() {
   const r = await api('GET', `/api/floors/${S.floorId}/audits`);
   const wasRunning = !!S.running;
-  Object.assign(S, { list: r.audits, running: r.running, sprints: r.sprints, settings: r.settings, models: r.models });
+  Object.assign(S, { list: r.audits, running: r.running, sprints: r.sprints, settings: r.settings, models: r.models, ledger: r.ledger || [] });
   S.model ||= r.settings.model;
   if (wasRunning && !r.running && r.audits[0]) { toast('Audit finished'); S.current = await api('GET', `/api/floors/${S.floorId}/audits/${r.audits[0].id}`); }
   if (!S.current && r.audits[0]) S.current = await api('GET', `/api/floors/${S.floorId}/audits/${r.audits[0].id}`);
@@ -113,7 +113,9 @@ function watch() {
 }
 
 ctx.actions.audit = async () => {
-  S = { floorId: ctx.state.route.floorId, list: [], current: null, running: null, sprints: [], settings: {}, models: [], sprint: '', model: '', poll: null };
+  S = { floorId: ctx.state.route.floorId, list: [], current: null, running: null, sprints: [], settings: {}, models: [], ledger: [], sprint: '', model: '', poll: null };
+  // after a decision: the history, the ledger and the shown audit (with its decisions) again
+  S.reload = async () => { await refresh(); if (S.current) S.current = await api('GET', `/api/floors/${S.floorId}/audits/${S.current.id}`); draw(); };
   await refresh();
   draw();
   if (S.running) watch();

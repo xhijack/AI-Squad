@@ -151,3 +151,12 @@ Object.assign(ctx.actions, {
     toast('Agent removed'); location.hash = `#/floor/${floorId()}`;
   },
 });
+
+// a newer Blueprint version (for example lessons applied from an audit): new snapshot, standard and agent files
+ctx.actions['blueprint-update'] = async () => {
+  const bp = ctx.state.floor?.blueprint;
+  if (!bp || !confirm(`Update this Floor to ${bp.title} v${bp.latest}? AISQUAD.md and the agent files get the new standard; running agents read it on their next start.`)) return;
+  const r = await api('POST', `/api/floors/${floorId()}/blueprint/update`);
+  toast(`Blueprint updated to v${r.version}`);
+  ctx.refresh();
+};

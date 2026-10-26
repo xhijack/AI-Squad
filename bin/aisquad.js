@@ -110,6 +110,13 @@ function pickFloor(list, arg) {
 
 async function audit() {
   const rest = args.slice(args.indexOf('audit') + 1);
+  if (rest[0] === 'export') {
+    const { exportBundle } = await import('../server/improve.js');
+    const r = exportBundle();
+    console.log(`Exported ${r.audits} audit${r.audits === 1 ? '' : 's'} of ${r.floors} Floor${r.floors === 1 ? '' : 's'} and ${r.decisions} decision${r.decisions === 1 ? '' : 's'} to ${r.file}.`);
+    console.log('Anonymised: metrics, findings and decisions only; no message text or file contents; paths and ids are salted hashes. Nothing was uploaded: send the file to Sopwer yourself if you want to.');
+    return;
+  }
   const value = (k) => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : undefined; };
   const floorArg = rest.find((a, i) => !a.startsWith('--') && !['--sprint', '--model'].includes(rest[i - 1]));
   const { loadBuilding } = await import('../server/building.js');

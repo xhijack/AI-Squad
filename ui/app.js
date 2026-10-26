@@ -12,6 +12,7 @@ import './meter.js';
 import './cost.js';
 import './log.js';
 import './audit.js';
+import './improve.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;

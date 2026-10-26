@@ -106,6 +106,7 @@ const DOC_STATE = { approved: ['ok', 'approved'], draft: ['warn', 'draft'], miss
 function standardHtml(bp) {
   const pending = bp.sourceDocs.filter((d) => d.status !== 'approved').length;
   return `<div class="row" style="margin-bottom:8px"><b class="grow">${esc(bp.title)} v${bp.version}</b>${pending ? `<span class="st idle">${pending} not approved</span>` : '<span class="st working">all approved</span>'}</div>
+    ${bp.latest > bp.version ? `<div class="row" style="margin-bottom:8px"><span class="chip info grow">Blueprint v${bp.latest} available</span><button class="small" data-act="blueprint-update">Update</button></div>` : ''}
     <p class="note" style="margin-top:0">Roles, channels, gates and the definition of done are in <code>AISQUAD.md</code> and in every agent's prompt.${pending ? ' The lead collects the source documents from you first.' : ''}</p>
     ${bp.sourceDocs.map((d) => `<div class="docRow"><span class="grow"><code>${esc(d.path)}</code><span class="note">${esc(d.purpose)}</span></span><span class="chip ${DOC_STATE[d.status][0]}">${DOC_STATE[d.status][1]}</span></div>`).join('')}`;
 }

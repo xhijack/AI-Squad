@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { readJson, writeJson, statOf, bad, notFound } from './util.js';
+import { readJson, writeJson, writeText, statOf, bad, notFound } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
 import * as tx from './transcripts.js';
@@ -20,6 +20,7 @@ import * as skillsLib from './skills.js';
 import * as collect from './collect.js';
 import * as squadLog from './log.js';
 import * as auditLib from './audit.js';
+import * as improve from './improve.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -304,7 +305,9 @@ function blueprintBoard(root) {
 }
 function blueprintInfo(root, ref) {
   const bp = blueprintsLib.floorBlueprint(root, ref);
-  return bp ? { id: bp.id, title: bp.title, version: bp.version, gates: bp.gates, sourceDocs: blueprintsLib.sourceDocsStatus(root, bp) } : null;
+  if (!bp) return null;
+  let latest = null; try { latest = blueprintsLib.getBlueprint(bp.id).version; } catch { /* not in the library */ }
+  return { id: bp.id, title: bp.title, version: bp.version, latest, gates: bp.gates, sourceDocs: blueprintsLib.sourceDocsStatus(root, bp) };
 }
 const readTextSafe = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
 
@@ -845,13 +848,14 @@ export function floorAudits(floorId) {
   const cfg = floors.readFloor(entry.path);
   const sprints = [...new Set(squadLog.read(floorId, { type: 'sprint', limit: 50000 }).map((e) => e.sprint).filter((x) => x != null))].sort((a, b) => a - b);
   const r = auditing.get(floorId);
-  return { audits: auditLib.historyOf(floorId).reverse(), running: r ? { since: r.since, sprint: r.sprint } : null, settings: cfg.floor.audit, sprints, models: floors.AUDIT_MODELS };
+  return { audits: auditLib.historyOf(floorId).reverse(), running: r ? { since: r.since, sprint: r.sprint } : null, settings: cfg.floor.audit, sprints, models: floors.AUDIT_MODELS,
+    ledger: improve.ledger({ floor: floorId }).reverse() };
 }
 export function floorAudit(floorId, auditId) {
   building.floorEntry(floorId);
   const a = auditLib.getAudit(floorId, auditId);
   if (!a) throw notFound('Audit not found');
-  return a;
+  return { ...a, decisions: improve.decisionsFor(floorId, a.id) };
 }
 
 // runs in the background; returns the promise of the audit (the CLI waits for it, the API does not)
@@ -865,6 +869,7 @@ export function startAudit(floorId, { sprint = null, model = '' } = {}) {
   auditing.set(floorId, { since: Date.now(), sprint: n });
   return auditLib.runAudit(floorId, auditInfo(entry, cfg), { sprint: n, model: m }).then((a) => {
     logEvent(floorId, { type: 'audit.done', sprint: n, data: { audit: a.id, findings: a.findings.length, cost: a.cost, model: a.model, ...(a.error ? { error: a.error } : {}) } });
+    improve.recordOutcomes(floorId, a);                // earlier applied changes get their "after" metrics
     return a;
   }).finally(() => auditing.delete(floorId));
 }
@@ -878,4 +883,34 @@ function runPendingAudits() {
     if (auditLib.listAudits(floorId).some((a) => a.range?.sprint === n)) continue;
     try { startAudit(floorId, { sprint: n }).then((a) => console.log(`[audit] ${floorId} sprint ${n}: ${a.error || `${a.findings.length} findings`}`), (e) => console.error('[audit]', e.message)); } catch (e) { console.error('[audit]', e.message); }
   }
+}
+
+// ---------- improvement loop (server/improve.js) ----------
+function floorRef(floorId) {
+  const entry = building.floorEntry(floorId);
+  return { id: floorId, root: entry.path, config: floors.readFloor(entry.path).floor };
+}
+export const findingProposal = (floorId, auditId, findingId) => improve.proposal(floorRef(floorId), auditId, findingId);
+export function applyFinding(floorId, auditId, findingId) {
+  const f = floorRef(floorId);
+  const d = improve.apply(f, auditId, findingId, { updateFloor: (patch) => floors.updateFloorConfig(f.root, patch) });
+  logEvent(floorId, { type: 'improvement.decided', data: { decision: 'applied', target: `${d.target.kind} ${d.target.id}`, version: d.versionCreated, finding: findingId, audit: auditId } });
+  invalidate();
+  return { ok: true, decision: d };
+}
+export function dismissFinding(floorId, auditId, findingId, reason) {
+  const d = improve.dismiss(floorRef(floorId), auditId, findingId, reason);
+  logEvent(floorId, { type: 'improvement.decided', data: { decision: 'dismissed', target: d.target ? `${d.target.kind} ${d.target.id}` : 'none', finding: findingId, audit: auditId, reason: d.reason } });
+  return { ok: true, decision: d };
+}
+// a newer Blueprint version (e.g. lessons applied from an audit) replaces the Floor's snapshot; pack files stay as they are
+export function updateFloorBlueprint(floorId) {
+  const entry = building.floorEntry(floorId);
+  const ref = floors.readFloor(entry.path).floor.blueprint;
+  if (!ref) throw bad('This Floor has no Blueprint');
+  const bp = blueprintsLib.getBlueprint(ref.id);
+  writeText(blueprintsLib.snapshotPath(entry.path), blueprintsLib.blueprintText(ref.id));
+  floors.updateFloorConfig(entry.path, { blueprint: { id: ref.id, version: bp.version } });
+  invalidate();
+  return { ok: true, version: bp.version };
 }

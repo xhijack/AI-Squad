@@ -71,6 +71,18 @@ export function getBlueprint(id) {
   return b;
 }
 export const blueprintText = (id) => readText(path.join(libraryDir(), id, 'blueprint.md'));
+const historyFile = (id, version) => path.join(libraryDir(), '.history', `${id}@${version}.md`);
+export const blueprintVersionText = (id, version) => (getBlueprint(id).version === version ? blueprintText(id) : readText(historyFile(id, version)));
+// a new version of a local Blueprint: the old text goes to .history, the version in the frontmatter goes up
+export function saveBlueprintText(id, text) {
+  const cur = getBlueprint(id);
+  const next = parseBlueprint(text, id);
+  if (next.id !== id) throw new Error('The Blueprint id cannot change');
+  writeText(historyFile(id, cur.version), blueprintText(id));
+  const bumped = String(text).replace(/^version:\s*\d+\s*$/m, `version: ${cur.version + 1}`);
+  writeText(path.join(libraryDir(), id, 'blueprint.md'), bumped);
+  return { id, version: cur.version + 1 };
+}
 // files of the Blueprint's workflow pack, relative to the project root
 export const packFiles = (b) => walk(path.join(b.dir, 'pack')).map((rel) => ({ rel, abs: path.join(b.dir, 'pack', rel) }));
 
