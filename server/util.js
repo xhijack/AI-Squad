@@ -15,7 +15,7 @@ export function writeText(file, text, mode) {
   fs.writeFileSync(tmp, text, mode ? { mode } : undefined);
   fs.renameSync(tmp, file);
 }
-export const writeJson = (file, data) => writeText(file, JSON.stringify(data, null, 2) + '\n');
+export const writeJson = (file, data, mode) => writeText(file, JSON.stringify(data, null, 2) + '\n', mode);
 
 // "Ramdani - Frappe Developer" -> "ramdani-frappe-developer"
 export function kebab(s, max = 48) {
