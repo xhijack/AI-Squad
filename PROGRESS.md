@@ -551,6 +551,27 @@ DOM and scene work per poll was already small (2–4 ms) and stays so. Milliseco
 - New counters: `scene.stats` (frames drawn, JS ms, screen redraws) and `ctx.stats` (poll fetch and render ms), read by `scripts/measure.js`.
 - Tests: `test/static-merge.test.js` (static merge in place, indices kept, screens and kept meshes untouched; a chibi under 45 meshes with its joints, mouth and cup) and an api test for the ETag and 304 (and no ETag behind the PIN). The `three` resolve hook for UI tests is in `test/three-hook.js`.
 
+## 0.8.2: nothing walks through desks (Phase 3.3 item 2, 26 Oct 2026)
+
+Why characters went through desks: the grid walk itself was safe (the old soak test proves it), but the office life around it added unchecked straight moves. On the owner's `pods` layout:
+- **Standing up teleported the character "behind the chair"** (0.95 × station scale back), even when that spot was in a neighbour's desk.
+- **Approach points could be unwalkable.** The grid then ended at the nearest free cell, possibly beyond a desk, and the last "docking" line went straight from there through it.
+- **No route meant a straight line.** When characters standing still blocked the only corridor, the walk fell back to straight through furniture. This is the case the soak test caught first.
+- **Leaving a meeting chair or the sofa** started inside the table's or sofa's margin.
+- **A walker that stopped short** of a taken approach point docked from where it stood.
+- **Footprints came from a fixed table.** The realistic plant is 1.13 × 1.06 m against 0.75 × 0.75 in the table.
+
+Fixed at the root (`ui/nav.js`, `ui/life.js`, `ui/scene.js`):
+- Footprints are measured from the devices actually built (in each device's frame). The grid is rebuilt with the Floor, so also once the models load and after every layout change. Edit Mode judges with the same sizes.
+- `approachPoint`: where a character stands before sitting down and after getting up is always walkable. It is searched outward from the seat, widening the angle when the way behind the chair is blocked. The straight step to the seat may touch only that seat: the own chair; the sofa, beanbag or meeting chair being sat on; its own desk just not touched.
+- Getting up from a sofa, beanbag or meeting chair first steps back to that approach point, as standing up from a desk does.
+- Spots on open floor (pantry, whiteboard, ping-pong) are reached on the grid, without any straight docking. A lounge spot that cannot be reached without touching other furniture is not offered.
+- No route around the people: route through the furniture only, and let avoidance handle the people. No route at all: wait and retry, never straight.
+- A walker stopped short of a taken approach point retries. After a long wait it steps onto the approach point, a visible hop but never through furniture.
+- Edit Mode's "cannot be reached" check uses the same approach points.
+
+Tests (`test/nav.test.js`): two ten-minute soaks of the real office life (`updateLife`, chibi rigs) on the owner's exact Floor. It uses the `pods` layout, nine agents, its 13 devices from `floor.json` (copied to `test/fixtures/dtamu-devices.json`: positions only) plus the meeting table. Agents switch between work and idle, and there are meetings. Every step, every character is checked against every footprint, allowing only the furniture it sits on. One run uses the footprint table, one the realistic look's measured furniture (`test/fixtures/realistic-sizes.json`). Zero penetrations, about 9,800 moves each.
+
 ## How to run
 
 ```
