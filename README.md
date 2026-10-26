@@ -242,6 +242,28 @@ Merges are done by The AI Squad server, never by an agent (decision D3). The pol
 
 For each branch with finished work (an agent's branch once its task is done and it is idle; feature branches once nobody has open work; a closed sprint branch) the server merges in a temporary worktree, runs the quality gate on the merged result, and refuses on conflicts, a red gate or a missing gate. Then it fast-forwards the main branch, pushes only when the push policy allows, and logs the attempt in `~/.aisquad/merges/<floor>.jsonl`. Failures appear in Attention. **Floor Settings → Merges** shows the policy, branches ready to merge (with **Merge now**) and the last merges. Automatic merges pause while free RAM is below the Watchdog limit.
 
+### Several repositories
+
+One squad = **one primary repository** (the Floor, `AISQUAD.md`, `docs/squad`, the board; the lead lives here) **plus linked repositories**, listed in `.claude/aisquad/repos.json` and shared through git:
+
+```json
+{ "version": 1, "repos": [
+  { "id": "bukutamu", "path": "../dtamu-bukutamu", "remote": "git@github.com:org/dtamu-bukutamu.git", "access": "read" },
+  { "id": "landing-page", "path": "../dtamu-landing-page", "access": "write", "agents": ["seo-writer"],
+    "branch": { "strategy": "feature-branches", "main": "main" }, "gate": "npm test" } ] }
+```
+
+- **Paths are relative** to the primary repository; absolute paths are refused. On a machine where a repository lives elsewhere, **Relink** it in Floor settings (kept in `~/.aisquad/building.json`, never in the repository). Missing on a new machine: **Clone** from its remote.
+- **read**: the agents get the folder with `--add-dir` for context, and every write there is denied at start time. That covers Edit, Write, MultiEdit and NotebookEdit on its path, and git writes through `git -C` or `cd … &&`. Change requests go into the module handoff for that repository's maintainer. With no agents listed, a read repository is context for everyone.
+- **write**: only the listed agents edit and commit there, on their sprint branch. Never pushed.
+- **Merges and gates per repository**: each write repository has its own quality gate, its own automatic-merge approval and its own merge log. It merges with the Floor's merge method.
+- The lead plans for every repository and names the repository of each module in PLAN and TASKS. The Log records the repository of every tool call and commit (filter `repo=…`, or `repo=primary`), and the Audit has a per-repository table.
+- In the UI:
+  - Set up Squad → Folder: "+ Add linked repository" (a path or a clone URL, access, agents);
+  - Floor settings → Repositories: status (branch, ahead/behind, uncommitted), Clone, Relink, approval;
+  - the Desk's Profile and the name tag show an agent's repositories, and a name plate on the desk shows those it writes in.
+- Changes apply when an agent next starts or resumes; running sessions keep what they started with.
+
 ### Squad Sprint
 
 Choosing the Squad Sprint workflow scaffolds the optional pack into the project (existing files are never overwritten): `.claude/squad/config.sh` (sprint number, test command, team ids kept in sync with `team.json`), the `TaskCompleted` and `TeammateIdle` gate hooks (merged into `.claude/settings.json`), a `/sprint` command, and the `docs/squad` board (PLAN, TASKS, QUESTIONS, handoff, qa, bugs and templates including RELEASE). It also merges permission rules for the squad's normal work (edit and write files, `node`, the quality gate, the git commands it needs; deny `.env`, `git push`, `reset --hard`, `rm -rf`), because teammates run as background agents that cannot answer prompts. Use the **Sprint Lead**, **Sprint Developer** and **Sprint QA** templates (the wizard's **+ Squad Sprint team** adds them). The gate hooks are small Node scripts. Marking a BUILD, BUG or QA row DONE in `docs/squad/TASKS.md` is checked after every change to that file, whatever tool made it: rows that fail the gate are put back and the agent is told why. TaskCompleted runs the same checks for Claude Code versions with a team task list.

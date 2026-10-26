@@ -677,6 +677,48 @@ A 10-minute docker build or e2e run writes nothing to the transcript, so the age
 - Screenshots: `playground/reference/task-0.8.8-desk.png`, `task-0.8.8-hourglass.png` (task data injected in the page for the picture).
 - One existing test (`Autopilot off: nothing is answered or nudged`) failed once under the full suite's load and passed on the rerun and alone. It waits for a fake agent's question in tmux, so it is timing-sensitive, not related to this change.
 
+## Phase 3.4: one squad, several repositories, 0.9.0 (26 Oct 2026)
+
+Decision: one squad = one primary repository + linked repositories (`.claude/aisquad/repos.json`, shared through git).
+
+- **`server/repos.js`.** Validation:
+  - relative paths only (absolute, `C:` and `~` paths refused);
+  - access `read` or `write` (anything else refused);
+  - `https`, `ssh` or `git@` remotes; known agent ids; no duplicate ids.
+  - Branch strategy as in `git.json` (`agent-branches`, `feature-branches`, `trunk`), the main branch, and a gate command.
+- **Local paths.** The absolute path per machine is resolved locally: relative to the primary, or a Relink override in `~/.aisquad/building.json` (`building.setRepoPath`). Missing: Clone from the remote. Status: branch, ahead/behind, uncommitted.
+- **Access per agent:**
+  - a write repository only for its listed agents;
+  - a read repository for its listed agents, or for everyone when none are listed;
+  - the lead gets all of them for planning, read access unless it is assigned to a write one.
+- **At start** (`startAgent`), each agent gets `--add-dir` for each of its repositories. For read-only ones, its `--disallowedTools` gains:
+  - `Edit`, `Write`, `MultiEdit` and `NotebookEdit` on `//abs/**`;
+  - git writes (commit, push, add, reset, checkout, …) through `git -C <path>` and `cd <path> &&`, for the absolute and the relative path.
+  - Limits: shell commands that write a file without git (`sed -i`, `>`) are not caught by Claude Code's prefix rules. The agent file and AISQUAD.md tell the agent the repository is read-only.
+- **Agent files** get a "Repositories" section: access, branch, gate, "never push", and for read-only "a change it needs goes into the module handoff". The lead also learns to name the repository of every module in PLAN and TASKS, and that gates, QA and merges run per repository. AISQUAD.md lists the repositories.
+- **Merges and gates per repository.** Each write repository has its own approval (`floorId~repoId`), quality gate and merge log, the Floor's merge method, and is never pushed. Manual merges come from the API (`POST /api/floors/:id/merges { branch, repo }`); automatic ones run in the merge tick (approved, a gate set, finished work of its agents).
+- **Log and Audit.** Tool calls (a file inside a linked repository, or a command naming its path), linked-repository commits and merges carry `repo`. `log.read` filters by `repo` (or `primary`), and the Audit has a "Per repository" table.
+- **API:** `GET/PUT /api/floors/:id/repos`, `PATCH /api/floors/:id/repos/:repo` (`{ path }` relink, `{ approved }`), `POST /api/floors/:id/repos/:repo/clone`.
+- **UI:**
+  - Floor settings → Repositories: edit path, remote, access, main branch, strategy, gate and agents; status; Clone, Relink; "Merge automatically after its gate passes".
+  - Set up Squad → Folder: "+ Add linked repository" (a path, made relative to the squad folder, or a clone URL, which is cloned after creation; access; agents).
+  - The Desk's Profile lists the agent's repositories, the name tag shows "⎇ repo", and a name plate on the desk names the repositories it writes in.
+  - All copy is in English and Bahasa Indonesia.
+- **Playground:** "Multi-repo demo" (Floor 6) with `shared-contract` (read) and `landing-site` (write, Sari, gate `test -f README.md`). Screenshots: `playground/reference/repos-0.9.0-settings.png`, `repos-0.9.0-desk.png`.
+- **DTamu (first real use):** `dtamu-app/.claude/aisquad/repos.json` is written:
+  - `bukutamu` (`../dtamu-bukutamu`, read only, context for every agent, as dtamu-app's CLAUDE.md says the squad does not change it);
+  - `landing-page` (`../dtamu-landing-page`, write, feature branches, gate `npm test`, no agent assigned yet).
+  - The DTamu team has no SEO or content agent yet: add one and tick it under Repositories.
+  - Only that file was written. The agent files were not regenerated, so the running DTamu agents are untouched. It applies on their next start or resume, once the service runs 0.9.0 (8097 was not restarted). Nothing was committed in dtamu-app.
+- Tests:
+  - `test/repos.test.js`: validation, local paths, access per agent, `--add-dir`, deny rules, status and clone from a local bare remote;
+  - `test/repos-squad.test.js`, end to end with the fake Claude:
+    - the agent file sections, AISQUAD.md and the start arguments (add-dir, read-only denies);
+    - relink;
+    - per-repository approval, a green merge and a refused red gate (main untouched), read-only never merged, merges logged with their repo;
+    - the Log's repo tags.
+  - 307 tests pass.
+
 ## How to run
 
 ```
