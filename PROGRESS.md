@@ -584,6 +584,16 @@ Tests (`test/nav.test.js`): two ten-minute soaks of the real office life (`updat
 - No CC0 modern laptop model was found (Poly Haven's only laptop is a 1990s one), so it is built in code, like the office chair; there is no new asset file.
 - Screenshots: `playground/reference/laptop-0.8.3-desk.png` (a desk facing the camera, default and realistic look) and `laptop-0.8.3-screen.png` (the Screen view of the same desk).
 
+## 0.8.4: a wider office (Phase 3.3 item 4, 26 Oct 2026)
+
+- The office is drawn 22 × 16 m instead of 16 × 13 m (`ui/layout.js`). Furniture and characters keep their size, so everything else spreads out:
+  - aisles between desks (pods: 2.9 m between neighbours instead of 2.1, the two rows 6 m apart instead of 4.9);
+  - room around the lounge, the meeting table and the pantry;
+  - windows and the brand wall move with the walls.
+- Saved desks and devices keep the original 16 × 13 coordinates. The UI spreads them out with `toRoom` when it draws a Floor, and Edit Mode turns them back with `toBase` when it saves. No `floor.json` is rewritten, and the server and the running 0.7.x service read the same files. Layout presets are scaled the same way.
+- Navigation and Edit Mode work in the wider room (`ROOM` follows `FW` and `FD`), and the camera frames the larger room by itself (Floor, Desk and Lobby views). The office life soak on the owner's layout runs in the wider room and still finds no penetrations.
+- Screenshots: `playground/reference/wider-0.8.4-owner-floor.png` (owner's layout, after), `wider-0.8.4-before-owner-floor.png` (before) and `wider-0.8.4-realistic-rows-lobby.png`.
+
 ## How to run
 
 ```
