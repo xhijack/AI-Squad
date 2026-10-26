@@ -21,7 +21,7 @@ const run = promisify(execFile);
 
 export const LAYOUTS = ['rows', 'pods', 'circle', 'open-space'];
 export const WORKFLOWS = ['free-team', 'squad-sprint'];
-export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack', 'pantry', 'tv', 'beanbag', 'pingpong', 'meeting-table'];
+export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack', 'pantry', 'tv', 'beanbag', 'pingpong', 'meeting-table', 'lamp'];
 export const DESK_DEVICES = ['laptop', 'dual-monitor'];
 export const BRANCH_STRATEGIES = ['agent-branches', 'feature-branches', 'trunk'];
 export const PUSH_POLICIES = ['never', 'after-merge', 'agents-may-push'];
@@ -54,6 +54,7 @@ export function defaultDevices() {
     { id: 'beanbag-1', type: 'beanbag', x: 2.3, z: 4.1, ry: .4 },
     { id: 'beanbag-2', type: 'beanbag', x: 7, z: 4, ry: -.4 },
     { id: 'pingpong-1', type: 'pingpong', x: -3.6, z: 4.4, ry: 0 },
+    { id: 'lamp-1', type: 'lamp', x: 6.7, z: 5.95, ry: 0 },
     // rituals: sprint planning, plan reviews, Retro, standups and briefings happen here (Phase 2.5)
     MEETING_TABLE,
   ];

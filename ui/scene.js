@@ -10,6 +10,7 @@ import { FW, FD, FH, floorY, desksFor } from './layout.js';
 import { makeScreen, drawScreen } from './screens.js';
 import { loungeSpots, updateLife, deskHome, seatRoot, MEETING_SEATS, meetingSeats } from './life.js';
 import { Quality, contactShadow } from './render.js';
+import { loadKit, kit, kitStamp } from './kit.js';
 import { deskProps, propsFor } from './props.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -172,6 +173,11 @@ const DEVICE_BUILDERS = {
       cyl(.03, .03, .45, mat('#9ca3af'), 0, .24, 0, c, 8);
     }
   },
+  lamp(g) {                                                                  // a standing lamp (KayKit lamp_standing when loaded)
+    cyl(.22, .26, .05, mat('#2f3a4a'), 0, .025, 0, g, 20);
+    cyl(.03, .03, 1.7, mat('#2f3a4a'), 0, .87, 0, g, 8);
+    cyl(.22, .32, .38, basic('#fde9c4'), 0, 1.82, 0, g, 20);
+  },
   'server-rack'(g) {
     box(.8, 2, .8, mat('#1f2937', { roughness: .5, metalness: .3 }), 0, 1, 0, g, .02);
     // two LED columns that follow the machine load (setLoad): CPU on the left, RAM on the right
@@ -183,12 +189,36 @@ const DEVICE_BUILDERS = {
   },
 };
 export const DEVICE_LABELS = { plant: 'Plant', whiteboard: 'Whiteboard', printer: 'Printer', coffee: 'Coffee machine', pantry: 'Pantry counter', bookshelf: 'Bookshelf',
-  sofa: 'Sofa', rug: 'Lounge rug', tv: 'TV', beanbag: 'Beanbag', pingpong: 'Ping-pong table', 'server-rack': 'Server rack', 'meeting-table': 'Meeting table' };
+  sofa: 'Sofa', rug: 'Lounge rug', tv: 'TV', beanbag: 'Beanbag', pingpong: 'Ping-pong table', 'server-rack': 'Server rack', 'meeting-table': 'Meeting table', lamp: 'Floor lamp' };
+
+// KayKit versions of the devices (ui/kit.js); a device without one, or before the models load, is procedural
+const add = (g, o) => { if (o) g.add(o); return o; };
+const KIT_CHAIR_TURN = Math.PI;              // KayKit chairs face -z; ours face the desk at +z
+const KIT_DEVICES = {
+  sofa: (g) => add(g, kit('couch_pillows', { w: 2.7 })),
+  rug: (g) => { const r = kit('rug_rectangle_stripes_A', { w: 4.2, d: 3.2, h: .03, uniform: false }); if (r) r.traverse((o) => { if (o.isMesh) o.castShadow = false; }); return add(g, r); },
+  plant: (g) => add(g, kit('cactus_medium_A', { h: 1.3 })),
+  bookshelf: (g) => add(g, kit('cabinet_medium_decorated', { w: 1.6 })),
+  lamp: (g) => add(g, kit('lamp_standing', { h: 2.1 })),
+  pantry: (g) => {
+    const parts = [kit('kitchencounter_straight_A_decorated', { w: 1.15 }), kit('kitchencounter_straight_A_decorated', { w: 1.15 }), kit('fridge_A', { w: 1.1 })];
+    if (parts.some((p) => !p)) return null;
+    parts.forEach((p, i) => { p.position.set(-1.15 + i * 1.15, 0, -.12); g.add(p); });
+    return g;
+  },
+  'meeting-table': (g) => {
+    const t = kit('table_medium_long', { w: 2.5, d: 1.55, h: .78, uniform: false });
+    if (!t) return null;
+    g.add(t);
+    for (const s of MEETING_SEATS) { const c = kit('chair_A', { h: 1.0 }); c.position.set(s.x, 0, s.z); c.rotation.y = s.face + Math.PI; g.add(c); }
+    return g;
+  },
+};
 
 function buildDevice(d) {
   const g = new THREE.Group();
   g.userData.device = d.id;
-  (DEVICE_BUILDERS[d.type] || DEVICE_BUILDERS.plant)(g, d);
+  if (!KIT_DEVICES[d.type]?.(g, d)) (DEVICE_BUILDERS[d.type] || DEVICE_BUILDERS.plant)(g, d);
   g.position.set(d.x, TOP, d.z); g.rotation.y = d.ry || 0;
   return g;
 }
@@ -236,8 +266,12 @@ function buildStation(agent, desk, accent) {
   g.position.set(desk.x, TOP, desk.z); g.rotation.y = desk.ry || 0; g.scale.setScalar(STATION_SCALE);
   g.userData.agent = agent.id;
   const lead = agent.lead || agent.kindOf === 'lead';
-  box(1.6, .07, .8, mat(lead ? '#8a5a35' : '#f4efe6', { roughness: .5 }), 0, .92, .62, g);         // desk
-  for (const x of [-.72, .72]) box(.06, .9, .66, mat('#2f3a4a', { metalness: .5, roughness: .4 }), x, .46, .62, g, .02);
+  const kd = kit(lead ? 'table_medium' : 'table_medium_long', { w: 1.6, d: .8, h: .955, uniform: false });   // KayKit desk when loaded
+  if (kd) { kd.position.set(0, 0, .62); g.add(kd); }
+  else {
+    box(1.6, .07, .8, mat(lead ? '#8a5a35' : '#f4efe6', { roughness: .5 }), 0, .92, .62, g);         // desk
+    for (const x of [-.72, .72]) box(.06, .9, .66, mat('#2f3a4a', { metalness: .5, roughness: .4 }), x, .46, .62, g, .02);
+  }
   const screens = [];
   // a screen = dark bezel + canvas plane facing the chair (-z); clicking it opens the over-the-shoulder view
   const screen = (x, y, z, w, h, rx, ry, part) => {
@@ -257,10 +291,14 @@ function buildStation(agent, desk, accent) {
     screen(0, 1.17, .76, .6, .38, .25, 0, 'main');
   }
   deskProps(g, agent, desk.device);
-  const chair = mat('#1f2937');
-  box(.62, .1, .6, chair, 0, .55, -.05, g, .04);                              // chair
-  box(.62, .6, .1, chair, 0, .9, -.33, g, .04);
-  cyl(.04, .04, .45, mat('#2f3a4a'), 0, .27, -.05, g, 8);
+  const kc = kit('chair_C', { h: 1.12 });
+  if (kc) { kc.position.set(0, 0, -.08); kc.rotation.y = KIT_CHAIR_TURN; g.add(kc); }
+  else {
+    const chair = mat('#1f2937');
+    box(.62, .1, .6, chair, 0, .55, -.05, g, .04);                              // chair
+    box(.62, .6, .1, chair, 0, .9, -.33, g, .04);
+    cyl(.04, .04, .45, mat('#2f3a4a'), 0, .27, -.05, g, 8);
+  }
   // state ring on the floor around the chair
   const ringMat = basic(STATE_RING[agent.state] || STATE_RING.stopped, { transparent: true, opacity: .55, depthWrite: false });
   const ring = new THREE.Mesh(new THREE.RingGeometry(.92, 1.04, 48), ringMat); ring.rotation.x = -Math.PI / 2; ring.position.set(0, .015, .2); g.add(ring);
@@ -330,11 +368,11 @@ function poseDesk(st, t, awake = false) {
 
 // ---------- floors ----------
 function sigOf(f) {
-  return JSON.stringify([f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf])]);
+  return JSON.stringify([kitStamp(), f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf])]);
 }
 
 function dispose(o) {
-  o.traverse((x) => { if (x.isCSS2DObject) x.element.remove(); if (x.geometry) x.geometry.dispose(); });
+  o.traverse((x) => { if (x.isCSS2DObject) x.element.remove(); if (x.geometry && !x.userData.kit) x.geometry.dispose(); });   // KayKit geometry is shared
   o.removeFromParent();
 }
 
@@ -396,6 +434,8 @@ export class BuildingScene {
 
     // rendering quality: Low (one pass, as before), High (environment light, AO, grading, SMAA), Auto
     this.quality = new Quality(this.renderer, this.scene, { hemi: this.hemi });
+    // KayKit furniture (one small GLB): the Floors are rebuilt with it once it has loaded
+    loadKit('./assets/kaykit/office.glb', () => { if (this.lastFloors) this.sync(this.lastFloors); });
     this.ray = new THREE.Raycaster();
     this.clock = new THREE.Clock();
     this.camAnim = null;
@@ -447,6 +487,7 @@ export class BuildingScene {
 
   // ---------- data sync ----------
   sync(floors) {
+    this.lastFloors = floors;
     const seen = new Set();
     for (const f of floors) {
       seen.add(f.id);

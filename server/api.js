@@ -18,7 +18,7 @@ import { recommend } from './recommend.js';
 import { createSquad, squadsDir } from './setup.js';
 
 const UI = path.join(ROOT, 'ui');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
 
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
@@ -43,7 +43,7 @@ function serveStatic(res, pathname) {
   const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
   const file = path.resolve(UI, rel);
   if (!file.startsWith(UI + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
-  if (rel.startsWith('vendor/')) {                         // vendored libraries never change: let the browser cache them
+  if (rel.startsWith('vendor/') || rel.startsWith('assets/')) {   // vendored libraries and assets (models, HDRI): let the browser cache them
     res.writeHead(200, { 'content-type': `${TYPES[path.extname(file)] || 'application/octet-stream'}; charset=utf-8`, 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff' });
     res.end(fs.readFileSync(file));
     return true;
