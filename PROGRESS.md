@@ -804,6 +804,16 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `test/scene-model.test.js` (projection = the three.js camera, headings, depth order, poses, the palette swap, Auto, a complete atlas).
 - Known limits: Iso has no first person, live screens, task props or shadows; desk sprites at 8 headings (a free rotation snaps to 45°); the Lobby stacks the Floors like the 3D dollhouse, so lower Floors are partly hidden. On the 2-core cloud machine with software GL, the 3D Lobby takes seconds per frame and can stall a headless page, so some 3D acceptance shots came out blank or hung; the Iso shots were fine, and `acceptance.json` now forces 3D explicitly (Auto would pick Iso for the 13 seeded agents). `scripts/chrome.js` now kills Chrome's whole process group, so no GPU process is left running after a script.
 
+## Phase 4, Sprint 8: the Office view and the List, 0.17.0 (27 Oct 2026)
+
+- **Office plan (`officeLayout` in `ui/scene-model.js`)**: departments by Floor number along the back with the Server room at the end, projects in rows in the middle (wrapped to the back row's width), the Lobby and the Owner's room in front; one room per Space sized to its agents (a 2-4 column desk grid facing the camera); `roomAt` for clicks. Tested: order, no overlaps, every desk inside its room, centred, the fixed rooms with no Spaces.
+- **Office drawing (`ui/office.js`, in the Iso Pixel renderer)**: carpet, rooms with low walls and the Space's accent, desks, chairs and agents in their state poses (typing frames), state rings, `?` bubbles, names when zoomed in; the Server room shows two racks and RAM/CPU bars; the Lobby a line of people for the queue; the Owner's room a desk and the approvals board. Room chips (Floor label, kind; queue; waiting for you; agents at once and free RAM). Clicks: a room opens its Space, an agent its Desk, the Lobby Admin → Dispatcher, the Owner's room the approvals, the Server room the meter.
+- **List view (`ui/list.js`)**: a third "renderer" of plain DOM with the same interface; summary tiles (waiting for you, queued, agents at once and free RAM), Departments / Projects / On their own, each agent's state and activity; taps open the Space or the Desk. Respects the panels' insets.
+- **Overviews**: the dock's Building · Office · List in the Lobby (remembered; the List by default on phones). The renderer host picks Iso for the Office and the List for the List; the Building keeps the chosen Scene view. Floors and Desks always use the chosen Scene view (Auto: Iso on phones). The page passes the queue, approvals and machine to the scene (`setCompany`).
+- **Acceptance**: Office (1440), List (390) and the Iso Building added to `acceptance-iso.json`; the 3D set forces the Building overview.
+- Checked in headless Chromium (Indonesian UI): Office and List on desktop and phone, a click on a room opens that Space, no page errors.
+- Not yet: agents walking from their department's room to a project's room (an agent is still one team member per Space; a shared identity across Spaces comes with the handoff bus), the golden-ratio split of plan and panel, and the Room zoom staying in Iso when the Scene view is 3D (it follows the Scene view).
+
 ## How to run
 
 ```

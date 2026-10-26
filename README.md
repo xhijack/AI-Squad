@@ -238,6 +238,16 @@ The first person, screen and follow views and Edit Mode always switch to 3D. The
 
 The sprites come from the 3D models: `node scripts/make-iso-sprites.js` renders `ui/dev/sprites.html` in headless Chrome and writes `ui/assets/iso/atlas.png` + `atlas.json` (devices, desks and chairs at 8 headings; every chibi style and pose twice, as a colour-key mask and a white shading pass, so each agent is painted in its own colours). Run it again when a model changes. The realistic look (`?look=realistic`) is frozen: no new features are built for it.
 
+### Building, Office and List (0.17)
+
+The Lobby has three overviews (the dock: **Building · Office · List**, remembered per browser):
+
+- **Building**: the Floors stacked as before, in the Scene view you chose (3D or Iso Pixel).
+- **Office**: the whole company on one floor plan, drawn in Iso Pixel. Departments along the back wall with the **Server room** at its end (this machine's racks with RAM and CPU bars, agents at once), projects in the middle (a room each, appearing and going with the project), the **Lobby** (the dispatcher's queue, people waiting in line) and the **Owner's room** (what waits for you) at the front. Every agent sits at a desk facing you, in its state; a `?` shows who needs you, names appear when you zoom in. A room opens its Space (in the Scene view you chose), an agent its Desk, the Lobby the queue, the Owner's room the approvals, the Server room the meter.
+- **List**: plain DOM, no canvas: what waits for you, the queue and the machine on top; departments, projects and independent agents with every agent's state and activity. A tap opens the Space or the Desk. The default on phones.
+
+Owner-only Spaces are left out for everyone else, as everywhere (0.14).
+
 ### Role Templates and overrides
 
 Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json` as a directory (`"path"`) or a git repository (`"url"`).
