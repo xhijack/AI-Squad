@@ -18,6 +18,7 @@ import './docs.js';
 import './retro.js';
 import './ship.js';
 import './design.js';
+import './health.js';
 import { attentionIndexHtml } from './convo.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';

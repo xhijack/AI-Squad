@@ -645,3 +645,11 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 /* linked repositories (Phase 3.4) */
 .nlabel .r { font-size: 10px; opacity: .8; margin-top: 1px; }
 .repoRow { margin: 8px 0; }
+
+/* Backups and health (0.10.0): doctor checks */
+ul.checks { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+ul.checks li { display: flex; gap: 10px; align-items: flex-start; }
+ul.checks .mark { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; font-size: 12px; }
+ul.checks li.ok .mark { background: var(--ok-soft); color: var(--ok-ink); }
+ul.checks li.warn .mark { background: var(--warn-soft); color: var(--warn-ink); }
+ul.checks li.fail .mark { background: var(--bad-soft); color: var(--bad); }
