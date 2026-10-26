@@ -66,3 +66,49 @@ export const hexRgb = (h) => { const n = parseInt(String(h).replace('#', '').pad
 
 // Auto picks Iso Pixel on phones, on devices with 4 GB or less and for big squads; three.js otherwise
 export const autoRenderer = ({ agents = 0, phone = false, memory = 8 } = {}) => (phone || memory <= 4 || agents > 12 ? 'iso' : 'three');
+
+// ---------- the Office view (0.17): the whole company on one floor plan ----------
+// Departments along the back wall with the Server room at its end, projects in rows in the middle, the Lobby
+// (the dispatcher's queue) and the Owner's room (approvals) at the front. Each Space is one room; its desks sit
+// in a compact grid facing the camera, so every agent is readable. Pure: the renderer only draws the result.
+export const DESK_DX = 2.4, DESK_DZ = 2.7, ROOM_PAD = 1.1, CORRIDOR = 2.2;
+const roomSize = (n) => {
+  const cols = Math.max(2, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, n))))), rows = Math.max(1, Math.ceil(n / cols));
+  return { cols, rows, w: Math.max(5.2, cols * DESK_DX + ROOM_PAD * 2), d: Math.max(5.2, rows * DESK_DZ + ROOM_PAD * 2) };
+};
+// spaces: [{ id, name, kind, number, agents: [{ id }] }] -> { rooms: [{ id, kind, x, z, w, d, desks: [{ agentId, x, z, ry }] }], w, d }
+// room kinds: department | project | server | lobby | owner. x, z: the room's back-left corner; the plan is centred.
+export function officeLayout(spaces, { maxRow = 30 } = {}) {
+  const rooms = [];
+  const place = (s, kind, x, z, size) => {
+    const desks = (s.agents || []).map((a, i) => ({ agentId: a.id, x: x + ROOM_PAD + DESK_DX / 2 + (i % size.cols) * DESK_DX, z: z + ROOM_PAD + 1.2 + Math.floor(i / size.cols) * DESK_DZ, ry: 0 }));
+    rooms.push({ id: s.id, kind, name: s.name || '', number: s.number, x, z, w: size.w, d: size.d, desks });
+  };
+  const deps = spaces.filter((s) => s.kind === 'department').sort((a, b) => a.number - b.number);
+  const projects = spaces.filter((s) => s.kind !== 'department').sort((a, b) => a.number - b.number);
+  // back row: departments, then the Server room
+  let x = 0, backD = 0;
+  for (const s of deps) { const sz = roomSize(s.agents?.length || 0); place(s, 'department', x, 0, sz); x += sz.w; backD = Math.max(backD, sz.d); }
+  rooms.push({ id: 'server', kind: 'server', x, z: 0, w: 4.4, d: Math.max(5.2, backD), desks: [] });
+  x += 4.4; backD = Math.max(backD, 5.2);
+  const width = Math.max(x, Math.min(maxRow, 22));
+  // middle: projects, wrapped into rows as wide as the back row
+  let z = backD + CORRIDOR, rx = 0, rowD = 0;
+  for (const s of projects) {
+    const sz = roomSize(s.agents?.length || 0);
+    if (rx > 0 && rx + sz.w > width) { z += rowD + CORRIDOR; rx = 0; rowD = 0; }
+    place(s, 'project', rx, z, sz); rx += sz.w + .6; rowD = Math.max(rowD, sz.d);
+  }
+  if (projects.length) z += rowD + CORRIDOR;
+  // front: the Lobby (queue) on the left, the Owner's room (approvals) on the right
+  rooms.push({ id: 'lobby', kind: 'lobby', x: 0, z, w: 8, d: 5.2, desks: [] });
+  rooms.push({ id: 'owner', kind: 'owner', x: Math.max(8.6, width - 6), z, w: 6, d: 5.2, desks: [{ agentId: '', x: Math.max(8.6, width - 6) + 3, z: z + 2.2, ry: 0 }] });
+  const W = Math.max(width, Math.max(8.6, width - 6) + 6), D = z + 5.2;
+  for (const r of rooms) { r.x -= W / 2; r.z -= D / 2; for (const d of r.desks) { d.x -= W / 2; d.z -= D / 2; } }
+  return { rooms, w: W, d: D };
+}
+// which room is under a floor point
+export const roomAt = (layout, x, z) => layout.rooms.find((r) => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d) || null;
+// the default overview: the list on phones, the building elsewhere (the person's choice wins)
+export const OVERVIEWS = ['building', 'office', 'list'];
+export const defaultOverview = ({ phone = false } = {}) => (phone ? 'list' : 'building');

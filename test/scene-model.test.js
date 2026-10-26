@@ -63,3 +63,24 @@ test('the atlas has every sprite the Iso renderer asks for', () => {
   assert.deepEqual(a.iso, [.587, .5576, .587], 'rendered from the 3D view\'s camera direction');
   assert.ok(fs.statSync(new URL('../ui/assets/iso/atlas.png', import.meta.url)).size < 1.5e6, 'the atlas stays small');
 });
+
+test('the Office plan: departments and the Server room at the back, projects in the middle, Lobby and Owner in front, no overlaps', () => {
+  const sp = (id, kind, number, n) => ({ id, kind, number, name: id, agents: Array.from({ length: n }, (_, i) => ({ id: `${id}-${i}` })) });
+  const spaces = [sp('sales', 'department', 2, 3), sp('mkt', 'department', 3, 1), sp('legal', 'department', 6, 2), sp('pos', 'project', 4, 5), sp('hr', 'project', 5, 2), sp('dtamu', 'project', 7, 9)];
+  const l = sm.officeLayout(spaces);
+  const by = (id) => l.rooms.find((r) => r.id === id);
+  assert.deepEqual(l.rooms.filter((r) => r.kind === 'department').map((r) => r.id), ['sales', 'mkt', 'legal'], 'by Floor number');
+  assert.ok(by('server').x > by('legal').x && by('server').z === by('sales').z, 'the Server room ends the back row');
+  for (const p of ['pos', 'hr', 'dtamu']) assert.ok(by(p).z > by('sales').z + by('sales').d, `${p} below the departments`);
+  for (const f of ['lobby', 'owner']) assert.ok(by(f).z > Math.max(...['pos', 'hr', 'dtamu'].map((p) => by(p).z)), `${f} in front`);
+  const overlap = (a, b) => a.x < b.x + b.w - 1e-6 && b.x < a.x + a.w - 1e-6 && a.z < b.z + b.d - 1e-6 && b.z < a.z + a.d - 1e-6;
+  for (const a of l.rooms) for (const b of l.rooms) if (a !== b) assert.ok(!overlap(a, b), `${a.id} overlaps ${b.id}`);
+  for (const r of l.rooms) for (const d of r.desks) assert.ok(d.x > r.x && d.x < r.x + r.w && d.z > r.z && d.z < r.z + r.d, `${r.id}: a desk outside its room`);
+  assert.equal(by('dtamu').desks.length, 9);
+  assert.ok(Math.abs(Math.min(...l.rooms.map((r) => r.x)) + l.w / 2) < 1e-6 && Math.abs(Math.min(...l.rooms.map((r) => r.z)) + l.d / 2) < 1e-6, 'centred');
+  const c = by('pos');
+  assert.equal(sm.roomAt(l, c.x + 1, c.z + 1).id, 'pos'); assert.equal(sm.roomAt(l, 1e3, 1e3), null);
+  assert.equal(sm.defaultOverview({ phone: true }), 'list'); assert.equal(sm.defaultOverview({}), 'building');
+  const empty = sm.officeLayout([]);
+  assert.deepEqual(empty.rooms.map((r) => r.kind), ['server', 'lobby', 'owner'], 'no Spaces yet: the fixed rooms');
+});
