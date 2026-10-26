@@ -129,9 +129,10 @@ const routes = [
   ['PATCH', /^\/api\/voice$/, (p, b) => squad.setVoiceSettings(b), { pin: true }],
   ['PUT', /^\/api\/voice\/key$/, (p, b) => { voice.setKey(b.key); return squad.voiceInfo(); }, { pin: true }],
   ['DELETE', /^\/api\/voice\/key$/, () => { voice.clearKey(); return squad.voiceInfo(); }, { pin: true }],
-  ['GET', /^\/api\/voice\/voices$/, async () => ({ voices: await squad.voiceList() }), { pin: true }],
+  ['GET', /^\/api\/voice\/voices$/, () => squad.voiceList(), { pin: true }],                     // { voices, error }
+  ['POST', /^\/api\/voice\/preview$/, async (p, b) => { const r = await squad.voicePreview(b); return r.audio ? { __audio: r.audio } : { ok: false, ...r }; }, { pin: true }],
   ['POST', /^\/api\/voice\/test$/, async () => { const r = await squad.voiceTest(); return r.audio ? { __audio: r.audio } : { ok: false, ...r }; }, { pin: true }],
-  ['POST', /^\/api\/voice\/speak$/, async (p, b) => { const r = await squad.speakLine(b); return r.audio ? { __audio: r.audio } : { ok: false, fallback: r.fallback, reason: r.reason, text: r.text }; }, { pin: true }],
+  ['POST', /^\/api\/voice\/speak$/, async (p, b) => { const r = await squad.speakLine(b); return r.audio ? { __audio: r.audio } : { ok: false, fallback: r.fallback, reason: r.reason, error: r.error || null, text: r.text }; }, { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/designs$/, ([id]) => squad.floorDesigns(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/designs\/([a-z0-9-]+)\/([\w.-]+\.html)$/, ([id, screen, file]) => ({ __file: squad.designVariantFile(id, screen, file), sandbox: true }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/designs\/([a-z0-9-]+)\/pick$/, ([id, screen], b) => squad.pickDesign(id, screen, String(b.file || ''), b.note), { pin: true }],

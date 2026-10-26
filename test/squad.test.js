@@ -118,3 +118,17 @@ test('Squad Sprint teammates the lead has not started are not "stopped"; the Flo
   // a Free Team Floor without a Blueprint keeps plain "stopped"
   assert.equal(fresh().floors.find((x) => x.id === 'acme').agents.find((a) => a.id === 'budi-dev').standby, null);
 });
+
+test('who speaks and how: the agent\'s language and voice settings, else the Floor\'s defaults, else auto', () => {
+  const agents = floors.readFloor(proj).team.agents, rina = agents.find((a) => a.lead), budi = agents.find((a) => !a.lead);
+  assert.deepEqual(squad.agentVoice('acme', budi.id).lang, 'auto');
+  floors.updateFloorConfig(proj, { voice: { lang: 'id', settings: { stability: .4 } } });
+  assert.deepEqual(squad.agentVoice('acme', budi.id), { voice: squad.agentVoice('acme', budi.id).voice, lang: 'id', vs: { stability: .4, similarity_boost: .8, style: 0, use_speaker_boost: true } }, 'the Floor default');
+  floors.updateAgent(proj, rina.id, { voiceLang: 'en', voiceSettings: { style: .3 } });
+  assert.equal(squad.agentVoice('acme', rina.id).lang, 'en', 'the agent\'s own');
+  assert.equal(squad.agentVoice('acme', rina.id).vs.style, .3);
+  floors.updateAgent(proj, rina.id, { voiceLang: 'klingon' });
+  assert.equal(floors.readFloor(proj).team.agents.find((a) => a.id === rina.id).voiceLang, undefined, 'an unknown language is dropped');
+  floors.updateAgent(proj, rina.id, { voiceSettings: null });
+  assert.equal(squad.agentVoice('acme', rina.id).vs.stability, .4, 'back to the Floor default');
+});

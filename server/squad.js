@@ -1192,13 +1192,24 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
 
 // ---------- voices (server/voice.js) ----------
 const voiceSettings = () => voice.cleanSettings(building.loadBuilding().prefs.voice || {});
-export const voiceInfo = () => ({ key: voice.keyStatus(), settings: voiceSettings(), usage: voice.usage(), models: voice.MODELS });
+// for Settings → Voice: the key (set, last 4), settings, this month's usage, the plan and what is left (needs the
+// user_read permission), ElevenLabs' last error with a hint, the models (and which take a language), languages
+export async function voiceInfo() {
+  const key = voice.keyStatus();
+  return { key, settings: voiceSettings(), usage: voice.usage(), account: key.set ? await voice.account().catch(() => null) : null, lastError: voice.lastApiError(),
+    models: voice.MODELS, langModels: voice.LANG_MODELS, languages: voice.LANGUAGES, voiceDefaults: voice.VOICE_DEFAULTS };
+}
 export function setVoiceSettings(input) { const s = voice.cleanSettings({ ...voiceSettings(), ...input }); building.setPrefs({ voice: s }); return voiceInfo(); }
 export const voiceList = () => voice.voices();
-// who speaks: the agent's voice (team.json), its role's default, or the Building default
-function agentVoice(floorId, agentId) {
-  if (!floorId || floorId === ind.FLOOR_ID) return voice.DEFAULT_VOICE;
-  try { const a = floors.readFloor(building.floorEntry(floorId).path).team.agents.find((x) => x.id === agentId); return voice.voiceFor(a); } catch { return voice.DEFAULT_VOICE; }
+// who speaks and how: the agent's voice (team.json), its role's default, or the Building default; its language and
+// voice settings, else the Floor's defaults, else auto and the defaults -> { voice, lang, vs }
+export function agentVoice(floorId, agentId) {
+  const base = { voice: voice.DEFAULT_VOICE, lang: 'auto', vs: voice.VOICE_DEFAULTS };
+  if (!floorId || floorId === ind.FLOOR_ID) return base;
+  try {
+    const cfg = floors.readFloor(building.floorEntry(floorId).path), a = cfg.team.agents.find((x) => x.id === agentId), fv = cfg.floor.voice || {};
+    return { voice: voice.voiceFor(a), lang: a?.voiceLang || fv.lang || 'auto', vs: a?.voiceSettings || fv.settings || voice.VOICE_DEFAULTS };
+  } catch { return base; }
 }
 // kind: finished | question | reply | shout | meeting | test; full: the whole message (the play button)
 // -> { audio } or { fallback, reason, text } (the browser then speaks the text itself, or stays silent)
@@ -1207,11 +1218,18 @@ export async function speakLine({ floorId = '', agentId = '', kind = 'finished',
   if (!full && floorId && s.mutedFloors.includes(floorId)) return { fallback: 'silent', reason: 'this Floor is muted', text: '' };
   if (!full && voice.quietNow(s)) return { fallback: 'silent', reason: 'quiet hours', text: '' };
   if (!full && s.onlyVisible && !visible) return { fallback: 'silent', reason: 'the tab is not visible', text: '' };
-  const r = await voice.speak({ text, voice: agentVoice(floorId, agentId), settings: s, full });
+  const who = agentVoice(floorId, agentId);
+  const r = await voice.speak({ text, voice: who.voice, lang: who.lang, vs: who.vs, settings: s, full });
   if (r.audio && floorId) logEvent(floorId, { type: 'voice.spoken', agent: agentId || null, data: { kind, chars: r.chars, voice: r.voice, cached: r.cached } });
   return r;
 }
-export const voiceTest = () => voice.speak({ text: 'Hello, this is The AI Squad. The voice works.', voice: voice.DEFAULT_VOICE, settings: voiceSettings() });
+export const voiceTest = () => voice.speak({ text: 'Hello, this is The AI Squad. The voice works.', voice: voice.DEFAULT_VOICE, lang: 'en', settings: voiceSettings() });
+// Preview in the voice picker: a sample line in the chosen language with settings not saved yet
+const SAMPLE = { id: 'Halo, aku siap bekerja. Tugas berikutnya apa?', en: 'Hello, I am ready to work. What is the next task?' };
+export function voicePreview({ voice: v, lang = 'auto', settings: vs = null, text = '' } = {}) {
+  const l = voice.cleanLang(lang);
+  return voice.speak({ text: String(text || '').slice(0, 200) || SAMPLE[l] || SAMPLE.en, voice: voice.validVoice(v) ? v : voice.DEFAULT_VOICE, lang: l, vs: voice.cleanVoice(vs || {}), settings: voiceSettings(), full: true });
+}
 
 // ---------- design variants (server/design.js) ----------
 export function floorDesigns(floorId) { return { groups: design.groups(building.floorEntry(floorId).path) }; }

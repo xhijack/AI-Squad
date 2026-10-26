@@ -15,6 +15,7 @@ import * as blueprints from './blueprints.js';
 import * as skills from './skills.js';
 import * as recovery from './recovery.js';
 import * as autopilot from './autopilot.js';
+import * as voiceLib from './voice.js';
 import { cleanStandup } from './rituals.js';
 
 const run = promisify(execFile);
@@ -100,6 +101,8 @@ export function cleanFloor(f = {}, prev = {}) {
     standup: cleanStandup({ ...prev.standup, ...f.standup }),
     // Autopilot level and auto-answer timeout (server/autopilot.js); a floor.json without it stays "off"
     ...autopilot.cleanSettings({ autopilot: pick('autopilot'), autopilotTimeoutSec: pick('autopilotTimeoutSec') }),
+    // the Floor's default voice language and settings (each agent may set its own; server/voice.js)
+    ...(pick('voice') ? { voice: { lang: voiceLib.cleanLang(pick('voice').lang), settings: voiceLib.cleanVoice(pick('voice').settings || {}) } } : {}),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
@@ -322,6 +325,9 @@ export function updateAgent(root, id, input) {
   if (input.appearance !== undefined) a.appearance = { ...a.appearance, ...cleanAppearance(input.appearance) };
   // the agent's ElevenLabs voice (an id only; the key is never in the repo)
   if (input.voice !== undefined) { if (/^[A-Za-z0-9]{10,40}$/.test(String(input.voice))) a.voice = String(input.voice); else delete a.voice; }
+  // the language it speaks and its voice settings (none: the Floor's defaults)
+  if (input.voiceLang !== undefined) { const l = voiceLib.cleanLang(input.voiceLang); if (input.voiceLang && l === String(input.voiceLang)) a.voiceLang = l; else delete a.voiceLang; }
+  if (input.voiceSettings !== undefined) { if (input.voiceSettings) a.voiceSettings = voiceLib.cleanVoice(input.voiceSettings); else delete a.voiceSettings; }
   if (input.lead !== undefined) { team.agents.forEach((x) => delete x.lead); if (input.lead) a.lead = true; }
   if (input.git !== undefined) { const g = cleanAgentGit(input.git); if (g) a.git = g; else delete a.git; }
   writeTeam(root, team);
