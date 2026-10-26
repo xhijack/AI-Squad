@@ -349,11 +349,45 @@ function inkOn(hex) {
 const STATUS_TEXT = { working: tt('working'), waiting: tt('needs you'), idle: tt('idle'), stopped: tt('stopped') };
 const shortActivity = (s) => { s = String(s || '').replace(/^(terminal|thinking): /, ''); return s.length > 30 ? `${s.slice(0, 29)}…` : s; };
 
+// a long-running command at the desk: an hourglass next to the screen (turned over every few seconds) and a progress
+// bar above it when the output counts (tests run, build steps); the agent sits back and watches
+function hourglass() {
+  const g = new THREE.Group();
+  const glass = mat('#dbeef7', { transparent: true, opacity: .45, roughness: .1 }), sand = mat('#e8b04a'), wood = mat('#8a5a35');
+  for (const s of [1, -1]) {
+    const c = new THREE.Mesh(new THREE.ConeGeometry(.055, .085, 20, 1, true), glass); c.position.y = s * .043; c.rotation.x = s > 0 ? Math.PI : 0; g.add(c);
+    cyl(.065, .065, .014, wood, 0, s * .093, 0, g, 20);
+  }
+  const top = new THREE.Mesh(new THREE.ConeGeometry(.035, .04, 16), sand); top.position.y = .035; top.rotation.x = Math.PI; g.add(top);
+  const bottom = new THREE.Mesh(new THREE.ConeGeometry(.045, .035, 16), sand); bottom.position.y = -.068; g.add(bottom);
+  for (const x of [-.058, .058]) cyl(.006, .006, .186, wood, x, 0, 0, g, 6);
+  g.position.set(.33, .955 + .1, .82);
+  return g;
+}
+function taskProps(st, task) {
+  if (!task) { if (st.task) st.task.g.visible = false; return; }
+  if (!st.task) {
+    const g = new THREE.Group(), hg = hourglass(), bar = new THREE.Group();
+    bar.position.set(0, 1.47, .72);
+    box(.46, .034, .02, mat('#2f3a4a'), 0, 0, 0, bar, .008);
+    const fill = box(.44, .022, .022, basic('#16a34a'), 0, 0, .002, bar, 0);
+    g.add(hg, bar); st.g.add(g);
+    st.task = { g, hg, bar, fill, flipAt: 0 };
+  }
+  const T = st.task, pct = task.progress?.pct;
+  T.g.visible = true;
+  T.bar.visible = pct != null;
+  if (pct != null) { const k = Math.max(.02, pct / 100); T.fill.scale.x = k; T.fill.position.x = -.22 * (1 - k); }
+  T.fill.material.color.set(task.stall ? '#d97706' : '#16a34a');
+}
+
 function updateStation(st, a) {
   st.state = a.state; st.data = a;
   const el = st.label.element;
   const name = String(a.displayName || '').split(' - ')[0];
-  const status = st.away || (a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
+  taskProps(st, a.task && a.state === 'working' ? a.task : null);
+  const taskStatus = a.task && a.state === 'working' ? tt('{label} · {n} min', { label: a.task.label, n: Math.max(1, Math.round((Date.now() - a.task.startedAt) / 60000)) }) : '';
+  const status = st.away || (a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || ''));
   const cls = `nlabel ${a.state || 'stopped'}${a.standby ? ' standby' : ''}${st.away ? ' away' : ''}`;
   if (el.className !== cls) el.className = cls;
   const n = el.querySelector('.n'), s = el.querySelector('.a');
@@ -373,6 +407,10 @@ function poseDesk(st, t, awake = false) {
   if (state === 'waiting') {
     arms(R, [-.4, .2, -.6], [-.2, -2.7 - Math.sin(p * 6) * .25, -.3]);         // raise a hand
     R.head.rotation.set(-.15, Math.sin(p * 2) * .2, 0);
+  } else if (state === 'working' && st.data?.task) {
+    // a long command runs: sit back, arms on the desk, watch the screen (no typing)
+    arms(R, [-.95, -.28, -1.15], [-.95, .28, -1.15]);
+    R.torso.rotation.x = -.05; R.head.rotation.set(.12, 0, 0);
   } else if (state === 'working') {
     const tap = Math.sin(p * 16);
     arms(R, [-1.0, -.32, -.62 + tap * .1], [-1.0, .32, -.62 - tap * .1]);
@@ -962,7 +1000,9 @@ export class BuildingScene {
         const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, nav: o.nav, others, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
         if (/walk|return/i.test(st.life?.mode || '')) walking = true;
-        if (st.state === 'working' || st.state === 'waiting' || st.talkLevel > .02) animating = true;   // typing, a raised hand, talking
+        // typing, a raised hand, talking; a long command only turns its hourglass over now and then (a frame each time)
+        if ((st.state === 'working' && !st.data?.task) || st.state === 'waiting' || st.talkLevel > .02) animating = true;
+        if (st.task?.g.visible && t - st.task.flipAt > 3) { st.task.flipAt = t; st.task.hg.rotation.z = st.task.hg.rotation.z ? 0 : Math.PI; this.dirty = true; }
         if (st.talkLevel > .02) st.rig.mouth.scale.y = .6 + st.talkLevel * 2.2;
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view

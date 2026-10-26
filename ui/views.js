@@ -4,11 +4,42 @@
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
 
-const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), scope: tt('Scope change'), design: tt('Pick a design') };
+const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
 const SYSTEM_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'crash', 'scope']);
 
 // ---------- Attention ----------
+// ---------- long-running commands (server/tasks.js) ----------
+// "7m 32s", "1h 04m", "45s"
+export function dur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m`;
+}
+const taskElapsed = (t) => Math.max(t.elapsedMs || 0, Date.now() - t.startedAt);
+// "e2e Playwright · 7m 32s"
+export const taskLine = (t) => tt('{label} · {time}', { label: t.label, time: dur(taskElapsed(t)) });
+const resultText = (tk) => (tk.passed != null ? (tk.failed ? tt('{passed} passed, {failed} failed', tk) : tt('{passed} passed', tk)) : '');
+// "e2e Playwright failed in 8m 00s: 40 passed, 2 failed"
+export function taskDoneText(tk) {
+  const r = resultText(tk), time = dur(tk.ms);
+  if (tk.status === 'killed') return tt('{label} was stopped after {time}', { label: tk.label, time });
+  const failed = tk.status === 'failed' || tk.ok === false;
+  return r ? (failed ? tt('{label} failed in {time}: {result}', { label: tk.label, time, result: r }) : tt('{label} finished in {time}: {result}', { label: tk.label, time, result: r }))
+    : (failed ? tt('{label} failed in {time}', { label: tk.label, time }) : tt('{label} finished in {time}', { label: tk.label, time }));
+}
+// the Desk's card for a running command: label, time, progress, its last output lines, a stall
+function taskHtml(t) {
+  const p = t.progress;
+  const stall = t.stall === 'quiet' ? tt('No output for {n} min: it may hang.', { n: Math.round((Date.now() - t.lastOutputAt) / 60000) })
+    : t.stall === 'long' ? tt('Running far longer than usual ({typical}).', { typical: dur(t.typicalMs) }) : '';
+  return `<div class="att task${t.stall ? ' stall' : ''}" style="margin-top:10px"><div class="where"><span class="grow">${tt('Running')} · ${esc(taskLine(t))}</span>${t.background ? `<span class="note">${tt('in the background')}</span>` : ''}</div>
+    ${p ? `<div class="taskBar" role="progressbar" aria-valuenow="${p.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${p.pct}%"></i></div><div class="note">${p.total ? tt('{done} of {total}', p) : `${p.pct} %`}</div>` : ''}
+    ${t.lines?.length ? `<pre class="taskOut">${esc(t.lines.join('\n'))}</pre>` : `<div class="note">${tt('No output yet.')}</div>`}
+    ${stall ? `<div class="note warnText">${stall}</div>` : ''}<div class="note"><code>${esc(t.command)}</code></div></div>`;
+}
+
 export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
   if (!items.length) return `<div class="empty">${tt('All clear. Nothing is waiting for you.')}</div>`;
   return items.map((a) => {
@@ -25,6 +56,9 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
         ? `<div class="row" style="margin-top:6px"><span class="note grow">${a.asks ? tt('It asks you something. This agent runs on its own: reply in its own terminal.') : tt('This agent runs on its own: reply in its own terminal.')}</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('OK')}</button></div>`
         : `<form class="replyForm" data-act="reply" data-id="${a.id}"><textarea name="text" rows="2" data-draft="${a.id}" placeholder="${tt('Reply to {name} (optional)…', { name: who })}" aria-label="${tt('Your reply to {name}', { name: who })}" required>${esc(drafts.get(a.id) || '')}</textarea>
         <div class="row"><span class="note grow">${tt('A reply goes to {name} as the next task.', { name: who })}</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}" title="${tt('Read it; hide the card')}">${tt('OK')}</button><button class="small">${tt('Reply')}</button></div></form>`;
+    } else if (a.kind === 'taskdone') {
+      // a calm card: the command's duration and result; OK, or the agent's log (its desk)
+      body = `<div class="row" style="margin-top:6px"><span class="grow"></span>${a.floorId && a.agentId ? `<a class="chip" href="#/floor/${a.floorId}/desk/${a.agentId}">${tt('Open log')}</a>` : ''}<button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('OK')}</button></div>`;
     } else if (a.kind === 'design') {
       body = `<div class="row" style="margin-top:6px"><span class="grow"></span><button class="small gold" data-act="designs" data-screen="${esc(a.screen)}">${tt('See the variants')}</button></div>`;
     } else if (a.kind === 'decided') {
@@ -51,7 +85,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button>`);
     body = apNote(a) + body;
     // a click on the message opens it large (the conversation view)
-    const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="${tt('Open large')}" aria-label="${tt('Message from {name}, open large', { name: esc(a.agentName || tt('the agent')) })}">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="${tt('Open large')}">${esc(SYSTEM_KINDS.has(a.kind) ? tx(a.text) : a.text)}</div>`;
+    const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="${tt('Open large')}" aria-label="${tt('Message from {name}, open large', { name: esc(a.agentName || tt('the agent')) })}">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="${tt('Open large')}">${esc(a.kind === 'taskdone' && a.task ? taskDoneText(a.task) : SYSTEM_KINDS.has(a.kind) ? tx(a.text) : a.text)}</div>`;
     return `<div class="att ${a.kind} ${a.level || ''}${a.muted ? ' muted' : ''}" data-item-floor="${esc(a.floorId || '')}" data-item-agent="${esc(a.agentId || '')}" data-item-kind="${esc(a.kind)}"><div class="where"><span class="grow">${where} · ${ago(a.ts)}</span><button type="button" class="openBig" data-act="convo" data-id="${a.id}" aria-label="${tt('Open large')}" title="${tt('Open large')}">⤢</button></div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
   }).join('');
 }
@@ -109,8 +143,11 @@ const STATE_SHORT = { working: tt('working'), waiting: tt('needs you'), idle: tt
 export function agentRow(floorId, a, selected) {
   const act = a.standby ? tx(a.activity) : a.crash && !a.crash.withLead ? tx(a.crash.text) : a.stopNote ? `${tx(a.stopNote)}${a.lastTs ? ` · ${ago(a.lastTs)}` : ''}`
     : a.state === 'stopped' ? (a.independent ? tx(a.activity) || tt('not running') : a.lastTs ? tt('stopped · last seen {ago}', { ago: ago(a.lastTs) }) : tt('stopped'))
+    : a.task ? taskLine(a.task)
     : a.state === 'idle' ? (a.lastTs ? tt('idle {ago}', { ago: ago(a.lastTs).replace(' ago', '') }) : tt('idle')) : tx(a.activity) || STATE_TEXT[a.state];
-  return `<div class="arow${selected ? ' sel' : ''}" data-href="#/floor/${floorId}/desk/${a.id}" role="button" tabindex="0">
+  // a running command: its last output lines as the tooltip, the row marked while it stalls
+  const tip = a.task?.lines?.length ? ` title="${esc(a.task.lines.join('\n'))}"` : '';
+  return `<div class="arow${selected ? ' sel' : ''}${a.task?.stall ? ' taskStall' : ''}" data-href="#/floor/${floorId}/desk/${a.id}" role="button" tabindex="0"${tip}>
     <i class="adot" style="--c:${esc(a.appearance?.shirt || '#3d82d6')}"></i>
     <span class="grow"><span class="nm"><b>${esc(String(a.displayName).split(' - ')[0])}</b> <span class="role">${esc(ROLE_SHORT(a))}</span></span><span class="act">${esc(act)}</span></span>
     ${a.standby ? `<span class="st standby">${tt('not started')}</span>` : a.crash && !a.crash.withLead ? `<span class="st crashed">${tt('crashed')}</span>` : `<span class="st ${a.state}">${STATE_SHORT[a.state]}</span>`}</div>`;
@@ -277,7 +314,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
     : d.crash?.withLead ? `<div class="att stall" style="margin-top:10px"><div class="where">${tt('Stopped with the lead')}</div><div class="q">${esc(tx(d.stopNote || d.crash.text))}</div><div class="note">${tt("This teammate ran inside the lead's session. Resume the lead; it re-spawns the teammates whose work is still open.")}</div></div>` : '';
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">${tt('Update available')}</div><div class="q">${tt('{title} template v{from} → v{to}', { title: esc(e.title), from: d.agent.role.version, to: ts.latestVersion })}</div>
       <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">${tt('View diff')}</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">${tt('Update')}</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">${tt('Keep current')}</button></div></div>` : '';
-  const overview = `${head}${crash}${modelWarn}${update}
+  const overview = `${head}${crash}${d.task ? taskHtml(d.task) : ''}${modelWarn}${update}
     ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
     <div class="section"><div class="sectionHead"><h3 class="grow">${tt('Send task')}</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">${tt('Queued: {text}', { text: esc(d.pending.slice(0, 120)) })}</div>` : ''}

@@ -636,3 +636,9 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .vErrBox .mono { font-size: 12px; margin: 4px 0; word-break: break-word; }
 .vSliders input[type=range] { width: 100%; }
 .vSliders output { font-variant-numeric: tabular-nums; color: var(--muted, #6b7280); margin-left: 4px; }
+/* a long-running command: progress and its last output lines */
+.att.task { border-left-color: var(--work, #16a34a); }
+.taskBar { height: 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; margin: 8px 0 2px; }
+.taskBar i { display: block; height: 100%; background: var(--work, #16a34a); transition: width .4s; }
+.taskOut { font-size: 11.5px; max-height: 9.5em; overflow: auto; margin: 6px 0; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, currentColor 6%, transparent); white-space: pre-wrap; }
+.arow.taskStall .act { color: var(--warn, #b45309); }
