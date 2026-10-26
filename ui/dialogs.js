@@ -65,6 +65,9 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="autoNext" ${c.sprint?.autoNext ? 'checked' : ''}> Squad Sprint: start the next sprint automatically (fresh lead session) once a closed sprint is merged</label>
     <div class="grid2"><div><label>Budget (USD, 0 = none)</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
       <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], c.budget.period)}</div></div>
+    <h3 style="margin-top:18px">Squad Log</h3>
+    <label class="inline"><input type="checkbox" name="logMessages" ${c.log?.messages !== false ? 'checked' : ''}> Log message text (tasks, messages between agents, questions and answers). Off: metadata only.</label>
+    <label class="inline"><input type="checkbox" name="logMask" ${c.log?.maskPersonalData !== false ? 'checked' : ''}> Mask personal data (e-mail, phone, national id and bank account numbers). Secrets are always removed.</label>
     <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
     <h3 style="margin-top:18px">Merges</h3><div id="dMerges" class="note">Loading…</div>`,
   '<button class="ghost danger" data-remove>Remove Floor</button><span class="spacer"></span><button class="ghost" data-close>Cancel</button><button class="gold" data-ok>Save</button>')));
@@ -79,7 +82,8 @@ async function floorSettings() {
     const v = (n) => form.elements[n].value;
     try {
       await api('PATCH', `/api/floors/${f.id}`, { name: v('name'), number: Number(v('number')), accent: v('accent'), tagline: v('tagline'), goal: v('goal'), workflow: segValue(form, 'workflow'),
-        budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked }, git: readGit(form) });
+        budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked },
+        log: { messages: form.elements.logMessages.checked, maskPersonalData: form.elements.logMask.checked }, git: readGit(form) });
       closeModal(); toast('Floor saved'); ctx.refresh();
     } catch (e) { fail(e); }
   };

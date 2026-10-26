@@ -4,7 +4,7 @@
 // Task names (words 1 and 2 are read):  BUILD M01 Login  |  QA M01 Login  |  BUG M01-B01 Save does nothing
 const fs = require('fs');
 const path = require('path');
-const { config, readInput, squadDir, strings, reject, checkTask, taskOf } = require('./squad-lib.cjs');
+const { config, readInput, squadDir, strings, reject, checkTask, taskOf, recordGate } = require('./squad-lib.cjs');
 
 const input = readInput();
 const cfg = config();
@@ -18,5 +18,6 @@ const subject = [input.task_subject, input.task && input.task.subject, input.sub
 const task = taskOf(subject);
 if (!task) process.exit(0);
 const why = checkTask(task.kind, task.id, cfg, dir);
+recordGate('task-completed', subject, why);
 if (why) reject(why);
 process.exit(0);

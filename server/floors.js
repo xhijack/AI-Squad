@@ -65,6 +65,10 @@ export function upgradeDevices(devices) {
 
 const num = (v, d = 0, lim = 20) => { const n = Number(v); return Number.isFinite(n) ? Math.max(-lim, Math.min(lim, +n.toFixed(3))) : d; };
 
+export const AUDIT_MODELS = ['sonnet', 'haiku', 'opus'];
+// automatic audits after a sprint closes are on by default for Squad Sprint Floors
+const auditSettings = (a = {}, workflow) => ({ auto: typeof a?.auto === 'boolean' ? a.auto : workflow === 'squad-sprint', model: AUDIT_MODELS.includes(a?.model) ? a.model : 'sonnet' });
+
 export function cleanFloor(f = {}, prev = {}) {
   const pick = (k) => (f[k] !== undefined ? f[k] : prev[k]);
   const budget = pick('budget') || {};
@@ -78,6 +82,9 @@ export function cleanFloor(f = {}, prev = {}) {
     accent: isHex(pick('accent')) ? pick('accent') : ACCENTS[0],
     budget: { usd: Math.max(0, Number(budget.usd) || 0), period: budget.period === 'day' ? 'day' : 'month' },
     sprint: { autoNext: !!(pick('sprint') || {}).autoNext },
+    // Squad Log: message text and personal data masking (secrets are always removed); Audit: after a sprint closes, model
+    log: (({ messages, maskPersonalData }) => ({ messages: messages !== false, maskPersonalData: maskPersonalData !== false }))({ ...prev.log, ...f.log }),
+    audit: auditSettings({ ...prev.audit, ...f.audit }, WORKFLOWS.includes(pick('workflow')) ? pick('workflow') : 'free-team'),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({

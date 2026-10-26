@@ -17,6 +17,8 @@ import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as blueprintsLib from './blueprints.js';
 import * as skillsLib from './skills.js';
+import * as collect from './collect.js';
+import * as squadLog from './log.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -250,7 +252,7 @@ export function watchdogTick(log = console.log) {
   const live = new Set();
   for (const a of snap.attention) {
     live.add(a.id);
-    if (!reported.has(a.id)) { reported.add(a.id); log(`[watchdog] ${a.kind}${a.floorName ? ` · ${a.floorName}` : ''}${a.agentName ? ` · ${a.agentName}` : ''}: ${a.text.split('\n')[0]}`); }
+    if (!reported.has(a.id)) { reported.add(a.id); if (a.floorId && WATCH_KINDS.has(a.kind)) logEvent(a.floorId, { type: 'watchdog.alert', agent: a.agentId || null, data: { kind: a.kind, text: a.text.split('\n')[0] } }); log(`[watchdog] ${a.kind}${a.floorName ? ` · ${a.floorName}` : ''}${a.agentName ? ` · ${a.agentName}` : ''}: ${a.text.split('\n')[0]}`); }
   }
   for (const id of reported) if (!live.has(id)) reported.delete(id);
   return snap;
@@ -354,6 +356,7 @@ export async function startAgent(floorId, agentId, task = '') {
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) setSessionInfo(floorId, agentId, { startedAt: Date.now(), model: eff.model, effort: eff.effort });
+  if (!r.already) logEvent(floorId, { type: 'agent.started', agent: agentId, session: name, model: eff.model, data: { model: eff.model, effort: eff.effort, via: 'aisquad', ...(task ? { withTask: true } : {}) } });
   invalidate();
   return { ok: true, session: name, already: !!r.already, queued: !!task };
 }
@@ -361,7 +364,13 @@ export async function startAgent(floorId, agentId, task = '') {
 export function stopAgent(floorId, agentId) {
   const { name } = locate(floorId, agentId);
   pending.delete(workKey(floorId, agentId));
+  const wasRunning = tm.isRunning(name);
   const r = tm.stopSession(name);
+  if (wasRunning) {
+    if (!stoppedByUs.has(floorId)) stoppedByUs.set(floorId, new Set());
+    stoppedByUs.get(floorId).add(agentId);
+    logEvent(floorId, { type: 'agent.stopped', agent: agentId, session: name, data: { via: 'aisquad' } });
+  }
   setSessionInfo(floorId, agentId, null);
   hooks.forget(floorId, agentId);
   invalidate();
@@ -471,8 +480,15 @@ export function startMerge(floorId, branch) {
   const entry = building.floorEntry(floorId);
   const { git } = floors.readFloor(entry.path);
   if (merge.isMerging(floorId)) throw bad('A merge is already running on this Floor');
-  merge.mergeBranch(floorId, entry.path, git, String(branch || ''), { trigger: 'manual' }).then(invalidate);
+  runMerge(floorId, entry.path, git, String(branch || ''), { trigger: 'manual' }).then(invalidate);
   return { ok: true, started: true };
+}
+
+// every merge attempt (and its quality gate) goes to the Squad Log
+async function runMerge(floorId, root, git, branch, opts) {
+  const r = await merge.mergeBranch(floorId, root, git, branch, opts);
+  for (const ev of collect.fromMerge(r)) logEvent(floorId, ev);
+  return r;
 }
 
 // finished work = the agent's current work item is done and the agent is not working (agent branches),
@@ -502,7 +518,7 @@ export async function mergeTick({ checkMemory = true } = {}) {
           const a = f.agents.find((x) => x.id === c.agent);
           if (!work[c.agent]?.doneAt || !a || a.state === 'working' || a.state === 'waiting') continue;
         } else if (openWork) continue;
-        done.push(await merge.mergeBranch(f.id, entry.path, git, c.branch, { trigger: 'auto' }));
+        done.push(await runMerge(f.id, entry.path, git, c.branch, { trigger: 'auto' }));
       }
     }
   } finally { merging = false; if (done.length) invalidate(); }
@@ -517,7 +533,7 @@ async function sprintTick(f, entry, git, team, floor) {
   if (!st.closed) return null;
   const tried = merge.mergeLog(f.id, 500).find((e) => e.branch === st.branch && e.tip === st.tip);
   if (tried) return null;
-  const result = await merge.mergeBranch(f.id, entry.path, git, st.branch, { trigger: 'sprint' });
+  const result = await runMerge(f.id, entry.path, git, st.branch, { trigger: 'sprint' });
   if (result.result === 'merged' && floor.sprint.autoNext) {
     const lead = team.agents.find((a) => a.lead) || team.agents.find((a) => sprint.roleKind(a) === 'lead');
     if (lead) {
@@ -657,7 +673,11 @@ export function ingestEvent(body) {
     return { id: e.id, path: e.path, agentIds };
   });
   const key = hooks.ingest(body, floorsNow);
-  if (key) snapCache.at = 0;
+  if (key) {
+    snapCache.at = 0;
+    const [fid] = key.split('/');
+    for (const ev of collect.fromHook(key, body, floorsNow.find((f) => f.id === fid)?.path || '')) logEvent(fid, ev);
+  }
   return { ok: true, matched: key };
 }
 
@@ -704,4 +724,96 @@ export function codeWindow(root, peek) {
   windowCache.set(key, win);
   if (windowCache.size > 200) windowCache.delete(windowCache.keys().next().value);
   return { ...peek, ...win };
+}
+
+// ---------- Squad Log (server/log.js, server/collect.js) ----------
+const stoppedByUs = new Map();                 // floorId -> agent ids stopped through The AI Squad since the last log tick
+function logCtx(floorId, root, cfg) {
+  if (floorId === ind.FLOOR_ID || !root) return { team: [], sprint: null, options: {} };
+  const c = cfg || floors.readFloor(root);
+  return { team: c.team.agents, sprint: sprint.hasPack(root) ? Number(sprint.readConfig(root).SPRINT) || null : null,
+    options: { messages: c.floor.log.messages, pii: c.floor.log.maskPersonalData } };
+}
+// logging never breaks the action that is logged
+export function logEvent(floorId, ev) {
+  try { collect.emitter(floorId, logCtx(floorId, floorId === ind.FLOOR_ID ? '' : building.floorEntry(floorId).path))(ev); } catch (e) { console.error('[log]', e.message); }
+}
+
+function collectTranscripts(floorId, root, emit, now, agentId = '') {
+  const S = collect.stateOf(floorId);
+  const fresh = (file, st) => (S.files[file] ? S.files[file].offset !== st.size || S.files[file].usage : st.mtimeMs >= now - collect.BACKFILL_MS);
+  for (const s of tx.sessionsOf(root)) {
+    if (fresh(s.file, s.st)) collect.readTranscript(floorId, s.file, { agent: agentId || tx.sessionAgent(s.file) || 'owner', root, emit }, now);
+    if (s.st.mtimeMs < now - collect.BACKFILL_MS) continue;
+    const sd = path.join(tx.projectDir(root), s.id, 'subagents');
+    for (const f of fs.existsSync(sd) ? fs.readdirSync(sd) : []) {
+      if (!f.endsWith('.jsonl')) continue;
+      const file = path.join(sd, f), st = statOf(file);
+      if (!st || !fresh(file, st)) continue;
+      const meta = readJson(file.replace(/\.jsonl$/, '.meta.json'), {}) || {};
+      collect.readTranscript(floorId, file, { agent: meta.customAgentType || meta.agentType || meta.name || 'subagent', root, subagent: true, emit }, now);
+    }
+  }
+}
+
+// every 15 s: new transcript lines, docs/squad and source documents, commits (every minute), agent state changes
+let logging = false, lastCommits = 0;
+export async function logTick(now = Date.now(), { onEvent = null } = {}) {
+  if (logging) return 0;
+  logging = true;
+  let n = 0;
+  try {
+    const snap = buildingSnapshot();
+    const commits = now - lastCommits >= 60000;
+    if (commits) lastCommits = now;
+    for (const entry of building.loadBuilding().floors) {
+      if (!fs.existsSync(entry.path)) continue;
+      let cfg; try { cfg = floors.readFloor(entry.path); } catch { continue; }
+      const base = collect.emitter(entry.id, logCtx(entry.id, entry.path, cfg));
+      const emit = (ev) => { const e = base(ev); if (e) { n++; onEvent?.(entry.id, e); } return e; };
+      try {
+        collectTranscripts(entry.id, entry.path, emit, now);
+        for (const ev of collect.scanDocs(entry.id, entry.path, { blueprint: blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint) }, now)) emit(ev);
+        if (commits) for (const ev of await collect.scanCommits(entry.id, entry.path, cfg.team.agents.map((a) => a.id), now)) emit(ev);
+        const f = snap.floors.find((x) => x.id === entry.id);
+        if (f?.agents) {
+          const own = {};
+          let teamOpen = 0;
+          for (const r of Object.values(collect.stateOf(entry.id).board || {})) if (r.status !== 'DONE') { teamOpen++; if (r.owner) own[r.owner] = (own[r.owner] || 0) + 1; }
+          for (const [id, w] of Object.entries(workOf(entry.id))) if (!w.doneAt) { teamOpen++; own[id] = (own[id] || 0) + 1; }
+          for (const ev of collect.stateChanges(entry.id, f.agents, { teamOpen, own, stoppedByUs: stoppedByUs.get(entry.id) }, now)) emit(ev);
+          stoppedByUs.delete(entry.id);
+          const S = collect.stateOf(entry.id);
+          S.models ||= {};
+          for (const a of f.agents) {
+            if (!a.models?.mismatch || S.models[a.id] === a.models.observed) continue;
+            S.models[a.id] = a.models.observed;
+            emit({ type: 'agent.model', agent: a.id, model: a.models.observed, data: { configured: a.models.configured, observed: a.models.observed } });
+          }
+        }
+      } catch (e) { console.error('[log]', entry.id, e.message); }
+      collect.saveState(entry.id);
+    }
+    // Floor 1: independent agents (one agent per folder for transcripts)
+    const ctx1 = collect.emitter(ind.FLOOR_ID, {});
+    const emit1 = (ev) => { const e = ctx1(ev); if (e) n++; return e; };
+    const roots = new Set();
+    for (const a of ind.current({ floorRoots: building.loadBuilding().floors.map((f) => f.path) })) {
+      if (roots.has(a.root)) continue;
+      roots.add(a.root);
+      try { collectTranscripts(ind.FLOOR_ID, a.root, emit1, now, a.id); } catch { /* unreadable */ }
+    }
+    const f1 = snap.floors.find((x) => x.id === ind.FLOOR_ID);
+    if (f1) for (const ev of collect.stateChanges(ind.FLOOR_ID, f1.agents, { independent: true }, now)) emit1(ev);
+    collect.saveState(ind.FLOOR_ID);
+  } finally { logging = false; }
+  return n;
+}
+
+// GET /api/floors/:id/log
+export function floorLog(floorId, q = {}) {
+  if (floorId !== ind.FLOOR_ID) building.floorEntry(floorId);
+  const events = squadLog.read(floorId, q);
+  return { floor: floorId, events, types: squadLog.TYPES, categories: squadLog.CATEGORIES,
+    agents: [...new Set(events.map((e) => e.agent).filter(Boolean))].sort(), sprints: [...new Set(events.map((e) => e.sprint).filter((x) => x != null))].sort((a, b) => a - b) };
 }

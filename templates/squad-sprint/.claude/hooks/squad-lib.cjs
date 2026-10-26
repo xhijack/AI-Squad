@@ -37,6 +37,15 @@ function strings(v, out = []) {
   return out;
 }
 
+// every gate decision goes to .git/aisquad-gates.jsonl (outside the working tree) for the Squad Log
+function recordGate(gate, subject, reason) {
+  try {
+    const { execFileSync } = require('child_process');
+    const gitDir = execFileSync('git', ['-C', ROOT, 'rev-parse', '--absolute-git-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    fs.appendFileSync(path.join(gitDir, 'aisquad-gates.jsonl'), JSON.stringify({ ts: new Date().toISOString(), gate, subject, ok: !reason, reason: String(reason || '').slice(0, 500) }) + '\n');
+  } catch { /* not a git repo */ }
+}
+
 // exit 2 = refuse; stderr goes back to the agent
 function reject(msg) { process.stderr.write(msg.trimEnd() + '\n'); process.exit(2); }
 
@@ -80,4 +89,4 @@ function taskOf(name) {
   return ['BUILD', 'QA', 'BUG'].includes(kind) && /^M\d/.test(id) ? { kind, id } : null;
 }
 
-module.exports = { ROOT, config, readInput, squadDir, read, status, mdFiles, strings, reject, checkTask, taskOf };
+module.exports = { ROOT, config, readInput, squadDir, read, status, mdFiles, strings, reject, checkTask, taskOf, recordGate };

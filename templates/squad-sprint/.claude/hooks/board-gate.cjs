@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { ROOT, config, readInput, squadDir, read, reject, checkTask, taskOf } = require('./squad-lib.cjs');
+const { ROOT, config, readInput, squadDir, read, reject, checkTask, taskOf, recordGate } = require('./squad-lib.cjs');
 
 const input = readInput();
 const cfg = config();
@@ -56,6 +56,7 @@ for (const [name, row] of cur) {
   if (!task) continue;
   checked.push(name);
   const why = checkTask(task.kind, task.id, cfg, dir);
+  recordGate('board', name, why);
   if (!why) continue;
   problems.push(`${name}: ${why}`);
   // put this row back: its previous line, or the same row with status TODO when it is new

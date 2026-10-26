@@ -131,6 +131,18 @@ test('send a task to a running agent, then stop it', async () => {
   assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'stopped');
 });
 
+test('the Squad Log records start, hook permission wait, tool call and stop; reading it needs the PIN', async () => {
+  assert.equal((await call('GET', '/api/floors/acme/log', null, false)).status, 401);
+  const r = await call('GET', '/api/floors/acme/log?agent=budi-dev');
+  assert.equal(r.status, 200);
+  const types = r.body.events.map((e) => e.type);
+  for (const t of ['agent.started', 'permission.asked', 'permission.answered', 'agent.stopped']) assert.ok(types.includes(t), `${t} in ${types}`);
+  const started = r.body.events.find((e) => e.type === 'agent.started');
+  assert.deepEqual([started.role, started.data.model, started.data.effort], ['fullstack-developer', 'sonnet', 'medium']);
+  assert.ok(r.body.categories.includes('communication'));
+  assert.deepEqual((await call('GET', '/api/floors/acme/log?type=lifecycle')).body.events.map((e) => e.type).filter((t) => !t.startsWith('agent.')), []);
+});
+
 test('per-agent commit identity reaches the agent session as git env', async () => {
   assert.equal((await call('PATCH', '/api/floors/acme', { git: { commitIdentity: 'per-agent' } })).status, 200);
   assert.equal((await call('PATCH', '/api/floors/acme/agents/rina-pm', { git: { email: 'rina@sopwer.net' } })).status, 200);

@@ -110,6 +110,7 @@ const routes = [
   }, { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/performance$/, ([id]) => squad.performance(id)],
+  ['GET', /^\/api\/floors\/([\w-]+)\/log$/, ([id], b, req) => squad.floorLog(id, Object.fromEntries(new URL(req.url, 'http://x').searchParams)), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/merges$/, ([id], b) => squad.startMerge(id, b.branch), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/merge-approval$/, ([id], b) => { building.floorEntry(id); setApproval(id, !!b.approved); squad.invalidate(); return { ok: true, approved: !!b.approved }; }, { pin: true }],
   ['DELETE', /^\/api\/floors\/([\w-]+)$/, ([id]) => { building.unregisterFloor(id); squad.invalidate(); return { ok: true }; }, { pin: true }],

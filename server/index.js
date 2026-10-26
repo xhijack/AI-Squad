@@ -9,7 +9,9 @@ import { config, paths, configure } from './config.js';
 import { seedDefaults } from './roles.js';
 import { seedBlueprints } from './blueprints.js';
 import { ensureCloned } from './libraries.js';
-import { flushPending, watchdogTick, mergeTick } from './squad.js';
+import { flushPending, watchdogTick, mergeTick, logTick } from './squad.js';
+import { maintain as maintainLogs, DEFAULT_RETENTION_DAYS } from './log.js';
+import { loadBuilding } from './building.js';
 import { meter } from './meter.js';
 
 const args = process.argv.slice(2);
@@ -38,3 +40,8 @@ setInterval(() => { try { watchdogTick(); } catch (e) { console.error('[watchdog
 setInterval(() => {
   mergeTick().then((done) => { for (const m of done) console.log(`[merge] ${m.branch || 'sprint'}: ${m.result}${m.reason ? ` (${m.reason})` : ''}`); }, (e) => console.error('[merge]', e.message));
 }, 60000).unref();
+// Squad Log: collect every 15 s; gzip and retention once an hour
+setInterval(() => { logTick().catch((e) => console.error('[log]', e.message)); }, 15000).unref();
+const rotateLogs = () => { try { maintainLogs({ retentionDays: Number(loadBuilding().prefs.logRetentionDays) || DEFAULT_RETENTION_DAYS }); } catch (e) { console.error('[log]', e.message); } };
+setTimeout(rotateLogs, 10000).unref();
+setInterval(rotateLogs, 3600e3).unref();
