@@ -17,7 +17,7 @@ import { meter } from './meter.js';
 import { migrate } from './schema.js';
 import * as backup from './backup.js';
 import * as jobs from './jobs.js';
-import { logJobEnded, dispatchTick } from './squad.js';
+import { logJobEnded, dispatchTick, chatTick } from './squad.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -57,6 +57,7 @@ setInterval(rotateLogs, 3600e3).unref();
 // background jobs (headless runner): an ended job goes to the Squad Log; old jobs are cleared once a day
 setInterval(() => { try { for (const j of jobs.jobsTick()) { logJobEnded(j); console.log(`[job] ${j.id} ${j.status}${j.error ? `: ${j.error}` : ''}`); } } catch (e) { console.error('[job]', e.message); } }, 3000).unref();
 setInterval(() => { try { jobs.pruneJobs(); } catch { /* next day */ } }, 864e5).unref();
+setInterval(() => { try { chatTick(); } catch (e) { console.error('[chat]', e.message); } }, 5000).unref();
 // the dispatcher: starts queued work when there is room, stops agents that sit idle
 setInterval(() => {
   dispatchTick().then((r) => { for (const x of r.started) console.log(`[dispatch] started ${x.floorId}/${x.agentId} (${x.action})`); for (const x of r.stopped) console.log(`[dispatch] idle stop ${x.floorId}/${x.agentId}`); for (const f of r.failed) console.error(`[dispatch] ${f.item.floorId}/${f.item.agentId}: ${f.error}`); }, (e) => console.error('[dispatch]', e.message));

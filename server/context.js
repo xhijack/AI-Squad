@@ -38,6 +38,7 @@ export function sessionContext(root, floor, prefs = {}) {
 export function contextLines(sp, dir, owner) {
   return [
     `This Space is a ${sp.kind}${owner ? ' for the Owner only' : ''}. Your identity is your role; what you learn about this ${sp.kind === 'department' ? 'department\'s clients' : 'client or project'} stays in this Space (its documents, \`docs/squad/LEARNINGS.md\`${sp.memory === 'repo' ? ', its memory in `.claude/aisquad/memory/`' : ''}).`,
+    'People may message you directly (Desk → Chat): answer them in your reply. The lead finds a list of those messages in `docs/squad/DIRECT.md`.',
     'Never write client or project facts to `~/.claude/CLAUDE.md`, `~/.aisquad` or the Company Brain: other Spaces would see them. Those paths are read-only for you.',
     ...(dir ? [`The Company Brain is at \`${dir}\` (read only): ${company.TEAM_DIRS.join(', ')}${owner ? `, and for this Owner Space ${company.OWNER_DIRS.join(', ')}` : ''}. Read what the task needs; follow the brand and the SOPs there.`] : []),
     ...(!owner && dir ? [`Legal, finance and pricing are not for this Space: ask the lead or the owner instead of looking for them.`] : []),

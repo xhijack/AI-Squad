@@ -24,7 +24,7 @@ export const TYPES = {
   'dispatch.queued': 'work', 'dispatch.started': 'work', 'dispatch.failed': 'work', 'dispatch.removed': 'work', 'dispatch.idle-stopped': 'lifecycle',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
-  'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
+  'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
   'usage.turn': 'usage', 'voice.spoken': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
@@ -95,6 +95,8 @@ function summarize(e) {
     case 'dispatch.failed': return `${who} could not start from the queue: ${oneLine(d.error || '', 80)}${d.dropped ? ' (removed)' : ''}`;
     case 'dispatch.removed': return `${who} removed from the queue`;
     case 'dispatch.idle-stopped': return `${who} stopped after ${d.idleMin} min idle to free its slot`;
+    case 'chat.message': return `${d.from || 'Owner'} → ${who} (chat${d.context === 'general' ? ', general' : ''}): ${oneLine(d.text || '', 80)}`;
+    case 'chat.reply': return `${who} answered in the chat${d.status && d.status !== 'done' ? ` (${d.status})` : ''}`;
     case 'job.ended': return `${who}'s background job ${d.status}${d.cost != null ? ` ($${(+d.cost).toFixed(2)})` : ''}${d.error ? `: ${oneLine(d.error, 80)}` : ''}`;
     case 'task.ended': return `${who} ${d.label || d.kind} ${d.status === 'completed' ? 'finished' : d.status} after ${secs(d.ms)}${d.summary ? `: ${d.summary}` : ''}`;
     case 'agent.idle': return `${who} idle${d.openWork ? ' with open work' : ''}`;

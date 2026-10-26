@@ -42,6 +42,9 @@ import { runnerFor } from './runner.js';
 import * as dispatcher from './dispatcher.js';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
+import { currentActor } from './access.js';
+import * as chatLib from './chat.js';
+import * as contextLib from './context.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -675,25 +678,30 @@ export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DE
   if (guard) return admit({ floorId, agentId, action: 'job', task: prompt, title, priority, via: 'owner', opts: { budgetUsd, permissionMode, kind, resume } });
   return launchJob(floorId, agentId, prompt, { budgetUsd, permissionMode, via, kind, title, resume });
 }
-function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '' } = {}) {
+function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null } = {}) {
   const { entry, cfg, agent } = locate(floorId, agentId);
   const b = building.loadBuilding();
   const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
     ...floors.commitIdentity(agent, cfg.git), ...auth.backgroundEnv(b.prefs.auth) };
   floors.generate(entry.path);
   const eff = floors.effectiveOf(entry.path, agent);
-  const repos = floors.agentReposOf(entry.path, agentId);
-  const sc = floors.sessionContext(entry.path);
+  // the General chat (0.14): a neutral folder with only the agent's identity and the Company Brain, no repositories
+  const general = chat?.context === 'general';
+  const cwd = general ? chatLib.neutralDir(floorId, agentId, path.join(entry.path, '.claude', 'agents', `${agentId}.md`)) : entry.path;
+  const repos = general ? [] : floors.agentReposOf(entry.path, agentId);
+  const sc = general ? contextLib.sessionContext(cwd, { ...cfg.floor, memory: 'claude' }, b.prefs) : floors.sessionContext(entry.path);
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
-    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny], pluginDir: config.useHooks ? ROOT : '', extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs] });
-  const job = runnerFor('headless').start({ floorId, agentId, kind, title, prompt, cwd: entry.path, args, env, model: eff.model, budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via });
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny], pluginDir: config.useHooks && !general ? ROOT : '', extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs] });
+  const job = runnerFor('headless').start({ floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : null });
   logEvent(floorId, { type: 'job.started', agent: agentId, model: eff.model, data: { job: job.id, kind, title: job.title, budgetUsd: job.budgetUsd, permissionMode, via } });
+  if (chat) chatLib.setState(chat.key, { awaiting: { msgId: chat.msgId, since: Date.now(), mode: 'job', job: job.id } });
   invalidate();
   return job;
 }
 // from the server's job tick: an ended job goes to the Squad Log
 export function logJobEnded(job) {
   if (!job.floorId) return;
+  if (job.meta?.chat) chatAnswered(job);
   logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}) } });
   invalidate();
 }
@@ -802,6 +810,74 @@ export async function dispatchTick(now = Date.now(), { res } = {}) {
   }
   if (r.started.length || r.failed.length || stopped.length) invalidate();
   return { started: r.started, failed: r.failed, stopped };
+}
+
+// ---------- direct chat with one agent (0.14), see server/chat.js ----------
+function chatPlace(floorId, agentId, context) {
+  const { entry, cfg, agent, name } = locate(floorId, agentId);
+  const file = chatLib.threadFile({ root: entry.path, floorId, agentId, context });
+  return { entry, cfg, agent, name, file, key: chatLib.keyOf(floorId, agentId, context) };
+}
+export function chatThread(floorId, agentId, context = 'space') {
+  const p = chatPlace(floorId, agentId, context);
+  const st = chatLib.getState(p.key);
+  return { context, contexts: chatLib.CONTEXTS, agent: { id: agentId, displayName: p.agent.displayName }, running: tm.isRunning(p.name),
+    messages: chatLib.read(p.file, 100), awaiting: st.awaiting || null, hasSession: !!st.sessionId };
+}
+// a person's message: typed into the running Desk session (Space), else a background job answers (P0). In a Space
+// the lead learns about it (docs/squad/DIRECT.md and the Squad Log).
+export async function sendChat(floorId, agentId, text, { context = 'space', user = null } = {}) {
+  const p = chatPlace(floorId, agentId, context);
+  const t = chatLib.cleanText(text);
+  const who = user || currentActor() || { id: 'owner', name: 'Owner' };
+  const msg = chatLib.append(p.file, { from: 'person', name: who.name, by: who.id, context, text: t });
+  let delivery = 'job', dispatch = null;
+  if (context === 'space' && tm.isRunning(p.name)) {
+    await sendTask(floorId, agentId, chatLib.typedText(who.name, t), [], { via: 'owner', priority: 'P0' });
+    chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'typed' } });
+    delivery = 'typed';
+  } else {
+    const st = chatLib.getState(p.key);
+    const prompt = chatLib.jobPrompt({ name: who.name, text: t, context, messages: chatLib.read(p.file, 20), spaceName: p.cfg.floor.name });
+    const r = await admit({ floorId, agentId, action: 'job', task: prompt, title: `Chat: ${t.replace(/\s+/g, ' ').slice(0, 100)}`, priority: 'P0', via: 'owner',
+      opts: { kind: 'chat', budgetUsd: 1, permissionMode: 'dontAsk', resume: st.sessionId || '', chat: { context, key: p.key, msgId: msg.id } } });
+    if (r.waiting) { delivery = 'queued'; dispatch = r.dispatch; chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'queued', queue: r.dispatch.id } }); }
+  }
+  const lead = p.cfg.team.agents.find((x) => x.lead) || p.cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  if (context === 'space' && lead && lead.id !== agentId) chatLib.noteForLead(p.entry.path, { name: who.name, agentName: p.agent.displayName, text: t });
+  logEvent(floorId, { type: 'chat.message', agent: agentId, data: { context, delivery, from: who.name, text: t.slice(0, 200) } });
+  invalidate();
+  return { ok: true, message: msg, delivery, ...(dispatch ? { dispatch } : {}) };
+}
+function chatAnswered(job) {
+  const c = job.meta.chat;
+  let p; try { p = chatPlace(job.floorId, job.agentId, c.context); } catch { return; }
+  const text = job.status === 'done' ? job.result : `(${job.status}) ${job.error || job.result || 'no answer'}`;
+  chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost });
+  chatLib.setState(p.key, { awaiting: undefined, ...(job.sessionId ? { sessionId: job.sessionId } : {}) });
+  logEvent(job.floorId, { type: 'chat.reply', agent: job.agentId, data: { context: c.context, status: job.status, job: job.id } });
+}
+// every few seconds: the answer of a Desk session that got a typed chat message goes back into the thread
+export function chatTick(now = Date.now()) {
+  const done = [];
+  for (const [key, st] of Object.entries(chatLib.loadState())) {
+    if (st.awaiting?.mode !== 'typed') continue;
+    const [floorId, agentId, context] = key.split('/');
+    let p; try { p = chatPlace(floorId, agentId, context); } catch { chatLib.setState(key, { awaiting: undefined }); continue; }
+    const l = liveAgents(p.entry, { agents: [p.agent] }, new Set(tm.listSessions()), { squad: squadOf(p.entry.path, p.cfg.floor) })[0];
+    const reply = l?.status?.reply;
+    if (reply && !l.status.turnOpen && reply.ts > st.awaiting.since) {
+      chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context, text: reply.text, replyTo: st.awaiting.msgId }, now);
+      chatLib.setState(key, { awaiting: undefined });
+      logEvent(floorId, { type: 'chat.reply', agent: agentId, data: { context, status: 'done', via: 'desk' } });
+      done.push(key);
+    } else if (!tm.isRunning(p.name)) {
+      chatLib.append(p.file, { from: 'system', context, text: 'The Desk session stopped before it answered. Send the message again to get an answer from a background job.' }, now);
+      chatLib.setState(key, { awaiting: undefined });
+    }
+  }
+  if (done.length) invalidate();
+  return done;
 }
 
 const criticalWaiting = (floorId) => (snapCache.value?.attention || []).filter((a) => a.floorId === floorId && a.autopilot?.critical).length;
@@ -1420,6 +1496,8 @@ function logCtx(floorId, root, cfg) {
 }
 // logging never breaks the action that is logged
 export function logEvent(floorId, ev) {
+  const who = currentActor();                     // a person other than the Owner did it (0.14)
+  if (who && who.id !== 'owner') ev = { ...ev, data: { ...(ev.data || {}), by: who.name } };
   try { collect.emitter(floorId, logCtx(floorId, floorId === ind.FLOOR_ID ? '' : building.floorEntry(floorId).path))(ev); } catch (e) { console.error('[log]', e.message); }
 }
 
