@@ -82,6 +82,8 @@ function wood() {
 }
 
 // ---------- devices (movable, in floor.json) ----------
+// the meeting table's seats in its own coordinates; face = the heading of someone sitting there (towards the table)
+export const MEETING_SEATS = [[-1.45, 0], [1.45, 0], [-.7, -1.05], [.7, -1.05], [-.7, 1.05], [.7, 1.05]].map(([x, z]) => ({ x, z, face: Math.atan2(-x, -z) }));
 const NOTES = ['#fde68a', '#fbcfe8', '#bbf7d0', '#bfdbfe', '#fed7aa'];
 const DEVICE_BUILDERS = {
   plant(g) {
@@ -157,6 +159,20 @@ const DEVICE_BUILDERS = {
     for (const [x, z] of [[-1.2, -.6], [1.2, -.6], [-1.2, .6], [1.2, .6]]) cyl(.05, .05, .75, mat('#2f3a4a'), x, .37, z, g, 8);
     for (const s of [-1, 1]) { cyl(.11, .11, .02, mat('#dc2626'), s * .95, .84, .3 * s, g, 16); }
   },
+  'meeting-table'(g) {
+    // an oval table with six chairs: sprint planning, plan reviews, Retro, standups and briefings
+    const top = cyl(1.05, 1.05, .07, mat('#8a5a35', { roughness: .45 }), 0, .76, 0, g, 40); top.scale.set(1.25, 1, .75);
+    cyl(.14, .22, .72, mat('#2f3a4a', { metalness: .4, roughness: .4 }), 0, .37, 0, g, 16);
+    cyl(.45, .45, .03, mat('#2f3a4a'), 0, .02, 0, g, 24);
+    box(.5, .02, .34, mat('#f4efe6'), -.3, .805, .05, g, 0);                         // papers and a laptop on the table
+    box(.42, .015, .3, mat('#cbd5e1', { metalness: .3 }), .45, .805, -.1, g, 0);
+    for (const s of MEETING_SEATS) {
+      const c = new THREE.Group(); c.position.set(s.x, 0, s.z); c.rotation.y = s.face; g.add(c);              // the backrest away from the table
+      box(.42, .06, .42, mat('#3d4a5c'), 0, .48, 0, c, .02);
+      box(.42, .45, .06, mat('#3d4a5c'), 0, .72, -.2, c, .02);
+      cyl(.03, .03, .45, mat('#9ca3af'), 0, .24, 0, c, 8);
+    }
+  },
   'server-rack'(g) {
     box(.8, 2, .8, mat('#1f2937', { roughness: .5, metalness: .3 }), 0, 1, 0, g, .02);
     // two LED columns that follow the machine load (setLoad): CPU on the left, RAM on the right
@@ -168,7 +184,7 @@ const DEVICE_BUILDERS = {
   },
 };
 export const DEVICE_LABELS = { plant: 'Plant', whiteboard: 'Whiteboard', printer: 'Printer', coffee: 'Coffee machine', pantry: 'Pantry counter', bookshelf: 'Bookshelf',
-  sofa: 'Sofa', rug: 'Lounge rug', tv: 'TV', beanbag: 'Beanbag', pingpong: 'Ping-pong table', 'server-rack': 'Server rack' };
+  sofa: 'Sofa', rug: 'Lounge rug', tv: 'TV', beanbag: 'Beanbag', pingpong: 'Ping-pong table', 'server-rack': 'Server rack', 'meeting-table': 'Meeting table' };
 
 function buildDevice(d) {
   const g = new THREE.Group();

@@ -163,9 +163,11 @@ test('an untouched pre-2.1 default device set becomes the new office; arranged s
   const legacy = [['whiteboard-1', 'whiteboard', -5.2, -3.9], ['plant-1', 'plant', 6.2, -3.7], ['plant-2', 'plant', -6.2, 3.7], ['printer-1', 'printer', 6, 3.4],
     ['coffee-1', 'coffee', 4.6, -3.8], ['rug-1', 'rug', 5.9, 1.1], ['sofa-1', 'sofa', 6.4, 1.1]].map(([id, type, x, z]) => ({ id, type, x, z, ry: 0 }));
   const up = floors.cleanFloor({ devices: legacy }).devices;
-  assert.deepEqual(up.map((d) => d.type).sort(), ['beanbag', 'beanbag', 'pantry', 'pingpong', 'plant', 'plant', 'plant', 'plant', 'rug', 'server-rack', 'sofa', 'tv', 'whiteboard']);
+  assert.deepEqual(up.map((d) => d.type).sort(), ['beanbag', 'beanbag', 'meeting-table', 'pantry', 'pingpong', 'plant', 'plant', 'plant', 'plant', 'rug', 'server-rack', 'sofa', 'tv', 'whiteboard']);
   const moved = legacy.map((d) => (d.id === 'sofa-1' ? { ...d, x: 2 } : d));
-  assert.deepEqual(floors.cleanFloor({ devices: moved }).devices.map((d) => d.id), moved.map((d) => d.id), 'the owner moved the sofa: keep their room');
+  assert.deepEqual(floors.cleanFloor({ devices: moved }).devices.map((d) => d.id), [...moved.map((d) => d.id), 'meeting-table-1'], 'the owner moved the sofa: keep their room, add the meeting table');
+  const withTable = [...moved, { id: 'mt', type: 'meeting-table', x: 1, z: 1, ry: 0 }];
+  assert.equal(floors.cleanFloor({ devices: withTable }).devices.filter((d) => d.type === 'meeting-table').length, 1, 'never a second table');
   assert.equal(floors.cleanFloor({ tagline: 'Ship it\nfast' }).tagline, 'Ship it fast');
 });
 

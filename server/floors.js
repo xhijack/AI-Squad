@@ -20,7 +20,7 @@ const run = promisify(execFile);
 
 export const LAYOUTS = ['rows', 'pods', 'circle', 'open-space'];
 export const WORKFLOWS = ['free-team', 'squad-sprint'];
-export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack', 'pantry', 'tv', 'beanbag', 'pingpong'];
+export const DEVICE_TYPES = ['whiteboard', 'printer', 'plant', 'coffee', 'bookshelf', 'sofa', 'rug', 'server-rack', 'pantry', 'tv', 'beanbag', 'pingpong', 'meeting-table'];
 export const DESK_DEVICES = ['laptop', 'dual-monitor'];
 export const BRANCH_STRATEGIES = ['agent-branches', 'feature-branches', 'trunk'];
 export const PUSH_POLICIES = ['never', 'after-merge', 'agents-may-push'];
@@ -53,16 +53,21 @@ export function defaultDevices() {
     { id: 'beanbag-1', type: 'beanbag', x: 2.3, z: 4.1, ry: .4 },
     { id: 'beanbag-2', type: 'beanbag', x: 7, z: 4, ry: -.4 },
     { id: 'pingpong-1', type: 'pingpong', x: -3.6, z: 4.4, ry: 0 },
+    // rituals: sprint planning, plan reviews, Retro, standups and briefings happen here (Phase 2.5)
+    MEETING_TABLE,
   ];
 }
 
 // Floors made before Phase 2.1 still carry the old default set (7 or 8 devices at their default spots). As long as
 // nobody moved them, they get the new office; anything the owner arranged is kept as it is.
 const LEGACY_DEFAULTS = { 'whiteboard-1': [-5.2, -3.9], 'plant-1': [6.2, -3.7], 'plant-2': [-6.2, 3.7], 'printer-1': [6, 3.4], 'coffee-1': [4.6, -3.8], 'rug-1': [5.9, 1.1], 'sofa-1': [6.4, 1.1], 'server-rack-1': [-6.35, -1.6] };
+export const MEETING_TABLE = { id: 'meeting-table-1', type: 'meeting-table', x: .3, z: 4.5, ry: 0 };
 export function upgradeDevices(devices) {
-  if (!Array.isArray(devices) || devices.length < 7) return devices;
-  const legacy = devices.every((d) => LEGACY_DEFAULTS[d.id] && Math.abs(LEGACY_DEFAULTS[d.id][0] - d.x) < .01 && Math.abs(LEGACY_DEFAULTS[d.id][1] - d.z) < .01);
-  return legacy ? defaultDevices() : devices;
+  if (!Array.isArray(devices)) return devices;
+  const legacy = devices.length >= 7 && devices.every((d) => LEGACY_DEFAULTS[d.id] && Math.abs(LEGACY_DEFAULTS[d.id][0] - d.x) < .01 && Math.abs(LEGACY_DEFAULTS[d.id][1] - d.z) < .01);
+  if (legacy) return defaultDevices();
+  // every Floor has a meeting table (0.5.3); arranged offices get it at its default spot, movable in Edit Mode
+  return devices.some((d) => d && d.type === 'meeting-table') ? devices : [...devices, { ...MEETING_TABLE }];
 }
 
 const num = (v, d = 0, lim = 20) => { const n = Number(v); return Number.isFinite(n) ? Math.max(-lim, Math.min(lim, +n.toFixed(3))) : d; };
