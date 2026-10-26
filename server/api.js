@@ -12,7 +12,6 @@ import * as roles from './roles.js';
 import * as libraries from './libraries.js';
 import * as dispatcher from './dispatcher.js';
 import * as squad from './squad.js';
-import { checkPin } from './pin.js';
 import { setApproval } from './merge.js';
 import { recentEvents as hooksRecent } from './events.js';
 import { meter } from './meter.js';
@@ -28,6 +27,8 @@ import * as jobs from './jobs.js';
 import * as history from './history.js';
 import * as company from './company.js';
 import * as admin from './admin.js';
+import * as users from './users.js';
+import * as access from './access.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -130,7 +131,14 @@ const routes = [
     squad.invalidate();
     return r;
   }, { pin: true }],
-  ['POST', /^\/api\/auth$/, () => ({ ok: true }), { pin: true }],
+  ['POST', /^\/api\/auth$/, (p, b, req) => ({ ok: true, user: req.user }), { pin: true }],
+  // people (0.14): the Owner adds members and viewers, each with an own PIN (shown once)
+  ['GET', /^\/api\/me$/, (p, b, req) => ({ user: req.user }), { pin: true }],
+  ['GET', /^\/api\/users$/, () => ({ users: users.listUsers(), roles: users.ROLES }), { pin: true }],
+  ['POST', /^\/api\/users$/, (p, b, req) => users.addUser(b, req.ownerPin), { pin: true }],
+  ['PATCH', /^\/api\/users\/([\w-]+)$/, ([id], b) => ({ user: users.updateUser(id, b) }), { pin: true }],
+  ['POST', /^\/api\/users\/([\w-]+)\/pin$/, ([id], b, req) => users.resetPin(id, req.ownerPin), { pin: true }],
+  ['DELETE', /^\/api\/users\/([\w-]+)$/, ([id]) => users.removeUser(id), { pin: true }],
   ['POST', /^\/api\/events$/, (p, b) => squad.ingestEvent(b), { pin: true }],
   ['GET', /^\/api\/events$/, () => ({ events: hooksRecent() }), { pin: true }],
 
@@ -223,6 +231,9 @@ const routes = [
   ['POST', /^\/api\/dispatcher\/queue\/([\w-]+)\/start$/, ([id]) => squad.startQueued(id), { pin: true }],
   ['PATCH', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id], b) => { dispatcher.setPriority(id, String(b.priority || '')); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['DELETE', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id]) => squad.dropQueued(id), { pin: true }],
+  // direct chat with one agent (0.14): ?context=space|general
+  ['GET', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat$/, ([id, a], b, req) => squad.chatThread(id, a, new URL(req.url, 'http://x').searchParams.get('context') || 'space'), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat$/, ([id, a], b, req) => squad.sendChat(id, a, b.text, { context: b.context || 'space', user: req.user }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/task$/, ([id, a], b) => squad.sendTask(id, a, b.text, b.attachments), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/work-done$/, ([id, a]) => { squad.clearWork(id, a); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/attachments$/, async ([id], b, req) => {
@@ -252,15 +263,26 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (method !== req.method) continue;
         const m = url.pathname.match(re);
         if (!m) continue;
-        if ((opts.pin || lockReads) && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
+        // who is asking (0.14): the Owner's PIN, or a person's own PIN; reads on loopback stay open without one
+        const user = users.identify(req.headers['x-aisquad-pin'], pin);
+        if ((opts.pin || lockReads) && !user) return send(res, 401, { error: 'PIN required' });
+        const need = access.requiredRole(method, url.pathname);
+        if (user && !access.allows(user, need)) return send(res, 403, { error: `Only ${need === 'owner' ? 'the Owner' : 'a member or the Owner'} can do this` });
+        if (!user && need === 'owner' && method !== 'GET') return send(res, 401, { error: 'PIN required' });
+        if (access.hiddenPath(url.pathname, user)) return send(res, 404, { error: 'Floor not found' });
+        Object.assign(req, { user: user || null, actor: user?.name || 'owner', ownerPin: pin });
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
+        if (body && typeof body === 'object' && body.floorId && access.hiddenPath(`/api/floors/${body.floorId}`, user)) return send(res, 404, { error: 'Floor not found' });
         // configuration is code: changes to the Building or a Space are recorded with their before and after (server/history.js)
-        let out;
-        if (opts.history) {
+        let out = await access.actorStore.run({ user }, async () => {
+          if (!opts.history) return handler(m.slice(1), body, req);
           const h = opts.history(m.slice(1), body);
           let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
-          out = await history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor || 'owner' }, () => handler(m.slice(1), body, req));
-        } else out = await handler(m.slice(1), body, req);
+          return history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor }, () => handler(m.slice(1), body, req));
+        });
+        if (method !== 'GET' && /^\/api\/floors/.test(url.pathname)) access.forgetOwnerFloors();
+        out = access.redact(url.pathname, out, user);
+        if (out === null) return send(res, 404, { error: 'Not found' });
         if (out && out.__audio) { res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); return res.end(out.__audio); }
         if (out && out.__file && out.sandbox) {
           // a design variant: shown in an iframe, sandboxed (no scripts, no access to The AI Squad), nothing from outside
