@@ -926,10 +926,12 @@ export async function startNextSprint(floorId) {
 const INDEPENDENT_NAME = 'Independent agents';
 function independentLives({ events = false } = {}) {
   const now = Date.now();
-  return ind.current({ floorRoots: building.loadBuilding().floors.map((f) => f.path) }).map((a) => {
+  const list = ind.current({ floorRoots: building.loadBuilding().floors.map((f) => f.path) });
+  const files = ind.assignTranscripts(list);                                 // each its own session, never one twice
+  return list.map((a) => {
     const screen = a.tmux ? tm.capturePane(a.tmux.target, config.scanTmuxSocket) : '';
     const dialog = a.tmux && a.live ? tm.parsePrompt(screen) : null;
-    const file = tx.sessionsOf(a.root)[0]?.file;
+    const file = files.get(a);
     const st = file ? statusOf(file, a.root, events) : null;
     const asking = a.live && st?.ask;
     const working = a.live && ((a.tmux && tm.isBusy(screen)) || (!a.tmux && st?.turnOpen && now - st.lastTs < tx.ACTIVE_MS));

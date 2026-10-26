@@ -94,3 +94,23 @@ test('Floor 1 in the Building: desks, a dialog in Attention answered in the pane
   assert.equal(b.floors.find((f) => f.number === 1).agents.some((a) => a.id === 'shop'), false);
   assert.deepEqual(b.floors.find((f) => f.number === 2).agents.map((a) => a.id), ['shop-dev']);
 });
+
+test('two VS Code sessions in one folder are two agents, each with its own transcript; one session twice is one', () => {
+  const A = 'fc36f4e2-ea1e-4f21-9789-d435d94039ec', B = '7bb1e7b7-4ad1-4140-9ff7-b2c63335970c';
+  assert.equal(ind.sessionArg(['claude', '--output-format', 'stream-json', `--resume=${A}`]), A);
+  assert.equal(ind.sessionArg(['claude', '-r', B]), B);
+  assert.equal(ind.sessionArg(['claude', '--session-id', A]), A);
+  assert.equal(ind.sessionArg(['claude', '--resume', 'not-a-uuid']), '');
+  const root = '/home/someone';
+  const procs = [{ pid: 10, ppid: 1, cwd: root, via: 'VS Code', session: A }, { pid: 11, ppid: 1, cwd: root, via: 'VS Code', session: B }, { pid: 12, ppid: 1, cwd: root, via: 'VS Code', session: A }];
+  const found = ind.detect({ procs, panes: [], projects: [] });
+  assert.deepEqual(found.map((c) => c.key), [`session:${A}`, `session:${B}`], 'the third process is the first session again');
+  // B is the newest transcript in the folder; each card still shows its own
+  const sessionsOf = () => [{ id: B, file: `/t/${B}.jsonl` }, { id: A, file: `/t/${A}.jsonl` }, { id: 'old', file: '/t/old.jsonl' }];
+  const files = ind.assignTranscripts(found, sessionsOf);
+  assert.deepEqual(found.map((c) => files.get(c)), [`/t/${A}.jsonl`, `/t/${B}.jsonl`]);
+  // two terminals without a session id in that folder: the newest and the next, never the same one
+  const plain = ind.detect({ procs: [{ pid: 20, ppid: 1, cwd: root, via: '', session: '' }, { pid: 21, ppid: 1, cwd: root, via: '', session: '' }], panes: [], projects: [] });
+  const f2 = ind.assignTranscripts(plain, sessionsOf);
+  assert.notEqual(f2.get(plain[0]), f2.get(plain[1]));
+});
