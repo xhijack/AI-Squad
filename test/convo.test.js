@@ -43,3 +43,15 @@ test('the message markdown: headings, lists, tables, code, safe links', () => {
   assert.match(h, /<a href="https:\/\/netlify\.com" [^>]*>https:\/\/netlify\.com<\/a>\./, 'the full stop is not part of the URL');
   assert.doesNotMatch(h, /href="javascript/); assert.doesNotMatch(h, /<b>raw<\/b>/);
 });
+
+test('desk monitors: an edit as a diff, and the QA / merge strip', async () => {
+  const { diffLines, mergeStatus } = await import('../ui/screen-model.js');
+  assert.deepEqual(diffLines({ old: 'const a = 1;\nreturn a;', added: 'const a = 2;\nreturn a * 2;', text: 'file window' }), [['-', 'const a = 1;'], ['-', 'return a;'], ['+', 'const a = 2;'], ['+', 'return a * 2;']]);
+  const many = Array.from({ length: 20 }, (_, i) => `line ${i}`).join('\n');
+  const d = diffLines({ old: many, text: many });
+  assert.equal(d.length, 18); assert.equal(d.filter(([op]) => op === '-').length, 3, 'removed lines stay visible');
+  assert.equal(mergeStatus({ board: { sprint: '2', tasks: [{ task: 'BUILD M01', column: 'DONE' }, { task: 'QA M01', column: 'DONE' }, { task: 'QA M02', column: 'TODO' }] }, merge: { approved: true, last: [{ branch: 'sprint-1', result: 'merged' }] } }),
+    'QA 1/2 passed · sprint-2 → main · last merge sprint-1: merged');
+  assert.equal(mergeStatus({ board: null, merge: { approved: false, last: [] } }), 'auto-merge not approved');
+  assert.equal(mergeStatus(null), '');
+});

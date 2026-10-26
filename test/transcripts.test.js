@@ -144,3 +144,9 @@ test('an agent\'s own sessions and the session a subagent run belongs to', () =>
   assert.equal(tx.parentSession(path.join(sub, 'agent-abc.jsonl')), 'sess-pm');
   assert.equal(tx.parentSession(path.join(pdir, 'sess-pm.jsonl')), 'sess-pm');
 });
+
+test('an edit\'s peek keeps the replaced lines for the diff on the monitor', () => {
+  fs.writeFileSync(path.join(sub, 'agent-edit.jsonl'), jsonl([{ type: 'assistant', timestamp: iso(1000), message: { id: 'x1', content: [{ type: 'tool_use', id: 'ed1', name: 'Edit', input: { file_path: path.join(proj, 'src/cart.js'), old_string: 'total = a', new_string: 'total = a + b' } }] } }]));
+  const p = tx.transcriptStatus(path.join(sub, 'agent-edit.jsonl'), proj).peek;
+  assert.deepEqual([p.type, p.path, p.old, p.text], ['code', 'src/cart.js', 'total = a', 'total = a + b']);
+});

@@ -78,7 +78,9 @@ function peekOf(c, root, ts, kind) {
   const i = c.input || {};
   if (/^(Edit|MultiEdit|Write)$/.test(c.name) && i.file_path) {
     const text = c.name === 'Write' ? i.content : c.name === 'Edit' ? i.new_string : (i.edits || []).map((e) => e.new_string).join('\n');
-    return { id: c.id, type: 'code', path: rel(root, i.file_path), text: clip(String(text ?? ''), 1500), ts, kind };
+    // an edit also keeps the lines it replaced, so the developer's monitor can show the diff
+    const old = c.name === 'Edit' ? i.old_string : c.name === 'MultiEdit' ? (i.edits || []).map((e) => e.old_string).join('\n') : null;
+    return { id: c.id, type: 'code', path: rel(root, i.file_path), text: clip(String(text ?? ''), 1500), ...(old != null ? { old: clip(String(old), 1500) } : {}), ts, kind };
   }
   if (c.name === 'Bash') return { id: c.id, type: 'terminal', command: clip(String(i.command || ''), 400), text: '', output: '', ts, kind };
   return null;

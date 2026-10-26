@@ -1052,7 +1052,8 @@ export function codeWindow(root, peek) {
   const st = statOf(file);
   if (!st || !st.isFile() || st.size > 400000) return peek;
   const key = `${file}:${st.mtimeMs}:${peek.ts}`;
-  if (windowCache.has(key)) return { ...peek, ...windowCache.get(key) };
+  const keep = peek.old != null ? { added: peek.text } : {};          // a diff on the monitor needs the edit's own lines
+  if (windowCache.has(key)) return { ...peek, ...windowCache.get(key), ...keep };
   let text; try { text = fs.readFileSync(file, 'utf8'); } catch { return peek; }
   const lines = text.split('\n');
   const needle = String(peek.text || '').split('\n').find((l) => l.trim().length > 3) || '';
@@ -1061,7 +1062,7 @@ export function codeWindow(root, peek) {
   const win = { text: lines.slice(start, start + 18).map((l) => l.slice(0, 160)).join('\n'), firstLine: start + 1, hlFrom: at + 1, hlTo: at + Math.min(12, String(peek.text || '').split('\n').length) };
   windowCache.set(key, win);
   if (windowCache.size > 200) windowCache.delete(windowCache.keys().next().value);
-  return { ...peek, ...win };
+  return { ...peek, ...win, ...keep };
 }
 
 // ---------- Squad Log (server/log.js, server/collect.js) ----------

@@ -2,6 +2,7 @@
 // the latest QA screenshot, a question waiting for the owner, a clock when idle, or the live tmux
 // screen in the over-the-shoulder view. Drawing ideas ported from the squad-3d prototype.
 import * as THREE from 'three';
+import { lines, diffLines, mergeStatus } from './screen-model.js';
 
 export const SCR_W = 800, SCR_H = 490;
 const MONO = 'ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace';
@@ -27,7 +28,6 @@ function hlCode(ctx, text, x, y) {
     cx += ctx.measureText(p).width;
   }
 }
-const lines = (s, max) => String(s || '').replace(/\t/g, '  ').split('\n').slice(0, max).map((l) => (l.length > 70 ? `${l.slice(0, 69)}…` : l));
 
 function titleBar(ctx, text, color) {
   ctx.fillStyle = '#181a26'; ctx.fillRect(0, 0, SCR_W, 34);
@@ -115,6 +115,26 @@ function drawLive(ctx, text) {
 // lead screen: the sprint board (counts + first tasks per column), or the team's states on Free Team Floors
 const BOARD_COLS = [['TODO', 'To do', '#94a3b8'], ['IN_PROGRESS', 'Building', '#6aa5ff'], ['REVIEW', 'QA', '#b388ff'], ['DONE', 'Done', '#4fc38a']];
 const STATE_COLOR = { working: '#4fc38a', waiting: '#ef5d6b', idle: '#f2b544', stopped: '#4b5068' };
+function drawDiff(ctx, peek, t) {
+  ctx.fillStyle = '#1e1f2b'; ctx.fillRect(0, 0, SCR_W, SCR_H);
+  titleBar(ctx, `± ${peek.path}`, '#86efac');
+  const all = diffLines(peek);
+  const shown = Math.min(all.length, Math.max(1, Math.floor((Date.now() - peek.ts) / 200)));
+  ctx.font = `17px ${MONO}`;
+  all.slice(0, shown).forEach(([op, l], i) => {
+    const y = 48 + i * 23;
+    ctx.fillStyle = op === '+' ? 'rgba(79, 195, 138, .16)' : 'rgba(239, 93, 107, .16)'; ctx.fillRect(0, y, SCR_W, 23);
+    ctx.fillStyle = op === '+' ? '#4fc38a' : '#ef5d6b'; ctx.fillText(op, 18, y + 16);
+    if (op === '+') hlCode(ctx, l, 44, y + 16); else { ctx.fillStyle = '#fca5a5'; ctx.fillText(l, 44, y + 16); }
+  });
+  if (Math.floor(t * 2) % 2 && shown) { ctx.fillStyle = '#e2e8f0'; ctx.fillRect(44 + ctx.measureText(all[shown - 1][1]).width, 48 + (shown - 1) * 23, 9, 20); }
+}
+function drawStrip(ctx, text) {
+  if (!text) return;
+  ctx.fillStyle = 'rgba(12, 14, 22, .92)'; ctx.fillRect(0, SCR_H - 38, SCR_W, 38);
+  ctx.fillStyle = /fail|refused/.test(text) ? '#fca5a5' : '#a3e635'; ctx.font = `600 16px ${SANS}`; ctx.fillText(`⎇ ${text}`.slice(0, 80), 14, SCR_H - 13);
+}
+
 function drawBoard(ctx, info) {
   ctx.fillStyle = '#141826'; ctx.fillRect(0, 0, SCR_W, SCR_H);
   const tasks = info?.board?.tasks;
@@ -170,19 +190,20 @@ export function drawScreen(S, a, { t, away = '', live = null, shot = null, part 
   if (live !== null && part === 'main') { drawLive(ctx, live); return .1; }
   if (stopped) { ctx.fillStyle = '#0b0d14'; ctx.fillRect(0, 0, SCR_W, SCR_H); return 30; }
   if (a.state === 'waiting') { drawWaiting(ctx, a); return 2; }
-  if (role === 'board' && part === 'main' && !away) { drawBoard(ctx, board); return 3; }
-  if (role === 'tests' && part === 'main' && a.state === 'working' && a.peek?.type === 'terminal' && a.peek.kind === 'test') { drawTests(ctx, a.peek); return .6; }
+  const strip = () => drawStrip(ctx, mergeStatus(board));
+  if (role === 'board' && part === 'main' && !away) { drawBoard(ctx, board); strip(); return 3; }
+  if (role === 'tests' && part === 'main' && a.state === 'working' && a.peek?.type === 'terminal' && a.peek.kind === 'test') { drawTests(ctx, a.peek); strip(); return .6; }
   if (away || a.state !== 'working') {
-    if (role === 'tests' && shot && !away && part === 'main') { drawShot(ctx, shot.img, shot.file); return 5; }
+    if (role === 'tests' && shot && !away && part === 'main') { drawShot(ctx, shot.img, shot.file); strip(); return 5; }
     drawIdle(ctx, a, away); return 5;
   }
   const p = a.peek;
-  if (role === 'tests' && shot && part === 'main' && (!p || p.type !== 'code')) { drawShot(ctx, shot.img, shot.file); return 3; }
+  if (role === 'tests' && shot && part === 'main' && (!p || p.type !== 'code')) { drawShot(ctx, shot.img, shot.file); strip(); return 3; }
   if (part === 'side') {                                   // second monitor: terminal or activity
     if (p && p.type === 'terminal') drawTerminal(ctx, p); else drawBars(ctx, t, KIND_COLOR[a.peek?.kind] || '#6aa5ff');
     return .6;
   }
-  if (p && p.type === 'code') { drawCode(ctx, p, t); return .25; }
+  if (p && p.type === 'code') { if (p.old != null && role === 'code') drawDiff(ctx, p, t); else drawCode(ctx, p, t); return .25; }
   if (p && p.type === 'terminal') { drawTerminal(ctx, p); return .6; }
   drawBars(ctx, t, KIND_COLOR[p?.kind] || '#6aa5ff');
   return .4;
