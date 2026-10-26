@@ -72,6 +72,10 @@ Your Floors and their repositories are not touched. To remove The AI Squad's mac
 | `/aisquad status` | Floors, agent states, Attention, machine resources and the service state as text |
 | `/aisquad stop` | Stop the server; agents keep running in tmux |
 | `/aisquad uninstall` | Stop the server and remove the systemd user service or launchd agent |
+| `/aisquad backup` | Back up the Building (see Backups and moving to another machine) |
+| `/aisquad verify <file>` | Check that a backup reads back |
+| `/aisquad restore <file>` | Restore a backup, on this machine or a new one |
+| `/aisquad doctor` | Check this machine and the Building: Node.js, tmux, Claude Code, git, the service, the data version, PIN and secrets permissions, every Floor folder and linked repository, memory, disk and backups |
 
 The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`); Claude Code accepts the short `/aisquad` when no other command uses that name. In `claude -p`, use the full name.
 
@@ -281,6 +285,32 @@ Checked every minute and shown in the Lobby:
 - **Stall**: pending work while the lead and all agents are idle for 10 minutes, or an agent with assigned work idle for 10 minutes.
 - **Resources**: free RAM below 1.5 GB, swap above 85 %, free disk below 5 GB.
 - **Budget**: estimated from transcript token usage; warning at 80 %, Attention at 100 %.
+- **Agents at once** (0.10): every Floor has its maximum (Floor settings, default 4) and the whole machine has one too (Menu → **Backups and health**, default 6). Starting one more asks first. The Desk shows each running agent's RAM and CPU: its Claude Code process and everything under it (MCP servers, shells, test runs). The averages and peaks per session are kept in `~/.aisquad/usage.json`; they tell how much memory one more agent needs.
+- **Backups**: a failed or late nightly backup, or a backup that no longer reads back, is an Attention item.
+
+### Backups and moving to another machine
+
+`/aisquad backup` writes one file, `~/.aisquad/backups/aisquad-backup-<host>-<time>.tar.gz` (`--out` for another folder or file):
+
+- `~/.aisquad` without caches and this machine's state: the Building registry, Role Templates, Blueprints, the Squad Log (`--no-logs` leaves it out), audits and improvements, attachments, settings. Left out on purpose: the voice cache, cloned template libraries (cloned again), running sessions, the independent agents scan, and auto-merge approvals (you approve again on the new machine).
+- Each Floor's configuration (`.claude/aisquad/`, `AISQUAD.md`), in case it was never committed, and Claude Code's auto memory of each Floor.
+- A manifest with a sha256 per file and, per Floor, its git remote, branch, commit and how many changes are not committed (the backup warns about them: repositories come back from git, so push your work).
+
+Secrets (PIN, API keys) are only backed up encrypted: `--passphrase-env VAR` (or the passphrase saved in Backups and health) encrypts the file with AES-256-GCM as `.tar.gz.enc`, and `--with-secrets` adds them. Without a passphrase the file is a plain `.tar.gz` you can open with `tar`.
+
+`/aisquad verify <file>` checks that every file reads back. `/aisquad restore <file> --dry-run` shows where every Floor goes; then, with the server stopped:
+
+```
+/aisquad restore aisquad-backup-old-box-20261026-023000.tar.gz --projects-dir ~/projects     # new machine, projects in ~/projects
+/aisquad restore <file> --relink /home/old/projects=/home/new/code                           # map an old folder to a new one
+/aisquad restore <file> --force                                                              # over a ~/.aisquad in use (kept as ~/.aisquad.before-restore-<time>)
+```
+
+Floors missing on the new machine are cloned from their remote (`--no-clone` to skip), a Floor without its configuration gets it from the backup, auto memory lands under the Floor's new path, the data is migrated, and `doctor` runs at the end.
+
+**Nightly backups** (Menu → Backups and health): on at a time you pick, the newest N kept, into `~/.aisquad/backups` or a folder you choose (a synced folder or a USB disk keeps it off the machine). Once a month the newest backup is read back. With a saved passphrase (`~/.aisquad/backup-passphrase`, mode 600, never backed up itself) they are encrypted.
+
+**Data versions**: `~/.aisquad/schema.json` records which version the files follow. A newer release migrates them when the server starts, after a safety backup (`…-pre-migrate-v<N>.tar.gz`, without secrets).
 
 ### Log and Audit
 
@@ -357,6 +387,11 @@ commands/aisquad.md   the Claude Code command
 ```
 
 ## License
+
+Apache License 2.0 (`LICENSE`, `NOTICE`; every source file carries `SPDX-License-Identifier: Apache-2.0`).
+Contributions are welcome under the Developer Certificate of Origin (`CONTRIBUTING.md`); report security
+problems privately (`SECURITY.md`). How Claude usage is billed and which sign-in to use for unattended work:
+`docs/BILLING.md`.
 
 Apache License 2.0. Free for personal and commercial use, as long as you keep the
 `LICENSE` and `NOTICE` files and credit the original source:

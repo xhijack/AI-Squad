@@ -719,6 +719,27 @@ Decision: one squad = one primary repository + linked repositories (`.claude/ais
     - the Log's repo tags.
   - 307 tests pass.
 
+## Phase 4, Sprint 1: foundation and safety, 0.10.0 (26 Oct 2026)
+
+Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safety net and measurements.
+
+- **Open source, consistently.** Apache-2.0 everywhere: `LICENSE`, `NOTICE`, the manifests, and `SPDX-License-Identifier: Apache-2.0` in every source file (96 files). The old "UNLICENSED" note is gone. New: `SECURITY.md` (threat model per asset, what is not protected, private reporting through GitHub, a hardening checklist), `CONTRIBUTING.md` (ground rules, Developer Certificate of Origin, commits), `docs/BILLING.md` (subscription or API key, what the official Anthropic pages say as of 26 Oct 2026, recommendations for teams and for people who install from GitHub).
+- **Data versions (`server/schema.js`).** `~/.aisquad/schema.json` records the version of the machine-local data and its history. The server runs pending migrations at start, in order; on a home that already had a schema, a safety backup comes first (`…-pre-migrate-v<N>.tar.gz`, no secrets). Version 1 is the 0.9 layout.
+- **Backups (`server/backup.js`, zero dependencies).**
+  - One file: tar (ustar, pax headers for long names) + gzip, and AES-256-GCM with a scrypt key when a passphrase is given (`.tar.gz.enc`).
+  - Inside: `~/.aisquad` without caches and machine state (voice cache, library clones, runtime sessions, independents, auto-merge approvals, usage, backup status), each Floor's `.claude/aisquad/` and `AISQUAD.md`, Claude Code's auto memory per Floor, and a manifest: sha256 per file; per Floor its remote, branch, commit and number of uncommitted changes.
+  - Secrets (PIN, API keys, people) only in an encrypted backup with `--with-secrets`. Warnings for uncommitted work and Floors without a remote.
+  - `verify` checks every checksum; a wrong passphrase or a flipped byte is refused.
+  - `restore`: plans first (`--dry-run`), maps paths (`--relink OLD=NEW`, `--projects-dir`), refuses a home in use without `--force` and then keeps it as `~/.aisquad.before-restore-<time>`, clones missing repositories from their remote (and checks out the branch), puts back a Floor's configuration that was never committed, writes the auto memory under the new path, migrates, and runs `doctor`. It reads the whole archive before anything moves, so a backup inside `~/.aisquad` restores too.
+  - Nightly backups (Menu → Backups and health): time, folder, how many to keep, with or without the Squad Log, encrypted with a saved passphrase (`~/.aisquad/backup-passphrase`, mode 600, never backed up itself). Once a month the newest backup is read back. A failed or late backup, or one that does not read back, is an Attention item (`backup`).
+- **`aisquad doctor` (`server/doctor.js`).** Node.js, tmux, Claude Code, git, the service and lingering, the data folder and version, PIN and secrets permissions, every Floor folder and its configuration, linked repositories, memory, disk, backups. Each check says what to do when it is not ok. Also `GET /api/doctor` (PIN) and the Backups and health dialog.
+- **CLI:** `aisquad backup [--out] [--with-secrets] [--no-logs] [--passphrase-env VAR]`, `aisquad verify FILE`, `aisquad restore FILE [--dry-run] [--force] [--relink OLD=NEW] [--projects-dir DIR] [--no-clone]`, `aisquad doctor`. A restore refuses while the server runs.
+- **RAM and CPU per agent (`server/usage.js`).** The meter's /proc sample now keeps the whole process tree (pid, parent, RSS, CPU). An agent session = its tmux pane's process and everything under it (MCP servers, shells, test runs). The Desk shows "RAM and CPU" with the number of processes; the Building snapshot carries `usage` per running agent. Averages and peaks per session are kept in `~/.aisquad/usage.json`; `estimateSessionRss()` is what one more agent needs (1 GB until measured), for the dispatcher of Sprint 4.
+- **Agents at once on the whole machine.** `prefs.maxAgents` (default 6, Menu → Backups and health) next to each Floor's maximum; starting one more asks first ("6 agents already run on this machine (Building maximum 6)"). The Building snapshot has `limits: { maxAgents, running, session }`.
+- **API:** `GET /api/doctor`, `GET /api/backups`, `POST /api/backups` (back up now), `POST /api/backups/verify`, `PATCH /api/building { maxAgents, backup, backupPassphrase }`.
+- **UI:** Menu → Backups and health (checks, agents at once, backups with Check, the nightly schedule and passphrase); the Desk's RAM and CPU. English and Bahasa Indonesia.
+- Tests: `test/backup.test.js` (tar round trip read by the system tar, encryption, what goes in and stays out, verify catching damage, restore planning, a restore on a "new machine" cloning from a bare remote and moving memory, a never-committed configuration put back, the nightly schedule, pruning, read-back and alerts, the stored passphrase), `test/schema.test.js` (migrations and the safety-backup hook, doctor), `test/usage.test.js` (parent pids, process trees, statistics, the Building maximum).
+
 ## How to run
 
 ```
