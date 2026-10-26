@@ -68,3 +68,29 @@ test('replyWait: only an idle agent with its own session, after an ended turn th
   assert.ok(replyWait(report, { gate: true, isLead: true }), 'a lead blocked by the source document gate waits for the owner');
   assert.equal(replyWait({ ...base, status: { ...base.status, reply: null } }, { gate: true, isLead: true }), null);
 });
+
+// shaped like the real case: the ui-ux-designer reporting a design review (findings, questions it answers itself)
+const REVIEW = `Design review M162 (premium template) selesai.
+
+**Temuan**
+1. Header: padding 16 px, seharusnya 24 px sesuai DESIGN.md.
+2. Apakah ikon kalender sudah benar? Ya, sudah sesuai mockup.
+3. Warna tombol utama sudah disetujui di DESIGN.md (approved).
+
+**Rekomendasi**
+- Tinjau ulang spacing layar RSVP pada 390 px.
+- Should we keep the gold accent? Yes, it is fixed in DESIGN.md.
+
+Status: PASS dengan 2 catatan minor. Next steps: fullstack-developer-1 fixes the padding, then QA retests.`;
+
+test('a teammate\'s status report or review is not a question for the owner', () => {
+  assert.equal(asksOwner(REVIEW, { teammate: true }), false);
+  assert.equal(asksOwner('Review done. Findings: 3 minor issues, see docs/squad/review/M162.md. Is the contrast enough? It passes WCAG AA.', { teammate: true }), false);
+  assert.equal(asksOwner('M162 review is ready. Do you want the gold accent kept on the RSVP page?', { teammate: true }), true, 'addressed to the owner');
+  assert.equal(asksOwner('Mohon kamu setujui palet warna baru di DESIGN.md.', { teammate: true }), true);
+  assert.equal(asksOwner('Design review done.\n\nNext steps: fullstack-developer-1 fixes the padding.'), false, '"next steps" for the team is not an ask');
+  const ts = 5;
+  const live = { running: true, inLead: false, status: { turnOpen: false, reply: { ts, text: REVIEW }, ask: null }, work: null, pending: false, dialog: null, busy: false };
+  assert.equal(replyWait(live, { teammate: true }), null);
+  assert.ok(replyWait({ ...live, status: { ...live.status, reply: { ts, text: 'Which font do you want for headings?' } } }, { teammate: true }));
+});

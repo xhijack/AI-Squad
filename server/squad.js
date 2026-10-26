@@ -142,7 +142,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
     // the turn ended with a plain-text message asking the owner for something: waiting for the owner's reply
-    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead }) : null;
+    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead, teammate: !!lead && a !== lead }) : null;
     if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
     if (reply) state = 'waiting';
     // teammates the lead has not spawned yet are not "stopped": they wait for the sprint (or the source documents)
