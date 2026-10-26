@@ -13,3 +13,8 @@ licensed under the MIT License (see ui/vendor/three/LICENSE).
 This product includes the Plus Jakarta Sans font (https://github.com/tokotype/PlusJakartaSans),
 Copyright 2020 The Plus Jakarta Sans Project Authors, licensed under the SIL Open Font License 1.1
 (see ui/vendor/fonts/OFL.txt).
+
+The realistic-look proof of concept (ui/assets/realistic) includes an avatar and animations from
+Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox), Copyright (c) 2020 Microsoft,
+licensed under the MIT License (see ui/assets/realistic/LICENSE-rocketbox.txt), and CC0 models and
+textures from Poly Haven (https://polyhaven.com). See ASSETS.md.
