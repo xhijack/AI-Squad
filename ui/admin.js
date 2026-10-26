@@ -5,8 +5,9 @@
 import { esc, api, toast, openModal, closeModal, diffHtml, ago } from './lib.js';
 import { ctx } from './ctx.js';
 import { t, tx } from './i18n.js';
+import { notifyHtml, improvementsHtml, bindMore } from './admin-more.js';
 
-const TABS = [['spaces', t('Spaces')], ['dispatcher', t('Dispatcher')], ['agents', t('Agents')], ['skills', t('Skills')], ['company', t('Company Brain')], ['changes', t('Changes')]];
+const TABS = [['spaces', t('Spaces')], ['dispatcher', t('Dispatcher')], ['agents', t('Agents')], ['skills', t('Skills')], ['company', t('Company Brain')], ['notify', t('Notifications')], ['improve', t('Improvements')], ['changes', t('Changes')]];
 const KIND = { project: t('Project'), department: t('Department') };
 const ACCESS = { team: t('Team'), owner: t('Owner only') };
 const MEMORY = { claude: t('This machine (Claude Code)'), repo: t('In the Space (committed)') };
@@ -118,10 +119,10 @@ function dispatcherHtml(x) {
 }
 
 async function openAdmin(tab = 'spaces') {
-  const [d, roles, disp] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles'), tab === 'dispatcher' ? api('GET', '/api/dispatcher') : null]);
+  const [d, roles, disp] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles'), tab === 'dispatcher' ? api('GET', '/api/dispatcher') : tab === 'notify' ? api('GET', '/api/notify') : tab === 'improve' ? api('GET', '/api/insights') : null]);
   const modal = openModal(`<div class="adminRoot"><div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
     <div class="mBody"><div class="tabs adminTabs" role="tablist">${TABS.map(([id, label]) => `<button role="tab" data-atab="${id}" aria-selected="${id === tab}">${esc(label)}</button>`).join('')}</div>
-    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
+    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp), notify: () => notifyHtml(disp), improve: () => improvementsHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
   modal.closest('dialog').classList.add('xwide');
   const body = modal.querySelector('.adminRoot');          // new on every render: its listeners go with it
   body.querySelectorAll('[data-close]').forEach((x) => x.onclick = () => closeModal());
@@ -192,6 +193,7 @@ async function openAdmin(tab = 'spaces') {
       }
     } catch (err) { toast(err.message, 5000); }
   });
+  bindMore(body, again);
   body.addEventListener('change', async (e) => {
     if (!e.target.dataset.prio) return;
     try { await api('PATCH', `/api/dispatcher/queue/${e.target.dataset.prio}`, { priority: e.target.value }); await again(t('Priority changed')); } catch (err) { toast(err.message, 5000); }
