@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { readJson, writeJson, writeText, statOf, bad, notFound } from './util.js';
+import { readJson, writeJson, writeText, statOf, bad, notFound, HttpError } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
 import * as tx from './transcripts.js';
@@ -22,10 +22,12 @@ import * as squadLog from './log.js';
 import * as auditLib from './audit.js';
 import * as improve from './improve.js';
 import * as replyLib from './reply.js';
+import * as recovery from './recovery.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {} }; };
+// ended: how the last session of each agent ended (crashes, exits); autoResumes: times of automatic resumes
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {} }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
 
@@ -45,6 +47,25 @@ function setSessionInfo(floorId, agentId, info) {
   const r = loadRuntime();
   if (info) r.sessions[workKey(floorId, agentId)] = info; else delete r.sessions[workKey(floorId, agentId)];
   saveRuntime(r);
+}
+export const endedOf = (floorId, agentId) => loadRuntime().ended[workKey(floorId, agentId)] || null;
+function setEnded(floorId, agentId, end) {
+  const r = loadRuntime();
+  if (end) r.ended[workKey(floorId, agentId)] = end; else delete r.ended[workKey(floorId, agentId)];
+  saveRuntime(r);
+}
+
+// a session we started is gone without a stop from The AI Squad: find out how it ended, once (the journal
+// is read only here). The session id is kept, so the agent can be resumed.
+function noteEnded(entry, agent, info, status, sessionId) {
+  const name = tm.sessionName(entry.id, agent.id), now = Date.now();
+  const from = Math.max(info.startedAt || 0, (status?.lastTs || now) - 120e3);
+  const end = recovery.classifyEnd({ info, status, name, detectedAt: now, kills: recovery.oomKills(from, now) });
+  const r = loadRuntime();
+  delete r.sessions[workKey(entry.id, agent.id)];
+  r.ended[workKey(entry.id, agent.id)] = { ...end, sessionId: sessionId || null, startedAt: info.startedAt || 0, detectedAt: now, ...(info.unit ? { unit: info.unit } : {}) };
+  saveRuntime(r);
+  return r.ended[workKey(entry.id, agent.id)];
 }
 
 // configured model (team.json) vs the model the session was started with vs the model seen in the transcript
@@ -91,18 +112,28 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
   // teammates the lead spawned live inside the lead's session: they count as running while it runs
   const lead = team.agents.find((x) => x.lead) || team.agents.find((x) => sprint.roleKind(x) === 'lead');
   const leadRunning = !!lead && sessions.has(tm.sessionName(entry.id, lead.id));
-  return team.agents.map((a) => {
+  const lastSession = new Map();                       // agent id -> its newest own Claude Code session (what Resume continues)
+  for (const s of tx.sessionsOf(entry.path)) { const id = tx.sessionAgent(s.file); if (id && !lastSession.has(id)) lastSession.set(id, s.id); }
+  const leadSession = lead ? lastSession.get(lead.id) : null;
+  const ended = new Map(team.agents.map((a) => [a.id, endedOf(entry.id, a.id)]));
+  const lives = team.agents.map((a) => {
     const name = tm.sessionName(entry.id, a.id);
     const own = sessions.has(name);
-    const inLead = !own && leadRunning && a !== lead && !!hooks.agentState(entry.id, a.id, now);
-    const running = own || inLead;
-    const screen = own ? tm.capture(name) : '';
-    const dialog = own ? tm.parsePrompt(screen) : null;
     const t = transcripts.get(a.id);
     const st = t ? statusOf(t.file, entry.path, events) : null;
-    const recent = st && st.turnOpen && now - st.lastTs < tx.ACTIVE_MS;   // finished turns are not "working"
+    // a teammate's runs live under the lead's session: those from the lead's last session are its real last state
+    const withLead = a !== lead && !own && !!t && !!leadSession && tx.parentSession(t.file) === leadSession;
+    const inLead = !own && leadRunning && a !== lead && (!!hooks.agentState(entry.id, a.id, now) || (withLead && now - st.lastTs < TEAMMATE_LIVE_MS));
+    const running = own || inLead;
+    const info = !own && sessionInfo(entry.id, a.id);
+    if (info) ended.set(a.id, noteEnded(entry, a, info, st, lastSession.get(a.id)));
+    const screen = own ? tm.capture(name) : '';
+    const dialog = own ? tm.parsePrompt(screen) : null;
+    // known to be gone (its session ended, or it ran inside a lead that is not running): never "working"
+    const gone = !running && (!!ended.get(a.id) || withLead);
+    const recent = !gone && st && st.turnOpen && now - st.lastTs < tx.ACTIVE_MS;   // finished turns are not "working"
     const busy = own && tm.isBusy(screen);
-    const asking = st?.ask && (running || now - st.ask.ts < ASK_OPEN_MS);   // Claude waits for an answer indefinitely
+    const asking = st?.ask && (running || (!gone && now - st.ask.ts < ASK_OPEN_MS));   // Claude waits for an answer indefinitely
     // plugin hook events are live; they win over the transcript heuristic when they are newer
     const h = hooks.agentState(entry.id, a.id, now);
     const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
@@ -115,7 +146,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
     if (reply) state = 'waiting';
     // teammates the lead has not spawned yet are not "stopped": they wait for the sprint (or the source documents)
-    const standby = squad && lead && a !== lead && !running ? (squad.gate?.blocking ? 'docs' : 'sprint') : null;
+    const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking ? 'docs' : 'sprint') : null;
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
     if (dialog && st?.ask?.questions?.length) {
@@ -124,15 +155,28 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, standby };
+      hook: hookFresh ? h : null, activity, inLead, reply, standby, withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
+  // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
+  const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
+  for (const l of lives) {
+    if (l.running) continue;
+    const own = ended.get(l.agent.id);
+    if (own && !(l.resumeId && own.sessionId && own.sessionId !== l.resumeId)) l.ended = own;      // a newer session started elsewhere replaces it
+    else if (l.withLead && leadEnd?.kind === 'crashed') l.ended = { ...leadEnd, withLead: lead.id };
+    if (l.withLead) l.stopNote = `${l.ended?.withLead ? `stopped with the lead (${recovery.causeText(l.ended)})` : 'not running'}${l.status?.activity ? ` · last: ${l.status.activity}` : ''}`;
+  }
+  return lives;
 }
+const TEAMMATE_LIVE_MS = 10 * 60e3;          // a teammate run of the running lead counts as alive this long after its last line
 const replyKey = (floorId, agentId, ts) => `${floorId}/${agentId}@${ts}`;
 // Squad Sprint and Blueprint Floors: the lead runs the squad; null on Free Team Floors without a Blueprint
 function squadOf(root, floor) {
   const bp = blueprintsLib.floorBlueprint(root, floor.blueprint);
   if (floor.workflow !== 'squad-sprint' && !bp) return null;
-  return { gate: bp ? blueprintsLib.docsGate(root, bp) : { blocking: false, pending: [] } };
+  const gate = bp ? blueprintsLib.docsGate(root, bp) : { blocking: false, pending: [] };
+  // once a sprint has started the gate is behind the squad, even if a later document is still a draft
+  return { gate: gate.blocking && sprint.sprintStarted(root) ? { ...gate, blocking: false, passed: true } : gate };
 }
 export const STANDBY_TEXT = { sprint: 'not started: the lead starts them when the sprint begins', docs: 'waiting for source documents' };
 
@@ -144,6 +188,9 @@ function agentView(root, l, cost) {
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     standby: l.standby || null, waitingReply: !!l.reply,
+    // stopped agents: how they ended (crash: Resume is the main action), the session Resume continues, the last state
+    crash: l.ended?.kind === 'crashed' ? { cause: l.ended.cause, at: l.ended.at, text: recovery.crashText(l.ended), withLead: l.ended.withLead || null } : null,
+    resume: !l.running && l.resumeId ? { sessionId: l.resumeId } : null, stopNote: l.stopNote || null, exited: l.ended?.kind === 'exited',
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
     models: modelReport(eff, l.running, l.started, l.status),
     peek: l.status?.peek ? codeWindow(root, (({ id, ...rest }) => rest)(l.status.peek)) : null, kindOf: sprint.roleKind(l.agent),
@@ -172,6 +219,11 @@ function floorAttention(entry, floor, lives, cost) {
     } else if (l.reply) {
       out.push({ id: attId(entry.id, l.agent.id, 'reply', l.reply.ts), kind: 'reply', replyKey: replyKey(entry.id, l.agent.id, l.reply.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: l.reply.text, options: [], answerable: true, ts: l.reply.ts });
+    } else if (!l.running && l.ended?.kind === 'crashed' && !l.ended.withLead && !l.ended.dismissed) {
+      // teammates that went down with their lead are covered by the lead's item
+      out.push({ id: attId(entry.id, l.agent.id, 'crash', l.ended.detectedAt), kind: 'crash', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+        agentId: l.agent.id, agentName: l.agent.displayName, text: recovery.crashText(l.ended), resumable: !!l.resumeId,
+        options: [...(l.resumeId ? [{ n: 1, label: 'Resume' }] : []), { n: 2, label: 'Start fresh' }], answerable: true, ts: l.ended.at });
     }
   }
   const work = workOf(entry.id);
@@ -379,23 +431,68 @@ function locate(floorId, agentId) {
   return { entry, cfg, agent, name: tm.sessionName(floorId, agentId) };
 }
 
-export async function startAgent(floorId, agentId, task = '') {
-  const { entry, agent, name } = locate(floorId, agentId);
+// resume: a Claude Code session id to continue (--resume) instead of a fresh session.
+// guard: the owner starts it; warn first (409) when swap is above 80 % or the Floor runs its maximum of agents
+export async function startAgent(floorId, agentId, task = '', { resume = '', guard = false, via = 'aisquad' } = {}) {
+  const { entry, cfg, agent, name } = locate(floorId, agentId);
+  if (guard && !tm.isRunning(name)) {
+    snapCache.at = 0;
+    const running = buildingSnapshot().floors.find((f) => f.id === floorId)?.agents.filter((a) => a.running).length || 0;
+    const warnings = recovery.startWarnings({ res: wd.readResources(), running, maxAgents: cfg.floor.recovery.maxAgents });
+    if (warnings.length) throw Object.assign(new HttpError(409, `${warnings.join(' ')} Start anyway?`), { data: { warnings } });
+  }
   floors.generate(entry.path);                          // agent file is current before Claude reads it
   const eff = floors.effectiveOf(entry.path, agent);
   // model comes from the agent file; effort is not read from agent files for the main session, so pass it
   // pass model and effort explicitly so the configured values win over defaults and earlier sessions
   const extraArgs = [...(eff.model && eff.model !== 'inherit' ? ['--model', eff.model] : []), '--effort', eff.effort,
-    ...(config.useHooks ? ['--plugin-dir', ROOT] : [])];               // our plugin hooks stream events back
+    ...(config.useHooks ? ['--plugin-dir', ROOT] : []),                // our plugin hooks stream events back
+    ...(resume ? ['--resume', resume] : [])];
   const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
     ...floors.commitIdentity(agent, floors.readFloor(entry.path).git) };   // per-agent commit identity (git.json)
   const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs, env });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
-  if (!r.already) setSessionInfo(floorId, agentId, { startedAt: Date.now(), model: eff.model, effort: eff.effort });
-  if (!r.already) logEvent(floorId, { type: 'agent.started', agent: agentId, session: name, model: eff.model, data: { model: eff.model, effort: eff.effort, via: 'aisquad', ...(task ? { withTask: true } : {}) } });
+  if (!r.already) {
+    setSessionInfo(floorId, agentId, { startedAt: Date.now(), model: eff.model, effort: eff.effort, ...(r.unit ? { unit: r.unit } : {}), ...(resume ? { resumed: resume } : {}) });
+    setEnded(floorId, agentId, null);
+    logEvent(floorId, resume
+      ? { type: 'agent.resumed', agent: agentId, session: name, model: eff.model, data: { session: resume, via, model: eff.model, effort: eff.effort } }
+      : { type: 'agent.started', agent: agentId, session: name, model: eff.model, data: { model: eff.model, effort: eff.effort, via, ...(task ? { withTask: true } : {}) } });
+  }
   invalidate();
-  return { ok: true, session: name, already: !!r.already, queued: !!task };
+  return { ok: true, session: name, already: !!r.already, queued: !!task, ...(resume ? { resumed: resume } : {}) };
+}
+
+// continue the agent's last Claude Code session; a resumed lead of a squad gets a short recovery note
+export async function resumeAgent(floorId, agentId, { guard = false, via = 'aisquad' } = {}) {
+  const { entry, cfg, agent } = locate(floorId, agentId);
+  const end = endedOf(floorId, agentId);
+  const sessionId = tx.agentSessions(entry.path, agentId)[0]?.id || end?.sessionId;
+  if (!sessionId) throw bad('This agent has no previous session to resume; start it fresh');
+  const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  const note = squadOf(entry.path, cfg.floor) && lead === agent ? recovery.recoveryMessage({ end, maxAgents: cfg.floor.recovery.maxAgents }) : '';
+  return startAgent(floorId, agentId, note, { resume: sessionId, guard, via });
+}
+
+// Floor setting "Auto-resume after a crash": at most 2 per agent per hour, never while memory is under pressure
+export async function autoResumeTick(now = Date.now(), { res = wd.readResources() } = {}) {
+  const done = [];
+  snapCache.at = 0;
+  for (const f of buildingSnapshot().floors.filter((x) => !x.independent && !x.missing)) {
+    let cfg; try { cfg = floors.readFloor(building.floorEntry(f.id).path); } catch { continue; }
+    if (!cfg.floor.recovery.autoResume) continue;
+    for (const a of f.agents.filter((x) => x.crash && !x.crash.withLead && x.resume && !x.running)) {
+      const key = workKey(f.id, a.id);
+      const r = loadRuntime();
+      const ok = recovery.autoResumeAllowed(r.autoResumes[key] || [], res, now);
+      if (!ok.ok) continue;
+      r.autoResumes[key] = [...(r.autoResumes[key] || []).filter((t) => now - t < recovery.AUTO_RESUME.windowMs), now];
+      saveRuntime(r);
+      try { await resumeAgent(f.id, a.id, { via: 'auto-resume' }); done.push({ floorId: f.id, agentId: a.id }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
+    }
+  }
+  return done;
 }
 
 export function stopAgent(floorId, agentId) {
@@ -463,7 +560,7 @@ export async function flushPending() {
   } finally { flushing = false; }
 }
 
-export function answerAttention(id, option, text = '') {
+export function answerAttention(id, option, text = '', { force = false } = {}) {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) throw notFound('This item is gone (maybe already answered)');
@@ -471,6 +568,14 @@ export function answerAttention(id, option, text = '') {
   if (item.kind === 'reply') {
     if (!Number(option) && !String(text).trim()) { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
     return sendTask(item.floorId, item.agentId, text);   // the reply goes to the agent as its next task
+  }
+  if (item.kind === 'crash') {
+    if (Number(option) === 1) return resumeAgent(item.floorId, item.agentId, { guard: !force });
+    if (Number(option) === 2) return startAgent(item.floorId, item.agentId, '', { guard: !force });
+    const end = endedOf(item.floorId, item.agentId);                         // no option: dismiss
+    if (end) setEnded(item.floorId, item.agentId, { ...end, dismissed: true });
+    invalidate();
+    return { ok: true };
   }
   if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');

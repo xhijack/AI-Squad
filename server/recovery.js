@@ -25,7 +25,9 @@ export function parseOomKills(text) {
 }
 
 // out of memory kills from the user journal between two times; [] when journalctl is not there
-export function oomKills(from, to, { run = execFileSync } = {}) {
+const journal = { run: execFileSync };
+export const setJournalRunner = (run) => { journal.run = run || execFileSync; };     // tests: a scratch journal
+export function oomKills(from, to, { run = journal.run } = {}) {
   const sec = (ms) => `@${Math.floor(ms / 1000)}`;
   try {
     return parseOomKills(run('journalctl', ['--user', '-q', '--no-pager', '-o', 'short-unix', '--since', sec(from), '--until', sec(to + 1000), '-g', 'systemd-oomd killed'],

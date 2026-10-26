@@ -370,7 +370,11 @@ export function stateChanges(floorId, agents, { teamOpen = 0, own = {}, stoppedB
     S.agents[a.id] = cur;
     if (!prev) continue;
     // a teammate inside the lead's session ends with its task: that is a normal stop, not a crash
-    if (prev.running && !a.running && !stoppedByUs.has(a.id)) out.push(independent || prev.inLead ? { type: 'agent.stopped', agent: a.id, data: { via: prev.inLead ? 'teammate finished' : 'process ended' } } : { type: 'agent.crashed', agent: a.id, data: { lastState: prev.state } });
+    // a.crash / a.ended: how the session ended, found by squad.js (out of memory, killed mid-turn, or the lead's crash)
+    if (prev.running && !a.running && !stoppedByUs.has(a.id)) {
+      out.push(a.crash ? { type: 'agent.crashed', agent: a.id, data: { lastState: prev.state, cause: a.crash.cause, at: a.crash.at, ...(a.crash.withLead ? { withLead: a.crash.withLead } : {}) } }
+        : independent || prev.inLead || a.exited ? { type: 'agent.stopped', agent: a.id, data: { via: prev.inLead ? 'teammate finished' : a.exited ? 'exited' : 'process ended' } } : { type: 'agent.crashed', agent: a.id, data: { lastState: prev.state } });
+    }
     if (!prev.running && a.running && independent) out.push({ type: 'agent.started', agent: a.id, data: { via: a.via || 'detected' } });
     const busy = (s) => s === 'working' || s === 'waiting';
     if (busy(prev.state) && a.state === 'idle') out.push({ type: 'agent.idle', agent: a.id, data: { openWork: teamOpen > 0, ownOpen: own[a.id] || 0, teamOpen } });

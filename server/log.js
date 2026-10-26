@@ -16,7 +16,7 @@ export const INDEPENDENTS = 'independents';           // Floor 1 (independent ag
 
 // type -> category (the timeline filters by either)
 export const TYPES = {
-  'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.model': 'lifecycle',
+  'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.resumed': 'lifecycle', 'agent.model': 'lifecycle',
   'task.given': 'work', 'board.changed': 'work', 'handoff.written': 'work', 'qa.report': 'work', 'bug.opened': 'work', 'bug.closed': 'work',
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
   'doc.status': 'work', 'commit': 'work',
@@ -42,7 +42,8 @@ function summarize(e) {
   switch (e.type) {
     case 'agent.started': return `${who} started (${[d.model || e.model, d.effort].filter(Boolean).join(', ') || 'default model'})`;
     case 'agent.stopped': return `${who} stopped`;
-    case 'agent.crashed': return `${who} ended without a stop from The AI Squad`;
+    case 'agent.crashed': return `${who} ${d.cause === 'oom' ? 'was killed: out of memory' : d.cause === 'killed' ? 'stopped unexpectedly mid-turn' : 'ended without a stop from The AI Squad'}${d.withLead ? ` (with the lead ${d.withLead})` : ''}`;
+    case 'agent.resumed': return `${who} resumed its last session${d.via === 'auto-resume' ? ' automatically' : ''}`;
     case 'agent.model': return `${who} runs ${d.observed}, configured ${d.configured}`;
     case 'task.given': return `${d.by || 'owner'} gave ${who} a task${t(d.text)}`;
     case 'task.delegated': return `${who} delegated to ${d.to}${t(d.text)}`;

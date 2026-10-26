@@ -132,7 +132,8 @@ const routes = [
     return floors.templateDiff(floorRoot(id), agent);
   }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/template$/, ([id, a], b) => { const r = floors.templateAction(floorRoot(id), a, b.action); squad.invalidate(); return { ok: true, agent: r }; }, { pin: true }],
-  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/start$/, ([id, a], b) => squad.startAgent(id, a, b.task ? squad.withAttachments(b.task, b.attachments) : ''), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/start$/, ([id, a], b) => squad.startAgent(id, a, b.task ? squad.withAttachments(b.task, b.attachments) : '', { guard: !b.force }), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/resume$/, ([id, a], b) => squad.resumeAgent(id, a, { guard: !b.force }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/stop$/, ([id, a]) => squad.stopAgent(id, a), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/task$/, ([id, a], b) => squad.sendTask(id, a, b.text, b.attachments), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/work-done$/, ([id, a]) => { squad.clearWork(id, a); squad.invalidate(); return { ok: true }; }, { pin: true }],
@@ -143,7 +144,7 @@ const routes = [
 
   ['POST', /^\/api\/independents\/rescan$/, () => squad.rescanIndependents(), { pin: true }],
   ['POST', /^\/api\/independents\/([\w-]+)\/adopt$/, ([id], b) => squad.adoptIndependent(id, b), { pin: true }],
-  ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text), { pin: true }],
+  ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text, { force: !!b.force }), { pin: true }],
 ];
 
 // 127.0.0.0/8, ::1 and localhost; 0.0.0.0, :: and real addresses are not
@@ -173,7 +174,7 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       if (status === 500) console.error(e);
-      send(res, status, { error: e.message || 'Server error' });
+      send(res, status, { error: e.message || 'Server error', ...(status !== 500 && e.data ? e.data : {}) });
     }
   };
 }
