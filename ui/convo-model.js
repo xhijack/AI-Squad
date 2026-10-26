@@ -1,7 +1,9 @@
 // The conversation view's model, without DOM access (unit tested): a one-line preview for the Attention index, the
 // short bubble over the agent's head, and which actions an item gets in the action bar.
 
-const firstLine = (text) => String(text || '').split('\n').map((l) => l.replace(/^[#>*\-\s|]+/, '').replace(/[*_`|]/g, '').trim()).find(Boolean) || '';
+const clean = (l) => l.replace(/^[#>*\-\s|☐☑✓]+/, '').replace(/[*_`|]/g, '').trim();
+// the question when there is one (dialogs start with a short header such as "☐ Runner"), else the first line
+const firstLine = (text) => { const ls = String(text || '').split('\n').map(clean).filter(Boolean); return ls.find((l) => l.endsWith('?')) || ls[0] || ''; };
 const short = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
 // "Finished: Server inventory done" / "Question: Which runner?"; at most n characters

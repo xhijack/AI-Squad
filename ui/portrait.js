@@ -12,8 +12,8 @@ export function createPortrait(canvas, agent, { reducedMotion = false } = {}) {
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight('#ffffff', '#d9cfc0', 1.6));
   const sun = new THREE.DirectionalLight('#ffffff', 1.4); sun.position.set(1.5, 3, 2.5); scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(26, 1, .1, 20);
-  camera.position.set(.15, 1.32, 2.55); camera.lookAt(0, 1.02, 0);
+  const camera = new THREE.PerspectiveCamera(28, 1, .1, 20);
+  camera.position.set(.2, 1.05, 3.6); camera.lookAt(0, .78, 0);           // head to knees, a little from the side
   const R = buildChibi(lookFor(agent.appearance || {}));
   R.root.rotation.y = -.25;
   scene.add(R.root);
@@ -21,14 +21,19 @@ export function createPortrait(canvas, agent, { reducedMotion = false } = {}) {
   const toy = propsFor(agent).props[0];
   if (toy && TOYS[toy]) {
     const stand = new THREE.Mesh(new THREE.CylinderGeometry(.16, .18, .5, 24), new THREE.MeshToonMaterial({ color: '#efe6d8' }));
-    stand.position.set(.62, .25, .1); scene.add(stand);
-    const t = new THREE.Group(); t.position.set(.62, .5, .1); t.scale.setScalar(1.8); TOYS[toy](t); scene.add(t);
+    stand.position.set(.5, .25, .1); scene.add(stand);
+    const t = new THREE.Group(); t.position.set(.5, .5, .1); t.scale.setScalar(1.8); TOYS[toy](t); scene.add(t);
   }
   const st = { rig: R, blinkAt: 0 };
   let talkUntil = 0, raf = 0, disposed = false;
   const size = () => {
     const w = canvas.clientWidth || 200, h = canvas.clientHeight || 240;
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    // fit about 1.7 units across (the character and its toy) in narrow canvases, head to knees in wide ones
+    const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const dist = Math.max(2.9, .62 / (half * camera.aspect));
+    camera.position.set(.2 * dist / 3.6, 1.1, dist); camera.lookAt(.08, .85, 0);
+    camera.updateProjectionMatrix();
   };
   const pose = (t) => {
     resetPose(R);

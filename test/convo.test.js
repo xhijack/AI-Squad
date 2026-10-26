@@ -10,6 +10,7 @@ const Q = { kind: 'question', text: 'Which test runner should we use?', answerab
 test('one-line previews for the index and short bubbles over the agent', () => {
   assert.equal(preview(FIN), 'Finished: Server inventory: dev.dtamu.id');
   assert.equal(preview(Q), 'Question: Which test runner should we use?');
+  assert.equal(preview({ kind: 'question', text: '☐ Runner\n\nWhich test runner should we use?' }), 'Question: Which test runner should we use?', 'the question, not the dialog header');
   assert.equal(preview({ kind: 'reply', text: 'x'.repeat(200) }).length, 90);
   assert.equal(bubbleText(FIN), 'Finished: Server inventory: dev.dtamu.id');
   assert.equal(bubbleText(Q), 'Question for you');

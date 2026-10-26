@@ -58,7 +58,7 @@ function render() {
         <div class="note">${esc([ag.title, item.floorNumber ? `Floor ${item.floorNumber} · ${item.floorName}` : item.floorName].filter(Boolean).join(' · '))}</div><div class="note">${ago(item.ts)}</div></div>
       <div class="convoNav">${C.list.length > 1 ? `<button type="button" class="iconBtn ghost" data-prev aria-label="Previous item">‹</button><span class="note">${ofText(C.i, C.list.length)}</span><button type="button" class="iconBtn ghost" data-next aria-label="Next item">›</button>` : ''}
         <button type="button" class="iconBtn ghost" data-close aria-label="Close">×</button></div></div>
-    <div class="convoBody" tabindex="0"><div class="bubble ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">Decided automatically: <b>${esc(item.chosen)}</b>. Pick another option to change it.</p>` : ''}</div></div>
+    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">Decided automatically: <b>${esc(item.chosen)}</b>. Pick another option to change it.</p>` : ''}</div></div>
     <div class="convoActions">${actionsHtml(item, a)}</div>`;
   if (!d.open) d.showModal();
   wire(d, item, a);

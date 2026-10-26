@@ -545,19 +545,19 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .convoBody { grid-column: 2; grid-row: 2; overflow: auto; overscroll-behavior: contain; padding: 18px 22px; min-height: 120px; }
 .convoBody:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
 /* the message as a speech bubble from the portrait */
-.bubble { position: relative; max-width: 72ch; background: var(--sunk); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; font-size: 16px; line-height: 1.6; word-break: break-word; }
-.bubble::before { content: ''; position: absolute; left: -9px; top: 22px; width: 16px; height: 16px; background: var(--sunk); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
-.bubble p { margin: 0 0 .8em; } .bubble p:last-child { margin-bottom: 0; }
-.bubble h5 { font-size: 17px; margin: 1.1em 0 .4em; } .bubble h5:first-child { margin-top: 0; }
-.bubble ul, .bubble ol { margin: 0 0 .8em; padding-left: 1.4em; } .bubble li + li { margin-top: .25em; }
-.bubble code { font-family: var(--mono); font-size: .9em; background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }
-.bubble pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.5; background: #1f2433; color: #e8ecf6; border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 0 0 .8em; }
-.bubble a { color: var(--info); text-decoration: underline; }
-.bubble .mdTable { overflow-x: auto; margin: 0 0 .9em; border: 1px solid var(--line); border-radius: 10px; }
-.bubble table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.45; }
-.bubble th, .bubble td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.bubble th { background: var(--card); font-weight: 700; }
-.bubble tr:nth-child(even) td { background: var(--card); }
+.convoMsg { position: relative; max-width: 72ch; background: var(--sunk); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; font-size: 16px; line-height: 1.6; word-break: break-word; }
+.convoMsg::before { content: ''; position: absolute; left: -9px; top: 22px; width: 16px; height: 16px; background: var(--sunk); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+.convoMsg p { margin: 0 0 .8em; } .convoMsg p:last-child { margin-bottom: 0; }
+.convoMsg h5 { font-size: 17px; margin: 1.1em 0 .4em; } .convoMsg h5:first-child { margin-top: 0; }
+.convoMsg ul, .convoMsg ol { margin: 0 0 .8em; padding-left: 1.4em; } .convoMsg li + li { margin-top: .25em; }
+.convoMsg code { font-family: var(--mono); font-size: .9em; background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }
+.convoMsg pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.5; background: #1f2433; color: #e8ecf6; border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 0 0 .8em; }
+.convoMsg a { color: var(--info); text-decoration: underline; }
+.convoMsg .mdTable { overflow-x: auto; margin: 0 0 .9em; border: 1px solid var(--line); border-radius: 10px; }
+.convoMsg table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.45; }
+.convoMsg th, .convoMsg td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.convoMsg th { background: var(--card); font-weight: 700; }
+.convoMsg tr:nth-child(even) td { background: var(--card); }
 .convoActions { grid-column: 2; grid-row: 3; border-top: 1px solid var(--line); padding: 14px 22px 16px; background: var(--card); display: flex; flex-direction: column; gap: 10px; }
 .convoOpts { display: flex; flex-wrap: wrap; gap: 8px; }
 .convoOpts .big { min-height: 48px; padding: 8px 18px; font-size: 15px; font-weight: 600; display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; }
@@ -582,7 +582,7 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
   .convoPortrait { grid-row: 1; grid-column: 1; width: 96px; min-height: 0; height: 112px; border-right: 0; border-bottom: 1px solid var(--line); }
   .convoWho { padding: 12px 14px 8px; padding-right: 96px; }
   .convoBody, .convoActions { grid-column: 1 / 3; padding-left: 14px; padding-right: 14px; }
-  .bubble { padding: 14px 16px; } .bubble::before { display: none; }
+  .convoMsg { padding: 14px 16px; } .convoMsg::before { display: none; }
   .convoOpts .big { flex: 1 1 100%; }
 }
 @media (prefers-reduced-motion: reduce) { #convo { animation: none; } }
