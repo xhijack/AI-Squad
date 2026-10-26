@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Floor 1 actions: rescan the machine for independent agents, adopt one into a squad's team.
 import { esc, api, toast, openModal, closeModal } from './lib.js';
 import { ctx } from './ctx.js';

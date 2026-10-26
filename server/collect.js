@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Log collectors: turn the sources The AI Squad already reads into log events (server/log.js).
 //   transcripts   usage per turn, tool calls (duration, error), SendMessage, delegations, AskUserQuestion + answer, owner tasks
 //   hook events   tool calls as they happen, permission prompts and how long they waited

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // "What do you want to build?" -> a Blueprint and a team, with the reason for every agent. Asks Claude Code
 // (`claude -p`, haiku, no tools, structured JSON output); falls back to keyword matching when Claude Code is
 // unavailable, slow or answers something unusable.

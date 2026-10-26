@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Audit dialog (dock): run an audit of the Floor (since the last audit or one sprint), the scores per area, findings
 // sorted by severity with evidence links into the Squad Log, and the history of audits so trends show.
 import { esc, money, api, openModal, toast } from './lib.js';

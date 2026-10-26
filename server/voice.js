@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Voices (Phase 3.1): the server calls the ElevenLabs text-to-speech REST API so the characters talk. The API key
 // lives in the service environment (ELEVENLABS_API_KEY) or in ~/.aisquad/secrets.json (0600): never in a repo, a
 // log or the browser (the UI only learns "set" and the last 4 characters). Spoken lines are shortened without a

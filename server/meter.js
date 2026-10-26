@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Server meter (from squad-3d): samples /proc every 3 s for CPU, RAM, swap and disk, keeps 6 minutes of
 // history, and groups the busiest processes. Only process names leave this module, never command lines
 // (they can contain secrets); command lines are read just to pick a group.

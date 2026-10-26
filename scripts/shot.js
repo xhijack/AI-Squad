@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Headless Chrome screenshots over the DevTools protocol (no dependencies).
 //   node scripts/shot.js shots.json      shots: [{ url, out, w, h, pin?, wait?, eval? }]
 //   SHOT_OFFLINE=1 blocks every host but 127.0.0.1 (checks the UI works without a CDN)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Realistic look, proof of concept (Phase 3.2 step 1): one desk corner at ?look=desk-poc, next to (not instead of)
 // the default look. Real-size furniture and props with physically based materials (Poly Haven CC0 models and
 // textures, plus pieces built in realistic-props.js), one Microsoft Rocketbox person (MIT) who types, stands up,

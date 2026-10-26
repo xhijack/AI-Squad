@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Small shared helpers for the UI: DOM, formatting, API calls with the local PIN, toast, modal.
 import { t, tx } from './i18n.js';
 export const $ = (id) => document.getElementById(id);

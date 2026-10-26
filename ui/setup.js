@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Set up Squad wizard: What do you want to build? → Team → Folder → Review and create.
 // The recommendation comes from Claude Code (haiku) with a keyword fallback; the owner edits the team freely.
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs } from './lib.js';

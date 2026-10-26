@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Set up Squad: one squad = one project folder = one Floor (2 and up). Creates the folder when asked
 // (default ~/aisquad-squads/<slug>, git init), writes the Floor files with the Blueprint, and can start the lead.
 import os from 'node:os';

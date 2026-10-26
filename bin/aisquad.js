@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // The AI Squad command line, used by the /aisquad Claude Code command.
 //   aisquad [start]      start the server in the background (if needed) and open the browser
 //   aisquad new-floor    same, straight into the New Floor wizard

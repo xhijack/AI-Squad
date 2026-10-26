@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Template + override inheritance (SPEC "Override rules") and the generated .claude/agents/<id>.md.
 import { stringifyFrontmatter } from './frontmatter.js';
 import { MODELS, EFFORTS, cleanPermissions, cleanAppearance } from './roles.js';

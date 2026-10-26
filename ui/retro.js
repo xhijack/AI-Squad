@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Retro dialog: the ritual after a sprint closes (made from that sprint's audit). What went well, what did not, three
 // changes, per agent, cost per story point; "Send to lead" asks the lead to turn it into LEARNINGS.md entries.
 import { esc, api, openModal, closeModal, toast } from './lib.js';

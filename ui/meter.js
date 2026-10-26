@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Server meter: the dock chip (CPU / RAM / swap / disk, red when dangerous) and the dialog with a
 // 6 minute graph, process groups and the busiest processes. Data from GET /api/meter (sampled every 3 s).
 import { esc, gb, api, openModal } from './lib.js';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Office rituals (Phase 2.5): meetings at the meeting table, read from Squad Log events (sprint planning, plan
 // review, Retro, the lead briefing a teammate, the daily standup), and the standup itself: per agent what was done
 // since the last standup, what it is doing now and what blocks it. All from the Log, without a model call.

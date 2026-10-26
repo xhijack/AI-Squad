@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // LEARNINGS.md: the project's memory in the repo (docs/squad/LEARNINGS.md). Short entries with a date and a
 // source (retro, audit finding, bug): patterns and pitfalls of this project. Every agent reads it before a module;
 // the lead adds entries after each Retro; Audit findings with target "project" add entries once the owner applies them.

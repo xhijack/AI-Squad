@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // The conversation view's model, without DOM access (unit tested): a one-line preview for the Attention index, the
 // short bubble over the agent's head, and which actions an item gets in the action bar.
 import { t } from './i18n.js';

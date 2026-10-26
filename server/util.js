@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Small filesystem and string helpers shared by the server modules.
 import fs from 'node:fs';
 import path from 'node:path';

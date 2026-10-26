@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Floor configuration inside the project repo (.claude/aisquad/*, AISQUAD.md, generated agent files)
 // and the operations on it: create (New Floor wizard), team changes, template update/keep/detach.
 import fs from 'node:fs';

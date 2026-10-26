@@ -765,5 +765,5 @@ scripts/dev.sh stop
   - Agents walk in straight lines (they can pass through furniture).
   - Name tags can overlap in tight layouts.
 - **Hook events**: they come from agents The AI Squad starts (via `--plugin-dir`). Other sessions send events only if the plugin is installed. Permission prompts reported by hooks are shown but answered on the Desk screen or in the terminal.
-- **License**: UNLICENSED for now (owner decision). The plugin validator warns that there is no LICENSE file.
+- **License**: Apache License 2.0 (`LICENSE`, `NOTICE`; every source file carries `SPDX-License-Identifier: Apache-2.0` since 0.10.0).
 - The real Claude Code smoke test recorded "trusted folder" for `playground/real/smoke` in Claude Code's own `~/.claude.json`. That directory no longer exists. The entry stays, as the owner asked.

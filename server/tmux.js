@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Agents run as Claude Code sessions in tmux ("aisquad-<floor>-<agent>"). This module starts and stops
 // them, reads their screens for option dialogs (numbered and unnumbered), answers dialogs and types tasks.
 // Prompt parsing is ported from the squad-3d prototype.

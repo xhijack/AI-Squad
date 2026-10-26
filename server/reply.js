@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // "Waiting for your reply": an agent ended its turn with a plain-text message that asks the owner for
 // something (questions, approvals, documents, a next step for the owner). A cheap text heuristic, no LLM.
 import { clip } from './util.js';

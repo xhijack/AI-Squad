@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Browser-side cost of a page, measured in headless Chrome over a window of seconds after it settles:
 // frames rendered per second (an idle Floor should render none), JS ms per frame, draw calls, triangles, textures,
 // geometries, shader programs, JS heap, polls (JSON bytes, fetch ms, DOM + scene ms). Read only: it loads the page,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Log dialog (dock): the Floor's log as a timeline (filter by agent, category, sprint and time range) and as a
 // conversation (who talked to whom, in order). The Audit dialog opens it on one event for its evidence links.
 import { esc, api, openModal } from './lib.js';

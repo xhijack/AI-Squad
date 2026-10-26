@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Long-running commands: a 10-minute docker build or e2e run writes nothing to the transcript while it runs, so
 // without this the agent looks idle and the Watchdog or Autopilot would nudge it. From the transcript records:
 // open tool calls (a tool_use without its tool_result yet), background shells (started with run_in_background:

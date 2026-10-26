@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Realistic look (Phase 3.2 proof of concept): one Microsoft Rocketbox avatar (MIT) with its own motion-captured
 // clips (sit, stand up, walk, sit down, idle; converted by scripts/convert-assets.js). The clips' root travel is
 // taken out of the clips and applied to the character's position here, so crossfades never pull it backwards.

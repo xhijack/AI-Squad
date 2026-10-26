@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Performance of a Squad Sprint Floor, read from the docs/squad files (ported from squad-3d's "kinerja"):
 // per agent and per sprint the bugs QA found per story point (weighted by severity), the first-round QA pass
 // rate, modules owned and cost per story point; plus the cost projection for the remaining backlog.

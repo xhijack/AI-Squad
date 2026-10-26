@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Source documents dialog: the Blueprint's source documents with their status; View, Approve and Request changes.
 // Opened by the Floor pill ("Waiting for you: N source documents"), the Standard tab and the Floor menu.
 import { esc, api, toast, openModal, closeModal, mdLite } from './lib.js';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // The conversation view: an Attention item as a large dialog. The agent's own chibi as a live portrait, its message
 // as a speech bubble (readable markdown that scrolls between a fixed header and action bar), the actions for the
 // item (options, Reply, OK / Dismiss, Open desk), and "n of m" with previous / next. While it is open the office

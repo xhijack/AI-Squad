@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Audit: turns a time range of the Squad Log (a sprint, a day, or since the last audit) into a compact digest
 // (metrics computed here plus the most relevant events), asks Claude Code (`claude -p` with the bundled squad-audit
 // skill, structured JSON output) to judge process and efficiency, and stores the result in

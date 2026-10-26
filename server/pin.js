@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Local PIN for mutating actions, stored in ~/.aisquad/pin (0600).
 import fs from 'node:fs';
 import crypto from 'node:crypto';

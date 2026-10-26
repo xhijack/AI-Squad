@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Design variants dialog: the designer's 3-4 variants of a screen side by side (each a static HTML file, shown in a
 // sandboxed frame without scripts), Pick with an optional note; the pick becomes a taste note in docs/DESIGN.md.
 import { esc, api, openModal, closeModal, toast } from './lib.js';

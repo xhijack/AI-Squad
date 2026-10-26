@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // JSON API + static UI. On a loopback address (the default) reads are open and every change and agent
 // screen needs the local PIN (header x-aisquad-pin); on any other address every /api call needs it.
 import fs from 'node:fs';

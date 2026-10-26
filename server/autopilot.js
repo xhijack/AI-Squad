@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Autopilot (Phase 2.4): how far the squad keeps going without the owner. One place for the levels, the
 // hard-stop list (always waits for the owner), the classification of questions, the lead's rules and the
 // timing of automatic answers and nudges. The lead's agent file is generated from the same list (compose.js).

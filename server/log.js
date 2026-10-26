@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Log: an append-only, structured record of how a squad worked, written for an AI to read later.
 // ~/.aisquad/logs/<floor-id>/<YYYY-MM-DD>.jsonl, one event per line (schema: docs/LOG-SCHEMA.md). Machine-local,
 // never in the repo. Day files older than 7 days are gzipped, files older than logRetentionDays are deleted.

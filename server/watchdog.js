@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Watchdog: stalls (assigned work but idle >= 10 min), machine resources (RAM, swap, disk) and budgets.
 import fs from 'node:fs';
 import os from 'node:os';

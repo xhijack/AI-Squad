@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Recovery after an agent dies: how a session ended (clean exit, out of memory kill, killed mid-turn), the texts
 // shown on the Desk and in Attention, when an automatic resume is allowed, the message a resumed lead gets,
 // and the memory guard before more agents start.

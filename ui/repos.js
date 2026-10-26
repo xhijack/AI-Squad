@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Floor settings → Repositories (Phase 3.4): the primary repository plus linked ones (.claude/aisquad/repos.json):
 // path (relative to the primary), remote, access (read: context only; write: the assigned agents commit there),
 // branch strategy, quality gate and agents; their status on this machine (branch, ahead/behind, uncommitted

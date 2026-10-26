@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // One squad, several repositories (Phase 3.4): the primary repository holds the Floor; linked repositories are
 // listed in .claude/aisquad/repos.json (shared through git, relative paths only) with their access ("read": context
 // for the agents, every write denied; "write": the assigned agents edit and commit there on their sprint branch),

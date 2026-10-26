@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Ship readiness dialog (Floor menu): which gates and reviews ran for the sprint, and what is still missing before
 // the merge (the server merges only when ready) or a deploy (DevOps checks the same list).
 import { esc, api, openModal, closeModal } from './lib.js';

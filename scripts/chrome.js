@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Headless Chrome over the DevTools protocol (no dependencies), shared by the dev scripts.
 //   const c = await openChrome(); await c.send('Page.navigate', { url }); await c.evaluate('1 + 1'); c.close();
 //   SHOT_OFFLINE=1 blocks every host but 127.0.0.1 (checks the UI works without a CDN)

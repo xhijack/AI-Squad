@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // The live Building: Floor summaries, agent states, Attention, running agents and sending tasks.
 import fs from 'node:fs';
 import os from 'node:os';

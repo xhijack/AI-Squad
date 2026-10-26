@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // The agent's portrait in the conversation view: the same chibi as in the office (look, colours, a desk toy),
 // in its own small WebGL canvas. Idle breathing and blinking, a simple talking animation while a message appears;
 // with reduced motion it is drawn once and stays still. dispose() frees the canvas when the dialog closes.

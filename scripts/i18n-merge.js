@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Folds translation fragments ({ "English key": "Indonesian" } JSON files) into ui/i18n/id.json and rewrites
 // ui/i18n/en.json from the keys (value = key). Existing translations win unless --replace is given.
 //   node scripts/i18n-merge.js fragment.json [...] [--replace]

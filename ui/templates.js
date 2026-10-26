@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Role Template editor: list, create, edit (every content change is a new version), version history with diff.
 import { esc, api, toast, openModal, closeModal, diffHtml } from './lib.js';
 import { lines, commaList } from './forms.js';

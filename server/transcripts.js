@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Reads Claude Code transcripts (~/.claude/projects/<encoded-path>/*.jsonl, subagents/*.meta.json,
 // ~/.claude/teams/*/config.json): which agent a session belongs to, what it is doing, open questions,
 // recent events, and token cost. Parsing approach taken from the sopwer-squad / squad-3d prototypes.

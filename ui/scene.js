@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // The 3D Building: a warm isometric office per Floor (after the squad-3d office), stacked into a dollhouse in the
 // Lobby; desks with chibi agents, devices, an orthographic isometric camera, and a perspective camera for the
 // first person and screen views.

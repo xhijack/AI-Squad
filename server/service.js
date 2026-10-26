@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Runs the server so it survives closing the terminal or editor: a systemd user service (aisquad.service)
 // on Linux, a launchd agent on macOS, else a detached process. The unit is generated from the plugin's
 // current path and node binary, so after a plugin update the next /aisquad rewrites it and restarts.

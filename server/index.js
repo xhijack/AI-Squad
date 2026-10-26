@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // The AI Squad server.  node server/index.js [--port 8097] [--host 127.0.0.1]
 import http from 'node:http';
 import { createHandler, isLoopback } from './api.js';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Panel content for the three places: Lobby, Floor, Desk. Each view returns sections
 // { id, title, card: top | main | tabs, html, head?, count? }; app.js lays them out as floating cards in the right
 // panel (desktop) or as tabs of the bottom sheet (phone).
