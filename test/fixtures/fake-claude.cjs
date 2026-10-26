@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // Fake Claude Code for tests: an unnumbered trust dialog, then an input box. Submitted lines go to
-// $FAKE_CLAUDE_LOG; typing "ask" opens a numbered permission dialog.
+// $FAKE_CLAUDE_LOG; typing "ask" opens a numbered permission dialog, "quiz" / "pricequiz" an AskUserQuestion dialog.
 const fs = require('fs');
 const log = process.env.FAKE_CLAUDE_LOG;
 let mode = 'trust', sel = 0, buf = '';
 const history = [];
 const dialogs = {
   trust: { q: ['Do you trust the files in this folder?', '', '/tmp/project'], opts: ['Yes, I trust this folder', 'No, exit'], hint: 'Enter to confirm · Esc to exit', numbered: false },
+  // AskUserQuestion: "quiz" is an everyday choice with a recommended option, "pricequiz" is about money
+  quiz: { q: ['☐ Runner', '', 'Which test runner should we use?'], opts: ['Jest', 'Vitest (Recommended)', 'Type something.'], hint: 'Enter to select · ↑/↓ to navigate · Esc to cancel', numbered: true },
+  pricequiz: { q: ['☐ Price', '', 'What price should the premium plan have?'], opts: ['Rp 49.000', 'Rp 99.000 (Recommended)', 'Type something.'], hint: 'Enter to select · ↑/↓ to navigate · Esc to cancel', numbered: true },
   ask: { q: ['Bash command', '', '  rm build/cache', '', 'Do you want to proceed?'], opts: ['Yes', "Yes, and don't ask again for rm commands", 'No, and tell Claude what to do differently (esc)'], hint: 'Esc to cancel', numbered: true },
 };
 function draw() {
@@ -40,7 +43,7 @@ process.stdin.on('data', (k) => {
       mode = 'input'; sel = 0;
     }
   } else if (k === '\r') {
-    if (buf === 'ask') { mode = 'ask'; buf = ''; }
+    if (dialogs[buf] && buf !== 'trust') { mode = buf; buf = ''; }
     else { if (log) fs.appendFileSync(log, `TASK ${buf}\n`); history.push(buf); buf = ''; }
   } else if (k === '\x15') buf = '';                 // C-u
   else if (k === '\x03') process.exit(0);

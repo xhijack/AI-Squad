@@ -125,8 +125,8 @@ test('a clean exit at the end of a turn is not a crash', () => {
 test('auto-resume: only when the Floor allows it, at most twice an hour, never under memory pressure', async () => {
   const crash = () => { setRuntime({ sessions: { [`${FLOOR}/rina-pm`]: { startedAt: Date.now() - 3600e3 } } }); leadSession('sess-3'); kiosk(); };
   crash();
-  floors.updateFloorConfig(r.path, { recovery: { autoResume: false, maxAgents: 4 } });
-  assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: calm }), [], 'off by default');
+  floors.updateFloorConfig(r.path, { autopilot: 'off', recovery: { autoResume: false, maxAgents: 4 } });
+  assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: calm }), [], 'off by default (with Autopilot off)');
   floors.updateFloorConfig(r.path, { recovery: { autoResume: true } });
   assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: { ...calm, swap: { total: 8 * GB, used: 7 * GB } } }), [], 'memory under pressure');
   for (let i = 0; i < 2; i++) {
@@ -137,4 +137,17 @@ test('auto-resume: only when the Floor allows it, at most twice an hour, never u
   assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: calm }), [], 'third crash within the hour waits for the owner');
   assert.equal(squadLog.read(FLOOR, { type: 'agent.resumed' }).at(-1).data.via, 'auto-resume');
   assert.ok(squad.attentionItems().some((a) => a.kind === 'crash'), 'still in Attention');
+});
+
+test('Autopilot turns auto-resume on, but not while the budget is reached', async () => {
+  const pdir2 = tx.projectDir(r.path);
+  const crash = () => { setRuntime({ autoResumes: {}, sessions: { [`${FLOOR}/rina-pm`]: { startedAt: Date.now() - 3600e3 } } }); leadSession('sess-4'); kiosk(); };
+  squad.stopAgent(FLOOR, 'rina-pm'); crash();
+  floors.updateFloorConfig(r.path, { autopilot: 'balanced', recovery: { autoResume: false }, budget: { usd: 0.0001, period: 'day' } });
+  fs.appendFileSync(path.join(pdir2, 'sess-4.jsonl'), jsonl([{ type: 'assistant', timestamp: new Date().toISOString(), message: { id: 'cost1', model: 'claude-opus-5-5', stop_reason: 'tool_use', usage: { input_tokens: 100000, output_tokens: 100000 }, content: [] } }]));
+  kiosk();
+  assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: calm }), [], 'the budget stops the chain');
+  floors.updateFloorConfig(r.path, { budget: { usd: 0, period: 'day' } });
+  assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: calm }), [{ floorId: FLOOR, agentId: 'rina-pm' }]);
+  squad.stopAgent(FLOOR, 'rina-pm');
 });

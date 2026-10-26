@@ -23,11 +23,14 @@ import * as auditLib from './audit.js';
 import * as improve from './improve.js';
 import * as replyLib from './reply.js';
 import * as recovery from './recovery.js';
+import * as autopilot from './autopilot.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
-// ended: how the last session of each agent ended (crashes, exits); autoResumes: times of automatic resumes
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {} }; };
+// ended: how the last session of each agent ended (crashes, exits); autoResumes: times of automatic resumes;
+// autopilot: decisions taken automatically (shown until the owner says OK), lead decisions seen, nudges sent, blocks logged
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
+  autopilot: { decided: [], leadSeen: {}, nudged: [], blocked: [], ...(r.autopilot || {}) } }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
 
@@ -142,7 +145,8 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
     // the turn ended with a plain-text message asking the owner for something: waiting for the owner's reply
-    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead, teammate: !!lead && a !== lead }) : null;
+    // (on squad Floors only the lead talks to the owner: a teammate's message counts only when it asks the owner explicitly)
+    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead, teammate: !!squad && !!lead && a !== lead }) : null;
     if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
     if (reply) state = 'waiting';
     // teammates the lead has not spawned yet are not "stopped": they wait for the sprint (or the source documents)
@@ -237,7 +241,29 @@ function floorAttention(entry, floor, lives, cost) {
   }
   const b = wd.budgetStatus(floor.budget, cost);
   if (b.level === 'over') out.push({ id: attId('budget', entry.id, floor.budget.period), kind: 'budget', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, text: `Budget reached: $${b.used.toFixed(2)} of $${floor.budget.usd} this ${floor.budget.period}`, ts: Date.now() });
+  if (floor.autopilot !== 'off') autopilotItems(entry, floor, out);
   return out;
+}
+
+// ---------- Autopilot (server/autopilot.js) ----------
+// questions, permission prompts and plain-text asks get their classification; a non-critical question with a
+// "(Recommended)" option (or a non-critical ask) is handled automatically once the timeout has passed
+const ASKING = new Set(['question', 'permission', 'reply']);
+function autopilotItems(entry, floor, out) {
+  const ownerOnly = blueprintsLib.floorBlueprint(entry.path, floor.blueprint)?.ownerOnly || [];
+  for (const a of out) {
+    if (!ASKING.has(a.kind)) continue;
+    const c = autopilot.classify([a.text, ...(a.options || []).filter((o) => !o.free).map((o) => o.label)].join('\n'), { level: floor.autopilot, ownerOnly });
+    const rec = a.kind === 'question' && a.answerable ? autopilot.recommendedOption(a.options) : null;
+    const auto = !c.critical && (a.kind === 'reply' || !!rec);                 // permission prompts are never answered
+    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, auto, autoAt: auto ? (a.ts || Date.now()) + floor.autopilotTimeoutSec * 1000 : null };
+  }
+  const day = Date.now() - 864e5;
+  for (const d of loadRuntime().autopilot.decided) {
+    if (d.floorId !== entry.id || d.acked || d.ts < day) continue;
+    out.push({ id: attId('decided', d.id), decidedId: d.id, kind: 'decided', muted: true, floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: d.agentId, agentName: d.agentName,
+      text: d.question, chosen: d.option, changed: d.changed || null, options: d.options.filter((o) => o.label !== d.optionLabel).map((o) => ({ ...o, label: autopilot.cleanLabel(o.label) })), answerable: true, ts: d.ts });
+  }
 }
 
 function floorState(entry, opts = {}) {
@@ -259,14 +285,17 @@ function summary(fs_) {
   const { cfg, lives, cost } = fs_;
   const agents = lives.map((l) => agentView(entry.path, l, cost));
   const count = (s) => agents.filter((a) => a.state === s).length;
-  const lamp = fs_.attention.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
+  const asks = fs_.attention.filter((a) => !a.muted);
+  const lamp = asks.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
   return {
     waitingFor: waitingFor(fs_),
+    // the Floor pill's Autopilot chip: the level and how many critical items wait for the owner
+    autopilot: { level: cfg.floor.autopilot, timeoutSec: cfg.floor.autopilotTimeoutSec, critical: asks.filter((a) => a.autopilot?.critical).length },
     id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, tagline: cfg.floor.tagline, accent: cfg.floor.accent, layout: cfg.floor.layout,
     workflow: cfg.floor.workflow, desks: cfg.floor.desks, devices: cfg.floor.devices, agents, lamp,
     counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped'), standby: agents.filter((a) => a.standby).length },
     cost: { today: round2(cost.today), month: round2(cost.month) }, budget: { ...cfg.floor.budget, ...fs_.budget, used: round2(fs_.budget.used) },
-    attention: fs_.attention.length, updates: agents.filter((a) => a.templateStatus.updateAvailable).length,
+    attention: asks.length, updates: agents.filter((a) => a.templateStatus.updateAvailable).length,
   };
 }
 
@@ -476,13 +505,104 @@ export async function resumeAgent(floorId, agentId, { guard = false, via = 'aisq
   return startAgent(floorId, agentId, note, { resume: sessionId, guard, via });
 }
 
+const criticalWaiting = (floorId) => (snapCache.value?.attention || []).filter((a) => a.floorId === floorId && a.autopilot?.critical).length;
+
+// Autopilot, every 30 s: answers non-critical questions with their recommended option after the timeout, nudges
+// agents whose plain-text ask went unanswered, nudges an idle squad with open work, records lead decisions
+const apMem = { idle: new Map(), blocked: new Set() };     // floorId -> idle nudge state; logged critical items
+export async function autopilotTick(now = Date.now(), { res = wd.readResources() } = {}) {
+  const done = [];
+  snapCache.at = 0;
+  const snap = buildingSnapshot();
+  for (const f of snap.floors.filter((x) => !x.independent && !x.missing && x.autopilot && x.autopilot.level !== 'off')) {
+    const entry = building.floorEntry(f.id);
+    let cfg; try { cfg = floors.readFloor(entry.path); } catch { continue; }
+    const timeout = cfg.floor.autopilotTimeoutSec;
+    const items = snap.attention.filter((a) => a.floorId === f.id && a.autopilot);
+    for (const a of items) {
+      if (a.autopilot.critical) {
+        if (!apMem.blocked.has(a.id)) { apMem.blocked.add(a.id); logEvent(f.id, { type: 'autopilot.blocked', agent: a.agentId, data: { kind: a.kind, question: a.text.slice(0, 300), reasons: a.autopilot.reasons } }); }
+        continue;
+      }
+      if (!a.autopilot.auto || now < a.autopilot.autoAt) continue;
+      try {
+        if (a.kind === 'question') done.push(await autoAnswer(f, a));
+        else if (a.kind === 'reply') done.push(await nudgeReply(f, a, timeout));
+      } catch (e) { console.error('[autopilot]', f.id, a.agentId, e.message); }
+    }
+    done.push(...leadDecisions(f.id, entry.path));
+    const lead = f.agents.find((a) => a.lead) || f.agents.find((a) => a.kindOf === 'lead');
+    const open = openTasks(entry.path, cfg.floor);
+    const stop = autopilot.chainStop({ level: f.autopilot.level, budgetOver: f.budget?.level === 'over', pressure: recovery.memoryPressure(res), criticalWaiting: f.autopilot.critical, openWork: open });
+    const st = apMem.idle.get(f.id) || {}; apMem.idle.set(f.id, st);
+    const allIdle = !!lead?.running && f.agents.every((a) => a.state !== 'working' && a.state !== 'waiting');
+    if (!stop && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
+      await sendTask(f.id, lead.id, autopilot.idleNudge(open));
+      logEvent(f.id, { type: 'autopilot.nudged', agent: lead.id, data: { kind: 'idle', open } });
+      done.push({ floorId: f.id, agentId: lead.id, kind: 'idle' });
+    }
+  }
+  for (const id of apMem.blocked) if (!snap.attention.some((a) => a.id === id)) apMem.blocked.delete(id);
+  if (done.length) invalidate();
+  return done;
+}
+// open rows on the board (Squad Sprint TASKS.md, or a Blueprint squad's docs/BOARD.md); null without a board
+function openTasks(root, floor) {
+  const b = floor.workflow === 'squad-sprint' && sprint.hasPack(root) ? sprint.boardData(root) : blueprintBoard(root);
+  return b ? b.tasks.filter((t) => t.column !== 'DONE').length : null;
+}
+// the dialog is still the same one: choose the recommended option, keep a muted item so the owner can change it
+async function autoAnswer(f, a) {
+  const name = tm.sessionName(f.id, a.agentId);
+  const dialog = tm.parsePrompt(tm.capture(name));
+  const rec = dialog && autopilot.recommendedOption(dialog.options);
+  if (!rec || rec.label !== a.options.find((o) => o.n === a.autopilot.recommended)?.label) return { floorId: f.id, agentId: a.agentId, kind: 'gone' };
+  const r = tm.answerDialog(name, dialog, rec.n);
+  if (!r.ok) throw new Error(r.error);
+  const rt = loadRuntime();
+  const rec2 = { id: crypto.randomBytes(5).toString('hex'), floorId: f.id, agentId: a.agentId, agentName: a.agentName, question: a.text.slice(0, 1000), option: autopilot.cleanLabel(rec.label), optionLabel: rec.label,
+    options: a.options.filter((o) => !o.free).map(({ n, label }) => ({ n, label })), ts: Date.now(), by: 'server', waitedMs: Date.now() - (a.ts || Date.now()) };
+  rt.autopilot.decided = [...rt.autopilot.decided, rec2].slice(-300);
+  saveRuntime(rt);
+  logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec2.question.slice(0, 300), option: rec2.option, critical: false, waitedMs: rec2.waitedMs } });
+  return { floorId: f.id, agentId: a.agentId, kind: 'answered', option: rec2.option };
+}
+async function nudgeReply(f, a, timeout) {
+  const rt = loadRuntime();
+  if (rt.autopilot.nudged.includes(a.replyKey)) return { floorId: f.id, agentId: a.agentId, kind: 'already' };
+  rt.autopilot.nudged = [...rt.autopilot.nudged, a.replyKey].slice(-300);
+  saveRuntime(rt);
+  await sendTask(f.id, a.agentId, autopilot.replyNudge(timeout));
+  logEvent(f.id, { type: 'autopilot.nudged', agent: a.agentId, data: { kind: 'reply', question: a.text.slice(-300) } });
+  return { floorId: f.id, agentId: a.agentId, kind: 'nudged' };
+}
+// "DECIDED BY LEAD (autopilot)" lines in the questions file: each new one is logged once
+function leadDecisions(floorId, root) {
+  const file = [path.join(root, 'docs', 'squad', 'QUESTIONS.md'), path.join(root, 'docs', 'QUESTIONS.md')].find((x) => fs.existsSync(x));
+  if (!file) return [];
+  const list = autopilot.leadDecisions(readTextSafe(file));
+  const rt = loadRuntime(), seen = rt.autopilot.leadSeen[floorId] ?? null;
+  if (seen === list.length) return [];
+  rt.autopilot.leadSeen[floorId] = list.length;
+  saveRuntime(rt);
+  if (seen === null) return [];                               // first look: what is already there is history
+  return list.slice(seen).map((q) => {
+    const c = autopilot.classify(q);
+    logEvent(floorId, { type: 'autopilot.decided', data: { by: 'lead', question: q, critical: c.critical, reasons: c.reasons } });
+    return { floorId, kind: 'lead', critical: c.critical };
+  });
+}
+
 // Floor setting "Auto-resume after a crash": at most 2 per agent per hour, never while memory is under pressure
 export async function autoResumeTick(now = Date.now(), { res = wd.readResources() } = {}) {
   const done = [];
   snapCache.at = 0;
   for (const f of buildingSnapshot().floors.filter((x) => !x.independent && !x.missing)) {
     let cfg; try { cfg = floors.readFloor(building.floorEntry(f.id).path); } catch { continue; }
-    if (!cfg.floor.recovery.autoResume) continue;
+    // Autopilot turns auto-resume on; the chain stops for the budget or a critical item waiting for the owner
+    const ap = cfg.floor.autopilot !== 'off';
+    if (!cfg.floor.recovery.autoResume && !ap) continue;
+    if (ap && (f.budget?.level === 'over' || criticalWaiting(f.id))) continue;
     for (const a of f.agents.filter((x) => x.crash && !x.crash.withLead && x.resume && !x.running)) {
       const key = workKey(f.id, a.id);
       const r = loadRuntime();
@@ -561,7 +681,7 @@ export async function flushPending() {
   } finally { flushing = false; }
 }
 
-export function answerAttention(id, option, text = '', { force = false } = {}) {
+export async function answerAttention(id, option, text = '', { force = false } = {}) {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) throw notFound('This item is gone (maybe already answered)');
@@ -569,6 +689,19 @@ export function answerAttention(id, option, text = '', { force = false } = {}) {
   if (item.kind === 'reply') {
     if (!Number(option) && !String(text).trim()) { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
     return sendTask(item.floorId, item.agentId, text);   // the reply goes to the agent as its next task
+  }
+  if (item.kind === 'decided') {
+    const rt = loadRuntime(), d = rt.autopilot.decided.find((x) => x.id === item.decidedId);
+    if (!d) throw notFound('This decision is gone');
+    const opt = item.options.find((o) => o.n === Number(option));
+    const label = opt ? opt.label : String(text || '').trim();
+    if (!label) { d.acked = Date.now(); saveRuntime(rt); invalidate(); return { ok: true }; }   // OK: the owner keeps it
+    const r = await sendTask(item.floorId, item.agentId, autopilot.changeAnswer(d.question, d.option, label));
+    Object.assign(d, { changed: label, acked: Date.now() });
+    saveRuntime(rt);
+    logEvent(item.floorId, { type: 'autopilot.changed', agent: item.agentId, data: { question: d.question.slice(0, 300), from: d.option, to: label } });
+    invalidate();
+    return r;
   }
   if (item.kind === 'crash') {
     if (Number(option) === 1) return resumeAgent(item.floorId, item.agentId, { guard: !force });
@@ -700,8 +833,10 @@ export async function startNextSprint(floorId) {
   const p = r.nextSprint?.[floorId];
   if (!p) return null;
   snapCache.at = 0;
-  const lead = buildingSnapshot().floors.find((x) => x.id === floorId)?.agents.find((a) => a.id === p.lead);
+  const fl = buildingSnapshot().floors.find((x) => x.id === floorId);
+  const lead = fl?.agents.find((a) => a.id === p.lead);
   if (!lead || lead.state === 'working' || lead.state === 'waiting') return null;
+  if (fl.autopilot?.level !== 'off' && (fl.budget?.level === 'over' || fl.autopilot?.critical)) return null;   // the Autopilot chain stops here
   delete r.nextSprint[floorId];
   saveRuntime(r);
   stopAgent(floorId, p.lead);
