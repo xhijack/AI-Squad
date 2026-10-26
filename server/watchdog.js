@@ -1,6 +1,8 @@
 // Watchdog: stalls (assigned work but idle >= 10 min), machine resources (RAM, swap, disk) and budgets.
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
+import { config } from './config.js';
 
 export const STALL_MS = 10 * 60 * 1000;
 export const LIMITS = { freeRamBytes: 1.5 * 2 ** 30, swapPct: 85, freeDiskBytes: 5 * 2 ** 30 };
@@ -9,7 +11,7 @@ export function readResources(diskPath = os.homedir()) {
   const out = { ts: Date.now(), cpus: os.cpus().length, load: os.loadavg().map((x) => +x.toFixed(2)) };
   try {
     const m = {};
-    for (const line of fs.readFileSync('/proc/meminfo', 'utf8').split('\n')) { const x = line.match(/^(\w+):\s+(\d+)/); if (x) m[x[1]] = +x[2] * 1024; }
+    for (const line of fs.readFileSync(path.join(config.procDir, 'meminfo'), 'utf8').split('\n')) { const x = line.match(/^(\w+):\s+(\d+)/); if (x) m[x[1]] = +x[2] * 1024; }
     out.mem = { total: m.MemTotal, available: m.MemAvailable };
     out.swap = { total: m.SwapTotal, used: m.SwapTotal - m.SwapFree };
   } catch {

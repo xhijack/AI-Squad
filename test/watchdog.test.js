@@ -38,3 +38,15 @@ test('budget levels at 80 % and 100 %', () => {
   assert.equal(wd.budgetStatus({ usd: 100, period: 'month' }, { today: 5, month: 85 }).level, 'warn');
   assert.equal(wd.budgetStatus({ usd: 10, period: 'day' }, { today: 10, month: 85 }).level, 'over');
 });
+
+test('memory is read from the configured /proc (tests use a scratch one)', async () => {
+  const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+  const { configure, config } = await import('../server/config.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aisquad-proc-')), before = config.procDir;
+  fs.writeFileSync(path.join(dir, 'meminfo'), 'MemTotal: 16000000 kB\nMemAvailable: 4000000 kB\nSwapTotal: 8000000 kB\nSwapFree: 800000 kB\n');
+  configure({ procDir: dir });
+  try {
+    const r = wd.readResources();
+    assert.equal(r.mem.available, 4000000 * 1024); assert.equal(r.swap.used, 7200000 * 1024);
+  } finally { configure({ procDir: before }); fs.rmSync(dir, { recursive: true, force: true }); }
+});
