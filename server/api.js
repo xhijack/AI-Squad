@@ -24,6 +24,9 @@ import { runDoctor } from './doctor.js';
 import * as service from './service.js';
 import * as auth from './auth.js';
 import * as jobs from './jobs.js';
+import * as history from './history.js';
+import * as company from './company.js';
+import * as admin from './admin.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -88,11 +91,25 @@ const routes = [
     if (b.backupPassphrase !== undefined) backup.setPassphrase(String(b.backupPassphrase || ''));
     if (b.squadsDir !== undefined) { if (!path.isAbsolute(String(b.squadsDir))) throw new HttpError(400, 'The squads folder must be an absolute path'); building.setPrefs({ squadsDir: path.resolve(String(b.squadsDir)) }); }
     squad.invalidate(); return { ok: true };
-  }, { pin: true }],
+  }, { pin: true, history: () => ({ label: 'Building settings' }) }],
   ['GET', /^\/api\/doctor$/, () => runDoctor({ service: (() => { try { return service.status(); } catch { return null; } })() }), { pin: true }],
   ['GET', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); return { settings: s, defaultDir: backup.defaultDir(), status: backup.readStatus(), encrypted: !!backup.storedPassphrase(), backups: backup.listBackups(s.dir || backup.defaultDir()).slice(0, 30) }; }, { pin: true }],
   ['POST', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const r = backup.createBackup({ out: s.dir || backup.defaultDir(), passphrase: backup.storedPassphrase(), logs: s.logs }); return { ok: true, ...r }; }, { pin: true }],
   ['POST', /^\/api\/backups\/verify$/, (p, b) => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const dir = s.dir || backup.defaultDir(); const f = backup.listBackups(dir).find((x) => x.name === String(b.name || '')); if (!f) throw notFound('Backup not found'); return backup.verifyBackup(f.file, { passphrase: backup.storedPassphrase() }); }, { pin: true }],
+  // Admin Panel (0.12): overview, change history with rollback, the Company Brain
+  ['GET', /^\/api\/admin$/, () => admin.overview(), { pin: true }],
+  ['GET', /^\/api\/history$/, (p, b, req) => ({ changes: history.list({ floorId: new URL(req.url, 'http://x').searchParams.get('floor') || '', limit: 100 }) }), { pin: true }],
+  ['GET', /^\/api\/history\/(h-[\w-]+)$/, ([id]) => history.get(id), { pin: true }],
+  ['POST', /^\/api\/history\/(h-[\w-]+)\/rollback$/, ([id], b, req) => {
+    const r = history.rollback(id, { force: !!b.force, actor: req.actor || 'owner' });
+    const e = history.get(r.id);
+    if (e.floorId) { try { floors.generate(building.floorEntry(e.floorId).path); } catch { /* the Floor is gone */ } }
+    squad.invalidate();
+    return r;
+  }, { pin: true }],
+  ['GET', /^\/api\/company$/, () => company.summary(company.companyDir(building.loadBuilding().prefs)), { pin: true }],
+  ['PATCH', /^\/api\/company$/, (p, b) => { building.setPrefs({ company: company.cleanCompany(b) }); for (const f of building.loadBuilding().floors) { try { floors.generate(f.path); } catch { /* missing */ } } squad.invalidate(); return company.summary(company.companyDir(building.loadBuilding().prefs)); }, { pin: true, history: () => ({ label: 'Company Brain folder' }) }],
+  ['POST', /^\/api\/company\/init$/, () => { const r = company.ensure(company.companyDir(building.loadBuilding().prefs)); for (const f of building.loadBuilding().floors) { try { floors.generate(f.path); } catch { /* missing */ } } squad.invalidate(); return r; }, { pin: true }],
   // Claude sign-in of background runs (docs/BILLING.md); the API key is write-only
   ['GET', /^\/api\/auth$/, () => ({ ...auth.cleanAuth(building.loadBuilding().prefs.auth), key: auth.keyStatus(), modes: auth.MODES }), { pin: true }],
   ['PATCH', /^\/api\/auth$/, (p, b) => { building.setPrefs({ auth: auth.cleanAuth(b) }); return { ...auth.cleanAuth(building.loadBuilding().prefs.auth), key: auth.keyStatus() }; }, { pin: true }],
@@ -144,10 +161,10 @@ const routes = [
     if (b.git && b.git.autoMergeApproved !== undefined) setApproval(id, !!b.git.autoMergeApproved);
     squad.invalidate();
     return { ok: true };
-  }, { pin: true }],
+  }, { pin: true, history: ([id]) => ({ label: 'Floor settings', floorId: id }) }],
   ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/repos$/, ([id]) => squad.floorRepos(id)],
-  ['PUT', /^\/api\/floors\/([\w-]+)\/repos$/, ([id], b) => squad.updateRepos(id, b.repos), { pin: true }],
+  ['PUT', /^\/api\/floors\/([\w-]+)\/repos$/, ([id], b) => squad.updateRepos(id, b.repos), { pin: true, history: ([id]) => ({ label: 'Repositories', floorId: id }) }],
   ['PATCH', /^\/api\/floors\/([\w-]+)\/repos\/([a-z0-9-]+)$/, ([id, rid], b) => (b.approved !== undefined ? squad.setRepoApproval(id, rid, b.approved) : squad.relinkRepo(id, rid, String(b.path || ''))), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/repos\/([a-z0-9-]+)\/clone$/, ([id, rid]) => squad.cloneRepo(id, rid), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/performance$/, ([id]) => squad.performance(id)],
@@ -170,24 +187,24 @@ const routes = [
   ['GET', /^\/api\/floors\/([\w-]+)\/audits\/([\w-]+)$/, ([id, aid]) => squad.floorAudit(id, aid), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/audits$/, ([id], b) => { squad.startAudit(id, { sprint: b.sprint, model: b.model }).catch((e) => console.error('[audit]', e.message)); return { ok: true, started: true }; }, { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/audits\/([\w-]+)\/findings\/(F\d+)\/proposal$/, ([id, aid, fid]) => squad.findingProposal(id, aid, fid), { pin: true }],
-  ['POST', /^\/api\/floors\/([\w-]+)\/audits\/([\w-]+)\/findings\/(F\d+)\/apply$/, ([id, aid, fid]) => squad.applyFinding(id, aid, fid), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/audits\/([\w-]+)\/findings\/(F\d+)\/apply$/, ([id, aid, fid]) => squad.applyFinding(id, aid, fid), { pin: true, history: ([id, aid, fid]) => ({ label: `Audit finding ${fid} applied`, floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/audits\/([\w-]+)\/findings\/(F\d+)\/dismiss$/, ([id, aid, fid], b) => squad.dismissFinding(id, aid, fid, b.reason), { pin: true }],
-  ['POST', /^\/api\/floors\/([\w-]+)\/blueprint\/update$/, ([id]) => squad.updateFloorBlueprint(id), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/blueprint\/update$/, ([id]) => squad.updateFloorBlueprint(id), { pin: true, history: ([id]) => ({ label: 'Blueprint update', floorId: id }) }],
   ['GET', /^\/api\/floors\/([\w-]+)\/log$/, ([id], b, req) => squad.floorLog(id, Object.fromEntries(new URL(req.url, 'http://x').searchParams)), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/merges$/, ([id], b) => squad.startMerge(id, b.branch, b.repo || ''), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/merge-approval$/, ([id], b) => { building.floorEntry(id); setApproval(id, !!b.approved); squad.invalidate(); return { ok: true, approved: !!b.approved }; }, { pin: true }],
-  ['DELETE', /^\/api\/floors\/([\w-]+)$/, ([id]) => { building.unregisterFloor(id); squad.invalidate(); return { ok: true }; }, { pin: true }],
+  ['DELETE', /^\/api\/floors\/([\w-]+)$/, ([id]) => { building.unregisterFloor(id); squad.invalidate(); return { ok: true }; }, { pin: true, history: ([id]) => ({ label: `Floor ${id} removed from the Building` }) }],
 
-  ['POST', /^\/api\/floors\/([\w-]+)\/agents$/, ([id], b) => { const a = floors.addAgent(floorRoot(id), b); squad.invalidate(); return { ok: true, agent: a }; }, { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents$/, ([id], b) => { const a = floors.addAgent(floorRoot(id), b); squad.invalidate(); return { ok: true, agent: a }; }, { pin: true, history: ([id], b) => ({ label: `Agent added: ${String(b.displayName || '').slice(0, 60)}`, floorId: id }) }],
   ['GET', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)$/, ([id, a]) => squad.deskDetail(id, a), { pin: true }],
-  ['PATCH', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)$/, ([id, a], b) => { const r = floors.updateAgent(floorRoot(id), a, b); squad.invalidate(); return { ok: true, agent: r }; }, { pin: true }],
-  ['DELETE', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)$/, ([id, a]) => { squad.stopAgent(id, a); floors.removeAgent(floorRoot(id), a); squad.invalidate(); return { ok: true }; }, { pin: true }],
+  ['PATCH', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)$/, ([id, a], b) => { const r = floors.updateAgent(floorRoot(id), a, b); squad.invalidate(); return { ok: true, agent: r }; }, { pin: true, history: ([id, a]) => ({ label: `Agent edited: ${a}`, floorId: id }) }],
+  ['DELETE', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)$/, ([id, a]) => { squad.stopAgent(id, a); floors.removeAgent(floorRoot(id), a); squad.invalidate(); return { ok: true }; }, { pin: true, history: ([id, a]) => ({ label: `Agent removed: ${a}`, floorId: id }) }],
   ['GET', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/diff$/, ([id, a]) => {
     const { team } = floors.readFloor(floorRoot(id));
     const agent = team.agents.find((x) => x.id === a); if (!agent) throw notFound('Agent not found');
     return floors.templateDiff(floorRoot(id), agent);
   }],
-  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/template$/, ([id, a], b) => { const r = floors.templateAction(floorRoot(id), a, b.action); squad.invalidate(); return { ok: true, agent: r }; }, { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/template$/, ([id, a], b) => { const r = floors.templateAction(floorRoot(id), a, b.action); squad.invalidate(); return { ok: true, agent: r }; }, { pin: true, history: ([id, a], b) => ({ label: `Template ${String(b.action || '')} for ${a}`, floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/start$/, ([id, a], b) => squad.startAgent(id, a, b.task ? squad.withAttachments(b.task, b.attachments) : '', { guard: !b.force }), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/docs$/, ([id]) => squad.sourceDocs(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/docs\/text$/, ([id], b, req) => squad.sourceDocText(id, new URL(req.url, 'http://x').searchParams.get('path')), { pin: true }],
@@ -227,7 +244,13 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (!m) continue;
         if ((opts.pin || lockReads) && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
-        const out = await handler(m.slice(1), body, req);
+        // configuration is code: changes to the Building or a Space are recorded with their before and after (server/history.js)
+        let out;
+        if (opts.history) {
+          const h = opts.history(m.slice(1), body);
+          let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
+          out = await history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor || 'owner' }, () => handler(m.slice(1), body, req));
+        } else out = await handler(m.slice(1), body, req);
         if (out && out.__audio) { res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); return res.end(out.__audio); }
         if (out && out.__file && out.sandbox) {
           // a design variant: shown in an iframe, sandboxed (no scripts, no access to The AI Squad), nothing from outside
