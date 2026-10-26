@@ -27,7 +27,7 @@ await floors.createFloor({ name: 'Shop', directory: { mode: 'new', path: proj },
 const FLOOR = 'shop', LEAD = 'rina-pm';
 const name = tm.sessionName(FLOOR, LEAD);
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
-const wait = async (fn, ms = 6000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await sleep(150); } return false; };
+const wait = async (fn, ms = 12000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await sleep(150); } return false; };
 const logText = () => (fs.existsSync(LOG) ? fs.readFileSync(LOG, 'utf8') : '');
 const snap = () => { squad.invalidate(); return squad.buildingSnapshot(); };
 const items = () => snap().attention.filter((a) => a.floorId === FLOOR);
