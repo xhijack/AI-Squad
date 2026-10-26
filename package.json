@@ -1,6 +1,6 @@
 {
   "name": "aisquad",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "The AI Squad: run Claude Code agent teams as floors of a 3D building.",
   "type": "module",
   "private": true,
