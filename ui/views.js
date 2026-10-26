@@ -45,7 +45,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">Open Floor</a>`);
     if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
     body = apNote(a) + body;
-    const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-scroll="reply-${a.id}" tabindex="0" aria-label="Message from ${esc(a.agentName || 'the agent')}">${mdLite(a.text)}</div>` : `<div class="q">${esc(a.text)}</div>`;
+    const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" aria-label="Message from ${esc(a.agentName || 'the agent')}">${mdLite(a.text)}</div>` : `<div class="q">${esc(a.text)}</div>`;
     return `<div class="att ${a.kind} ${a.level || ''}${a.muted ? ' muted' : ''}"><div class="where">${where} · ${ago(a.ts)}</div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
   }).join('');
 }

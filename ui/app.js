@@ -163,7 +163,8 @@ function patch(el, html) {
   el.innerHTML = html;
   el._html = html;
   el.querySelectorAll('[data-slot="task"]').forEach((s) => s.appendChild(getTaskForm()));
-  el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p || p.bottom ? s.scrollHeight : p.top; });
+  // new scroll areas start at the end (screens, a reply card's ask); a Finished report starts at its first lines
+  el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p ? ('top' in s.dataset ? 0 : s.scrollHeight) : p.bottom && !('top' in s.dataset) ? s.scrollHeight : p.top; });
   el.querySelectorAll('.cardBody').forEach((x, i) => { x.scrollTop = bodies[i] || 0; });
   el.scrollTop = bodyTop;
 }
