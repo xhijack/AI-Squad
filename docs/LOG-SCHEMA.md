@@ -82,6 +82,9 @@ The first scan of a Floor only records a baseline (the current board and files a
 ```
 
 
+**`dispatch.idle-stopped`** (0.13, lifecycle): the dispatcher stopped an agent that sat idle (`idleMin`) to free its
+slot; `queue` is true when work was waiting. Resume continues the session.
+
 ### Work (`work`)
 
 **`task.given`**: A prompt the owner typed or sent to the agent (from the transcript; `id` is the transcript record uuid).
@@ -181,6 +184,17 @@ Desk) or the part of The AI Squad that started it.
 {"v":1,"id":"7c2d1e0f4a65","ts":"2026-10-26T02:21:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"claude-sonnet-5-5","type":"job.ended","summary":"budi-dev's background job done ($0.04)","data":{"job":"j-20261026-a1b2c3d4","kind":"task","status":"done","cost":0.0421,"turns":2,"ms":121000}}
 ```
 
+
+**`dispatch.queued`** (0.13): a start could not run now and waits in the dispatcher's queue. `action` is `start`,
+`resume`, `job` or `sprint`; `priority` P0 to P3; `reason` why it waits; `via` who asked (`owner`, `auto-resume`,
+`next-sprint`, `autopilot`).
+
+```json
+{"v":1,"id":"a3c90e7d1b42","ts":"2026-10-27T01:00:00.000Z","floor":"mkt","sprint":null,"module":null,"agent":"dodi-designer","role":"designer","session":null,"model":null,"type":"dispatch.queued","summary":"dodi-designer queued (job, P2): waiting for a free slot","data":{"action":"job","priority":"P2","reason":"waiting for a free slot","via":"owner"}}
+```
+
+**`dispatch.started`** (0.13): a queued start ran; `waitedMs` is how long it waited. **`dispatch.failed`**: it could
+not start (`error`; `dropped` after three attempts). **`dispatch.removed`**: the owner removed it from the queue.
 
 ### Communication (`communication`)
 

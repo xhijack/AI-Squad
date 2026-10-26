@@ -760,6 +760,17 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - **API:** `GET /api/admin`, `GET /api/history?floor=`, `GET /api/history/:id`, `POST /api/history/:id/rollback {force}`, `GET/PATCH /api/company`, `POST /api/company/init`; `PATCH /api/floors/:id` takes `kind`, `access`, `memory`, `shift`.
 - Tests: `test/space.test.js` (Space cleaning, shifts across midnight, the Company Brain, session context for team and Owner Spaces, memory moved into the repository, an agent job's arguments, change history with conflict and forced rollback, the Admin overview).
 
+## Phase 4, Sprint 4: dispatcher, shifts and the quota guard, 0.13.0 (27 Oct 2026)
+
+- **`server/dispatcher.js`**: one queue (`~/.aisquad/queue.json`) for every start. Slots = min(Building maximum, free RAM minus 2 GB divided by the measured RAM per session, no new session at 90 % CPU load); the Space's own maximum per Space. Priorities P0 (owner) to P3 (background) with aging (one level per 30 minutes, never to P0); one daytime slot kept for the owner (`reserveP0`, `day`); automated work (`via` other than `owner`) waits outside the Space's shift and while the quota guard pauses. A failing start is tried three times, then dropped and logged.
+- **All start paths** go through `squad.admit()`: Desk Start / Resume / Send task to a stopped agent / background job (P0, jobs P2), Attention's crash options, Set up Squad's lead, auto-resume (P1), the next sprint (P1, a restart of a running lead needs no slot), Autopilot's nudges (P2; idle nudges wait for the shift). The 409 "Start anyway?" warning is gone: a start either runs or queues; `force` still skips the queue.
+- **Idle stop**: agents idle for `idleStopMin` (30) or `idleStopBusyMin` (10) while work waits are stopped, never with an open question, report, command, dialog, typed-later task, or a lead with teammates in its session (`dispatch.idle-stopped`).
+- **`server/quota.js`**: rate-limit reports of background jobs (`rate_limits`, `rate_limit_event`: used %, resets at) and "usage limit reached" errors pause automated work until the reset; an API-equivalent cost proxy over 5 hours and 7 days (`costBetween` of every Space's cost tracker) against limits the owner sets (off by default).
+- **Squad Log**: `dispatch.queued`, `dispatch.started`, `dispatch.failed`, `dispatch.removed`, `dispatch.idle-stopped` (`docs/LOG-SCHEMA.md`).
+- **UI**: Admin → Dispatcher (slots and their limits, quota guard, queue with priority / Start now / Remove, settings); the Desk tells why a start waits and at which place. EN + ID.
+- Tests: `test/dispatcher.test.js` (capacity, aging, plan with reserve / shift / quota / Space maximum / one start per agent, the queue on disk, retries, idle stop rules, quota parsing and the cost proxy, and end to end: a job waits for the machine's only slot, the tick starts it after the first job stops, a scheduled job waits outside the shift). `test/resume.test.js` now expects the queue instead of the 409.
+- Known limits: interactive Desk sessions report their limits only on their screen, so the quota guard reads signals from background jobs and the cost proxy; the cost proxy is an estimate.
+
 ## How to run
 
 ```
