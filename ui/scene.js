@@ -8,7 +8,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { buildChibi, HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
 import { FW, FD, FH, floorY, desksFor } from './layout.js';
 import { makeScreen, drawScreen } from './screens.js';
-import { loungeSpots, updateLife, deskHome, seatRoot } from './life.js';
+import { loungeSpots, updateLife, deskHome, seatRoot, MEETING_SEATS, meetingSeats } from './life.js';
 import { deskProps, propsFor } from './props.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -82,8 +82,6 @@ function wood() {
 }
 
 // ---------- devices (movable, in floor.json) ----------
-// the meeting table's seats in its own coordinates; face = the heading of someone sitting there (towards the table)
-export const MEETING_SEATS = [[-1.45, 0], [1.45, 0], [-.7, -1.05], [.7, -1.05], [-.7, 1.05], [.7, 1.05]].map(([x, z]) => ({ x, z, face: Math.atan2(-x, -z) }));
 const NOTES = ['#fde68a', '#fbcfe8', '#bbf7d0', '#bfdbfe', '#fed7aa'];
 const DEVICE_BUILDERS = {
   plant(g) {
@@ -479,6 +477,7 @@ export class BuildingScene {
       chip.addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
     });
     o.spots = loungeSpots(f.devices || []);
+    o.seats = meetingSeats(f.devices || []);
     o.occupied = new Map();
     if (f.missing) label('Directory not found', 'alabel warnlabel', g, 0, 1.4, 0);
     else if (!(f.agents || []).length) o.empty = label(f.independent ? 'No independent agents right now.' : 'No agents yet. Add one from the dock.', 'alabel', g, 0, 1.3, 0);
@@ -778,7 +777,11 @@ export class BuildingScene {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
       for (const st of o.stations.values()) {
-        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
+        // a meeting at the table (from the Log): the agents involved take a seat, except one that waits for the owner
+        const mt = near && o.data?.meeting && o.data.meeting.until > Date.now() ? o.data.meeting : null;
+        const k = mt && st.state !== 'waiting' ? mt.agents.indexOf(st.id) : -1;
+        const meeting = k >= 0 && o.seats[k] ? { ...o.seats[k], label: mt.label } : null;
+        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view

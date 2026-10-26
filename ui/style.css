@@ -588,3 +588,9 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 @media (prefers-reduced-motion: reduce) { #convo { animation: none; } }
 .convoBar a.btn { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; min-height: 36px; font-weight: 600; color: var(--text); }
 .convoBar a.btn:hover { background: var(--sunk); border-color: var(--line2); }
+
+/* Standup tab */
+.suAgent + .suAgent { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.suGrid { display: grid; grid-template-columns: 74px 1fr; gap: 2px 8px; margin-top: 4px; font-size: 13px; }
+.suList { margin: 0; padding-left: 16px; }
+.suList.blocked li { color: var(--bad); }

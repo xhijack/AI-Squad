@@ -441,7 +441,7 @@ export function floorDetail(id) {
     attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null,
     board: s.cfg.floor.workflow === 'squad-sprint' ? sprint.boardData(entry.path) : blueprintBoard(entry.path),
     blueprint: blueprintInfo(entry.path, s.cfg.floor.blueprint),
-    shots: listShots(entry.path),
+    shots: listShots(entry.path), standup: collect.stateOf(id).standup || null,
     merge: { approved: !!merge.approval(entry.id), approvedAt: merge.approval(entry.id)?.approvedAt || null, running: merge.isMerging(entry.id), last: merge.mergeLog(entry.id, 5) } };
 }
 

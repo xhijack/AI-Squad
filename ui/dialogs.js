@@ -77,6 +77,10 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="autoResume" ${c.recovery?.autoResume ? 'checked' : ''}> Auto-resume after a crash (at most 2 times per hour per agent, not while memory is still under pressure)</label>
     <div class="grid2"><div><label>Max concurrent agents</label><input name="maxAgents" type="number" min="1" max="20" value="${c.recovery?.maxAgents || 4}"></div>
       <p class="note">The lead is told this limit. Starting more, or starting while swap is above 80 %, asks you first.</p></div>
+    <h3 style="margin-top:18px">Standup</h3>
+    <div class="grid2"><div><label>Daily standup at (local time)</label><input name="standupTime" type="time" value="${esc(c.standup?.time || '09:30')}"></div>
+      <label class="inline" style="align-self:end"><input type="checkbox" name="standupMeeting" ${c.standup?.meeting !== false ? 'checked' : ''}> The team meets at the table for it</label></div>
+    <p class="note">Made from the Squad Log (done, doing, blocked by per agent), no model call. It shows in the Standup tab.</p>
     <h3 style="margin-top:18px">Squad Log and Audit</h3>
     <label class="inline"><input type="checkbox" name="logMessages" ${c.log?.messages !== false ? 'checked' : ''}> Log message text (tasks, messages between agents, questions and answers). Off: metadata only.</label>
     <label class="inline"><input type="checkbox" name="logMask" ${c.log?.maskPersonalData !== false ? 'checked' : ''}> Mask personal data (e-mail, phone, national id and bank account numbers). Secrets are always removed.</label>
@@ -99,7 +103,7 @@ async function floorSettings() {
         budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked },
         log: { messages: form.elements.logMessages.checked, maskPersonalData: form.elements.logMask.checked },
         audit: { auto: form.elements.auditAuto.checked, model: segValue(form, 'auditModel') }, recovery: { autoResume: form.elements.autoResume.checked, maxAgents: Number(v('maxAgents')) || 4 },
-        autopilot: segValue(form, 'autopilot'), autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form) });
+        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form) });
       closeModal(); toast('Floor saved'); ctx.refresh();
     } catch (e) { fail(e); }
   };

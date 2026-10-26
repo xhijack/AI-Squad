@@ -138,6 +138,19 @@ export function boardHtml(f) {
     ${b.tasks.length ? `<div class="kcols">${cols}</div>` : '<div class="empty">No tasks yet. Start the lead and run <code>/sprint</code> to plan the sprint.</div>'}`;
 }
 
+// the daily standup (from the Squad Log): per agent done, doing, blocked by; "Now" asks the server for today so far
+export function standupHtml(s, meeting = null) {
+  const now = meeting ? `<div class="chip info" style="margin-bottom:8px">At the table now: ${esc(meeting.label)} (${meeting.agents.length} agents)</div>` : '';
+  if (!s) return `${now}<div class="empty">No standup yet. It runs every day at the time in Floor settings, from the Squad Log.</div><button class="small" data-act="standup-now">Standup so far today</button>`;
+  return `${now}<div class="row" style="margin-bottom:6px"><b class="grow">Standup ${esc(new Date(s.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }))}</b><button class="small ghost" data-act="standup-now">So far today</button></div>
+    ${standupAgents(s)}`;
+}
+export function standupAgents(s) {
+  const list = (xs, cls) => (xs.length ? `<ul class="suList ${cls}">${xs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<span class="note">–</span>');
+  return s.quiet ? '<div class="empty">A quiet day: nothing done, in progress or blocked.</div>' : s.agents.filter((a) => a.done.length || a.doing.length || a.blocked.length).map((a) => `<div class="suAgent"><b>${esc(a.name)}</b>
+    <div class="suGrid"><span class="note">Done</span>${list(a.done, 'done')}<span class="note">Doing</span>${list(a.doing, 'doing')}<span class="note">Blocked by</span>${list(a.blocked, 'blocked')}</div></div>`).join('');
+}
+
 // the Blueprint this squad follows and the state of its source documents
 const DOC_STATE = { approved: ['ok', 'approved'], draft: ['warn', 'draft'], missing: ['bad', 'missing'] };
 function standardHtml(bp) {
@@ -175,6 +188,7 @@ export function floorSections(f, deskAgentId = null) {
     { id: 'messages', title: 'Messages', icon: 'chat', card: 'tabs', count: (f.messages || []).length, html: messagesHtml(f.messages || [], f.agents) },
   ];
   if (f.blueprint) sections.push({ id: 'standard', title: 'Standard', icon: 'doc', card: 'tabs', html: standardHtml(f.blueprint) });
+  sections.push({ id: 'standup', title: 'Standup', icon: 'activity', card: 'tabs', html: standupHtml(f.standup, f.meeting) });
   const att = f.attentionItems || [];
   if (att.length) sections.unshift({ id: 'f-attention', title: 'Needs you', card: 'top', count: needsYou(att).length || undefined, countClass: 'bad', html: attentionHtml(att, { showFloor: false }) });
   return sections;

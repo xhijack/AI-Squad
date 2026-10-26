@@ -1,7 +1,7 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
 import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts } from './lib.js';
-import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou } from './views.js';
+import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
 import './edit.js';
@@ -500,6 +500,12 @@ const actions = Object.assign(ctx.actions, {
     if (!$('sheet').hidden) state.tab.sheet = sec; else state.tab.tabs = sec;
     layoutPanels(lastSections);
     requestAnimationFrame(() => document.querySelector('#side .att, #sheet .att')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  },
+  async 'standup-now'() {
+    const r = await api('GET', `/api/floors/${state.route.floorId}/standup`);
+    const body = openModal(`<div class="mHead"><h3 class="grow">Standup so far today</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div>
+      <div class="mBody"><p class="note" style="margin-top:0">From the Squad Log since the last standup${r.last ? ` (${new Date(r.last.at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })})` : ''}, and what the agents do right now. The next one is at ${esc(r.setting.time)}.</p>${standupAgents(r.now)}</div>`);
+    body.closest('dialog').querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
   async 'work-done'(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/work-done`, {}); },
   async 'remove-floor'(el) {
