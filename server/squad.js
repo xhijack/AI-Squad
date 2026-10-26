@@ -420,7 +420,7 @@ export async function flushPending() {
       const name = tm.sessionName(floorId, agentId);
       if (Date.now() - t.since > 10 * 60e3 || !tm.isRunning(name)) { pending.delete(key); continue; }
       if (t.startedAt && Date.now() - t.startedAt < 4000) continue;
-      if (!tm.isReady(tm.capture(name))) continue;
+      if (!tm.isReady(tm.capture(name, 0, { styled: true }))) continue;
       pending.delete(key);
       const at = Date.now();
       const r = await tm.typeTask(name, t.text);

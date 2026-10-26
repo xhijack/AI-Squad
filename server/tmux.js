@@ -38,9 +38,10 @@ export function keepSize(name) {
   tmux(['set-option', '-t', `=${name}`, 'window-size', 'manual']);
   tmux(['resize-window', '-t', `=${name}:`, '-x', String(SIZE.x), '-y', String(SIZE.y)]);
 }
-export const capture = (name, history = 0) => {
+// styled: keep the colour/attribute escapes (needed to tell typed input from a dim prompt suggestion)
+export const capture = (name, history = 0, { styled = false } = {}) => {
   if (!sized.has(name) && isRunning(name)) { keepSize(name); sized.add(name); }   // also sessions started before this fix
-  return tmux(['capture-pane', '-p', '-J', '-t', `=${name}:`, ...(history ? ['-S', `-${history}`] : [])]) || '';
+  return tmux(['capture-pane', '-p', '-J', ...(styled ? ['-e'] : []), '-t', `=${name}:`, ...(history ? ['-S', `-${history}`] : [])]) || '';
 };
 
 // ---------- screen parsing ----------
@@ -114,12 +115,34 @@ export function unnumberedPrompt(tail) {
 // Claude Code shows "esc to interrupt" while a turn is running
 export const isBusy = (screen) => /esc to interrupt/i.test(screen);
 
-// text currently in the input box ("❯ ..." line inside the last box), '' when empty
+// Claude Code's prompt suggestions ("ghost text") are drawn dim (SGR 2) in the empty input box, the
+// cursor on their first letter in reverse video (SGR 7): drop both, so a suggestion never counts as typed
+// input. Other escapes are left for cleanScreen.
+export function stripDim(text) {
+  let dim = false, rev = false, out = '';
+  for (const part of String(text).split(/(\x1b\[[0-9;]*m)/)) {
+    const m = part.match(/^\x1b\[([0-9;]*)m$/);
+    if (!m) { out += dim || rev ? part.replace(/[^\n]/g, '') : part; continue; }
+    const codes = (m[1] || '0').split(';');
+    for (let i = 0; i < codes.length; i++) {
+      const c = codes[i];
+      if (c === '38' || c === '48' || c === '58') { i += codes[i + 1] === '2' ? 4 : 2; continue; }   // colours: 38;5;n and 38;2;r;g;b
+      if (c === '2') dim = true; else if (c === '22') dim = false;
+      else if (c === '7') rev = true; else if (c === '27') rev = false;
+      else if (c === '0' || c === '') dim = rev = false;
+    }
+    out += part;
+  }
+  return out;
+}
+
+// text currently in the input box ("❯ ..." line inside the last box), '' when empty; pass a styled
+// capture (capture(name, 0, { styled: true })) so prompt suggestions are not read as input
 export function inputLine(screen) {
   const lines = cleanScreen(screen);
+  const typed = cleanScreen(stripDim(screen));          // same lines; the prompt marker itself may be dim too
   for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
-    const m = lines[i].match(/^\s*(?:❯|>)\s?(.*)$/);
-    if (m) return m[1].trim();
+    if (/^\s*(?:❯|>)/.test(lines[i])) return (typed[i] || '').replace(/^\s*(?:❯|>)?\s?/, '').trim();
   }
   return null;
 }
@@ -178,7 +201,7 @@ export async function typeTask(name, text, { settleMs = 600, verifyMs = 1500 } =
   const probe = flat.slice(0, 24);
   for (let attempt = 0; attempt < 3; attempt++) {
     await sleep(verifyMs);
-    const line = inputLine(capture(name));
+    const line = inputLine(capture(name, 0, { styled: true }));
     if (line === null || !line.includes(probe)) return { ok: true };
     tmux(['send-keys', '-t', `=${name}:`, 'Enter']);       // pasted text sometimes swallows the first Enter
   }

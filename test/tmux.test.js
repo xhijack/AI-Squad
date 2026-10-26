@@ -89,6 +89,21 @@ test('a numbered list in the conversation is not a dialog', () => {
   assert.equal(tm.isReady(TRUST), false);
 });
 
+// as captured with -e from Claude Code 2.1: the prompt suggestion is dim after "❯ " (NBSP), the hint line too
+const GHOST = '\x1b[37m' + '─'.repeat(40) + '\x1b[39m\n\x1b[39m❯\u00a0\x1b[2mtemplate undangan baru di katalog\x1b[0m\x1b[39m\x1b[49m\n\x1b[37m' + '─'.repeat(40) + '\x1b[39m\n  \x1b[93m⏵⏵ auto mode on\x1b[2m\x1b[37m (shift+tab to cycle)\x1b[0m';
+test('a dim prompt suggestion in the input box is not typed input', () => {
+  assert.equal(tm.inputLine(GHOST), '');
+  assert.equal(tm.isReady(GHOST), true);
+  // the cursor in reverse video on the suggestion's first letter
+  assert.equal(tm.inputLine(GHOST.replace('\x1b[2mtemplate', '\x1b[7mt\x1b[27m\x1b[2memplate')), '');
+  // typed text stays, also next to colours whose parameters contain a 2 (38;5;2, 38;2;r;g;b)
+  assert.equal(tm.inputLine('\x1b[2m❯\u00a0\x1b[0m\x1b[38;5;2mfix the login\x1b[38;2;20;20;20m page\x1b[0m'), 'fix the login page');
+  assert.equal(tm.inputLine('❯ \x1b[1mbold\x1b[22m text \x1b[2mand a hint\x1b[22m'), 'bold text');
+  // a busy session draws the marker dim
+  assert.equal(tm.inputLine('\x1b[2m❯\u00a0\x1b[0m'), '');
+  assert.equal(tm.stripDim('a\x1b[2mb\nc\x1b[0md'), 'a\x1b[2m\n\x1b[0md');
+});
+
 test('busy detection', () => {
   assert.equal(tm.isBusy('✻ Cogitating… (12s · esc to interrupt)'), true);
   assert.equal(tm.isBusy(CHAT_LIST), false);
