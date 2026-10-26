@@ -781,6 +781,17 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Checked in headless Chromium (Playwright, Indonesian UI): Admin → Spaces and Dispatcher, Menu → People, Desk → Chat render without page errors. The capacity and quota lines of the Dispatcher are now translated as whole sentences (a word-by-word match of the server's English gave mixed text).
 - Known limits: viewers still see action buttons (the server refuses them); the Owner's browser without a PIN shows no Owner-only Spaces until the PIN is entered.
 
+## Phase 4, Sprint 6: Telegram, digest and Daily Insight, 0.15.0 (27 Oct 2026)
+
+- **Notification Gateway (`server/notify.js`)** with **Telegram** as its first channel (`server/telegram.js`: Bot API with Node's `fetch`, long polling, back-off and `retry_after`). The token is write-only in `secrets.json`, checked with `getMe`.
+- **Pairing**: a one-time 6-digit code (10 minutes) from Admin for the signed-in person; `/start CODE`; other chats are ignored. Each chat acts as its person (`AsyncLocalStorage`), with their role; viewers get messages without buttons; Owner-only Spaces reach only the Owner.
+- **What goes out**: questions, permissions, replies, crashes, resources, scope, backups at once (configurable); the rest in a morning digest (default 07:30: what waits, jobs done/failed and their cost, idle stops, chat answers, new suggestions). Quiet hours (22:00-07:00) hold all but machine alerts; at most 20 messages an hour. Summaries are redacted like the Squad Log. Buttons come off when the item is answered elsewhere.
+- **What comes in**: option buttons answer through `answerAttention`; Reply takes text; Dismiss for reports; hard stops (the Autopilot classifier: money, legal, production, secrets, irreversible) need a 4-digit code within 5 minutes. `/status`, `/chat <agent>` (Sprint 5's chat; answers are forwarded), `/end`, `/digest`, `/help`. Bot text in English or Indonesian.
+- **Daily Insight level 0 (`server/insight.js`, `server/inbox.js`)**: at 02:30 a deterministic pass over the week's Squad Log finds seven patterns and writes suggestions (evidence with event ids, impact, risk, the exact change or advice, how to check, the metric now) to the Improvement Inbox. Accept applies the change through the change history (agent rule, agent model, Space Autopilot, Building maximum); Dismiss keeps it quiet for 14 days, Accept for its 7-day check.
+- **UI**: Admin → Notifications (token, pair, chats, test, digest now, quiet hours, what is sent at once, Open link, bot language) and Admin → Improvements (open and decided suggestions, run now). EN + ID. `docs/TELEGRAM.md`.
+- Tests: `test/notify.test.js` against a fake Bot API (token, pairing, quiet hours, the message and its buttons, answering as the paired person, buttons removed, the hard-stop code, reply to an item that moved on, viewer, expired buttons, `/chat` with a forwarded answer, Owner-only Spaces, the digest in Indonesian, once a day) and `test/insight.test.js` (every pattern and its thresholds, the inbox rules, accept through the change history, the nightly tick).
+- Known limits: no real Telegram call was made from the cloud session (its network allows only package registries and GitHub); the poller restarts on settings and token changes, not on a network change.
+
 ## How to run
 
 ```

@@ -218,6 +218,14 @@ Every start goes through one queue (`server/dispatcher.js`): the Desk's Start, R
 
 API: `GET/POST /api/floors/:id/agents/:agent/chat` (`context`: `space` | `general`), `GET /api/me`, `GET/POST /api/users`, `PATCH/DELETE /api/users/:id`, `POST /api/users/:id/pin`.
 
+### Telegram, digest and Daily Insight (0.15)
+
+**Admin → Notifications**: a Telegram bot sends questions, permissions and alerts with buttons, holds quiet hours, and sends a morning digest. Answers from Telegram take the same path as the browser, as the paired person, with the same role checks; hard stops need a 4-digit code. `/chat <agent>` talks to an agent. Long polling only (no open port). See `docs/TELEGRAM.md`.
+
+**Admin → Improvements** (Daily Insight, trust level 0): every night (02:30) The AI Squad counts patterns in its own week (failing commands, opus for short turns, slow answers, idle with open work, out-of-memory crashes, queue waits, repeated questions) and suggests a change with its evidence, impact, risk and how to check it. Nothing is applied until the Owner accepts; an accepted change goes through Changes (rollback). No model is called.
+
+API: `GET/PATCH /api/notify`, `PUT/DELETE /api/notify/telegram/token`, `POST /api/notify/pair|test|digest`, `DELETE /api/notify/chats/:id`, `GET/PATCH /api/insights`, `POST /api/insights/run`, `POST /api/insights/:id/accept|dismiss`.
+
 ### Role Templates and overrides
 
 Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json` as a directory (`"path"`) or a git repository (`"url"`).
@@ -410,6 +418,8 @@ Floors missing on the new machine are cloned from their remote (`--no-clone` to 
 ~/.aisquad/history/<id>.json               configuration changes with before and after (Admin → Changes)
 ~/.aisquad/queue.json                      the dispatcher's queue (survives a restart)
 ~/.aisquad/users.json                      people: name, role, scrypt hash of their PIN (0600)
+~/.aisquad/notify.json                     paired Telegram chats, what was sent, open buttons (0600)
+~/.aisquad/insights/                       Daily Insight reports, the Improvement Inbox, decisions
 ~/.aisquad/chats/                          General chats and the state of every chat thread
 ~/.aisquad/general/<space>--<agent>/       the neutral folder of an agent's General chat
 <repo>/docs/squad/chats/<agent>.jsonl      direct chat with an agent in this Space
