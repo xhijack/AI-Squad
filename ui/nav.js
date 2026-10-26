@@ -18,16 +18,53 @@ const DEVICE_PARTS = {
 };
 // a desk station (scaled with STATION_SCALE): the desk and the chair
 const DESK_PARTS = [[1.6, .8, 0, .62], [.66, .64, 0, -.07]];
+const PART_NAMES = { desk: ['desk', 'chair'], 'meeting-table': ['table', 'seat0', 'seat1', 'seat2', 'seat3', 'seat4', 'seat5'] };
 
 const rot = (x, z, ry) => ({ x: x * Math.cos(ry) + z * Math.sin(ry), z: -x * Math.sin(ry) + z * Math.cos(ry) });
-// -> [{ cx, cz, hw, hd, ry, id }] rectangles in floor coordinates
-export function footprints({ desks = [], devices = [] } = {}) {
+// -> [{ cx, cz, hw, hd, ry, id, part }] rectangles in floor coordinates. sizes: { [device id]: [w, d, dx, dz] }
+// measured from the models actually built (bigger or smaller than the table above); multi-part devices and rugs
+// keep their table entry
+export function footprints({ desks = [], devices = [] } = {}, { sizes = {} } = {}) {
   const out = [];
-  const part = (o, [w, d, dx = 0, dz = 0], scale, id) => { const c = rot(dx * scale, dz * scale, o.ry || 0); out.push({ cx: o.x + c.x, cz: o.z + c.z, hw: w * scale / 2, hd: d * scale / 2, ry: o.ry || 0, id }); };
-  for (const d of desks) for (const p of DESK_PARTS) part(d, p, STATION_SCALE, `desk:${d.agent}`);
-  for (const d of devices) for (const p of DEVICE_PARTS[d.type] || [[.8, .8]]) part(d, p, 1, d.id);
+  const part = (o, [w, d, dx = 0, dz = 0], scale, id, name) => { const c = rot(dx * scale, dz * scale, o.ry || 0); out.push({ cx: o.x + c.x, cz: o.z + c.z, hw: w * scale / 2, hd: d * scale / 2, ry: o.ry || 0, id, part: name }); };
+  for (const d of desks) DESK_PARTS.forEach((p, i) => part(d, p, STATION_SCALE, `desk:${d.agent}`, PART_NAMES.desk[i]));
+  for (const d of devices) {
+    const parts = DEVICE_PARTS[d.type] || [[.8, .8]];
+    const measured = parts.length === 1 && sizes[d.id];
+    (measured ? [measured] : parts).forEach((p, i) => part(d, p, 1, d.id, PART_NAMES[d.type]?.[i] || 'body'));
+  }
   return out;
 }
+
+// a straight move a -> b that keeps margin(r) from every rectangle (margin < 0: that rectangle is ignored, e.g. the
+// chair being sat on); sampled every 5 cm
+export function segmentClear(rects, a, b, margin = () => RADIUS) {
+  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / .05));
+  for (const r of rects) {
+    const m = margin(r);
+    if (m < 0) continue;
+    for (let k = 0; k <= n; k++) if (rectDistance(r, a.x + (b.x - a.x) * k / n, a.z + (b.z - a.z) * k / n) < m - 1e-9) return false;
+  }
+  return true;
+}
+// where a character stands before sitting down (and after getting up): the nearest walkable point from `seat`
+// in the direction `heading` (rotation.y; widening the angle when that way is blocked) from which a straight
+// step reaches the seat touching nothing but what margin() allows. null when there is none.
+const AROUND = [0, .5, -.5, 1, -1, Math.PI / 2, -Math.PI / 2, 2.1, -2.1];
+export function approachPoint(grid, seat, heading, margin, { min = .45, max = 2.6 } = {}) {
+  for (const da of AROUND) for (let d = min; d <= max + 1e-9; d += .1) {
+    const p = { x: seat.x + Math.sin(heading + da) * d, z: seat.z + Math.cos(heading + da) * d };
+    const c = grid.cellOf(p.x, p.z);
+    if (grid.walkable(p.x, p.z) && grid.free(c.i, c.j) && segmentClear(grid.rects, p, seat, margin)) return p;
+  }
+  return null;
+}
+// the margins for docking into a desk chair: the chair itself is ignored, the agent's own desk only not touched,
+// everything else keeps a character's radius
+export const deskMargin = (agent) => (r) => (r.id === `desk:${agent}` ? (r.part === 'chair' ? -1 : .02) : RADIUS);
+// ... and into a device's seat (sofa, beanbag, meeting seat k): that seat ignored, the rest of that device not
+// touched, everything else a radius
+export const seatMargin = (deviceId, part = null) => (r) => (r.id === deviceId ? (!part || r.part === part ? -1 : .02) : RADIUS);
 // distance from a point to a rectangle (0 inside)
 export function rectDistance(r, x, z) {
   const l = rot(x - r.cx, z - r.cz, -r.ry);
@@ -231,8 +268,9 @@ export class Seats {
 // ---------- Edit Mode ----------
 // a layout is refused when two things overlap or a desk cannot be reached from the room
 // layout: { desks: [{ agent, x, z, ry }], devices: [{ id, type, x, z, ry }] } -> { ok, problems: [{ id, reason }] }
-export function checkLayout(layout, { entrance = { x: 0, z: 5.6 } } = {}) {
-  const rects = footprints(layout), problems = [];
+// sizes: the measured device footprints of the Floor (see footprints)
+export function checkLayout(layout, { entrance = { x: 0, z: 5.6 }, sizes = {} } = {}) {
+  const rects = footprints(layout, { sizes }), problems = [];
   const overlap = (a, b) => {
     // separating axis test for two rotated rectangles
     const axes = [a.ry, a.ry + Math.PI / 2, b.ry, b.ry + Math.PI / 2].map((t) => ({ x: Math.cos(t), z: -Math.sin(t) }));
@@ -253,8 +291,8 @@ export function checkLayout(layout, { entrance = { x: 0, z: 5.6 } } = {}) {
   {
     const grid = new NavGrid(rects);
     for (const d of layout.desks || []) {
-      const back = rot(0, -.95 * STATION_SCALE, d.ry || 0);           // where the agent stands up, behind its chair
-      if (!grid.path(entrance, { x: d.x + back.x, z: d.z + back.z })) problems.push({ id: d.agent, reason: 'cannot be reached: every way to this desk is blocked' });
+      const at = approachPoint(grid, { x: d.x, z: d.z }, (d.ry || 0) + Math.PI, deskMargin(d.agent), { min: .95 * STATION_SCALE });   // where the agent stands up
+      if (!at || !grid.path(entrance, at)) problems.push({ id: d.agent, reason: 'cannot be reached: every way to this desk is blocked' });
     }
   }
   return { ok: !problems.length, problems };

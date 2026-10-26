@@ -101,3 +101,61 @@ test('Edit Mode judges only what the moved piece causes', () => {
   assert.equal(nav.problemsOf(c, 'plant-1').length, 1, 'the plant stands in desk b');
   assert.equal(nav.problemsOf(c, 'b')[0].with, 'b');
 });
+
+// ---------- the office life on the owner's Floor (pods, nine agents, its devices): nothing walks through anything ----------
+import '../test/three-hook.js';
+import fs from 'node:fs';
+
+// sizes: measured device footprints (the realistic look's models, measured in the browser) or none (the table)
+async function officeSoak(sizes = {}) {
+  globalThis.location ||= { search: '' };
+  const THREE = await import('three');
+  const { buildChibi } = await import('../ui/chibi.js');
+  const life = await import('../ui/life.js');
+  const { desksFor } = await import('../ui/layout.js');
+  const MEETING = { id: 'meeting-table-1', type: 'meeting-table', x: .3, z: 4.5, ry: 0 };   // added to every Floor (floors.js)
+  const devices = [...JSON.parse(fs.readFileSync(new URL('./fixtures/dtamu-devices.json', import.meta.url))), MEETING];
+  const agents = Array.from({ length: 9 }, (_, i) => ({ id: `a${i}` }));
+  const desks = desksFor(agents, [], 'pods');
+  const rects = footprints({ desks, devices }, { sizes }), grid = new NavGrid(rects);
+  const spots = life.loungeSpots(devices), seats = life.meetingSeats(devices), occupied = new Map();
+  const look = { eye: '#2f3a4a', pants: '#334155', shoe: '#1f2937', hat: '#f08a24', skin: '#f6d2b0', hair: '#2b2440', shirt: '#3d82d6', sleeve: '#3d82d6', style: 'bob' };
+  const st = desks.map((d, i) => {
+    const g = new THREE.Group(); g.position.set(d.x, 0, d.z); g.rotation.y = d.ry || 0; g.scale.setScalar(nav.STATION_SCALE);
+    const human = new THREE.Group(); const rig = buildChibi(look); human.add(rig.root);
+    const s = { id: d.agent, g, human, rig, phase: i * .37, blinkAt: 0 };
+    life.deskHome(s);
+    return s;
+  });
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const wants = st.map(() => true);
+  let meeting = null, moves = 0;
+  const allowed = (s) => (r) => {
+    const L = s.life || {};
+    if (r.id === `desk:${s.id}`) return r.part === 'chair' ? -1 : .02;
+    if (L.meeting && r.id === L.meeting.device) return r.part === L.meeting.part ? -1 : .02;
+    if (L.spot && r.id === L.spot.device) return L.spot.act === 'sofa' || L.spot.act === 'beanbag' ? -1 : .02;
+    return RADIUS - 1e-6;
+  };
+  const dt = 1 / 20;
+  for (let step = 0, t = 0; step < 12000; step++, t += dt) {            // ten simulated minutes
+    if (step % 400 === 0) st.forEach((s, i) => { wants[i] = rnd() < .45; });
+    if (step % 2400 === 1200) meeting = { agents: ['a0', 'a3', 'a5', 'a7'], until: t + 40 };
+    if (meeting && t > meeting.until) meeting = null;
+    const others = st.filter((s) => s.life && s.life.mode !== 'desk').map((s) => ({ id: s.id, x: s.human.position.x, z: s.human.position.z, moving: /walk|return/i.test(s.life.mode) }));
+    for (const [i, s] of st.entries()) {
+      const k = meeting ? meeting.agents.indexOf(s.id) : -1;
+      const before = { x: s.human.position.x, z: s.human.position.z };
+      life.updateLife(s, { t, dt, wantsDesk: wants[i], spots, occupied, meeting: k >= 0 ? { ...seats[k], label: 'Standup' } : null, nav: grid, others, poseDesk: () => life.deskHome(s) });
+      const p = s.human.position;
+      if (Math.hypot(p.x - before.x, p.z - before.z) > 1e-6) moves++;
+      for (const r of rects) {
+        const m = allowed(s)(r);
+        if (m >= 0) assert.ok(rectDistance(r, p.x, p.z) >= m, `${s.id} (${s.life?.mode}) is inside ${r.id} ${r.part} at step ${step}: ${rectDistance(r, p.x, p.z).toFixed(3)} < ${m.toFixed(3)}`);
+      }
+    }
+  }
+  assert.ok(moves > 3000, `the characters keep moving (${moves} moves)`);
+}
+test('office life soak on the owner\'s Floor layout (pods, nine agents): no character ever enters furniture it does not sit on', () => officeSoak());
+test('the same with the realistic look\'s measured furniture (bigger plants, the meeting chairs)', () => officeSoak(JSON.parse(fs.readFileSync(new URL('./fixtures/realistic-sizes.json', import.meta.url)))));

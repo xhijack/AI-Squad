@@ -1,7 +1,7 @@
 // Office life: idle agents get up, walk to a lounge spot (sofa, coffee machine, whiteboard, bookshelf)
 // and run back to their desk when work or a question arrives. Ported and simplified from squad-3d.
 import { HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
-import { Walker } from './nav.js';
+import { Walker, approachPoint, segmentClear, deskMargin, seatMargin } from './nav.js';
 
 export const WANDER_AFTER = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo') ? 2 : 20;   // seconds idle before getting up (?demo: 2)
 const WALK = 1.3, RUN = 3.6;               // m/s
@@ -14,7 +14,7 @@ export function loungeSpots(devices = []) {
   const out = [];
   const at = (d, lx, lz, act, faceBack, extra = {}) => {
     const o = rot(lx, lz, d.ry || 0);
-    out.push({ id: `${d.id}:${lx}`, act, x: d.x + o.x, z: d.z + o.z, face: (d.ry || 0) + (faceBack ? Math.PI : 0), label: LABEL[act], ...extra });
+    out.push({ id: `${d.id}:${lx}`, device: d.id, act, x: d.x + o.x, z: d.z + o.z, face: (d.ry || 0) + (faceBack ? Math.PI : 0), label: LABEL[act], ...extra });
   };
   for (const d of devices) {
     if (d.type === 'sofa') { at(d, -.6, .12, 'sofa', false); at(d, .6, .12, 'sofa', false); }
@@ -33,7 +33,7 @@ export const MEETING_SEATS = [[-1.45, 0], [1.45, 0], [-.7, -1.05], [.7, -1.05], 
 export function meetingSeats(devices = []) {
   const d = devices.find((x) => x.type === 'meeting-table');
   if (!d) return [];
-  return MEETING_SEATS.map((s) => { const o = rot(s.x, s.z, d.ry || 0); return { x: d.x + o.x, z: d.z + o.z, face: s.face + (d.ry || 0) }; });
+  return MEETING_SEATS.map((s, k) => { const o = rot(s.x, s.z, d.ry || 0); return { x: d.x + o.x, z: d.z + o.z, face: s.face + (d.ry || 0), device: d.id, part: `seat${k}` }; });
 }
 const LABEL = { sofa: 'on the sofa', coffee: 'getting coffee', whiteboard: 'at the whiteboard', read: 'reading', beanbag: 'on a beanbag', pingpong: 'playing ping-pong' };
 
@@ -42,13 +42,36 @@ export function deskHome(st) {
   st.human.position.set(st.g.position.x, st.g.position.y, st.g.position.z);
   st.human.rotation.y = st.g.rotation.y;
 }
-const behindDesk = (st) => { const o = rot(0, -.95 * st.g.scale.x, st.g.rotation.y); return { x: st.g.position.x + o.x, z: st.g.position.z + o.z }; };
+// where the agent stands up and sits down: behind its chair when that is free, else the nearest walkable point
+// around it from which the step to the chair touches only the chair (never another desk); kept per grid
+function behindDesk(st) {
+  const nav = st.life?.nav;
+  if (st.exit && st.exitNav === nav) return st.exit;
+  const seat = { x: st.g.position.x, z: st.g.position.z }, back = rot(0, -.95 * st.g.scale.x, st.g.rotation.y);
+  st.exit = (nav && approachPoint(nav, seat, st.g.rotation.y + Math.PI, deskMargin(st.id), { min: .95 * st.g.scale.x })) || { x: seat.x + back.x, z: seat.z + back.z };
+  st.exitNav = nav;
+  return st.exit;
+}
+// the same for a lounge spot or a meeting seat: in front of it (or behind a chair), clear of everything else
+function approachTo(st, spot, heading, margin, min) {
+  const o = rot(0, min, heading), plain = { x: spot.x + o.x, z: spot.z + o.z };
+  return (st.life?.nav && approachPoint(st.life.nav, spot, heading, margin, { min })) || plain;
+}
+// a lounge spot is offered only when it can be reached without touching other furniture (a cramped layout can put
+// a desk right where the pantry spot is); decided once per grid
+function usable(spot, nav) {
+  if (!nav) return true;
+  if (spot.navOf !== nav) { spot.navOf = nav; spot.ok = !!approachPoint(nav, spot, spot.face, spotMargin(spot), { min: .45 }); }
+  return spot.ok;
+}
+const spotMargin = (spot) => (spot.act === 'sofa' || spot.act === 'beanbag' ? seatMargin(spot.device) : seatMargin(spot.device, '-'));
 
 // a walk: a route through the Floor's grid to the first point (around furniture and the other characters), then a
-// short straight "docking" step into the seat or spot. Without a grid (no Floor data yet) the walk is straight.
-function startWalk(st, points, run) {
+// short straight "docking" step into the seat or spot that touches only what margin allows. Without a grid (no
+// Floor data yet) the walk is straight.
+function startWalk(st, points, run, margin = null) {
   const L = st.life;
-  Object.assign(L, { target: { x: points[0].x, z: points[0].z }, dock: points.slice(1).map((p) => ({ x: p.x, z: p.z })), path: [], walker: null, run });
+  Object.assign(L, { approach: { x: points[0].x, z: points[0].z }, target: { x: points[0].x, z: points[0].z }, goal: { x: points[0].x, z: points[0].z }, dock: points.slice(1).map((p) => ({ x: p.x, z: p.z })), path: [], walker: null, run, margin, retries: 0 });
 }
 
 // the shortest turn from angle a towards b, at most k (0..1) of the way per frame
@@ -63,14 +86,28 @@ function moveAlong(st, dt) {
     else {
       if (!L.walker) {
         L.walker = new Walker(st.id, h.position.x, h.position.z);
-        if (!L.walker.goTo(L.nav, L.target, L.others || [])) { L.path = [L.target, ...L.dock]; L.target = null; L.walker = null; }   // no route at all: straight (Edit Mode prevents this)
+        // no route while others stand in the way: route through the furniture only (avoidance handles the people);
+        // no route at all: wait and try again, never straight through furniture (Edit Mode prevents this layout)
+        if (!L.walker.goTo(L.nav, L.target, L.others || []) && !L.walker.goTo(L.nav, L.target, [])) { L.walker = null; return false; }
       }
       if (L.walker) {
         const w = L.walker, x0 = w.x, z0 = w.z;
         const r = w.step(L.nav, L.others || [], dt, L.run ? RUN : WALK);
         h.position.x = w.x; h.position.z = w.z;
         if (Math.hypot(w.x - x0, w.z - z0) > 1e-4) h.rotation.y = turnTowards(h.rotation.y, Math.atan2(w.x - x0, w.z - z0), dt * 10);
-        if (r === 'arrived') { L.path = [...L.dock]; L.target = null; L.walker = null; }
+        if (r === 'arrived') {
+          const here = { x: w.x, z: w.z }, next = L.dock[0];
+          L.walker = null;
+          // a spot on open floor (pantry, whiteboard, ping-pong): walk there on the grid too, no straight docking
+          if (next && L.nav.walkable(next.x, next.z)) { L.target = L.dock.shift(); return false; }
+          // a seat inside furniture: the straight step may touch only that seat; stopped short of the approach point
+          // (someone stood there): try again, and after a long wait step onto the approach point first
+          if (next && L.margin && !segmentClear(L.nav.rects, here, next, L.margin)) {
+            if (++L.retries < 40) return false;
+            h.position.x = L.approach.x; h.position.z = L.approach.z;
+          }
+          L.path = [...L.dock]; L.target = null;
+        }
         return false;
       }
     }
@@ -156,10 +193,10 @@ export function updateLife(st, { t, dt, wantsDesk, spots, occupied, poseDesk, me
     if (L.mode !== 'meetWalk' && L.mode !== 'meet') {
       if (L.spot && occupied.get(L.spot.id) === st.id) occupied.delete(L.spot.id);
       st.rig.cup.visible = false;
-      const from = L.mode === 'desk' ? behindDesk(st) : { x: st.human.position.x, z: st.human.position.z };
+      const from = L.mode === 'desk' ? behindDesk(st) : L.mode === 'act' && L.approach ? L.approach : { x: st.human.position.x, z: st.human.position.z };
       st.human.position.set(from.x, st.human.position.y, from.z);
-      const o = rot(0, -.55, meeting.face);                                 // behind the chair, then onto the seat
-      startWalk(st, [{ x: meeting.x + o.x, z: meeting.z + o.z }, meeting], false);
+      const m = meeting.device ? seatMargin(meeting.device, meeting.part) : null;   // behind the chair, then onto the seat
+      startWalk(st, [approachTo(st, meeting, meeting.face + Math.PI, m || (() => -1), .55), meeting], false, m);
       Object.assign(L, { mode: 'meetWalk', spot: null, meeting });
     }
     if (L.mode === 'meetWalk') {
@@ -172,32 +209,33 @@ export function updateLife(st, { t, dt, wantsDesk, spots, occupied, poseDesk, me
     return `in the ${meeting.label.toLowerCase()}`;
   }
   if (L.mode === 'meetWalk' || L.mode === 'meet') {                         // the meeting is over: back to the desk
+    if (L.mode === 'meet' && L.approach) st.human.position.set(L.approach.x, st.human.position.y, L.approach.z);   // up from the chair, behind it
     const exit = behindDesk(st);
-    startWalk(st, [exit, { x: st.g.position.x, z: st.g.position.z }], false);
+    startWalk(st, [exit, { x: st.g.position.x, z: st.g.position.z }], false, deskMargin(st.id));
     Object.assign(L, { mode: 'return', meeting: null, spot: null });
   }
   if (L.mode === 'desk') {
     if (wantsDesk || !spots.length) { L.idleSince = 0; poseDesk(); return ''; }
     if (!L.idleSince) L.idleSince = t;
     if (t - L.idleSince > WANDER_AFTER * (1 + (st.phase % 1) * .75)) {
-      const free = spots.filter((s) => !occupied.has(s.id));
+      const free = spots.filter((s) => !occupied.has(s.id) && usable(s, nav));
       if (free.length) {
         const spot = free[Math.floor(((st.phase * 9973) % 1) * free.length) % free.length];
         occupied.set(spot.id, st.id);
         Object.assign(L, { mode: 'walk', spot });
         const exit = behindDesk(st);
         st.human.position.set(exit.x, st.human.position.y, exit.z);        // stand up behind the chair
-        const o = rot(0, .45, spot.face);
-        startWalk(st, [{ x: spot.x + o.x, z: spot.z + o.z }, spot], false);
+        startWalk(st, [approachTo(st, spot, spot.face, spotMargin(spot), .45), spot], false, spotMargin(spot));
       }
     }
     if (L.mode === 'desk') { poseDesk(); return ''; }
   }
   if (wantsDesk && L.mode !== 'return') {                  // work arrived: run back
+    if (L.mode === 'act' && L.approach) st.human.position.set(L.approach.x, st.human.position.y, L.approach.z);   // up from the sofa or spot first
     if (L.spot && occupied.get(L.spot.id) === st.id) occupied.delete(L.spot.id);
     st.rig.cup.visible = false;
     const exit = behindDesk(st);
-    startWalk(st, [exit, { x: st.g.position.x, z: st.g.position.z }], true);
+    startWalk(st, [exit, { x: st.g.position.x, z: st.g.position.z }], true, deskMargin(st.id));
     L.mode = 'return';
   }
   if (L.mode === 'walk' || L.mode === 'return') {

@@ -590,7 +590,17 @@ export class BuildingScene {
     });
     o.spots = loungeSpots(f.devices || []);
     // the walkable grid of this Floor: desks, chairs and devices with their real footprints (rebuilt with the Floor)
-    o.nav = new NavGrid(footprints({ desks, devices: f.devices || [] }));
+    // footprints measured from the devices actually built (models differ from the table in nav.js), in each
+    // device's own frame; the grid is rebuilt with the Floor (also once the models have loaded)
+    o.sizes = {};
+    for (const [id, dg] of o.devices) {
+      const p = dg.position.clone(), ry = dg.rotation.y;
+      dg.position.set(0, 0, 0); dg.rotation.y = 0; dg.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(dg);
+      dg.position.copy(p); dg.rotation.y = ry; dg.updateMatrixWorld(true);
+      if (!b.isEmpty()) o.sizes[id] = [b.max.x - b.min.x, b.max.z - b.min.z, (b.max.x + b.min.x) / 2, (b.max.z + b.min.z) / 2];
+    }
+    o.nav = new NavGrid(footprints({ desks, devices: f.devices || [] }, { sizes: o.sizes }));
     if (NAV_DEBUG) g.add(navOverlay(o.nav));
     o.seats = meetingSeats(f.devices || []);
     o.occupied = new Map();
