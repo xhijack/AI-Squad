@@ -63,6 +63,7 @@ function auditHtml(a) {
     <div class="kpis"><div><span>Cost</span><b>${usd(E.totals.cost)}</b></div><div><span>Cost / SP</span><b>${usd(E.costPerSP, 3)}</b></div><div><span>First-round pass</span><b>${pct(P.qaFirstRoundPassRate)}</b></div>
       <div><span>Cache hit rate</span><b>${pct(E.cacheHitRate)}</b></div><div><span>Bugs</span><b>${P.bugs.total}</b></div><div><span>Waiting on you</span><b>${E.blockedOnOwnerMin} min</b></div></div>
     ${a.summary ? `<p>${esc(a.summary)}</p>` : ''}
+    ${a.retro ? `<div class="row" style="margin:8px 0"><span class="chip ok">Retro of sprint ${esc(a.retro.sprint)}</span><button class="small" data-retro>Open the Retro</button></div>` : ''}
     <h4 class="perfH">Findings</h4>${a.findings.length ? a.findings.map((f) => findingHtml(a, f)).join('') : '<div class="empty">No findings.</div>'}`;
 }
 
@@ -84,6 +85,7 @@ function draw() {
   body.querySelector('[data-close]').onclick = () => dlg.close();
   body.querySelectorAll('[data-f]').forEach((sel) => sel.onchange = () => { S[sel.dataset.f] = sel.value; });
   body.querySelector('[data-run]')?.addEventListener('click', run);
+  body.querySelector('[data-retro]')?.addEventListener('click', () => ctx.actions.retro());
   body.querySelectorAll('[data-audit]').forEach((tr) => { const open = () => show(tr.dataset.audit); tr.onclick = open; tr.onkeydown = (e) => { if (e.key === 'Enter') open(); }; });
   body.querySelectorAll('.evLink').forEach((b) => b.onclick = () => ctx.actions.log({ focus: b.dataset.ev, back: true }));
   ctx.bindAuditTargets?.(body, S, draw);
