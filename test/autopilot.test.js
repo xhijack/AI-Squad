@@ -7,7 +7,8 @@ const critical = (t, o) => ap.classify(t, o).critical;
 test('critical: the hard-stop list in English and Indonesian', () => {
   for (const t of ['What price should the premium plan have?', 'Berapa harga paket premium?', 'Hapus data tamu yang lama?', 'Deploy produksi sekarang?',
     'Should we deploy to production tonight?', 'Do we need consent for storing phone numbers (personal data)?', 'Force push the cleaned branch?',
-    'Drop the legacy_orders table?', 'Where do I put the Stripe API key?', 'Should we add a loyalty program feature to the PRD scope?',
+    'Drop the legacy_orders table?', 'Install the staging app on the shared server?', 'Add an nginx reverse proxy block for staging.example.com?', 'Pasang di server bersama sekarang?',
+    'Restart the production database to apply the setting?', 'Add a DNS record for the API subdomain?', 'Use sudo to open port 8300 in the firewall?', 'Where do I put the Stripe API key?', 'Should we add a loyalty program feature to the PRD scope?',
     'There is no PRD yet: should I write one?', 'Pakai Midtrans untuk pembayaran?', 'Setujui kontrak dengan vendor?', 'Rewrite the history of main to remove the big file?']) {
     assert.equal(critical(t), true, t);
   }
@@ -15,7 +16,7 @@ test('critical: the hard-stop list in English and Indonesian', () => {
 
 test('not critical: everyday product and engineering choices', () => {
   for (const t of ['Rename the "Save" button to "Save changes"?', 'Ganti label tombol jadi "Simpan"?', 'Use Vitest or Jest for unit tests?', 'Should the RSVP list be sorted by name or by date?',
-    'Deploy to staging after QA?', 'Which icon for the guest list tab?', 'Pakai warna biru atau hijau untuk tombol utama?']) {
+    'Deploy to staging after QA?', 'Run server-discovery on the staging host first?', 'Which free port range for our staging containers, 8300-8399?', 'Which icon for the guest list tab?', 'Pakai warna biru atau hijau untuk tombol utama?']) {
     assert.equal(critical(t), false, t);
   }
 });
