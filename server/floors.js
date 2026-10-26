@@ -19,6 +19,8 @@ import * as autopilot from './autopilot.js';
 import * as voiceLib from './voice.js';
 import * as reposLib from './repos.js';
 import { cleanStandup } from './rituals.js';
+import * as space from './space.js';
+import * as context from './context.js';
 
 const run = promisify(execFile);
 
@@ -105,6 +107,8 @@ export function cleanFloor(f = {}, prev = {}) {
     ...autopilot.cleanSettings({ autopilot: pick('autopilot'), autopilotTimeoutSec: pick('autopilotTimeoutSec') }),
     // the Floor's default voice language and settings (each agent may set its own; server/voice.js)
     ...(pick('voice') ? { voice: { lang: voiceLib.cleanLang(pick('voice').lang), settings: voiceLib.cleanVoice(pick('voice').settings || {}) } } : {}),
+    // the Space: kind, access, where its auto memory lives, its shift and machine (server/space.js)
+    ...space.cleanSpace({ kind: pick('kind'), access: pick('access'), memory: pick('memory'), shift: pick('shift'), node: pick('node') }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
@@ -181,6 +185,9 @@ export function templateOf(root, agent) {
 }
 
 export function effectiveOf(root, agent) { return effectiveAgent(templateOf(root, agent), agent); }
+// what a session of this Floor is started with besides the agent's own rules: the Company Brain, the identity
+// guard and the Space's memory (server/context.js)
+export function sessionContext(root) { return context.sessionContext(root, readFloor(root).floor, building.loadBuilding().prefs); }
 
 // ---------- generation ----------
 export function generate(root) {
@@ -192,6 +199,7 @@ export function generate(root) {
   const lead = leadAgent ? { id: leadAgent.id, displayName: leadAgent.displayName } : null;
   const runsSquad = leadAgent || team.agents.find((a) => sprint.roleKind(a) === 'lead');
   const repoList = reposLib.readRepos(root);
+  const ctxLines = context.sessionContext(root, floor, building.loadBuilding().prefs).lines;     // L0-L3 (server/context.js)
   fs.mkdirSync(agentsDir(root), { recursive: true });
   for (const a of team.agents) {
     const eff = effectiveOf(root, a);
@@ -202,7 +210,7 @@ export function generate(root) {
       memory: a === runsSquad ? recovery.memoryRules(floor.recovery.maxAgents) : null,
       autopilot: a === runsSquad ? autopilot.leadRules(floor.autopilot, { timeoutSec: floor.autopilotTimeoutSec, questionsFile: sprint.hasPack(root) ? 'docs/squad/QUESTIONS.md' : 'docs/QUESTIONS.md' }) : null,
       repos: a === runsSquad ? reposLib.leadRepos(root, repoList, a.id, localRepoPaths(root)) : reposLib.agentRepos(root, repoList, a.id, localRepoPaths(root)),
-      lead: a === runsSquad }));
+      lead: a === runsSquad, context: ctxLines }));
   }
   // remove generated files of agents that left the team (hand-written agent files are never touched)
   for (const f of safeReaddir(agentsDir(root))) {
@@ -396,6 +404,7 @@ export function templateAction(root, id, action) {
 export function updateFloorConfig(root, input) {
   const cur = readFloor(root);
   const floor = cleanFloor(input, cur.floor);
+  if (floor.memory === 'repo' && cur.floor.memory !== 'repo') space.adoptMemory(root);   // what Claude Code learned here comes along
   const ids = new Set(cur.team.agents.map((a) => a.id));
   floor.desks = floor.desks.filter((d) => ids.has(d.agent));
   writeFloor(root, floor);

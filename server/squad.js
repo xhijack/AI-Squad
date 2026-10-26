@@ -418,6 +418,7 @@ function summary(fs_) {
     autopilot: { level: cfg.floor.autopilot, timeoutSec: cfg.floor.autopilotTimeoutSec, critical: asks.filter((a) => a.autopilot?.critical).length },
     meeting: rituals.active(meetings.get(entry.id)),
     id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, tagline: cfg.floor.tagline, accent: cfg.floor.accent, layout: cfg.floor.layout,
+    kind: cfg.floor.kind, access: cfg.floor.access, shift: cfg.floor.shift,                     // the Space (server/space.js)
     workflow: cfg.floor.workflow, desks: cfg.floor.desks, devices: cfg.floor.devices, agents, lamp,
     counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped'), standby: agents.filter((a) => a.standby).length },
     cost: { today: round2(cost.today), month: round2(cost.month) }, budget: { ...cfg.floor.budget, ...fs_.budget, used: round2(fs_.budget.used) },
@@ -630,7 +631,10 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
   // linked repositories: --add-dir for each, and every write denied in the read-only ones (Phase 3.4)
   const repos = floors.agentReposOf(entry.path, agentId);
   extraArgs.push(...reposLib.addDirArgs(repos));
-  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], extraArgs, env });
+  // the context layers: the Company Brain read-only, the identity guard, the Space's memory (server/context.js)
+  const sc = floors.sessionContext(entry.path);
+  extraArgs.push(...sc.addDirs, ...(sc.settings ? ['--settings', JSON.stringify(sc.settings)] : []));
+  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny], extraArgs, env });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -673,8 +677,9 @@ export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DE
   floors.generate(entry.path);
   const eff = floors.effectiveOf(entry.path, agent);
   const repos = floors.agentReposOf(entry.path, agentId);
-  const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume,
-    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], pluginDir: config.useHooks ? ROOT : '', extraArgs: reposLib.addDirArgs(repos) });
+  const sc = floors.sessionContext(entry.path);
+  const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny], pluginDir: config.useHooks ? ROOT : '', extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs] });
   const job = runnerFor('headless').start({ floorId, agentId, kind, title, prompt, cwd: entry.path, args, env, model: eff.model, budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via });
   logEvent(floorId, { type: 'job.started', agent: agentId, model: eff.model, data: { job: job.id, kind, title: job.title, budgetUsd: job.budgetUsd, permissionMode, via } });
   invalidate();

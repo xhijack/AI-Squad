@@ -97,7 +97,7 @@ export function repoRules(repos, lead = false) {
 // standard: the Floor's Blueprint ({ title, version, text, roleRules, lead }), written into every agent prompt
 // skillName(name): the name the skill is known by in Claude Code (aisquad:<name> for our plugin's copy)
 // repos: this agent's linked repositories ({ id, path, abs, access, branch, gate }); lead: it plans the board
-export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null, autopilot = null, repos = [], lead = false } = {}) {
+export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null, autopilot = null, repos = [], lead = false, context = [] } = {}) {
   const fm = {
     name: eff.id,
     description: `${eff.displayName} (${eff.title}) on ${floorName || 'this Floor'}. ${eff.description || ''}`.trim(),
@@ -124,6 +124,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
     const lead = standard.lead && standard.lead.id !== eff.id ? `Your lead is **${standard.lead.displayName}** (\`${standard.lead.id}\`): talk to the owner only through the lead and the questions file.` : 'You are the lead: you are the only agent who talks to the owner.';
     sections.push(`## Squad standard: ${standard.title} v${standard.version}\nThis squad follows the ${standard.title} Blueprint. ${lead}\n\n${standard.text}${standard.roleRules ? `\n\n### Your rules in this squad\n${standard.roleRules}` : ''}`);
   }
+  if (context.length) sections.push(`## Context\n${context.map((r) => `- ${r}`).join('\n')}`);
   if (eff.rules.length) sections.push(`## Rules\n${eff.rules.map((r) => `- ${r}`).join('\n')}`);
   if (memory?.length) sections.push(`## Memory\n${memory.map((r) => `- ${r}`).join('\n')}`);
   if (memory?.length) sections.push('## Learnings\n- After each Retro (`docs/squad/retro/`), add 1-3 short entries to `docs/squad/LEARNINGS.md`: `- YYYY-MM-DD · retro sprint N: the pattern or pitfall, and what to do`. Keep entries short; remove ones that no longer hold.');
