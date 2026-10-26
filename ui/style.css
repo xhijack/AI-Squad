@@ -653,3 +653,12 @@ ul.checks .mark { width: 20px; height: 20px; border-radius: 50%; display: inline
 ul.checks li.ok .mark { background: var(--ok-soft); color: var(--ok-ink); }
 ul.checks li.warn .mark { background: var(--warn-soft); color: var(--warn-ink); }
 ul.checks li.fail .mark { background: var(--bad-soft); color: var(--bad); }
+
+/* background jobs (0.11.0) */
+details.bgOpts { margin-top: 8px; font-size: 13px; }
+details.bgOpts summary { cursor: pointer; color: var(--muted); }
+details.bgOpts .row { gap: 12px; flex-wrap: wrap; }
+ul.jobs li.job { padding: 6px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.15)); }
+ul.jobs li.job.running .badge { background: var(--info-soft); color: var(--info-ink); }
+ul.jobs li.job.done .badge { background: var(--ok-soft); color: var(--ok-ink); }
+ul.jobs li.job.failed .badge { background: var(--bad-soft); color: var(--bad); }

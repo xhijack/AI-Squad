@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -19,6 +19,7 @@ import './retro.js';
 import './ship.js';
 import './design.js';
 import './health.js';
+import './signin.js';
 import { attentionIndexHtml } from './convo.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
@@ -121,7 +122,11 @@ function getTaskForm() {
   f.className = 'taskBox';
   f.innerHTML = `<textarea name="text" placeholder="${tt('Describe the task. The agent gets it as a message in its Claude Code session.')}" aria-label="${tt('Task')}" required></textarea>
     <div class="files" data-files></div>
-    <div class="row" style="margin-top:8px"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="chip" style="cursor:pointer">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>`;
+    <div class="row" style="margin-top:8px"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="chip" style="cursor:pointer">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>
+    <details class="bgOpts"><summary>${tt('Run in the background')}</summary>
+      <label class="inline"><input type="checkbox" name="bg"> ${tt('As a background job: no terminal, ends by itself, every step in the Squad Log')}</label>
+      <div class="row"><label class="inline" style="margin:0">${tt('Budget (USD)')} <input name="budget" type="number" min="0.1" max="50" step="0.5" value="2" style="width:80px"></label>
+      <label class="inline" style="margin:0"><input type="checkbox" name="edits"> ${tt('May edit files')}</label></div></details>`;
   f.querySelector('[data-file]').addEventListener('change', async (e) => {
     for (const file of e.target.files) {
       try {
@@ -137,6 +142,13 @@ function getTaskForm() {
     if (!text) return;
     const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
     try {
+      if (f.elements.bg.checked) {
+        const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' });
+        if (!r) { btn.disabled = false; return; }
+        toast(tt('Background job started'));
+        f.elements.text.value = ''; taskFiles = []; drawFiles(); btn.disabled = false; refresh();
+        return;
+      }
       const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) });
       toast(r.queued ? r.note : tt('Task sent'));
       f.elements.text.value = ''; taskFiles = []; drawFiles();
@@ -565,6 +577,16 @@ const actions = Object.assign(ctx.actions, {
     const r = await api('POST', `/api/floors/${state.route.floorId}/skills/install`, { names });
     const n = r.results.filter((x) => x.installed).length;
     toast(n ? (n === 1 ? tt('Installed {n} skill into .claude/skills', { n }) : tt('Installed {n} skills into .claude/skills', { n })) : tt('Already installed'));
+  },
+  async 'job-stop'(el) { await api('POST', `/api/jobs/${el.dataset.job}/stop`, {}); toast(tt('Job stopped')); },
+  async 'job-open'(el) {
+    const j = await api('GET', `/api/jobs/${el.dataset.job}`);
+    const body = openModal(`<div class="mHead"><h3 class="grow">${esc(j.title)}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
+      <div class="mBody"><p class="note">${tt('{status} · {cost} · {turns} turns · started {ago}', { status: esc(j.status), cost: money(j.cost), turns: j.turns || 0, ago: ago(j.startedAt) })}${j.sessionId ? ` · <code>${esc(j.sessionId.slice(0, 8))}</code>` : ''}</p>
+      ${j.error ? `<div class="att budget warn"><div class="q">${esc(tx(j.error))}</div></div>` : ''}
+      ${j.text ? `<div class="md">${mdLite(j.text)}</div>` : ''}
+      ${j.events?.length ? `<details><summary>${tt('Steps ({n})', { n: j.events.length })}</summary><ul class="feed events">${j.events.map((e) => `<li><span class="k ${e.kind === 'tool' ? 'tool' : 'text'}"></span><div class="grow d ${e.kind === 'tool' ? 'mono' : ''}">${esc(e.detail)}</div></li>`).join('')}</ul></details>` : ''}</div>`);
+    body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
   async copy(el) { try { await navigator.clipboard.writeText(el.dataset.text); toast(tt('Copied')); } catch { toast(el.dataset.text, 6000); } },
 });

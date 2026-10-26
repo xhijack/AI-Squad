@@ -285,6 +285,16 @@ function startButtons(d) {
   return `<button class="ok" data-act="start" data-agent="${d.id}">${tt('Start')}</button>${d.resume ? `<button class="ghost small" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session ({id})', { id: esc(d.resume.sessionId.slice(0, 8)) })}">${tt('Resume last session')}</button>` : ''}`;
 }
 
+// background jobs (headless runner, 0.11): status, title, cost; Stop while it runs, Open for what it did
+const JOB_TEXT = { running: tt('Running'), done: tt('Done'), failed: tt('Failed'), stopped: tt('Stopped') };
+function jobsHtml(d) {
+  if (!d.jobs?.length) return '';
+  return `<div class="section"><div class="sectionHead"><h3 class="grow">${tt('Background jobs')}</h3></div><ul class="list jobs">${d.jobs.map((j) => `<li class="job ${esc(j.status)}">
+    <div class="row"><span class="badge">${esc(JOB_TEXT[j.status] || j.status)}</span><span class="grow ellipsis" title="${esc(j.title)}">${esc(j.title)}</span><span class="note">${money(j.cost)} · ${ago(j.startedAt)}</span>
+    ${j.status === 'running' ? `<button class="small ghost" data-act="job-stop" data-job="${esc(j.id)}">${tt('Stop')}</button>` : ''}<button class="small ghost" data-act="job-open" data-job="${esc(j.id)}">${tt('Open')}</button></div>
+    ${j.status === 'running' && j.activity ? `<div class="note ellipsis">${esc(j.activity)}</div>` : ''}${j.error ? `<div class="note warnText">${esc(tx(j.error))}</div>` : ''}</li>`).join('')}</ul></div>`;
+}
+
 export function deskSections(floor, d, opts = {}) {
   return deskSectionsInner(floor, d, opts).map((x) => ({ ...x, back: `#/floor/${floor.id}` }));
 }
@@ -320,6 +330,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
     <div class="section"><div class="sectionHead"><h3 class="grow">${tt('Send task')}</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">${tt('Queued: {text}', { text: esc(d.pending.slice(0, 120)) })}</div>` : ''}
       ${d.work ? `<div class="note" style="margin-top:6px">${d.work.doneAt ? tt('Current work (done {ago}):', { ago: ago(d.work.doneAt) }) : tt('Current work (since {ago}):', { ago: ago(d.work.assignedAt) })} ${esc(d.work.text.slice(0, 160))} <button class="small ghost" data-act="work-done" data-agent="${d.id}">${tt('Clear')}</button></div>` : ''}</div>
+    ${jobsHtml(d)}
     <div class="section note">${tt('Terminal:')} <code>${esc(d.attach)}</code> <button class="small ghost" data-act="copy" data-text="${esc(d.attach)}">${tt('Copy')}</button></div>`;
   const screen = d.running ? `<pre class="screen" data-scroll="screen">${esc(d.screen) || ' '}</pre>` : `<div class="empty">${d.resume ? tt('The agent is stopped. Resume or start it to see its live screen.') : tt('The agent is stopped. Start it to see its live screen.')}</div>`;
   const events = d.events.length ? `<ul class="feed events">${d.events.map((ev) => `<li><span class="k ${ev.kind}"></span><div class="grow"><div><b>${esc(tx(ev.title))}</b>${ev.tool ? ` <span class="note">${esc(ev.tool)}</span>` : ''}</div><div class="d ${ev.kind === 'think' || ev.kind === 'task' ? '' : 'mono'}">${esc(ev.detail)}</div><div class="t">${ago(ev.ts)}</div></div></li>`).join('')}</ul>` : `<div class="empty">${tt('No transcript yet.')}</div>`;
