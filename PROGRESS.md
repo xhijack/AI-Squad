@@ -391,6 +391,13 @@ Brief: `PHASE-2.5-RITUALS.md` (concepts from CLAW3D and gstack, our own text and
 - Screenshots (playground with the fake `claude -p`, two seeded sprints, swap 74 %): `playground/reference/retro-1440.png`, `retro-390.png`. When Performance has no board data, the cost per story point trend comes from the audits of earlier sprints.
 - Tests: `test/retro.test.js`, `test/retro-squad.test.js` (fake `claude -p`: the sprint audit's Retro, Send to lead), collect (debug events), audit (loops), improve (project target), plus role version updates.
 
+### 0.5.1: plan reviews before the sprint
+- **Premise check** in `source-docs-intake`: six forcing questions before the PRD, with the answers in a `## Premise` section.
+- **Scope mode** in `sprint-planning` and the PLAN.md template: `Scope mode: <mode> — <reason>`. The log records `sprint.scope` once per sprint and `scope.changed` for a different mode in the same sprint. The change becomes a critical **Scope change** Attention item ("Accept" or "Back to …", which sends the lead a task), and it stops the Autopilot chain.
+- **Plan review chain**: the new `plan-review` skill (engineering, design scored 0-10, security), `/sprint` step 6, and a Software House gate. `PLAN-REVIEW.md` is logged as `plan.reviewed` with the verdicts and the design score. The Audit's `process.planReviews` counts reviewed sprints (and whether before the first BUILD), design scores, requested changes, scope modes and mid-sprint changes.
+- **Security Engineer** role (v1) with the `security-review` skill (STRIDE for plans, OWASP Top 10 for releases, evidence per finding, local and staging only). It is an optional role in **Software House v3**, which also has the premise check and plan review in the lead's rules. project-manager v4 and sprint-lead v5 have `plan-review` and the scope mode rule. Floors on older versions show "Update available".
+- Tests: collect (scope parsing, events, plan review), audit (plan review metrics), retro-squad (Scope change item and "Back to"), blueprints (v3, the Security role), and version updates. No screenshots: the only new screen element is a standard Attention card.
+
 ## How to run
 
 ```
