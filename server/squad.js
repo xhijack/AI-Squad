@@ -26,6 +26,7 @@ import * as recovery from './recovery.js';
 import * as autopilot from './autopilot.js';
 import * as retroLib from './retro.js';
 import * as learnings from './learnings.js';
+import * as rituals from './rituals.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -313,6 +314,7 @@ function summary(fs_) {
     waitingFor: waitingFor(fs_),
     // the Floor pill's Autopilot chip: the level and how many critical items wait for the owner
     autopilot: { level: cfg.floor.autopilot, timeoutSec: cfg.floor.autopilotTimeoutSec, critical: asks.filter((a) => a.autopilot?.critical).length },
+    meeting: rituals.active(meetings.get(entry.id)),
     id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, tagline: cfg.floor.tagline, accent: cfg.floor.accent, layout: cfg.floor.layout,
     workflow: cfg.floor.workflow, desks: cfg.floor.desks, devices: cfg.floor.devices, agents, lamp,
     counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped'), standby: agents.filter((a) => a.standby).length },
@@ -1108,7 +1110,9 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
       if (!fs.existsSync(entry.path)) continue;
       let cfg; try { cfg = floors.readFloor(entry.path); } catch { continue; }
       const base = collect.emitter(entry.id, logCtx(entry.id, entry.path, cfg));
-      const emit = (ev) => { const e = base(ev); if (e) { n++; onEvent?.(entry.id, e); } return e; };
+      const team = ritualTeam(cfg);
+      // rituals: a logged planning, review, Retro, briefing or standup gathers the characters at the meeting table
+      const emit = (ev) => { const e = base(ev); if (e) { n++; onEvent?.(entry.id, e); const m = rituals.meetingFrom(e, team, now); if (m && now - m.since < 5 * 60e3) meetings.set(entry.id, m); } return e; };
       try {
         collectTranscripts(entry.id, entry.path, emit, now);
         for (const ev of collect.scanDocs(entry.id, entry.path, { blueprint: blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint) }, now)) emit(ev);
@@ -1131,6 +1135,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
           }
         }
       } catch (e) { console.error('[log]', entry.id, e.message); }
+      try { holdStandup(entry, cfg, snap, emit, now); } catch (e) { console.error('[standup]', entry.id, e.message); }
       collect.saveState(entry.id);
       if (commits && cfg.floor.audit.auto) queueSprintAudit(entry.id, now);
     }
@@ -1150,6 +1155,36 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
     runPendingAudits();
   } finally { logging = false; }
   return n;
+}
+
+// ---------- rituals (server/rituals.js) ----------
+const meetings = new Map();                    // floorId -> the meeting at the table now { kind, label, agents, since, until }
+const ritualTeam = (cfg) => { const lead = cfg.team.agents.find((a) => a.lead) || cfg.team.agents.find((a) => sprint.roleKind(a) === 'lead');
+  return cfg.team.agents.map((a) => ({ id: a.id, lead: a === lead, template: a.role?.template || '', displayName: a.displayName })); };
+// the standup since the last one: from the Log and what the agents do right now
+function currentStandup(floorId, cfg, snap, now = Date.now()) {
+  const S = collect.stateOf(floorId);
+  const since = S.standup?.at || now - 864e5;
+  const f = snap?.floors.find((x) => x.id === floorId);
+  const live = Object.fromEntries((f?.agents || []).map((a) => [a.id, { state: a.state, activity: a.activity }]));
+  return rituals.standup(squadLog.read(floorId, { from: since, limit: 50000 }), ritualTeam(cfg), { since, now, live });
+}
+function holdStandup(entry, cfg, snap, emit, now) {
+  const S = collect.stateOf(entry.id);
+  if (!rituals.standupDue(cfg.floor.standup, S.standup?.at || 0, now)) return;
+  const s = currentStandup(entry.id, cfg, snap, now);
+  S.standup = { at: now, ...s };
+  const count = (k) => s.agents.reduce((n, a) => n + a[k].length, 0);
+  // a quiet day is recorded but nobody walks to the table
+  if (!s.quiet) emit({ type: 'standup.held', data: { agents: s.agents.length, done: count('done'), doing: count('doing'), blocked: count('blocked'), meeting: cfg.floor.standup.meeting } });
+  if (s.quiet || !cfg.floor.standup.meeting) meetings.delete(entry.id);
+}
+// GET /api/floors/:id/standup: the one held last and what a standup would say now
+export function floorStandup(floorId) {
+  const entry = building.floorEntry(floorId);
+  const cfg = floors.readFloor(entry.path);
+  const S = collect.stateOf(floorId);
+  return { setting: cfg.floor.standup, last: S.standup || null, now: currentStandup(floorId, cfg, buildingSnapshot()), meeting: rituals.active(meetings.get(floorId)) };
 }
 
 // report.delivered: once per ended turn that reached the owner as a "Finished" or "Waiting for your reply" card

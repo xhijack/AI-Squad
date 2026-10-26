@@ -15,6 +15,7 @@ import * as blueprints from './blueprints.js';
 import * as skills from './skills.js';
 import * as recovery from './recovery.js';
 import * as autopilot from './autopilot.js';
+import { cleanStandup } from './rituals.js';
 
 const run = promisify(execFile);
 
@@ -94,6 +95,8 @@ export function cleanFloor(f = {}, prev = {}) {
     audit: auditSettings({ ...prev.audit, ...f.audit }, WORKFLOWS.includes(pick('workflow')) ? pick('workflow') : 'free-team'),
     // after a crash: resume automatically (off by default); how many agents may run at once (the lead is told)
     recovery: recovery.cleanRecovery({ ...prev.recovery, ...f.recovery }),
+    // the daily standup: when (local time) and whether the team meets at the table for it
+    standup: cleanStandup({ ...prev.standup, ...f.standup }),
     // Autopilot level and auto-answer timeout (server/autopilot.js); a floor.json without it stays "off"
     ...autopilot.cleanSettings({ autopilot: pick('autopilot'), autopilotTimeoutSec: pick('autopilotTimeoutSec') }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)

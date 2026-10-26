@@ -68,3 +68,23 @@ test('a mid-sprint scope change waits for the owner; "back" sends the lead a tas
   assert.equal(squad.buildingSnapshot().attention.some((a) => a.kind === 'scope'), false);
   squad.stopAgent('pos', 'rina-lead');
 });
+
+test('rituals: a planned sprint gathers the team at the meeting table; the standup is held once a day', async () => {
+  fs.writeFileSync(path.join(proj, 'docs/squad/PLAN.md'), '# Plan: Sprint 1\n\nScope mode: Hold — small\n\n| Module | Stories | SP | Owner |\n|---|---|---|---|\n| M01 Login | S1 | 3 | budi-dev |\n');
+  floors.updateFloorConfig(proj, { standup: { time: '00:00', meeting: true } });
+  log.append('pos', { type: 'commit', agent: 'budi-dev', id: 'c-standup', ts: Date.now() - 1000, data: { sha: 'abc', subject: 'feat(login): form' } });
+  await squad.logTick();
+  squad.invalidate();
+  const f = squad.buildingSnapshot().floors.find((x) => x.id === 'pos');
+  assert.ok(f.meeting, 'a meeting is on');
+  assert.ok(['planning', 'standup'].includes(f.meeting.kind));
+  assert.deepEqual([...f.meeting.agents].sort(), ['budi-dev', 'rina-lead']);
+  assert.ok(f.meeting.until > Date.now());
+  const st = squad.floorStandup('pos');
+  assert.ok(st.last.at, 'held today');
+  assert.deepEqual(st.last.agents.find((a) => a.id === 'budi-dev').done, ['commit: feat(login): form']);
+  assert.equal(log.read('pos', { type: 'standup.held' }).length, 1);
+  await squad.logTick();
+  assert.equal(log.read('pos', { type: 'standup.held' }).length, 1, 'once a day');
+  assert.deepEqual(floors.readFloor(proj).floor.standup, { time: '00:00', meeting: true });
+});
