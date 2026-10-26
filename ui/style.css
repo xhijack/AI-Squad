@@ -436,6 +436,8 @@ table.perf tr.pick { cursor: pointer; } table.perf tr.pick:hover, table.perf tr.
 body.immersive #hud, body.immersive #dock, body.immersive #elevator { display: none !important; }
 #povBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 7; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 6px 8px 6px 14px; display: flex; gap: 10px; align-items: center; max-width: calc(100vw - 24px); box-shadow: var(--shadow); }
 #povBar button { white-space: nowrap; }
+#followBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 7; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 6px 8px; display: flex; gap: 8px; align-items: center; max-width: calc(100vw - 24px); box-shadow: var(--shadow); }
+#followBar button { white-space: nowrap; } #followText { max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #povText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #toast { position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--card); box-shadow: var(--shadow); border-radius: 12px; padding: 9px 14px; z-index: 30; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: calc(100vw - 24px); font-weight: 600; }
 #toast.on { opacity: 1; }

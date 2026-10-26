@@ -259,7 +259,8 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
       <div class="note">${esc(e.title || '')} · model ${esc(mr.configured || '?')}${mr.observed ? ` · last reply from <span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span>` : ''}</div>
       <div class="note"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div>
       <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">${startButtons(d)}
-      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a></div></div>`;
+      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a>
+      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}/follow" title="A camera that follows this agent around">Follow</a></div></div>`;
   const crashed = d.crash && !d.crash.withLead;
   const crash = crashed ? `<div class="att crash" style="margin-top:10px"><div class="where">Stopped unexpectedly</div><div class="q">${esc(d.crash.text)}</div>
       <div class="note">${d.resume ? `Resume continues session <code>${esc(d.resume.sessionId.slice(0, 8))}</code> with its context${d.lead || d.kindOf === 'lead' ? '; the lead is told its teammates died and re-spawns only what is still needed' : ''}. Start fresh begins a new session.` : 'No previous session was found; start it fresh.'}</div>

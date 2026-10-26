@@ -23,11 +23,11 @@ const isPhone = () => matchMedia('(max-width: 760px)').matches;
 
 // ---------- routing ----------
 function parseRoute() {
-  const m = location.hash.match(/^#\/floor\/([\w-]+)(?:\/desk\/([\w-]+)(?:\/(screen|eyes))?)?/);
+  const m = location.hash.match(/^#\/floor\/([\w-]+)(?:\/desk\/([\w-]+)(?:\/(screen|eyes|follow))?)?/);
   if (!m) return { mode: 'lobby' };
   return m[2] ? { mode: 'desk', floorId: m[1], agentId: m[2], ...(m[3] ? { [m[3]]: true } : {}) } : { mode: 'floor', floorId: m[1] };
 }
-const routeKey = (r) => [r.mode, r.floorId, r.agentId, r.screen ? 'screen' : r.eyes ? 'eyes' : ''].join('/');
+const routeKey = (r) => [r.mode, r.floorId, r.agentId, r.screen ? 'screen' : r.eyes ? 'eyes' : r.follow ? 'follow' : ''].join('/');
 
 addEventListener('hashchange', () => {
   const prev = state.route;
@@ -183,7 +183,7 @@ function cardHtml(list, group) {
 
 function layoutPanels(sections) {
   const phone = isPhone();
-  if (state.route.eyes) {                                  // first person: only the 3D view and the small bar
+  if (state.route.eyes || state.route.follow) {           // first person and follow: only the 3D view and the small bar
     $('side').hidden = $('sheet').hidden = $('sideShow').hidden = true;
     return updateInsets();
   }
@@ -224,7 +224,7 @@ function updateInsets() {
   const phone = isPhone(), r = (id) => { if ($(id).hidden) return null; const b = $(id).getBoundingClientRect(); return b.width && b.height ? b : null; };
   const hud = r('hud'), dock = r('dock'), side = r('side'), sheet = r('sheet'), elev = r('elevator');
   let insets;
-  if (state.route.eyes) insets = {};
+  if (state.route.eyes || state.route.follow) insets = {};
   else if (phone) insets = { top: (hud ? hud.bottom : 0) + 8, bottom: (sheet ? innerHeight - sheet.top : 0) + (dock ? dock.height + 14 : 0) };
   else insets = { top: (hud ? hud.bottom : 0) + 12, bottom: (dock ? innerHeight - dock.top : 0) + 12, right: side ? innerWidth - side.left + 12 : 0, left: elev ? elev.right + 12 : 0 };
   const k = JSON.stringify(insets);
@@ -311,11 +311,13 @@ function render() {
   const { building: b, route } = state;
   if (!b) return;
   // screen view and first person view: no hud or dock, just the scene
-  document.body.classList.toggle('immersive', !!(route.screen || route.eyes));
+  document.body.classList.toggle('immersive', !!(route.screen || route.eyes || route.follow));
   document.body.classList.toggle('pov', !!route.eyes);
   const f = b.floors.find((x) => x.id === route.floorId);
   const desk = f && route.agentId ? f.agents.find((a) => a.id === route.agentId) : null;
   $('povBar').hidden = !route.eyes;
+  $('followBar').hidden = !route.follow;
+  if (route.follow) patch($('followText'), desk ? `<i class="dot ${desk.state}"></i> Following <b>${esc(String(desk.displayName).split(' - ')[0])}</b> · ${esc(desk.activity && desk.state !== 'stopped' ? desk.activity : STATE_TEXT[desk.state] || '')}` : 'Follow');
   if (route.eyes) patch($('povText'), desk ? `<i class="dot ${desk.state}"></i> Through the eyes of <b>${esc(desk.displayName)}</b> · ${esc(desk.activity && desk.state !== 'stopped' ? desk.activity : STATE_TEXT[desk.state] || '')}` : 'First person view');
   patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
@@ -334,7 +336,7 @@ function render() {
   }
   // elevator (Floor switcher): a slim card on the left
   const elev = $('elevator');
-  elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes || isPhone();
+  elev.hidden = route.mode === 'lobby' || ctx.editing || !!route.eyes || !!route.follow || isPhone();
   if (!elev.hidden) {
     const floors = [...b.floors].sort((x, y) => y.number - x.number);
     patch(elev, `${floors.map((x) => `<button data-href="#/floor/${x.id}" aria-current="${x.id === route.floorId}" data-tip="${x.number} · ${esc(x.name)}" aria-label="Floor ${x.number}: ${esc(x.name)}">${x.number}<i class="l lamp ${x.lamp}"></i></button>`).join('')}<button data-href="#/" data-tip="Lobby" aria-label="Lobby">L</button>`);
@@ -433,13 +435,19 @@ addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   if (POPS.some((id) => !$(id).hidden)) return closePopovers();
   if (ctx.editing) return;
-  if (state.route.eyes) location.hash = `#/floor/${state.route.floorId}`;
+  if (state.route.eyes || state.route.follow) location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
   else if (state.route.mode === 'desk') location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.mode === 'floor') location.hash = '#/';
 });
-document.querySelector('[data-povback]').onclick = () => { location.hash = `#/floor/${state.route.floorId}`; };
-document.querySelector('[data-povdesk]').onclick = () => { location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`; };
+document.querySelectorAll('[data-povback]').forEach((b) => { b.onclick = () => { location.hash = `#/floor/${state.route.floorId}`; }; });
+document.querySelectorAll('[data-povdesk]').forEach((b) => { b.onclick = () => { location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`; }; });
+// follow mode: switch to the previous / next agent of the Floor
+document.querySelectorAll('[data-follow]').forEach((b) => { b.onclick = () => {
+  const list = state.building.floors.find((f) => f.id === state.route.floorId)?.agents || [];
+  const i = list.findIndex((a) => a.id === state.route.agentId), next = list[(i + Number(b.dataset.follow) + list.length) % list.length];
+  if (next) location.hash = `#/floor/${state.route.floorId}/desk/${next.id}/follow`;
+}; });
 $('grip').onclick = () => { $('sheet').classList.toggle('tall'); setTimeout(() => { render(); updateInsets(); }, 250); };
 $('sideShow').onclick = () => { state.sideHidden = false; try { localStorage.removeItem('aisquad.sideHidden'); } catch { /* private mode */ } render(); };
 try { state.sideHidden = localStorage.getItem('aisquad.sideHidden') === '1'; } catch { /* private mode */ }

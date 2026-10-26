@@ -494,7 +494,7 @@ export class BuildingScene {
   setView(view) {
     const wasEyes = this.view.eyes, wasPersp = this.camera === this.persp;
     this.view = view;
-    const persp = !!(view.eyes || view.screen);
+    const persp = !!(view.eyes || view.screen || view.follow);
     if (persp && !wasPersp) {
       // hand over from the isometric camera: start the perspective camera where the ortho view looked from
       this.persp.position.copy(this.ortho.position).sub(this.controls.target).setLength(18).add(this.controls.target);
@@ -502,13 +502,14 @@ export class BuildingScene {
     }
     this.camera = persp ? this.persp : this.ortho;
     this.controls.object = this.camera;
-    const fov = view.eyes ? POV_FOV : 30;                     // tight lens for the over-the-shoulder view
+    const fov = view.eyes ? POV_FOV : view.follow ? 42 : 30;    // tight lens for the over-the-shoulder view
     if (persp && this.persp.fov !== fov) { this.persp.fov = fov; this.persp.updateProjectionMatrix(); }
     this.resize();
     this.applyVisibility();
-    this.controls.enabled = !view.eyes;
+    this.controls.enabled = !view.eyes && !view.follow;
     Object.assign(this.controls, persp ? { enableRotate: true, enablePan: false } : { enableRotate: false, enablePan: true });
     this.controls.mouseButtons.LEFT = persp ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+    if (view.follow) { this.followReady = false; this.camAnim = null; return; }   // the chase camera takes over (updateFollow)
     if (view.eyes) {
       // first person: at the desk look down at the hands and keyboard, elsewhere straight ahead
       const st = this.floors.get(view.floorId)?.stations.get(view.agentId);
@@ -520,6 +521,23 @@ export class BuildingScene {
     // sharp shadows for the Floor in view, a wider shadow area for the whole building in the Lobby
     if (view.mode === 'lobby') this.aimSun(floorY(Math.max(1, this.top)) / 2, this.top + 1);
     else this.aimSun(this.floors.get(view.floorId)?.g.position.y || 0, 1);
+  }
+
+  // follow mode: a camera behind and above the agent that follows it around (desk, lounge, meetings)
+  updateFollow(dt) {
+    const st = this.floors.get(this.view.floorId)?.stations.get(this.view.agentId);
+    if (!st) return;
+    const h = st.human, head = new THREE.Vector3();
+    h.updateWorldMatrix(true, false);
+    h.getWorldPosition(head); head.y += 1.5;
+    const fwd = new THREE.Vector3(Math.sin(h.rotation.y), 0, Math.cos(h.rotation.y));
+    const want = head.clone().addScaledVector(fwd, -3.6).add(new THREE.Vector3(0, 1.9, 0)).addScaledVector(new THREE.Vector3(fwd.z, 0, -fwd.x), 1.2);
+    const k = this.followReady ? Math.min(1, dt * 2.5) : 1;                // eases after the agent, no jumps
+    this.persp.position.lerp(want, k);
+    this.followTarget = this.followReady ? this.followTarget.lerp(head, Math.min(1, dt * 4)) : head.clone();
+    this.persp.lookAt(this.followTarget);
+    this.controls.target.copy(this.followTarget);
+    this.followReady = true;
   }
 
   // camera at the agent's eyes (inside its hidden head), turned by the owner's drag; follows walking and sitting
@@ -560,7 +578,7 @@ export class BuildingScene {
   setInsets(insets) {
     this.insets = { left: 0, right: 0, top: 0, bottom: 0, ...insets };
     this.resize();
-    if (this.view.eyes) return;
+    if (this.view.eyes || this.view.follow) return;
     const p = this.poseFor(this.view);
     if (this.camAnim) Object.assign(this.camAnim, p);          // retarget the move in progress
     else this.flyTo(p, 500);
@@ -764,7 +782,7 @@ export class BuildingScene {
   // ---------- loop ----------
   frame() {
     const t = this.clock.getElapsedTime();
-    if (this.camAnim && !this.view.eyes) {
+    if (this.camAnim && !this.view.eyes && !this.view.follow) {
       const a = this.camAnim, u = Math.min(1, (performance.now() - a.start) / a.ms), k = 1 - Math.pow(1 - u, 3);
       this.camera.position.lerpVectors(a.fromP, a.pos, k);
       this.controls.target.lerpVectors(a.fromT, a.target, k);
@@ -802,7 +820,7 @@ export class BuildingScene {
     }
     this.updateRacks(t);
     this.handlers.onFrame?.(t);
-    if (v.eyes) this.updatePov(dt); else this.controls.update();
+    if (v.eyes) this.updatePov(dt); else if (v.follow) this.updateFollow(dt); else this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
   }
