@@ -2,11 +2,11 @@
 // Menu → Admin (0.12): one place for the configuration of the whole company. Spaces (kind, access, memory, shift,
 // agents at once), agents across Spaces (model, effort, skills; add, remove), the skill catalog, the Company Brain,
 // and the change history with diff and rollback. It edits the same files as the Floor settings; nothing of its own.
-import { esc, api, toast, openModal, closeModal, diffHtml } from './lib.js';
+import { esc, api, toast, openModal, closeModal, diffHtml, ago } from './lib.js';
 import { ctx } from './ctx.js';
-import { t } from './i18n.js';
+import { t, tx } from './i18n.js';
 
-const TABS = [['spaces', t('Spaces')], ['agents', t('Agents')], ['skills', t('Skills')], ['company', t('Company Brain')], ['changes', t('Changes')]];
+const TABS = [['spaces', t('Spaces')], ['dispatcher', t('Dispatcher')], ['agents', t('Agents')], ['skills', t('Skills')], ['company', t('Company Brain')], ['changes', t('Changes')]];
 const KIND = { project: t('Project'), department: t('Department') };
 const ACCESS = { team: t('Team'), owner: t('Owner only') };
 const MEMORY = { claude: t('This machine (Claude Code)'), repo: t('In the Space (committed)') };
@@ -79,12 +79,49 @@ function changesHtml(d) {
       <div class="note mono">${esc(h.files.join(', '))}</div><div data-diff="${esc(h.id)}"></div></li>`).join('')}</ul>`;
 }
 
+const LIMIT = { building: t('Building maximum'), ram: t('free RAM'), cpu: t('CPU load') };
+function dispatcherHtml(x) {
+  const c = x.capacity, q = x.quota, p = x.prefs;
+  return `<p class="note">${t('Every start goes through one queue: the owner\'s own work first (P0), then a waiting squad (P1), normal work (P2) and background work (P3). Waiting 30 minutes moves an item up one level. Automated work waits outside its Space\'s shift and while the quota guard pauses.')}</p>
+    <div class="dispStats">
+      <div><b>${c.running} / ${c.cap}</b><span class="note">${t('running / slots now')}</span></div>
+      <div><b>${c.free}</b><span class="note">${t('free')}${x.reserve ? ` · ${t('{n} kept for the owner', { n: x.reserve })}` : ''}</span></div>
+      <div><b>${esc(LIMIT[c.limiting] || c.limiting)}</b><span class="note">${t('limits it now')}</span></div>
+      <div><b class="${q.paused ? 'warnText' : ''}">${q.paused ? t('Paused') : t('OK')}</b><span class="note">${t('quota guard')}</span></div>
+    </div>
+    <ul class="list note">${c.limits.map((l) => `<li>${esc(tx(l.text))}: ${l.cap}</li>`).join('')}</ul>
+    ${q.paused ? `<p class="warnText">${esc(tx(q.reason))}${q.until ? ` · ${t('until {time}', { time: new Date(q.until).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) })}` : ''}</p>` : ''}
+    <div class="section"><div class="sectionHead"><h3 class="grow">${t('Queue')}</h3></div>
+    ${x.queue.length ? `<div class="adminList">${x.queue.map((it) => `<div class="adminRow"><div class="row"><span class="badge">${esc(it.effective)}</span><b class="grow">${esc(it.agentName)} · ${esc(it.floorName)}</b><span class="note">${esc(it.action)} · ${esc(it.via)} · ${ago(it.createdAt)}</span></div>
+      <div class="note">${esc(it.title)}</div>
+      <div class="row"><span class="note grow">${esc(tx(it.reason))}${it.lastError ? ` · <span class="warnText">${esc(it.lastError)}</span>` : ''}</span>
+        <select data-prio="${esc(it.id)}" aria-label="${t('Priority')}">${['P0', 'P1', 'P2', 'P3'].map((v) => `<option ${v === it.priority ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="small ghost danger" data-qdrop="${esc(it.id)}">${t('Remove')}</button><button class="small gold" data-qstart="${esc(it.id)}">${t('Start now')}</button></div></div>`).join('')}</div>`
+    : `<div class="empty">${t('Nothing waiting.')}</div>`}</div>
+    <form class="section" data-dispatch>
+      <div class="sectionHead"><h3 class="grow">${t('Settings')}</h3></div>
+      <div class="grid4">
+        <label>${t('Slots kept for the owner (daytime)')}<input name="reserveP0" type="number" min="0" max="4" value="${p.reserveP0}"></label>
+        <label>${t('Daytime from')}<input name="dayFrom" type="time" value="${esc(p.day.from)}"></label>
+        <label>${t('Daytime to')}<input name="dayTo" type="time" value="${esc(p.day.to)}"></label>
+        <label>${t('Stop idle agents after (min, 0 = never)')}<input name="idleStopMin" type="number" min="0" value="${p.idleStopMin}"></label>
+        <label>${t('…while work waits (min)')}<input name="idleStopBusyMin" type="number" min="0" value="${p.idleStopBusyMin}"></label>
+        <label>${t('Quota: 5 hours (USD, 0 = off)')}<input name="fiveHourUsd" type="number" min="0" step="0.5" value="${p.quota.fiveHourUsd}"></label>
+        <label>${t('Quota: 7 days (USD, 0 = off)')}<input name="weekUsd" type="number" min="0" step="1" value="${p.quota.weekUsd}"></label>
+        <label>${t('Pause automated work at (%)')}<input name="pausePct" type="number" min="50" max="100" value="${p.quota.pausePct}"></label>
+      </div>
+      <p class="note">${t('Used (API-equivalent estimate): {five} in 5 hours, {week} in 7 days. A subscription counts differently; set limits from what you see in Claude\'s usage page. Rate-limit reports of background jobs pause automated work too.', { five: `$${q.windows[0].usd}`, week: `$${q.windows[1].usd}` })}</p>
+      <div class="row"><span class="spacer"></span><button class="gold" type="submit">${t('Save')}</button></div>
+    </form>`;
+}
+
 async function openAdmin(tab = 'spaces') {
-  const [d, roles] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles')]);
-  const body = openModal(`<div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
+  const [d, roles, disp] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles'), tab === 'dispatcher' ? api('GET', '/api/dispatcher') : null]);
+  const modal = openModal(`<div class="adminRoot"><div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
     <div class="mBody"><div class="tabs adminTabs" role="tablist">${TABS.map(([id, label]) => `<button role="tab" data-atab="${id}" aria-selected="${id === tab}">${esc(label)}</button>`).join('')}</div>
-    <div id="adminBody">${{ spaces: spacesHtml, agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div>`);
-  body.closest('dialog').classList.add('xwide');
+    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
+  modal.closest('dialog').classList.add('xwide');
+  const body = modal.querySelector('.adminRoot');          // new on every render: its listeners go with it
   body.querySelectorAll('[data-close]').forEach((x) => x.onclick = () => closeModal());
   body.querySelectorAll('[data-atab]').forEach((b) => b.onclick = () => openAdmin(b.dataset.atab));
   const again = async (msg) => { toast(msg); ctx.refresh(); await openAdmin(tab); };
@@ -93,6 +130,12 @@ async function openAdmin(tab = 'spaces') {
     e.preventDefault();
     const f = e.target;
     try {
+      if (f.dataset.dispatch !== undefined) {
+        const v = (n) => f.elements[n].value;
+        await api('PATCH', '/api/dispatcher', { reserveP0: +v('reserveP0'), day: { from: v('dayFrom'), to: v('dayTo') }, idleStopMin: +v('idleStopMin'), idleStopBusyMin: +v('idleStopBusyMin'),
+          quota: { fiveHourUsd: +v('fiveHourUsd'), weekUsd: +v('weekUsd'), pausePct: +v('pausePct') } });
+        return again(t('Saved'));
+      }
       if (f.dataset.space) {
         const days = [...f.querySelectorAll('[name=day]:checked')].map((x) => +x.value);
         await api('PATCH', `/api/floors/${f.dataset.space}`, { kind: f.elements.kind.value, access: f.elements.access.value, memory: f.elements.memory.value,
@@ -121,6 +164,8 @@ async function openAdmin(tab = 'spaces') {
         await api('DELETE', `/api/floors/${f.dataset.floor}/agents/${f.dataset.agent}`);
         return again(t('Agent removed'));
       }
+      if (el.dataset.qstart) { await api('POST', `/api/dispatcher/queue/${el.dataset.qstart}/start`, {}); return again(t('Started')); }
+      if (el.dataset.qdrop) { await api('DELETE', `/api/dispatcher/queue/${el.dataset.qdrop}`); return again(t('Removed from the queue')); }
       if (el.closest('[data-templates]')) { closeModal(); return ctx.actions.templates?.(); }
       if (el.dataset.install) {
         const sp = body.querySelector(`[data-install-space="${el.dataset.install}"]`).value;
@@ -144,6 +189,10 @@ async function openAdmin(tab = 'spaces') {
         return again(t('Rolled back'));
       }
     } catch (err) { toast(err.message, 5000); }
+  });
+  body.addEventListener('change', async (e) => {
+    if (!e.target.dataset.prio) return;
+    try { await api('PATCH', `/api/dispatcher/queue/${e.target.dataset.prio}`, { priority: e.target.value }); await again(t('Priority changed')); } catch (err) { toast(err.message, 5000); }
   });
 }
 ctx.actions.admin = (el) => openAdmin(el?.dataset?.tab || 'spaces');

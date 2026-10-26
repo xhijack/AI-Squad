@@ -146,12 +146,12 @@ function getTaskForm() {
       if (f.elements.bg.checked) {
         const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' });
         if (!r) { btn.disabled = false; return; }
-        toast(tt('Background job started'));
+        toast(r.waiting ? queuedText(r) : tt('Background job started'), r.waiting ? 6000 : 2800);
         f.elements.text.value = ''; taskFiles = []; drawFiles(); btn.disabled = false; refresh();
         return;
       }
       const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) });
-      toast(r.queued ? r.note : tt('Task sent'));
+      toast(r.waiting ? queuedText(r) : r.queued ? tx(r.note) : tt('Task sent'), r.waiting ? 6000 : 2800);
       f.elements.text.value = ''; taskFiles = []; drawFiles();
       refresh();
     } catch (err) { toast(err.message); }
@@ -502,6 +502,8 @@ try { state.sideHidden = localStorage.getItem('aisquad.sideHidden') === '1'; } c
 addEventListener('resize', () => { for (const id of ['hud', 'dock', 'sideTop', 'sideMain', 'sideTabs', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 
 // starts that the Watchdog may question first (swap above 80 %, the Floor at its maximum of agents): ask, then force
+// the dispatcher queued it (0.13): why it waits; it starts by itself when there is room
+const queuedText = (r) => tt('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) });
 async function guarded(url, body = {}, force = false) {
   try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }); } catch (e) {
     if (e.status !== 409) throw e;
@@ -521,10 +523,10 @@ const actions = Object.assign(ctx.actions, {
     body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
   voice() { const on = !voiceOn(); setVoice(on); if (on) speak(tt('Voice is on, boss.')); render(); },
-  async start(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`)) toast(tt('Starting agent…')); },
+  async start(el) { const r = await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`); if (r) toast(r.waiting ? queuedText(r) : tt('Starting agent…'), r.waiting ? 6000 : 2800); },
   // continue the agent's last Claude Code session (after a crash this is the main action)
-  async resume(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/resume`)) toast(tt('Resuming the last session…')); },
-  async 'crash-answer'(el) { el.disabled = true; if (await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n, ...itemContext(el) })) toast(+el.dataset.n === 1 ? tt('Resuming the last session…') : tt('Starting a fresh session…')); else el.disabled = false; },
+  async resume(el) { const r = await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/resume`); if (r) toast(r.waiting ? queuedText(r) : tt('Resuming the last session…'), r.waiting ? 6000 : 2800); },
+  async 'crash-answer'(el) { el.disabled = true; const r = await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n, ...itemContext(el) }); if (r) toast(r.waiting ? queuedText(r) : +el.dataset.n === 1 ? tt('Resuming the last session…') : tt('Starting a fresh session…')); else el.disabled = false; },
   async restart(el) {
     if (!confirm(tt('Restart this agent? Its Claude Code session is closed and a fresh one starts with the configured model and effort.'))) return;
     await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {});

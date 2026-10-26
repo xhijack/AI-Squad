@@ -677,3 +677,8 @@ ul.jobs li.job.failed .badge { background: var(--bad-soft); color: var(--bad); }
 .addAgent { gap: 6px; margin-top: 6px; }
 .addAgent input { flex: 1; min-width: 180px; }
 @media (max-width: 640px) { .grid4 { grid-template-columns: 1fr 1fr; } }
+.adminRoot { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.dispStats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+.dispStats > div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.dispStats b { font-size: 18px; }
+@media (max-width: 640px) { .dispStats { grid-template-columns: 1fr 1fr; } }
