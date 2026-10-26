@@ -141,7 +141,9 @@ function standardHtml(bp) {
     <div class="row" style="margin-top:8px"><span class="spacer"></span><button class="small ${pending ? 'gold' : ''}" data-act="source-docs">${pending ? 'Review and approve' : 'Open source documents'}</button></div>`;
 }
 
-const agentsHead = (f, extra = '') => `<div class="cardHead"><h3>Agents</h3><span class="meta">${f.agents.filter((a) => a.state === 'working' || a.state === 'waiting').length}/${f.agents.length} active</span>${extra}</div>`;
+// the Autopilot level also sits here (on a phone the top bar has no room for its chip)
+const apMini = (f) => (f.autopilot && !f.independent ? `<button class="chip apMini ${f.autopilot.level}${f.autopilot.critical ? ' crit' : ''}" data-act="floor-settings" title="Autopilot level (Floor settings)">Autopilot: ${f.autopilot.level}${f.autopilot.critical ? ` · ${f.autopilot.critical} critical` : ''}</button>` : '');
+const agentsHead = (f, extra = '') => `<div class="cardHead"><h3>Agents</h3>${apMini(f)}<span class="meta">${f.agents.filter((a) => a.state === 'working' || a.state === 'waiting').length}/${f.agents.length} active</span>${extra}</div>`;
 
 function independentFloorSections(f, deskAgentId) {
   const sections = [
