@@ -397,11 +397,14 @@ ctx.panelBody = () => (isPhone() ? $('sheetBody') : $('sideMain'));
 
 // ---------- new Attention: open it by itself, badge the tab, notify when the tab is in the background ----------
 const lastMeeting = {};                // floorId -> the meeting already announced
-let seenAtt = null;
+let seenAtt = null, attBooted = false;
 try { seenAtt = new Set(JSON.parse(sessionStorage.getItem('aisquad.seenAtt') || '[]')); } catch { seenAtt = new Set(); }
 function announceAttention(list, route) {
   document.title = list.length ? `(${list.length}) The AI Squad` : 'The AI Squad';
   const fresh = list.filter((a) => !seenAtt.has(a.id));
+  // the first look after the page loads: what is waiting is in the panel (and the pill's count) already; only
+  // items that arrive later open the popover, so the two never open together
+  if (!attBooted) { attBooted = true; fresh.forEach((a) => seenAtt.add(a.id)); return; }
   if (!fresh.length) return;
   // the newest report or question is said aloud by its character (short; the full text is in the conversation view)
   const say = fresh.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
