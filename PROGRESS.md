@@ -1,6 +1,6 @@
 # Progress: The AI Squad MVP
 
-Status on 25 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions, the five Phase 1.2 items, Phase 2 (parts A to F of `PHASE-2.md`) and the Phase 2.1 visual rebuild (`PHASE-2.1-VISUAL.md`) are built and committed in small Conventional Commits. `npm test` runs 128 tests in 21 modules and all pass. The tests are run one module at a time (`npm test` now does that too) because of memory pressure on the machine.
+Status on 26 Oct 2026: the seven MVP steps from `SPEC.md`, the five Phase 1.1 decisions, the five Phase 1.2 items, Phase 2 (parts A to F of `PHASE-2.md`), the Phase 2.1 visual rebuild (`PHASE-2.1-VISUAL.md`) and the Phase 2.2 Squad Log and Audit (`PHASE-2.2-LOG-AUDIT.md`) are built and committed in small Conventional Commits. `npm test` runs 156 tests in 26 modules and all pass. The tests are run one module at a time (`npm test` now does that too) because of memory pressure on the machine.
 
 ## What works
 
@@ -278,6 +278,66 @@ The owner found Phase 2 "messy and below squad-3d". This phase rebuilt how The A
 - **Many agents**: with more than 8 desks the third row can reach the lounge, and at small zoom the name chips of neighbouring desks can still touch.
 - **Lobby**: the dollhouse spreads the Floors apart, so a building with many Floors gets tall; the camera zooms out to fit and the offices get small.
 - **Font source**: see QUESTIONS 14.
+
+## Phase 2.2: Squad Log and Audit (26 Oct 2026)
+
+Built from `PHASE-2.2-LOG-AUDIT.md` in the order A, B, C, one commit per step, then one commit with the fixes found in the real run. Version 0.3.0. Decisions in `QUESTIONS.md` (16 to 26).
+
+### A. Squad Log
+- **Writer** (`server/log.js`): `~/.aisquad/logs/<floor-id>/<YYYY-MM-DD>.jsonl`, append-only, schema `v: 1`, documented with an example for every event type in `docs/LOG-SCHEMA.md`. Common fields `ts`, `floor`, `sprint`, `module`, `agent`, `role`, `session`, `model`, `type`, a one-line `summary` and `data`. Floor 1 logs under `independents`.
+  - Day files older than 7 days are gzipped (late events are merged into the archive), files older than `prefs.logRetentionDays` (default 90) deleted, once an hour.
+  - Deduplication by id: a tool call or message seen by a hook and in a transcript has the same id (`tool:<tool_use_id>`, `msg:...`, `use:<message id>`); the ids of the last two days are reloaded after a restart.
+- **Collectors** (`server/collect.js`, every 15 s; git every minute):
+  - transcripts: owner tasks, delegations, SendMessage, AskUserQuestion and its answer with the wait time, every tool call (target path or trimmed command, duration, error; never file contents), usage per reply with the estimated cost;
+  - hook events: tool calls live, permission prompts and how long they waited;
+  - `docs/squad` and Blueprint files: board changes (with reopened rows), handoffs, QA reports (round, status, failed criteria), bugs opened / closed, sprint plan (modules, SP), questions in QUESTIONS.md and their answers, source document status;
+  - gate decisions: the board and TaskCompleted hooks now record them in `.git/aisquad-gates.jsonl`; merge gate and merge results from the executor;
+  - git commits (credited to agents with per-agent identities) and the closing commit as `sprint.closed`;
+  - agent states: started / stopped / crashed, the model observed vs configured, idle while the team had open work, back to work, Watchdog alerts.
+- **Privacy** (`server/redact.js`): secrets always removed (prefixed tokens, JWT, Bearer, URL passwords, private keys, `NAME=value` when a word of the name is sensitive); e-mail, phone, NIK / SSN and bank account numbers masked by default; `.env` content and file contents never logged. Floor settings: log message text on/off, masking on/off.
+- **API and UI**: `GET /api/floors/:id/log?from=&to=&type=&agent=&sprint=` (PIN). A **Log** dock button: timeline filtered by agent, type (category), sprint and range, with details per event, and a **Conversation** view (who talked to whom, in order).
+- `scripts/dev.sh` takes `AISQUAD_PORT`, so the playground runs on 8096 while the real `aisquad.service` keeps 8097.
+
+### B. Audit
+- `server/audit.js` builds a digest from a sprint, a range or the time since the last audit: process metrics (source documents approved before the first sprint, handoffs, QA before merge, first-round pass rate, bugs per SP by severity, parallel modules, questions and waits, refused gates, rework, and the server's sprint close checks) and efficiency metrics (cost and tokens per SP, per module, per agent, cache hit rate, cost by model, repeated reads, failed tool calls and retries, long outputs, idle time with open work, time blocked on the owner, opus on docs-only work), plus up to 60 relevant events with refs `E1...`. About 5 KB for a small sprint.
+- The bundled `squad-audit` skill (English) is the system prompt of `claude -p --tools "" --json-schema ...` (sonnet by default, Floor setting). Findings have area, severity, title, evidence, recommendation and an optional target (role-template, blueprint or floor-setting with a concrete change). The parser drops findings without evidence and cleans targets.
+- Stored as `~/.aisquad/audits/<floor-id>/<timestamp>.json` + `.md`, with the audit's own cost and duration. Scores per area: 100 minus 30 / 15 / 8 / 3 per critical / high / medium / low finding.
+- Triggers: `/aisquad audit [floor] [--sprint N] [--model m]`, the **Audit** dock button, and automatically after a sprint closes (on by default for Squad Sprint Floors). The trigger is read from the log once a minute, so a server restart does not lose it; it waits for free RAM like merges.
+- The Audit dialog: run controls, scores, key numbers, the summary, findings by severity with evidence chips (event refs open the Log on that event, with a way back), and the history with trend lines (cost per SP, first-round pass rate, cache hit rate).
+
+### C. Improvement loop
+- **Review change** shows the proposed change as a diff. **Apply** saves a new Role Template version (old text in `.history`, Floors show *Update available*), a new Blueprint version with a *Lessons from audits* section (old text in `blueprints/.history`; the Floor's Standard tab offers **Update**, which refreshes the snapshot, `AISQUAD.md` and the agent files), or one of four Floor settings. **Dismiss** asks why.
+- Ledger `~/.aisquad/improvements.jsonl`: finding, proposed change, decision, version created, metrics before; after the next audit of the Floor an outcome line with the metrics after. Shown as **Improvements** in the Audit dialog.
+- `/aisquad audit export` writes `~/.aisquad/exports/aisquad-export-<time>.json` (0600): metrics, findings and decisions; no message text; paths, Floor and agent ids (also inside free text) as salted hashes; nothing is uploaded.
+
+### Verified
+- **Tests**: 156 tests in 26 modules, run one module at a time, all pass. New modules: redact (every pattern plus a false-positive list), log (fields, dedupe across restarts, message text off, filters, gzip, retention), collect (transcripts, hook + transcript dedupe, permission wait, docs/squad changes, gate records, commits, agent states, name resolution), audit (metrics on a fixture log, digest, review parsing, `claude -p` arguments with the fake Claude Code, storage and history), improve (Role Template and Blueprint versions, Floor setting, dismiss, outcomes, anonymised export).
+- **Real dogfood** (Claude Code, haiku, scratch home `playground/home-dogfood`, server on 8096): a Software House squad "Slug Tool" (Project Manager lead, developer, QA, all haiku / low) with the four source documents approved, started with `/sprint 1`.
+  - In about 2.5 minutes the lead planned M01 (2 SP), delegated to the developer and QA as teammates, the developer built `slug.js` with 6 green tests and a handoff, QA passed it in round 1, and the lead committed `feat(slug)` and `docs(squad): close sprint 1`. Cost $0.030 (26 replies, 87 % cache hit rate).
+  - The log has 100 events for the Floor: 26 tool calls, 26 usage turns, 11 board changes, delegations, messages, QA report, commits, the sprint close, the audits and the decisions.
+  - **The team did not really close the sprint**: RELEASE.md was written to `docs/squad/` instead of `docs/squad/sprint-1/`, there was no `FINAL-S1.md`, so the server did not merge (and my own Floor settings change had left `floor.json` dirty).
+  - The automatic audit ran on the closing commit (haiku, 28 s, $0.0038, 5 findings). After adding the sprint close checks to the digest, a second audit of sprint 1 (haiku, 38 s, $0.0049, 6 findings) found exactly that problem as F1 (high, evidence: the QA PASS event, the sprint closed event, `process.sprintClose`, `process.qaBeforeMerge`) and proposed two rules for the Project Manager.
+  - **Applied F1**: Role Template `project-manager` v2 → v3 (v2 in `.history`); the Floor showed *Update available* for the lead. F3 was dismissed with a reason. Both are in the ledger and in the log as `improvement.decided`.
+  - Total cost of the run about $0.04. The lead was stopped, the private tmux server and the dogfood server ended, and the run's transcripts were removed from `~/.claude/projects`. The repository `playground/real/squads2/slug-tool` and `playground/home-dogfood` (log, audits, ledger) are kept for inspection (gitignored).
+- **What the dogfood found in Phase 2.2 itself** (all fixed in the last code commit):
+  - teammates that finished inside the lead's session were logged as `agent.crashed` (the audit even reported "two agents crashed");
+  - teammate messages arrive in the lead's transcript as user text ("Another Claude session sent a message") and were logged as owner tasks (the audit noticed this too, F6);
+  - `Tester: Sari` and messages to `main` were not mapped to agent ids;
+  - the automatic audit was only queued in memory and a server restart lost it;
+  - the audit could not see the server's sprint close checks; the Blueprint id was copied with its version (`software-house-v1`);
+  - Floor 1 read back 7 days of this machine's other sessions at once (about 47,000 events, 24 MB): now 1 day. That scratch log was deleted.
+  The events logged before the fixes stay in the dogfood log as they were (append-only).
+- **Screenshots** in the Phase 2.1 look, from the dogfood Floor, in `playground/reference/` (gitignored): `phase22-log-1440.png`, `phase22-conversation-1440.png`, `phase22-audit-1440.png`, `phase22-audit-findings-1440.png`, `phase22-log-390.png`, `phase22-audit-390.png`. One headless Chrome at a time.
+
+### Known gaps (Phase 2.2)
+- **The owner's running `aisquad.service` was not restarted.** It serves `ui/` from this checkout, so a reload shows the new Log and Audit buttons while its API is still 0.2.2 ("Not found" in those dialogs). `/aisquad` sees the version change (0.3.0) and restarts it.
+- **Floors scaffolded before 0.3.0** keep their old gate hooks, so board-gate decisions are not logged there (QUESTIONS 19).
+- **Board rows that do not follow `BUILD M01 ...`** are not checked by the board gate at all. In the dogfood the lead wrote `M01 BUILD: ...`, so no gate ran; the log shows 0 gate events and the audit did not flag it.
+- **Owner prompts typed directly in a tmux pane** are logged from the transcript; the UserPromptSubmit hook is not used (no shared id to deduplicate).
+- **Permission answers** are measured until the agent's next event; whether the owner allowed or denied is not known.
+- **Audits are as good as the model and the digest.** With haiku and a one-module sprint the findings were sensible but small; costs are estimates from the price table.
+- **Personal data masking is pattern based**; names are not detected (QUESTIONS 20).
+- **Log size**: a busy Floor writes one line per tool call and per reply; the timeline reads up to 20,000 events of the chosen range.
 
 ## How to run
 
