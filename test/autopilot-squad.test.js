@@ -49,7 +49,9 @@ test('a non-critical question is answered with its recommended option after the 
   await open('quiz');
   const q = items().find((a) => a.kind === 'question');
   assert.deepEqual([q.autopilot.critical, q.autopilot.recommended, q.autopilot.auto], [false, 2, true]);
-  assert.equal(q.autopilot.autoAt - q.ts, 180e3, '3 minutes');
+  assert.ok(Math.abs(q.autopilot.autoAt - q.ts - 180e3) < 2000, '3 minutes');
+  await sleep(1100);
+  assert.equal(items().find((a) => a.kind === 'question').autopilot.autoAt, q.autopilot.autoAt, 'the clock does not move with each snapshot');
   assert.deepEqual(await squad.autopilotTick(Date.now(), { res: calm }), [], 'not before the timeout');
   const done = await squad.autopilotTick(later(4), { res: calm });
   assert.deepEqual(done.map((d) => [d.kind, d.option]), [['answered', 'Vitest']]);

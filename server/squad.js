@@ -249,14 +249,19 @@ function floorAttention(entry, floor, lives, cost) {
 // questions, permission prompts and plain-text asks get their classification; a non-critical question with a
 // "(Recommended)" option (or a non-critical ask) is handled automatically once the timeout has passed
 const ASKING = new Set(['question', 'permission', 'reply']);
+const apSeen = new Map();                 // item id -> first seen: the clock for items whose own time moves (no transcript)
 function autopilotItems(entry, floor, out) {
+  const now = Date.now();
+  if (apSeen.size > 500) for (const [k, t] of apSeen) if (now - t > 864e5) apSeen.delete(k);
   const ownerOnly = blueprintsLib.floorBlueprint(entry.path, floor.blueprint)?.ownerOnly || [];
   for (const a of out) {
     if (!ASKING.has(a.kind)) continue;
     const c = autopilot.classify([a.text, ...(a.options || []).filter((o) => !o.free).map((o) => o.label)].join('\n'), { level: floor.autopilot, ownerOnly });
     const rec = a.kind === 'question' && a.answerable ? autopilot.recommendedOption(a.options) : null;
     const auto = !c.critical && (a.kind === 'reply' || !!rec);                 // permission prompts are never answered
-    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, auto, autoAt: auto ? (a.ts || Date.now()) + floor.autopilotTimeoutSec * 1000 : null };
+    if (!apSeen.has(a.id)) apSeen.set(a.id, now);
+    const since = Math.min(a.ts || now, apSeen.get(a.id));
+    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
   }
   const day = Date.now() - 864e5;
   for (const d of loadRuntime().autopilot.decided) {
