@@ -151,3 +151,20 @@ test('Autopilot turns auto-resume on, but not while the budget is reached', asyn
   assert.deepEqual(await squad.autoResumeTick(Date.now(), { res: calm }), [{ floorId: FLOOR, agentId: 'rina-pm' }]);
   squad.stopAgent(FLOOR, 'rina-pm');
 });
+
+test('a teammate started on its own Desk reads its own session, not a lead-spawned run with the same id', async () => {
+  floors.updateFloorConfig(r.path, { autopilot: 'off' });
+  const at = Date.now();
+  fs.writeFileSync(path.join(pdir, 'sess-budi.jsonl'), jsonl([
+    { type: 'agent-setting', agentSetting: 'budi-dev', sessionId: 'sess-budi' },
+    { type: 'user', timestamp: iso(at - 70000), message: { role: 'user', content: 'Inventory the staging server' } },
+    { type: 'assistant', timestamp: iso(at - 60000), message: { id: 'd1', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: path.join(r.path, 'docs/ops/SERVER-box.md'), content: '# box' } }] } },
+  ]));
+  leadSession('sess-5', { at });                          // the lead's teammate run of budi-dev is newer (editing src/app.js)
+  await squad.startAgent(FLOOR, 'budi-dev', '', { guard: false });
+  const dev = kiosk().agents.find((a) => a.id === 'budi-dev');
+  assert.deepEqual([dev.running, dev.inLead, dev.standby], [true, false, null]);
+  assert.equal(dev.activity, 'editing docs/ops/SERVER-box.md');
+  squad.stopAgent(FLOOR, 'budi-dev');
+  assert.equal(kiosk().agents.find((a) => a.id === 'budi-dev').activity.includes('docs/ops'), false, 'stopped: the teammate run is its last state again');
+});

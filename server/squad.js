@@ -116,13 +116,15 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
   const lead = team.agents.find((x) => x.lead) || team.agents.find((x) => sprint.roleKind(x) === 'lead');
   const leadRunning = !!lead && sessions.has(tm.sessionName(entry.id, lead.id));
   const lastSession = new Map();                       // agent id -> its newest own Claude Code session (what Resume continues)
-  for (const s of tx.sessionsOf(entry.path)) { const id = tx.sessionAgent(s.file); if (id && !lastSession.has(id)) lastSession.set(id, s.id); }
+  const ownFile = new Map();                           // agent id -> that session's transcript
+  for (const s of tx.sessionsOf(entry.path)) { const id = tx.sessionAgent(s.file); if (id && !lastSession.has(id)) { lastSession.set(id, s.id); ownFile.set(id, s.file); } }
   const leadSession = lead ? lastSession.get(lead.id) : null;
   const ended = new Map(team.agents.map((a) => [a.id, endedOf(entry.id, a.id)]));
   const lives = team.agents.map((a) => {
     const name = tm.sessionName(entry.id, a.id);
     const own = sessions.has(name);
-    const t = transcripts.get(a.id);
+    // an agent running on its own Desk reads its own session, never a lead-spawned teammate run with the same id
+    const t = own && ownFile.has(a.id) ? { file: ownFile.get(a.id) } : transcripts.get(a.id);
     const st = t ? statusOf(t.file, entry.path, events) : null;
     // a teammate's runs live under the lead's session: those from the lead's last session are its real last state
     const withLead = a !== lead && !own && !!t && !!leadSession && tx.parentSession(t.file) === leadSession;
