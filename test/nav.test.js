@@ -93,3 +93,11 @@ test('soak: 8 characters walking for 10 simulated minutes never touch an obstacl
   }
   assert.ok(arrivals > 80, `the characters keep moving (${arrivals} arrivals)`);
 });
+
+test('Edit Mode judges only what the moved piece causes', () => {
+  const layout = { desks: [{ agent: 'a', x: 0, z: -3, ry: 0 }, { agent: 'b', x: 4, z: -3, ry: 0 }], devices: [{ id: 'plant-1', type: 'plant', x: 4, z: -3.4 }] };
+  const c = nav.checkLayout(layout);
+  assert.deepEqual(nav.problemsOf(c, 'a'), [], 'desk a is fine');
+  assert.equal(nav.problemsOf(c, 'plant-1').length, 1, 'the plant stands in desk b');
+  assert.equal(nav.problemsOf(c, 'b')[0].with, 'b');
+});

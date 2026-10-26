@@ -11,6 +11,7 @@ import { makeScreen, drawScreen } from './screens.js';
 import { loungeSpots, updateLife, deskHome, seatRoot, MEETING_SEATS, meetingSeats } from './life.js';
 import { Quality, contactShadow } from './render.js';
 import { loadKit, kit, kitStamp } from './kit.js';
+import { NavGrid, footprints } from './nav.js';
 import { deskProps, propsFor } from './props.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -366,6 +367,27 @@ function poseDesk(st, t, awake = false) {
   }
 }
 
+// ?nav=1: the walkable grid (blocked cells in red) and the paths characters walk (navigation debug overlay)
+const NAV_DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('nav') === '1';
+function navOverlay(grid) {
+  const n = grid.blocked.reduce((a, b) => a + b, 0);
+  const m = new THREE.InstancedMesh(new THREE.PlaneGeometry(grid.cell * .9, grid.cell * .9), basic('#dc2626', { transparent: true, opacity: .28, depthWrite: false }), n);
+  const q = new THREE.Object3D(); let k = 0;
+  for (let j = 0; j < grid.h; j++) for (let i = 0; i < grid.w; i++) if (grid.blocked[j * grid.w + i]) { const c = grid.centre(i, j); q.position.set(c.x, TOP + .03, c.z); q.rotation.x = -Math.PI / 2; q.updateMatrix(); m.setMatrixAt(k++, q.matrix); }
+  m.userData.navDebug = true;
+  return m;
+}
+function drawPaths(o) {
+  if (!o.pathLine) { o.pathLine = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: '#2563eb' })); o.g.add(o.pathLine); }
+  const pts = [];
+  for (const st of o.stations.values()) {
+    const w = st.life?.walker; if (!w) continue;
+    let a = { x: w.x, z: w.z };
+    for (const b of w.path) { pts.push(a.x, TOP + .06, a.z, b.x, TOP + .06, b.z); a = b; }
+  }
+  o.pathLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+}
+
 // ---------- floors ----------
 function sigOf(f) {
   return JSON.stringify([kitStamp(), f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf])]);
@@ -529,6 +551,9 @@ export class BuildingScene {
       chip.addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
     });
     o.spots = loungeSpots(f.devices || []);
+    // the walkable grid of this Floor: desks, chairs and devices with their real footprints (rebuilt with the Floor)
+    o.nav = new NavGrid(footprints({ desks, devices: f.devices || [] }));
+    if (NAV_DEBUG) g.add(navOverlay(o.nav));
     o.seats = meetingSeats(f.devices || []);
     o.occupied = new Map();
     if (f.missing) label('Directory not found', 'alabel warnlabel', g, 0, 1.4, 0);
@@ -584,6 +609,15 @@ export class BuildingScene {
     h.getWorldPosition(head); head.y += 1.5;
     const fwd = new THREE.Vector3(Math.sin(h.rotation.y), 0, Math.cos(h.rotation.y));
     const want = head.clone().addScaledVector(fwd, -3.2).add(new THREE.Vector3(0, 2.4, 0)).addScaledVector(new THREE.Vector3(fwd.z, 0, -fwd.x), 1.9);
+    // never through walls or furniture: a ray from the head to the wanted spot; the camera stops in front of the first hit
+    if (!this.followRay || performance.now() - this.followRay.at > 100) {
+      const o = this.floors.get(this.view.floorId), dir = want.clone().sub(head), len = dir.length();
+      this.ray.set(head, dir.normalize()); this.ray.far = len;
+      const hits = this.ray.intersectObjects(o.g.children.filter((c) => c !== st.human && c.visible), true).filter((h) => h.object.isMesh && !h.object.userData.contact && h.object.material?.opacity !== 0);
+      this.followRay = { at: performance.now(), dist: hits.length ? Math.max(.6, hits[0].distance - .25) : len };
+      this.ray.far = Infinity;
+    }
+    want.copy(head).add(want.clone().sub(head).setLength(Math.min(want.distanceTo(head), this.followRay.dist)));
     const k = this.followReady ? Math.min(1, dt * 2.5) : 1;                // eases after the agent, no jumps
     this.persp.position.lerp(want, k);
     this.followTarget = this.followReady ? this.followTarget.lerp(head, Math.min(1, dt * 4)) : head.clone();
@@ -775,6 +809,8 @@ export class BuildingScene {
     return { x: p.x, z: p.z };
   }
 
+  // Edit Mode: the selection ring turns red while the piece would overlap something or block a desk
+  warnSelection(on) { if (this.ring) this.ring.material.color.set(on ? '#dc2626' : '#b7852a'); }
   select(floorId, sel) {
     if (!this.ring) {
       this.ring = new THREE.Mesh(new THREE.RingGeometry(.95, 1.1, 40), basic('#b7852a', { transparent: true, opacity: .9, side: THREE.DoubleSide, depthTest: false }));
@@ -848,12 +884,14 @@ export class BuildingScene {
     for (const [fid, o] of this.floors) {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
+      // characters away from their desks are moving obstacles for each other
+      const others = [...o.stations.values()].filter((x) => x.life && x.life.mode !== 'desk').map((x) => ({ id: x.id, x: x.human.position.x, z: x.human.position.z, moving: /walk|return/i.test(x.life.mode) }));
       for (const st of o.stations.values()) {
         // a meeting at the table (from the Log): the agents involved take a seat, except one that waits for the owner
         const mt = near && o.data?.meeting && o.data.meeting.until > Date.now() ? o.data.meeting : null;
         const k = mt && st.state !== 'waiting' ? mt.agents.indexOf(st.id) : -1;
         const meeting = k >= 0 && o.seats[k] ? { ...o.seats[k], label: mt.label } : null;
-        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
+        const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, nav: o.nav, others, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
         if (/walk|return/i.test(st.life?.mode || '')) walking = true;
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
@@ -874,6 +912,7 @@ export class BuildingScene {
       if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;
     }
     this.walking = walking;
+    if (NAV_DEBUG) for (const o of this.floors.values()) if (o.g.visible) drawPaths(o);
     this.updateRacks(t);
     this.handlers.onFrame?.(t);
     if (v.eyes) this.updatePov(dt); else if (v.follow) this.updateFollow(dt); else this.controls.update();

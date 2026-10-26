@@ -246,11 +246,11 @@ export function checkLayout(layout, { entrance = { x: 0, z: 5.6 } } = {}) {
   for (let i = 0; i < rects.length; i++) for (let k = i + 1; k < rects.length; k++) {
     const a = rects[i], b = rects[k];
     if (a.id === b.id) continue;
-    if (overlap(a, b)) problems.push({ id: b.id.replace(/^desk:/, ''), reason: `overlaps ${a.id.replace(/^desk:/, '')}` });
+    if (overlap(a, b)) problems.push({ id: b.id.replace(/^desk:/, ''), with: a.id.replace(/^desk:/, ''), reason: `overlaps ${a.id.replace(/^desk:/, '')}` });
   }
   const outside = rects.filter((r) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].some(([sx, sz]) => { const c = rot(sx * r.hw, sz * r.hd, r.ry); const x = r.cx + c.x, z = r.cz + c.z; return x < ROOM.x0 || x > ROOM.x1 || z < ROOM.z0 || z > ROOM.z1; }));
   for (const r of outside) problems.push({ id: r.id.replace(/^desk:/, ''), reason: 'stands outside the room' });
-  if (!problems.length) {
+  {
     const grid = new NavGrid(rects);
     for (const d of layout.desks || []) {
       const back = rot(0, -.95 * STATION_SCALE, d.ry || 0);           // where the agent stands up, behind its chair
@@ -259,3 +259,5 @@ export function checkLayout(layout, { entrance = { x: 0, z: 5.6 } } = {}) {
   }
   return { ok: !problems.length, problems };
 }
+// the problems a moved piece (desk agent id or device id) is part of
+export const problemsOf = (check, id) => check.problems.filter((p) => p.id === id || p.with === id);

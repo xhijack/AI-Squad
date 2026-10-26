@@ -1,6 +1,7 @@
 // Office life: idle agents get up, walk to a lounge spot (sofa, coffee machine, whiteboard, bookshelf)
 // and run back to their desk when work or a question arrives. Ported and simplified from squad-3d.
 import { HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
+import { Walker } from './nav.js';
 
 export const WANDER_AFTER = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo') ? 2 : 20;   // seconds idle before getting up (?demo: 2)
 const WALK = 1.3, RUN = 3.6;               // m/s
@@ -43,7 +44,12 @@ export function deskHome(st) {
 }
 const behindDesk = (st) => { const o = rot(0, -.95 * st.g.scale.x, st.g.rotation.y); return { x: st.g.position.x + o.x, z: st.g.position.z + o.z }; };
 
-function startWalk(st, points, run) { st.life.path = points.map((p) => ({ x: p.x, z: p.z })); st.life.run = run; }
+// a walk: a route through the Floor's grid to the first point (around furniture and the other characters), then a
+// short straight "docking" step into the seat or spot. Without a grid (no Floor data yet) the walk is straight.
+function startWalk(st, points, run) {
+  const L = st.life;
+  Object.assign(L, { target: { x: points[0].x, z: points[0].z }, dock: points.slice(1).map((p) => ({ x: p.x, z: p.z })), path: [], walker: null, run });
+}
 
 // the shortest turn from angle a towards b, at most k (0..1) of the way per frame
 export function turnTowards(a, b, k) {
@@ -52,6 +58,23 @@ export function turnTowards(a, b, k) {
 }
 function moveAlong(st, dt) {
   const L = st.life, h = st.human;
+  if (L.target) {
+    if (!L.nav) { L.path = [L.target, ...L.dock]; L.target = null; }
+    else {
+      if (!L.walker) {
+        L.walker = new Walker(st.id, h.position.x, h.position.z);
+        if (!L.walker.goTo(L.nav, L.target, L.others || [])) { L.path = [L.target, ...L.dock]; L.target = null; L.walker = null; }   // no route at all: straight (Edit Mode prevents this)
+      }
+      if (L.walker) {
+        const w = L.walker, x0 = w.x, z0 = w.z;
+        const r = w.step(L.nav, L.others || [], dt, L.run ? RUN : WALK);
+        h.position.x = w.x; h.position.z = w.z;
+        if (Math.hypot(w.x - x0, w.z - z0) > 1e-4) h.rotation.y = turnTowards(h.rotation.y, Math.atan2(w.x - x0, w.z - z0), dt * 10);
+        if (r === 'arrived') { L.path = [...L.dock]; L.target = null; L.walker = null; }
+        return false;
+      }
+    }
+  }
   let step = (L.run ? RUN : WALK) * dt;
   while (step > 0 && L.path.length) {
     const tg = L.path[0], dx = tg.x - h.position.x, dz = tg.z - h.position.z, d = Math.hypot(dx, dz);
@@ -126,8 +149,9 @@ function poseMeeting(st, t) {
 // one frame. wantsDesk: working, waiting or stopped. occupied: Map spot.id -> agent id (per Floor).
 // meeting: { x, z, face, label } while the agent is in a meeting at the table (overrides desk and lounge).
 // Returns the lounge or meeting label while away, or '' at the desk.
-export function updateLife(st, { t, dt, wantsDesk, spots, occupied, poseDesk, meeting = null }) {
+export function updateLife(st, { t, dt, wantsDesk, spots, occupied, poseDesk, meeting = null, nav = null, others = [] }) {
   const L = st.life || (st.life = { mode: 'desk', idleSince: 0 });
+  L.nav = nav; L.others = others;                          // the Floor's grid and where the other characters are
   if (meeting) {
     if (L.mode !== 'meetWalk' && L.mode !== 'meet') {
       if (L.spot && occupied.get(L.spot.id) === st.id) occupied.delete(L.spot.id);
