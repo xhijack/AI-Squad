@@ -34,6 +34,8 @@ import * as rituals from './rituals.js';
 import * as ship from './ship.js';
 import * as design from './design.js';
 import * as voice from './voice.js';
+import * as usageLib from './usage.js';
+import * as backupLib from './backup.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -385,7 +387,7 @@ function floorState(entry, opts = {}) {
   const squad = squadOf(entry.path, cfg.floor);
   const lives = liveAgents(entry, cfg.team, sessions, { ...opts, squad });
   const cost = costFor(entry.id, entry.path);
-  return { entry, cfg, lives, cost, squad, attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
+  return { entry, cfg, lives, cost, squad, usage: opts.usage || null, attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
 }
 
 const round2 = (n) => +(+n || 0).toFixed(2);
@@ -395,7 +397,8 @@ function summary(fs_) {
   if (fs_.missing) return { id: entry.id, number: entry.number, path: entry.path, missing: true, name: path.basename(entry.path), error: fs_.error || 'Directory not found', agents: [], attention: 0 };
   const { cfg, lives, cost } = fs_;
   const repoList = reposLib.readRepos(entry.path);
-  const agents = lives.map((l) => ({ ...agentView(entry.path, l, cost), repos: repoList.filter((r) => r.access === 'write' && r.agents.includes(l.agent.id)).map((r) => r.id) }));
+  const agents = lives.map((l) => ({ ...agentView(entry.path, l, cost), repos: repoList.filter((r) => r.access === 'write' && r.agents.includes(l.agent.id)).map((r) => r.id),
+    usage: (l.running && fs_.usage?.get(l.session)) || null }));      // RAM and CPU of its processes (server/usage.js)
   const count = (s) => agents.filter((a) => a.state === s).length;
   const asks = fs_.attention.filter((a) => !a.muted);
   const lamp = asks.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
@@ -427,10 +430,12 @@ export function buildingSnapshot() {
   if (Date.now() - snapCache.at < 1500 && snapCache.value) return snapCache.value;
   const b = building.loadBuilding();
   const sessions = tm.listSessions();
-  const states = b.floors.map((e) => floorState(e, { sessions }));
+  const usage = usageLib.sessionsUsage(sessions, meter.state.tree, tm.panePids);
+  const states = b.floors.map((e) => floorState(e, { sessions, usage }));
   const res = wd.readResources();
   const attention = [
     ...wd.resourceWarnings(res).map((w) => ({ id: attId('resource', w.key), kind: 'resource', floorId: null, text: w.text, ts: res.ts })),
+    ...backupLib.backupAlerts(b.prefs.backup).map((w) => ({ id: attId('backup', w.key), kind: 'backup', floorId: null, text: w.text, ts: Date.now() })),
     ...states.flatMap((s) => s.attention || []),
   ];
   for (const s of states) if (s.budget?.level === 'warn') attention.push({ id: attId('budget-warn', s.entry.id), kind: 'budget', level: 'warn', floorId: s.entry.id, floorNumber: s.entry.number, floorName: s.cfg.floor.name, text: `Budget at ${s.budget.pct} %: $${s.budget.used.toFixed(2)} of $${s.cfg.floor.budget.usd} this ${s.cfg.floor.budget.period}`, ts: Date.now() });
@@ -445,6 +450,8 @@ export function buildingSnapshot() {
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
+    // agents running at once on this machine and what one session needs in RAM (measured)
+    limits: { maxAgents: recovery.buildingMax(b.prefs), running: sessions.length, session: usageLib.summary() },
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
       projectsDir: suggestProjectsDir(b), autopilot: { levels: autopilot.LEVELS, text: autopilot.LEVEL_TEXT, hardStop: autopilot.hardStopList(), defaultLevel: autopilot.DEFAULT_LEVEL } },
@@ -472,7 +479,7 @@ function suggestProjectsDir(b) {
 // Watchdog alerts (stall, budget, resources) are recomputed on every snapshot; remember when each
 // one first appeared so "since" stays stable, and report new ones once.
 const firstSeen = new Map();
-export const WATCH_KINDS = new Set(['stall', 'budget', 'resource', 'merge']);
+export const WATCH_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'backup']);
 function stampAlerts(items, onNew = null) {
   const now = Date.now(), live = new Set();
   for (const a of items) {
@@ -489,6 +496,7 @@ const reported = new Set();
 export function watchdogTick(log = console.log) {
   snapCache.at = 0;
   const snap = buildingSnapshot();
+  try { usageLib.record(usageLib.sessionsUsage(tm.listSessions(), meter.state.tree, tm.panePids)); } catch { /* no /proc */ }
   const live = new Set();
   for (const a of snap.attention) {
     live.add(a.id);
@@ -568,6 +576,7 @@ export function deskDetail(floorId, agentId) {
     skills: (effective?.skills || []).map((n) => skillsLib.skillStatus(entry.path, n)),
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(),
+    usage: l.running && l.own ? usageLib.usageOf(meter.state.tree, tm.panePids(l.session)) : null,     // RAM and CPU of its processes
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
     attach: tm.attachCommand(l.session),
   };
@@ -592,8 +601,9 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
   const { entry, cfg, agent, name } = locate(floorId, agentId);
   if (guard && !tm.isRunning(name)) {
     snapCache.at = 0;
-    const running = buildingSnapshot().floors.find((f) => f.id === floorId)?.agents.filter((a) => a.running).length || 0;
-    const warnings = recovery.startWarnings({ res: wd.readResources(), running, maxAgents: cfg.floor.recovery.maxAgents });
+    const snap = buildingSnapshot();
+    const running = snap.floors.find((f) => f.id === floorId)?.agents.filter((a) => a.running).length || 0;
+    const warnings = recovery.startWarnings({ res: wd.readResources(), running, maxAgents: cfg.floor.recovery.maxAgents, buildingRunning: snap.limits.running, buildingMax: snap.limits.maxAgents });
     if (warnings.length) throw Object.assign(new HttpError(409, `${warnings.join(' ')} Start anyway?`), { data: { warnings } });
   }
   floors.generate(entry.path);                          // agent file is current before Claude reads it

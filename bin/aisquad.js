@@ -8,6 +8,10 @@
 //   aisquad uninstall    remove the systemd user service / launchd agent
 //   aisquad audit [floor] [--sprint N] [--model sonnet]   audit a Floor from its Squad Log (claude -p)
 //   aisquad audit export anonymised bundle of audits and decisions in ~/.aisquad/exports (never uploaded)
+//   aisquad backup [--out DIR|FILE] [--with-secrets] [--no-logs] [--passphrase-env VAR]   back up the Building
+//   aisquad verify FILE [--passphrase-env VAR]            check that a backup reads back
+//   aisquad restore FILE [--dry-run] [--force] [--relink OLD=NEW]... [--projects-dir DIR] [--no-clone] [--passphrase-env VAR]
+//   aisquad doctor                                        check this machine and the Building
 // The server runs as a systemd user service (aisquad.service) where systemd exists, as a launchd agent on
 // macOS, otherwise as a detached process, so it survives closing the terminal or editor.
 // Options: --port 8097  --host 127.0.0.1  --no-open
@@ -143,7 +147,68 @@ async function audit() {
   console.log(`Report: ${path.join(dir, `${a.id}.md`)}. Open the Floor's Audit dialog to apply or dismiss proposed changes.`);
 }
 
+// ---------- backup, verify, restore, doctor ----------
+const flag = (k) => args.includes(k);
+const many = (k) => args.flatMap((a, i) => (a === k && args[i + 1] ? [args[i + 1]] : []));
+const fileArg = (name) => { const i = args.indexOf(name); return args.slice(i + 1).find((a, j, rest) => !a.startsWith('--') && !(j > 0 && /^--(out|relink|projects-dir|passphrase-env)$/.test(rest[j - 1]))); };
+const size = (n) => (n > 2 ** 20 ? `${(n / 2 ** 20).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
+async function passphrase() {
+  const env = opt('--passphrase-env', '');
+  if (env) { if (!process.env[env]) throw new Error(`The environment variable ${env} is empty`); return process.env[env]; }
+  const backup = await import('../server/backup.js');
+  return backup.storedPassphrase();
+}
+async function backupCmd() {
+  const backup = await import('../server/backup.js');
+  const r = backup.createBackup({ out: opt('--out', ''), passphrase: await passphrase(), secrets: flag('--with-secrets'), logs: !flag('--no-logs') });
+  console.log(`Backup written: ${r.file} (${size(r.size)}, ${r.files} files, ${r.floors} Floor${r.floors === 1 ? '' : 's'}, ${r.encrypted ? 'encrypted' : 'not encrypted, no secrets'}).`);
+  for (const w of r.warnings) console.log(`  ! ${w}`);
+  console.log('Repositories are not inside: they come back from their git remotes. Keep the backup off this machine (a USB disk, a synced folder).');
+}
+async function verifyCmd() {
+  const backup = await import('../server/backup.js');
+  const file = fileArg('verify');
+  if (!file) { console.log('Usage: aisquad verify <backup file>'); process.exitCode = 1; return; }
+  const r = backup.verifyBackup(path.resolve(file), { passphrase: await passphrase() });
+  console.log(r.ok ? `The backup reads back: ${r.files} files, ${r.floors} Floor${r.floors === 1 ? '' : 's'}, made ${r.createdAt}.` : `The backup does not read back:\n  ${r.errors.slice(0, 10).join('\n  ')}`);
+  if (!r.ok) process.exitCode = 1;
+}
+async function restoreCmd() {
+  const backup = await import('../server/backup.js');
+  const file = fileArg('restore');
+  if (!file) { console.log('Usage: aisquad restore <backup file> [--dry-run] [--force] [--relink OLD=NEW] [--projects-dir DIR] [--no-clone]'); process.exitCode = 1; return; }
+  const relink = Object.fromEntries(many('--relink').map((x) => x.split('=')).filter((x) => x.length === 2 && x[0] && x[1]));
+  const opts = { passphrase: await passphrase(), relink, projectsDir: opt('--projects-dir', ''), force: flag('--force'), clone: !flag('--no-clone') };
+  const plan = backup.planRestore(path.resolve(file), opts);
+  console.log(`Backup of ${plan.manifest.host}, made ${plan.manifest.createdAt} by The AI Squad ${plan.manifest.aisquadVersion}: ${plan.homeFiles} files, ${plan.floors.length} Floor${plan.floors.length === 1 ? '' : 's'}, ${plan.memory} memory file${plan.memory === 1 ? '' : 's'}.`);
+  for (const f of plan.floors) console.log(`  ${f.number}. ${f.id}: ${f.to} -> ${{ present: 'already there', clone: `clone ${f.remote}${f.branch ? ` (${f.branch})` : ''}`, missing: 'MISSING (no remote)' }[f.action]}`);
+  for (const w of plan.warnings) console.log(`  ! ${w}`);
+  if (plan.errors.length) { console.log(`The backup is damaged: ${plan.errors.slice(0, 5).join(', ')}`); process.exitCode = 1; return; }
+  if (flag('--dry-run')) { console.log(`Dry run: nothing changed.${plan.homeExists ? ` ${config.home} is not empty: the restore needs --force (the current folder is kept).` : ''}`); return; }
+  if (await get('/api/building')) { console.log('The server is running: run /aisquad stop first, then restore again.'); process.exitCode = 1; return; }
+  const r = backup.restore(path.resolve(file), opts);
+  const { migrate } = await import('../server/schema.js');
+  migrate();
+  console.log(`Restored ${r.written} files into ${config.home}${r.previous ? ` (the previous folder is kept as ${r.previous})` : ''}, ${r.memory} memory file${r.memory === 1 ? '' : 's'}.`);
+  for (const f of r.floors) console.log(`  ${f.id}: ${f.result} (${f.to})`);
+  for (const w of r.warnings) console.log(`  ! ${w}`);
+  console.log('Auto-merge approvals are not restored: approve them again per Floor. Then check the machine:');
+  await doctorCmd();
+}
+async function doctorCmd() {
+  const { runDoctor, doctorText } = await import('../server/doctor.js');
+  const r = runDoctor({ service: service.status() });
+  const v = await get('/api/version');
+  console.log(doctorText(r));
+  console.log(v ? `Server: running ${v.version}${v.version === VERSION && v.root === ROOT ? '' : ' (outdated: run /aisquad to restart it)'}` : 'Server: not running (run /aisquad to start it)');
+  if (!r.ok) process.exitCode = 1;
+}
+
 async function main() {
+  if (cmd === 'backup') return backupCmd();
+  if (cmd === 'verify') return verifyCmd();
+  if (cmd === 'restore') return restoreCmd();
+  if (cmd === 'doctor') return doctorCmd();
   if (cmd === 'audit') return audit();
   if (cmd === 'status') return status();
   if (cmd === 'stop') {
@@ -156,7 +221,7 @@ async function main() {
     return console.log(r.removed ? `Removed the ${r.mode === 'systemd' ? 'aisquad.service user service' : 'launchd agent'}; the server is stopped. ~/.aisquad and your Floors are untouched.` : 'No service was installed.' + (r.stopped ? ' The detached server was stopped.' : ''));
   }
   if (cmd !== 'start' && cmd !== 'new-floor' && cmd !== 'open') {
-    console.log('Usage: aisquad [start | new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export] [--port 8097] [--host 127.0.0.1] [--no-open]');
+    console.log('Usage: aisquad [start | new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export | backup | verify FILE | restore FILE | doctor] [--port 8097] [--host 127.0.0.1] [--no-open]');
     process.exitCode = 1;
     return;
   }

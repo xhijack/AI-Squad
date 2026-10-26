@@ -19,6 +19,9 @@ import * as blueprints from './blueprints.js';
 import { recommend } from './recommend.js';
 import { createSquad, squadsDir } from './setup.js';
 import * as voice from './voice.js';
+import * as backup from './backup.js';
+import { runDoctor } from './doctor.js';
+import * as service from './service.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -77,9 +80,17 @@ const routes = [
   ['GET', /^\/api\/meter$/, () => meter.detail()],
   ['PATCH', /^\/api\/building$/, (p, b) => {
     if (b.name !== undefined) building.setBuildingName(b.name);
+    // agents running at once on the whole machine; nightly backups
+    if (b.maxAgents !== undefined) building.setPrefs({ maxAgents: Math.max(1, Math.min(40, parseInt(b.maxAgents, 10) || 6)) });
+    if (b.backup !== undefined) building.setPrefs({ backup: backup.cleanSettings({ ...building.loadBuilding().prefs.backup, ...b.backup }) });
+    if (b.backupPassphrase !== undefined) backup.setPassphrase(String(b.backupPassphrase || ''));
     if (b.squadsDir !== undefined) { if (!path.isAbsolute(String(b.squadsDir))) throw new HttpError(400, 'The squads folder must be an absolute path'); building.setPrefs({ squadsDir: path.resolve(String(b.squadsDir)) }); }
     squad.invalidate(); return { ok: true };
   }, { pin: true }],
+  ['GET', /^\/api\/doctor$/, () => runDoctor({ service: (() => { try { return service.status(); } catch { return null; } })() }), { pin: true }],
+  ['GET', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); return { settings: s, defaultDir: backup.defaultDir(), status: backup.readStatus(), encrypted: !!backup.storedPassphrase(), backups: backup.listBackups(s.dir || backup.defaultDir()).slice(0, 30) }; }, { pin: true }],
+  ['POST', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const r = backup.createBackup({ out: s.dir || backup.defaultDir(), passphrase: backup.storedPassphrase(), logs: s.logs }); return { ok: true, ...r }; }, { pin: true }],
+  ['POST', /^\/api\/backups\/verify$/, (p, b) => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const dir = s.dir || backup.defaultDir(); const f = backup.listBackups(dir).find((x) => x.name === String(b.name || '')); if (!f) throw notFound('Backup not found'); return backup.verifyBackup(f.file, { passphrase: backup.storedPassphrase() }); }, { pin: true }],
   ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => b), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber() })],
   ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
   ['POST', /^\/api\/floors\/([\w-]+)\/skills\/install$/, ([id], b) => squad.installSkills(id, b.names || b.name), { pin: true }],
