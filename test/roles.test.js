@@ -14,7 +14,7 @@ test('default templates are seeded and parsed', () => {
     'project-manager', 'qa-engineer', 'sales-analyst', 'sales-copywriter', 'sales-manager', 'seo-specialist', 'social-media-specialist', 'sprint-developer', 'sprint-lead', 'sprint-qa', 'ui-ux-designer']);
   assert.equal(roles.getTemplate('sales-manager').category, 'sales');
   const t = roles.getTemplate('frappe-developer');
-  assert.equal(t.version, 2);
+  assert.equal(t.version, 3);
   assert.ok(t.rules.length >= 3);
   assert.match(t.prompt, /Frappe developer/);
   assert.ok(t.permissions.deny.includes('Bash(git push*)'));
@@ -23,10 +23,10 @@ test('default templates are seeded and parsed', () => {
 test('saving changed content bumps the version and keeps history', () => {
   const r = roles.saveTemplate({ role: 'qa-engineer', rules: [...roles.getTemplate('qa-engineer').rules, 'Attach screenshots to UI bugs.'] });
   assert.equal(r.changed, true);
-  assert.equal(r.template.version, 3);
-  assert.deepEqual(roles.templateVersions('qa-engineer'), [2, 3]);
-  assert.match(roles.templateText('qa-engineer', 2), /version: 2/);
-  assert.doesNotMatch(roles.templateText('qa-engineer', 2), /screenshots/);
+  assert.equal(r.template.version, 4);
+  assert.deepEqual(roles.templateVersions('qa-engineer'), [3, 4]);
+  assert.match(roles.templateText('qa-engineer', 3), /version: 3/);
+  assert.doesNotMatch(roles.templateText('qa-engineer', 3), /screenshots/);
 });
 
 test('saving identical content does not bump', () => {

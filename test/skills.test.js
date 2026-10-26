@@ -13,15 +13,15 @@ import { parseFrontmatter } from '../server/frontmatter.js';
 import { createSquad } from '../server/setup.js';
 
 const root = scratch();
-const MIN = { 'project-manager': ['source-docs-intake', 'sprint-planning', 'handoff-review'], 'fullstack-developer': ['implement-from-spec', 'tdd', 'handoff-writing'],
-  'qa-engineer': ['test-plan-from-acceptance', 'ui-evidence', 'bug-report'], 'ui-ux-designer': ['design-fidelity-map', 'design-review', 'accessibility-check'],
+const MIN = { 'project-manager': ['source-docs-intake', 'sprint-planning', 'handoff-review'], 'fullstack-developer': ['implement-from-spec', 'tdd', 'handoff-writing', 'investigate'],
+  'qa-engineer': ['test-plan-from-acceptance', 'ui-evidence', 'bug-report', 'investigate'], 'ui-ux-designer': ['design-fidelity-map', 'design-review', 'accessibility-check'],
   'devops-engineer': ['environment-matrix', 'deploy-and-rollback', 'secrets-hygiene', 'server-discovery', 'staging-install', 'docker-ops', 'git-deploy', 'netlify-setup', 'server-health'] };
 const MARKETING = ['marketing-brief-intake', 'seo-audit', 'content-calendar', 'brand-voice-check', 'campaign-report'];
 const SALES = ['icp-intake', 'lead-qualification', 'crm-hygiene', 'outreach-copy', 'pipeline-report'];
 
 test('every skill a Role Template lists is bundled, in the standard format', () => {
   const bundled = skills.bundledSkills().map((s) => s.name);
-  assert.equal(bundled.length, 32);
+  assert.equal(bundled.length, 33);
   for (const [role, list] of Object.entries(MIN)) for (const s of list) assert.ok(listTemplates().find((t) => t.role === role).skills.includes(s), `${role} lists ${s}`);
   const listed = new Set([...listTemplates().flatMap((t) => t.skills), ...MARKETING, ...SALES]);
   for (const s of listed) if (!['frappe', 'erpnext'].includes(s)) assert.ok(bundled.includes(s), `${s} is bundled`);
@@ -54,14 +54,14 @@ test('status: bundled until installed in the project; user skills are seen too; 
   assert.deepEqual(skills.skillStatus(proj, 'tdd'), { name: 'tdd', status: 'bundled', description: skills.bundledSkills().find((s) => s.name === 'tdd').description, installable: true });
   assert.equal(skills.skillStatus(proj, 'frappe').status, 'missing');
   let agentFile = parseFrontmatter(fs.readFileSync(path.join(proj, '.claude/agents/budi-dev.md'), 'utf8'));
-  assert.equal(agentFile.data.skills, 'aisquad:implement-from-spec, aisquad:tdd, aisquad:handoff-writing', 'the plugin copy is namespaced');
+  assert.equal(agentFile.data.skills, 'aisquad:implement-from-spec, aisquad:tdd, aisquad:handoff-writing, aisquad:investigate', 'the plugin copy is namespaced');
   const desk = squad.deskDetail('shop', 'budi-dev');
-  assert.deepEqual(desk.skills.map((s) => [s.name, s.status]), [['implement-from-spec', 'bundled'], ['tdd', 'bundled'], ['handoff-writing', 'bundled']]);
+  assert.deepEqual(desk.skills.map((s) => [s.name, s.status]), [['implement-from-spec', 'bundled'], ['tdd', 'bundled'], ['handoff-writing', 'bundled'], ['investigate', 'bundled']]);
   squad.installSkills('shop', ['tdd']);
   assert.ok(fs.existsSync(path.join(proj, '.claude/skills/tdd/SKILL.md')));
   assert.equal(skills.skillStatus(proj, 'tdd').status, 'project');
   agentFile = parseFrontmatter(fs.readFileSync(path.join(proj, '.claude/agents/budi-dev.md'), 'utf8'));
-  assert.equal(agentFile.data.skills, 'aisquad:implement-from-spec, tdd, aisquad:handoff-writing');
+  assert.equal(agentFile.data.skills, 'aisquad:implement-from-spec, tdd, aisquad:handoff-writing, aisquad:investigate');
   fs.writeFileSync(path.join(proj, '.claude/skills/tdd/SKILL.md'), 'mine');
   assert.deepEqual(skills.install(proj, 'tdd'), { name: 'tdd', installed: false, already: true });
   assert.equal(fs.readFileSync(path.join(proj, '.claude/skills/tdd/SKILL.md'), 'utf8'), 'mine');
