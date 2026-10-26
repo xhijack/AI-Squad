@@ -126,3 +126,19 @@ test('runAudit with claude -p: schema, skill, cost; files and history; errors ar
   assert.deepEqual(audit.historyOf('pos').map((h) => [h.findings, h.trend.passRate, !!h.error]), [[2, 0.5, false], [0, null, true]]);
   delete process.env.FAKE_CLAUDE_MODE;
 });
+
+test('Autopilot section: decisions, the owner\'s changes, critical decisions and the waiting saved', () => {
+  put(50, 'autopilot.decided', { sprint: 2, agent: 'rina-pm', data: { by: 'server timeout', question: 'Which runner?', option: 'Vitest', critical: false, waitedMs: 180000 } });
+  put(51, 'autopilot.decided', { sprint: 2, data: { by: 'lead', question: 'Sort by date?', critical: false } });
+  put(52, 'autopilot.decided', { sprint: 2, data: { by: 'lead', question: 'Raise the price to Rp 99.000?', critical: true, reasons: ['money'] } });
+  put(53, 'autopilot.changed', { sprint: 2, agent: 'rina-pm', data: { question: 'Which runner?', from: 'Vitest', to: 'Jest' } });
+  put(54, 'autopilot.blocked', { sprint: 2, data: { kind: 'question', question: 'Deploy to production?', reasons: ['production'] } });
+  put(55, 'question.answered', { sprint: 2, agent: 'rina-pm', data: { channel: 'AskUserQuestion', answer: 'x', waitMs: 600000 } });
+  const { events } = audit.rangeEvents('pos', { sprint: 2 });
+  const m = audit.metrics(events, INFO);
+  assert.deepEqual(m.autopilot, { decided: 3, byServer: 1, byLead: 2, changed: 1, changeRate: 0.33, criticalDecided: 1, blocked: 1, nudges: 0, timeSavedMin: 27 });
+  const d = audit.digest(events, m, { ...INFO, floorId: 'pos', label: 'sprint 2' });
+  assert.match(d.text, /## Autopilot/); assert.match(d.text, /autopilot\.criticalDecided \| 1 critical items decided without the owner \(must be 0\)/);
+  assert.ok(Object.values(d.refs).some((id) => events.find((e) => e.id === id)?.data.critical), 'the critical decision is cited');
+  assert.ok(audit.FLOOR_SETTINGS.includes('autopilot'));
+});

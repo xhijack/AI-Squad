@@ -82,6 +82,7 @@ const SETTINGS = {
   'sprint.autoNext': { parse: (v) => /^(true|on|yes|1)$/i.test(String(v)), patch: (v) => ({ sprint: { autoNext: v } }), get: (f) => f.sprint.autoNext },
   'audit.model': { parse: (v) => { if (!['sonnet', 'haiku', 'opus'].includes(v)) throw bad('Unknown model'); return v; }, patch: (v) => ({ audit: { model: v } }), get: (f) => f.audit.model },
   'log.messages': { parse: (v) => /^(true|on|yes|1)$/i.test(String(v)), patch: (v) => ({ log: { messages: v } }), get: (f) => f.log.messages },
+  autopilot: { parse: (v) => { if (!['off', 'balanced', 'full'].includes(v)) throw bad('Autopilot level must be off, balanced or full'); return v; }, patch: (v) => ({ autopilot: v }), get: (f) => f.autopilot },
 };
 
 // floor: { id, root, config: floor.json (cleaned) } -> { kind, id, fromVersion, toVersion, diff, applicable, reason }

@@ -75,6 +75,16 @@ test('floor settings, advice-only findings and dismissals', () => {
   assert.equal(improve.decisionsFor('pos', '2026-10-26T12-00-00Z').F2.decision, 'dismissed');
 });
 
+test('an audit can propose the Autopilot level as a Floor setting', () => {
+  saveAudit('2026-10-26T13-00-00Z', [
+    finding('F1', { kind: 'floor-setting', id: 'pos', proposedChange: change({ setting: 'autopilot', value: 'off' }) }),
+    finding('F2', { kind: 'floor-setting', id: 'pos', proposedChange: change({ setting: 'autopilot', value: 'turbo' }) }),
+  ]);
+  const F = { ...FLOOR, config: { ...FLOOR.config, autopilot: 'balanced' } };
+  assert.deepEqual(improve.proposal(F, '2026-10-26T13-00-00Z', 'F1').diff, [{ op: '-', text: 'autopilot: "balanced"' }, { op: '+', text: 'autopilot: "off"' }]);
+  assert.equal(improve.proposal(F, '2026-10-26T13-00-00Z', 'F2').applicable, false);
+});
+
 test('the next audit records the metrics after each applied change', () => {
   const next = saveAudit('2026-10-27T09-00-00Z', [], metricsOf(0.06, 0.75));
   const out = improve.recordOutcomes('pos', next);

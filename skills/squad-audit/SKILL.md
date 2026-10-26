@@ -15,6 +15,7 @@ You review one squad's work for The AI Squad. You get a **digest**: metric table
    - Cost and tokens per story point, per module and per agent; cache hit rate; share of cost by model; turns per module.
    - Waste: the same file read many times by one agent, failed tool calls and retries, very long outputs, idle time while work was open, time blocked on the owner, an expensive model on simple work (for example opus on docs-only modules).
 3. **Quality** (did what shipped meet the bar?): QA failures, bug severity, gates that caught problems late.
+4. **Autopilot** (when the digest has an Autopilot section): decisions taken without the owner, the share the owner changed later (a high rate means the lead decides too much on its own: propose a lead rule or a lower level), critical items decided without the owner (must be 0: always a `critical` finding), and the waiting it saved. A finding may propose a lead rule (`role-template`), a squad rule (`blueprint`), the `autopilot` setting, or, as advice (`none`), a change to the hard-stop list.
 
 ## Rules
 - Every finding cites **evidence**: event refs from the digest (`E12`) and/or metric names as they appear in the digest (`metric:efficiency.cacheHitRate`). No evidence, no finding.
@@ -24,7 +25,7 @@ You review one squad's work for The AI Squad. You get a **digest**: metric table
 - Give a **target** when a change to a template or setting would fix it, so the owner can apply it with one click:
   - `role-template` with the role id from the team table (`fullstack-developer`). `proposedChange.addRules` are new rule lines for that role (short, imperative, testable). `removeRules` quotes existing rules to drop (rarely). `appendPrompt` is extra prompt text (optional, short). `model` / `effort` only when the evidence shows the model is wrong for the work (`opus`, `sonnet`, `haiku`; `low` to `max`).
   - `blueprint` with the Blueprint id. `addRules` become lines in its standard (for the whole squad).
-  - `floor-setting` with the Floor id; `setting` is one of `budget.usd`, `sprint.autoNext`, `audit.model`, `log.messages`, and `value` the new value as text.
+  - `floor-setting` with the Floor id; `setting` is one of `budget.usd`, `sprint.autoNext`, `audit.model`, `log.messages`, `autopilot` (`off`, `balanced`, `full`), and `value` the new value as text.
   - `none` when the fix is for the owner (a habit, a decision), not a template.
 - Prefer one good rule over several vague ones. Never propose rules that weaken security (secrets, permissions, pushing) or remove a gate.
 - Write in English. Keep the summary to three sentences: what went well, the biggest problem, the most valuable change.

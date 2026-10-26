@@ -17,7 +17,7 @@ export const AUDIT_TIMEOUT_MS = 5 * 60e3;
 export const AREAS = ['process', 'efficiency', 'quality'];
 export const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 export const TARGET_KINDS = ['role-template', 'blueprint', 'floor-setting', 'none'];
-export const FLOOR_SETTINGS = ['budget.usd', 'sprint.autoNext', 'audit.model', 'log.messages'];
+export const FLOOR_SETTINGS = ['budget.usd', 'sprint.autoNext', 'audit.model', 'log.messages', 'autopilot'];
 const SCORE_COST = { critical: 30, high: 15, medium: 8, low: 3 };
 const LONG_OUTPUT = 4000;                        // output tokens in one reply
 const REPEAT_READS = 3;
@@ -143,9 +143,21 @@ export function metrics(events, info = {}) {
     blockedOnOwnerMin: r2((sum(waits, (x) => x) + sum(permWaits, (x) => x)) / 60e3, 1),
     expensiveModelOnSimpleWork: Object.values(agents).filter((a) => a.models.opus && a.edits && a.editsDocsOnly).map((a) => ({ agent: a.agent, role: a.role, cost: r2(a.models.opus, 4), reason: 'opus for docs-only edits' })),
   };
+  // Autopilot: decisions without the owner, how many the owner changed later (quality signal), critical items that were
+  // decided anyway (must be zero), and the waiting it saved compared with the owner's average answer time
+  const apDecided = of('autopilot.decided'), byServer = apDecided.filter((e) => e.data.by !== 'lead'), byLead = apDecided.filter((e) => e.data.by === 'lead');
+  const avgWait = waits.length ? sum(waits, (x) => x) / waits.length : null;
+  const changed = of('autopilot.changed').length;
+  const autopilot = {
+    decided: apDecided.length, byServer: byServer.length, byLead: byLead.length, changed,
+    changeRate: apDecided.length ? r2(changed / apDecided.length) : null,
+    criticalDecided: apDecided.filter((e) => e.data.critical).length,
+    blocked: of('autopilot.blocked').length, nudges: of('autopilot.nudged').length,
+    timeSavedMin: avgWait == null ? null : r2((byLead.length * avgWait + sum(byServer, (e) => Math.max(0, avgWait - (e.data.waitedMs || 0)))) / 60e3, 1),
+  };
   // quality: what QA and the gates caught
   const quality = { qaFailures: of('qa.report').filter((e) => e.data.status === 'FAIL').length, bugsBySeverity: bySeverity, crashes: of('agent.crashed').length, watchdogAlerts: of('watchdog.alert').length };
-  return { range: { from: events[0]?.ts || null, to: events.at(-1)?.ts || null, events: events.length }, process: process_, efficiency, quality };
+  return { range: { from: events[0]?.ts || null, to: events.at(-1)?.ts || null, events: events.length }, process: process_, efficiency, quality, autopilot };
 }
 
 // ---------- digest: what the reviewer reads ----------
@@ -163,6 +175,9 @@ const relevant = (e, m) => {
     case 'usage.turn': return e.data.output > LONG_OUTPUT ? 2 : 0;
     case 'agent.idle': return e.data.openWork ? 1 : 0;
     case 'message.sent': case 'task.delegated': case 'task.given': return 1;
+    case 'autopilot.decided': return e.data.critical ? 5 : 2;
+    case 'autopilot.changed': return 4;
+    case 'autopilot.blocked': return 3;
     default: return 0;
   }
 };
@@ -219,6 +234,13 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
     '### Files read 3+ times by one agent (efficiency.repeatedReads)', table(['agent', 'file', 'reads'], E.repeatedReads.map((x) => [x.agent, x.target, x.count])),
     '### Failing tool calls (efficiency.failedTools.top)', table(['tool', 'target', 'failures'], E.failedTools.top.map((x) => [x.tool, clip(x.target, 80), x.count])),
     '## Communication (who -> whom: messages)', table(['from -> to', 'count'], Object.entries(talk).sort((a, b) => b[1] - a[1]).slice(0, 15)),
+    ...(m.autopilot && (m.autopilot.decided || m.autopilot.blocked || m.autopilot.nudges) ? ['## Autopilot', table(['metric', 'value'], [
+      ['autopilot.decided', `${m.autopilot.decided} decisions without the owner (${m.autopilot.byLead} by the lead, ${m.autopilot.byServer} by the server timeout)`],
+      ['autopilot.changeRate', m.autopilot.changeRate == null ? '–' : `${m.autopilot.changed} changed by the owner later (${Math.round(m.autopilot.changeRate * 100)} %)`],
+      ['autopilot.criticalDecided', `${m.autopilot.criticalDecided} critical items decided without the owner (must be 0)`],
+      ['autopilot.blocked', `${m.autopilot.blocked} critical items waited for the owner, ${m.autopilot.nudges} nudges`],
+      ['autopilot.timeSavedMin', m.autopilot.timeSavedMin ?? '– (no owner answer times to compare)'],
+    ])] : []),
     '## Quality', `QA failures ${m.quality.qaFailures}, crashes ${m.quality.crashes}, watchdog alerts ${m.quality.watchdogAlerts}.`, '',
     '## Relevant events', ...(lines.length ? lines : ['(none)']),
   ].join('\n');
