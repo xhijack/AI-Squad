@@ -219,7 +219,7 @@ The Floor's status pill shows **Autopilot: Balanced** (or that something critica
 
 ### Graphics quality
 
-Menu → **Graphics**: **Auto** (default: High, and Low when frames get slow), **High** (soft image-based light from a small studio HDRI, ambient occlusion, warm colour grading with a light vignette, SMAA, soft shadows under the characters) or **Low** (one render pass, as fast as before). The setting is kept per browser. The frame loop slows to a third of its rate when nothing moves: no input, no camera move, nobody walking.
+Menu → **Graphics**: **Auto** (default: High, and Low when frames get slow), **High** (soft image-based light from a small studio HDRI, ambient occlusion, warm colour grading with a light vignette, SMAA, soft shadows under the characters) or **Low** (one render pass, as fast as before). The setting is kept per browser. The furniture comes from the KayKit packs by Kay Lousberg (CC0): desks, chairs, sofa, rug, plants, pantry counter and fridge, meeting table, bookshelf and floor lamp, packed into one 390 KB GLB (`ui/assets/kaykit/office.glb`, sources and licences in `ASSETS.md`). Devices without a KayKit model (monitors, whiteboard, TV, beanbags, ping-pong, server rack, printer) and the whole room while the file loads are drawn by the procedural builders. The frame loop slows to a third of its rate when nothing moves: no input, no camera move, nobody walking.
 
 ### Merges
 

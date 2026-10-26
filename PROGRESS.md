@@ -433,6 +433,15 @@ Brief: `PHASE-3-VISUAL.md`. The owner put Phase 3 before the rest of Phase 2.5. 
 - Frame times (headless Chrome with SwiftShader, a software GPU, 1440×900 Floor view): median 33 ms on both Low and High, 90th percentile 217 ms on Low and 1550 ms on High. On this machine Auto would drop to Low. Real GPUs were not measured here.
 - Screenshots: `playground/reference/p3-floor-high-1440.png` and `p3-floor-low-1440.png`.
 
+### 0.6.1: KayKit assets
+- Two official KayKit packs by Kay Lousberg, licences checked (CC0 1.0, `ui/assets/kaykit/LICENSE-*.txt`): **Furniture Bits 1.0** (tables, chairs, couch, rugs, cacti, cabinet, lamp and more) and **Restaurant Bits 1.0** (kitchen counter, cabinet, fridge). The files and their sources are listed in `ASSETS.md`. No paid assets.
+- Pipeline: `scripts/pack-glb.js` (Node built-ins) packs the 19 glTF models into one GLB (`ui/assets/kaykit/office.glb`, 390 KB, both 1024 px atlases embedded). meshopt and KTX2 were not needed at this size. The static server serves `assets/` with a cache header and the glTF type.
+- `ui/kit.js` loads the GLB once and gives clones fitted to a target size. KayKit geometry is shared, so `dispose()` never frees it. Floors are rebuilt once the models have loaded (the kit state is part of a Floor's signature).
+- Mapping: desks (table_medium_long, table_medium for the lead), desk chairs (chair_C), sofa (couch_pillows), rug (rug_rectangle_stripes_A), plants (cactus_medium_A), bookshelf (cabinet_medium_decorated), pantry (two kitchen counters and a fridge), meeting table (table_medium_long with six chair_A), and the new **floor lamp** device (lamp_standing, in the default lounge). Monitors, laptop, whiteboard, TV, beanbags, ping-pong, server rack, printer and coffee machine have no KayKit model and stay procedural. Edit Mode, presets, role props and the brand wall are unchanged. KayKit chairs face -z, so desk and meeting chairs are turned to face their table.
+- Characters keep the chibi look (the product's identity). Their toon shading and outline sit well next to KayKit's flat colours in the screenshots, so no character pack was proposed.
+- Baked lighting with Blender was skipped: the disk is 86 % full and memory is shared. Part A (HDRI and AO) carries the look.
+- Screenshots: `playground/reference/p3-kit-1440.png`, `p3-kit-desk-1440.png`, `p3-kit-lobby-1440.png`, `p3-kit-390.png`.
+
 ## How to run
 
 ```
