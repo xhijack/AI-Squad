@@ -115,3 +115,55 @@ export class Quality {
     }
   }
 }
+
+// Contact shadows (like three's webgl_shadow_contact example): the objects above a floor patch are rendered from
+// below into a depth-darkness texture, blurred twice and laid on the floor. Soft and grounded where the shadow map
+// is too coarse (chair casters, feet). Re-render each frame only when something moves.
+const BlurShader = {
+  uniforms: { tDiffuse: { value: null }, dir: { value: new THREE.Vector2() } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv;
+    void main() {
+      vec4 s = texture2D(tDiffuse, vUv) * .2270270270;
+      s += (texture2D(tDiffuse, vUv + dir * 1.3846153846) + texture2D(tDiffuse, vUv - dir * 1.3846153846)) * .3162162162;
+      s += (texture2D(tDiffuse, vUv + dir * 3.2307692308) + texture2D(tDiffuse, vUv - dir * 3.2307692308)) * .0702702703;
+      gl_FragColor = s;
+    }`,
+};
+export class ContactShadows {
+  constructor({ width = 4, depth = 4, res = 512, height = 1.2, darkness = 1.6, blur = 1.6, opacity = .8 } = {}) {
+    const rt = () => { const t = new THREE.WebGLRenderTarget(res, res); t.texture.generateMipmaps = false; return t; };
+    Object.assign(this, { rt: rt(), rt2: rt(), blur, res });
+    this.group = new THREE.Group(); this.group.position.y = .003;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, depth).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.rt.texture, transparent: true, opacity, depthWrite: false }));
+    plane.scale.y = -1; plane.renderOrder = 1; plane.userData.contact = true;
+    this.group.add(plane);
+    this.cam = new THREE.OrthographicCamera(-width / 2, width / 2, depth / 2, -depth / 2, 0, height);
+    this.cam.rotation.x = Math.PI / 2; this.group.add(this.cam);
+    this.depthMat = new THREE.MeshDepthMaterial();
+    this.depthMat.userData.darkness = { value: darkness };
+    this.depthMat.onBeforeCompile = (sh) => {
+      sh.uniforms.darkness = this.depthMat.userData.darkness;
+      sh.fragmentShader = `uniform float darkness;\n${sh.fragmentShader.replace('gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );', 'gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * darkness );')}`;
+    };
+    this.depthMat.depthTest = this.depthMat.depthWrite = false;
+    this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ ...BlurShader, uniforms: THREE.UniformsUtils.clone(BlurShader.uniforms), depthTest: false }));
+    this.quadScene = new THREE.Scene(); this.quadScene.add(this.quad);
+    this.quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  }
+  // hide: objects that must not cast (the floor, walls, the shadow plane itself)
+  update(renderer, scene, hide = []) {
+    const was = { bg: scene.background, ov: scene.overrideMaterial, rt: renderer.getRenderTarget(), clear: renderer.getClearAlpha() };
+    const vis = hide.map((o) => o.visible); hide.forEach((o) => { o.visible = false; }); this.group.visible = false;
+    scene.background = null; scene.overrideMaterial = this.depthMat;
+    renderer.setRenderTarget(this.rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, this.cam);
+    scene.overrideMaterial = was.ov; scene.background = was.bg;
+    hide.forEach((o, i) => { o.visible = vis[i]; }); this.group.visible = true;
+    const u = this.quad.material.uniforms;
+    for (const [src, dst, d] of [[this.rt, this.rt2, [1, 0]], [this.rt2, this.rt, [0, 1]]]) {
+      u.tDiffuse.value = src.texture; u.dir.value.set(d[0] * this.blur / this.res, d[1] * this.blur / this.res);
+      renderer.setRenderTarget(dst); renderer.clear(); renderer.render(this.quadScene, this.quadCam);
+    }
+    renderer.setRenderTarget(was.rt); renderer.setClearAlpha(was.clear);
+  }
+}

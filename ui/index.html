@@ -83,6 +83,9 @@
 <dialog id="modal"><div id="modalBody"></div></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 <noscript>The AI Squad needs JavaScript.</noscript>
-<script type="module" src="app.js"></script>
+<script type="module">
+// ?look=realistic opens the realistic-look proof of concept (Phase 3.2) instead of the office
+if (new URLSearchParams(location.search).get('look') === 'realistic') import('./realistic.js'); else import('./app.js');
+</script>
 </body>
 </html>
