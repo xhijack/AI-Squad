@@ -603,3 +603,13 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .shipItem .note { display: block; }
 .shipItem .mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff; background: var(--line2); flex: none; }
 .shipItem.ok .mark { background: var(--ok); } .shipItem.missing .mark { background: var(--bad); }
+
+/* Design variants */
+.dvGroup + .dvGroup { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.dvGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 10px; }
+.dvItem { margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+.dvItem.chosen { border-color: var(--ok); box-shadow: 0 0 0 2px var(--ok) inset; }
+.dvItem iframe { width: 100%; height: 340px; border: 0; background: #fff; display: block; }
+.dvItem figcaption { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.dvItem figcaption b { flex: 1; }
+.dvNote { width: 100%; margin-top: 4px; }

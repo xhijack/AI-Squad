@@ -28,6 +28,7 @@ import * as retroLib from './retro.js';
 import * as learnings from './learnings.js';
 import * as rituals from './rituals.js';
 import * as ship from './ship.js';
+import * as design from './design.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -254,6 +255,11 @@ function floorAttention(entry, floor, lives, cost) {
   }
   const b = wd.budgetStatus(floor.budget, cost);
   if (b.level === 'over') out.push({ id: attId('budget', entry.id, floor.budget.period), kind: 'budget', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, text: `Budget reached: $${b.used.toFixed(2)} of $${floor.budget.usd} this ${floor.budget.period}`, ts: Date.now() });
+  // design variants waiting for the owner's pick (taste: not critical, but only the owner picks)
+  for (const g of design.groups(entry.path).filter((x) => !x.chosen)) {
+    out.push({ id: attId('design', entry.id, g.screen, g.variants.map((v) => v.file).join('|')), kind: 'design', screen: g.screen, floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+      text: `Pick a design for ${g.screen}: ${g.variants.length} variants${g.question ? `. ${g.question}` : ''}`, options: [], answerable: false, ts: Date.now() });
+  }
   // the scope mode changed mid-sprint: the owner decides (critical, also under Autopilot)
   const sc = collect.stateOf(entry.id).scope;
   if (sc?.changed && !sc.changed.acked) out.push({ id: attId('scope', entry.id, sc.sprint, sc.changed.ts), kind: 'scope', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
@@ -1164,6 +1170,21 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
     runPendingAudits();
   } finally { logging = false; }
   return n;
+}
+
+// ---------- design variants (server/design.js) ----------
+export function floorDesigns(floorId) { return { groups: design.groups(building.floorEntry(floorId).path) }; }
+export function designVariantFile(floorId, screen, file) { return design.variantFile(building.floorEntry(floorId).path, screen, file); }
+// the owner's pick: a taste note in DESIGN.md, the designer is told (as its next task when it runs, else queued)
+export async function pickDesign(floorId, screen, file, note = '') {
+  const entry = building.floorEntry(floorId);
+  const r = design.pick(entry.path, screen, file, { note });
+  logEvent(floorId, { type: 'design.picked', data: { screen, chosen: file, title: r.title, others: r.others.length } });
+  const cfg = floors.readFloor(entry.path);
+  const designer = cfg.team.agents.find((a) => /designer/.test(a.role?.template || ''));
+  if (designer && tm.isRunning(tm.sessionName(floorId, designer.id))) await sendTask(floorId, designer.id, `The owner picked "${r.title}" for ${screen} (docs/design/variants/${screen}/${file}). The taste note is in docs/DESIGN.md: follow it in this screen and in later rounds.`);
+  invalidate();
+  return { ok: true, ...r };
 }
 
 // GET /api/floors/:id/ship: what ran and what is missing before the sprint merges or deploys

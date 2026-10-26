@@ -54,7 +54,7 @@ test('create a Floor through the wizard API and read it back', async () => {
   const d = (await call('GET', '/api/floors/acme')).body;
   assert.equal(d.team.length, 2);
   assert.match(d.brief, /Coffee shop/);
-  assert.equal((await call('GET', '/api/roles')).body.templates.length, 20);
+  assert.equal((await call('GET', '/api/roles')).body.templates.length, 21);
   assert.equal((await call('GET', '/api/floors/nope')).status, 404);
 });
 
@@ -292,4 +292,22 @@ test('source documents: view and approve only the Blueprint\'s paths; only STATU
   const desk = await call('GET', `/api/floors/${id}/agents/rina-pm`);
   assert.match(desk.body.pending, /changes to the source document docs\/PRD\.md .*Add the refund flow\./);
   await call('POST', `/api/floors/${id}/agents/rina-pm/stop`, {});
+});
+
+test('design variants: listed, served sandboxed, picked into DESIGN.md; paths outside the folder refused', async () => {
+  const dir = path.join(proj, 'docs/design/variants/rsvp');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'variant-a.html'), '<title>Cards</title><p>a</p>');
+  fs.writeFileSync(path.join(dir, 'variant-b.html'), '<title>List</title><p>b</p>');
+  const list = await call('GET', '/api/floors/acme/designs');
+  assert.deepEqual(list.body.groups.map((g) => [g.screen, g.variants.length, g.chosen]), [['rsvp', 2, null]]);
+  assert.ok((await call('GET', '/api/building')).body.attention.some((a) => a.kind === 'design' && a.screen === 'rsvp'), 'waits for the owner in Attention');
+  const r = await fetch(`${base}/api/floors/acme/designs/rsvp/variant-b.html`, { headers: { 'x-aisquad-pin': pin } });
+  assert.equal(r.status, 200); assert.match(r.headers.get('content-security-policy'), /^sandbox; default-src 'none'/); assert.match(await r.text(), /<title>List/);
+  assert.equal((await fetch(`${base}/api/floors/acme/designs/rsvp/variant-b.html`)).status, 401, 'needs the PIN');
+  for (const bad of ['..%2F..%2F.env.html', 'nope.html']) assert.equal((await fetch(`${base}/api/floors/acme/designs/rsvp/${bad}`, { headers: { 'x-aisquad-pin': pin } })).status, 404, bad);
+  const p = await call('POST', '/api/floors/acme/designs/rsvp/pick', { file: 'variant-b.html', note: 'denser' });
+  assert.equal(p.status, 200); assert.equal(p.body.title, 'List');
+  assert.match(fs.readFileSync(path.join(proj, 'docs/DESIGN.md'), 'utf8'), /## Taste notes[\s\S]*rsvp: the owner picked "List" over "Cards"\. Why: denser/);
+  assert.equal((await call('GET', '/api/building')).body.attention.some((a) => a.kind === 'design'), false, 'picked: no longer waiting');
 });

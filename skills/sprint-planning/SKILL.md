@@ -23,6 +23,7 @@ Approved `docs/PRD.md` and `docs/TECH.md` (and DESIGN for UI work), the backlog 
    - depends on (modules that must be done first),
    - **parallel or sequential**: parallel when it shares no folders and no unfinished dependency; otherwise sequential, with the reason,
    - acceptance criteria (Given/When/Then; mobile, desktop, empty and error states for UI).
+   - **Risk**: `Risk: high` for payments, auth, data migrations and anything hard to undo. When the team has a Second Opinion Reviewer, spawn it for each high-risk module after its handoff, on a different model than the module's developer (`second-opinion` skill); a DISAGREE comes back to you to decide.
 4. Order the work: foundations first (data model, shared layout, auth), then parallel modules, then integration.
 5. Write `docs/squad/TASKS.md`: per module `BUILD Mxx <name>` (developer) and `QA Mxx <name>` (QA, blocked by BUILD).
 6. Shared files (lockfiles, root config, migrations, main layout) are never owned by two developers: assign them or keep them yourself.

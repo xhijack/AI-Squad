@@ -25,7 +25,7 @@ export function stateOf(floorId) {
   let s = states.get(floorId);
   if (!s) {
     s = readJson(stateFile(floorId), null) || {};
-    s.files ||= {}; s.board ||= null; s.handoffs ||= null; s.qa ||= null; s.bugs ||= null; s.docs ||= null; s.commits ||= null; s.planned ||= {}; s.gates ||= 0; s.questions ||= null; s.debug ||= null; s.scope ||= null; s.reviewed ||= {};
+    s.files ||= {}; s.board ||= null; s.handoffs ||= null; s.qa ||= null; s.bugs ||= null; s.docs ||= null; s.commits ||= null; s.planned ||= {}; s.gates ||= 0; s.questions ||= null; s.debug ||= null; s.scope ||= null; s.reviewed ||= {}; s.second ||= {};
     states.set(floorId, s);
   }
   return s;
@@ -301,6 +301,16 @@ export function scanDocs(floorId, root, { blueprint = null } = {}, now = Date.no
     // the plan review of the sprint (docs/squad/sprint-<N>/PLAN-REVIEW.md), once
     const review = sprint != null && !S.reviewed[sprint] ? readText(path.join(squad, `sprint-${sprint}`, 'PLAN-REVIEW.md'), '') : '';
     if (review) { S.reviewed[sprint] = now; out.push({ type: 'plan.reviewed', id: `review:${sprint}`, sprint, data: planReview(review) }); }
+  }
+  // second opinions on risky modules (docs/squad/review/Mxx-second-opinion.md): logged once per verdict
+  if (pack) for (const f of mdIn(path.join(squad, 'review')).filter((x) => /second-opinion/i.test(x))) {
+    const t = readText(path.join(squad, 'review', f), '');
+    const verdict = word(field(t, 'VERDICT')).toUpperCase();
+    if (!/^(AGREE|DISAGREE)$/.test(verdict) || S.second[f] === verdict) continue;
+    S.second[f] = verdict;
+    const rev = field(t, 'Reviewer'), module = modId(f) || modId(t.split('\n')[0]);
+    out.push({ type: 'review.second', id: `second:${f}:${verdict}`, module, agent: word(rev) || null,
+      data: { module, verdict, model: (rev.match(/\(([^)]+)\)/) || [])[1] || '', authorModel: field(t, 'Author model'), file: path.relative(root, path.join(squad, 'review', f)) } });
   }
   // investigate records (docs/squad/debug/*.md): each new "## Attempt N" is a fix attempt, STATUS: ESCALATED an escalation
   const ddir = pack ? path.join(squad, 'debug') : path.join(root, 'docs', 'debug');

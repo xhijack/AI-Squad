@@ -111,6 +111,9 @@ const routes = [
   ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/performance$/, ([id]) => squad.performance(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/audits$/, ([id]) => squad.floorAudits(id), { pin: true }],
+  ['GET', /^\/api\/floors\/([\w-]+)\/designs$/, ([id]) => squad.floorDesigns(id)],
+  ['GET', /^\/api\/floors\/([\w-]+)\/designs\/([a-z0-9-]+)\/([\w.-]+\.html)$/, ([id, screen, file]) => ({ __file: squad.designVariantFile(id, screen, file), sandbox: true }), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/designs\/([a-z0-9-]+)\/pick$/, ([id, screen], b) => squad.pickDesign(id, screen, String(b.file || ''), b.note), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/ship$/, ([id]) => squad.floorShip(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/standup$/, ([id]) => squad.floorStandup(id), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/retro$/, ([id], b, req) => squad.floorRetro(id, new URL(req.url, 'http://x').searchParams.get('sprint')), { pin: true }],
@@ -175,6 +178,12 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if ((opts.pin || lockReads) && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
         const out = await handler(m.slice(1), body, req);
+        if (out && out.__file && out.sandbox) {
+          // a design variant: shown in an iframe, sandboxed (no scripts, no access to The AI Squad), nothing from outside
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+            'content-security-policy': "sandbox; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; font-src data:" });
+          return res.end(fs.readFileSync(out.__file));
+        }
         if (out && out.__file) return send(res, 200, fs.readFileSync(out.__file), TYPES[path.extname(out.__file).toLowerCase()] || 'image/jpeg');
         return send(res, 200, out);
       }

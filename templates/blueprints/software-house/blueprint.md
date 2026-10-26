@@ -1,7 +1,7 @@
 ---
 id: software-house
 title: Software House
-version: 3
+version: 4
 category: software
 description: A software team that builds and ships an application from a PRD, a tech spec and a design, in QA-gated sprints.
 keywords: [software, app, application, website, web, mobile, saas, platform, pos, "point of sale", erp, crm system, api, backend, frontend, dashboard, portal, marketplace, ecommerce, "e-commerce", shop, store, booking, system, develop, build, code, startup, mvp]
@@ -13,6 +13,7 @@ roles:
   - { template: qa-engineer, min: 1, default: 1, max: 1, why: "Tests every module against the PRD acceptance criteria and the design, on mobile and desktop, and gates what ships." }
   - { template: ui-ux-designer, min: 0, default: 1, max: 1, why: "Keeps the screens faithful to the design: writes the fidelity map and reviews built screens." }
   - { template: devops-engineer, min: 0, default: 1, max: 1, why: "Owns development, staging and production: environments, deploys, rollbacks and the variable names (never secrets)." }
+  - { template: second-opinion-reviewer, min: 0, default: 0, max: 1, why: "Optional: a second review of modules marked risky (payments, auth, migrations) on a different model than the author's; disagreements go to the lead." }
   - { template: security-engineer, min: 0, default: 0, max: 1, why: "Optional: reviews each sprint plan (STRIDE) and each release (OWASP Top 10) with evidence, testing only local and staging." }
 sourceDocs:
   - { path: docs/PRD.md, title: PRD, purpose: "What and why: users, features, acceptance criteria, priorities", owner: project-manager, readers: all }
@@ -85,11 +86,16 @@ A module is done when its acceptance criteria pass in QA with evidence (screensh
 - When the owner gave only mockups, write a fidelity map in `docs/DESIGN.md`: what **must match** exactly and what **may be improved**, with reasons.
 - Review built screens against the fidelity map and report findings like QA does.
 - Do not invent screens outside the PRD; propose them to the lead instead.
+- For a screen whose look is not decided, show the owner 3-4 variants (`design-variants` skill) and follow the taste notes in DESIGN.md.
 
 ### security-engineer
 - Review every sprint plan with STRIDE and every release with the OWASP Top 10 (`security-review` skill); findings need evidence.
 - Test only local and staging environments the owner approved; never production or anyone else's systems.
 - Critical and High findings block the release until fixed or the owner accepts the risk.
+
+### second-opinion-reviewer
+- Review only the risky modules the lead hands you, on a different model than the author's; write AGREE or DISAGREE with evidence in `docs/squad/review/`.
+- Never change the author's code; the lead decides on a disagreement.
 
 ### devops-engineer
 - Own `docs/ENVIRONMENTS.md` and `.env.example`; keep development and production setups separate.

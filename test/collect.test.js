@@ -147,6 +147,17 @@ test('docs/squad: board, handoffs, QA rounds, bugs, plan, questions, source docu
   assert.deepEqual(scan(160), []);
 });
 
+test('second opinions on risky modules are logged once per verdict', () => {
+  w('docs/squad/review/M02-second-opinion.md', '# Second opinion: M02 Cart\nReviewer: sari-review (opus)\nAuthor model: sonnet\nVERDICT: DISAGREE\n\n## Findings\n1. rounding\n');
+  const scan = (s) => collect.scanDocs('docs', proj, {}, T0 + s * 1000);
+  let ev = scan(200).filter((e) => e.type === 'review.second');
+  assert.deepEqual(ev.map((e) => [e.module, e.agent, e.data.verdict, e.data.model, e.data.authorModel]), [['M02', 'sari-review', 'DISAGREE', 'opus', 'sonnet']]);
+  assert.deepEqual(scan(210).filter((e) => e.type === 'review.second'), [], 'once');
+  w('docs/squad/review/M02-second-opinion.md', '# Second opinion: M02 Cart\nReviewer: sari-review (opus)\nVERDICT: AGREE\n');
+  ev = scan(220).filter((e) => e.type === 'review.second');
+  assert.equal(ev[0].data.verdict, 'AGREE', 'a changed verdict is logged again');
+});
+
 test('scope mode lines: the four modes, markdown bold, placeholders are not reasons', () => {
   assert.deepEqual(collect.scopeMode('# Plan\n\n**Scope mode:** Selective expand - one extra report'), { mode: 'Selective expand', reason: 'one extra report' });
   assert.deepEqual(collect.scopeMode('Scope mode: Hold — <one-line reason; Expand, Selective expand, Hold or Reduce>'), { mode: 'Hold', reason: '' });

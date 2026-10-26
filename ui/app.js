@@ -16,6 +16,7 @@ import './improve.js';
 import './docs.js';
 import './retro.js';
 import './ship.js';
+import './design.js';
 import { attentionIndexHtml } from './convo.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
@@ -271,7 +272,7 @@ function floorMenuHtml(f) {
   return [['floor-settings', 'Floor settings'], ['edit-mode', 'Edit layout and looks'], ['add-agent', 'Add agent'],
     ...(any((a) => !a.running) ? [['start-all', 'Start all agents']] : []), ...(any((a) => a.running) ? [['stop-all', 'Stop all agents']] : []),
     ...(state.floor?.id === f.id && state.floor.blueprint ? [['source-docs', 'Source documents']] : []),
-    ...(state.floor?.id === f.id && state.floor.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost'], ['log', 'Squad Log'], ['audit', 'Audit'], ['retro', 'Retro'], ...(f.workflow === 'squad-sprint' ? [['ship', 'Ship readiness']] : [])]
+    ...(state.floor?.id === f.id && state.floor.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost'], ['log', 'Squad Log'], ['audit', 'Audit'], ['retro', 'Retro'], ...(f.workflow === 'squad-sprint' ? [['ship', 'Ship readiness']] : []), ['designs', 'Design variants']]
     .map(([act, text]) => `<button role="menuitem" data-act="${act}">${text}</button>`).join('');
 }
 

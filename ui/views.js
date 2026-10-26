@@ -3,7 +3,7 @@
 // panel (desktop) or as tabs of the bottom sheet (phone).
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 
-const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge', crash: 'Stopped unexpectedly', decided: 'Decided by autopilot', finished: 'Finished', scope: 'Scope change' };
+const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge', crash: 'Stopped unexpectedly', decided: 'Decided by autopilot', finished: 'Finished', scope: 'Scope change', design: 'Pick a design' };
 
 // ---------- Attention ----------
 export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
@@ -22,6 +22,8 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
         ? `<div class="row" style="margin-top:6px"><span class="note grow">${a.asks ? 'It asks you something. ' : ''}This agent runs on its own: reply in its own terminal.</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}">OK</button></div>`
         : `<form class="replyForm" data-act="reply" data-id="${a.id}"><textarea name="text" rows="2" data-draft="${a.id}" placeholder="Reply to ${who} (optional)…" aria-label="Your reply to ${who}" required>${esc(drafts.get(a.id) || '')}</textarea>
         <div class="row"><span class="note grow">A reply goes to ${who} as the next task.</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}" title="Read it; hide the card">OK</button><button class="small">Reply</button></div></form>`;
+    } else if (a.kind === 'design') {
+      body = `<div class="row" style="margin-top:6px"><span class="grow"></span><button class="small gold" data-act="designs" data-screen="${esc(a.screen)}">See the variants</button></div>`;
     } else if (a.kind === 'decided') {
       // a muted card: what Autopilot chose, the other options to change it, OK to keep it
       body = `<div class="note">Decided automatically: <b>${esc(a.chosen)}</b></div>

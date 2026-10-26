@@ -178,3 +178,13 @@ test('ship readiness: a sprint that waited is in the digest', () => {
   assert.deepEqual(m.process.gatesRefused.byGate, { 'edit-lock': 1 });
   assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.shipBlocked \| sprint-5 waited for: QA pass for every module/);
 });
+
+test('second opinions and design picks in the digest', () => {
+  put(100, 'review.second', { sprint: 6, module: 'M09', data: { module: 'M09', verdict: 'DISAGREE', model: 'opus' } });
+  put(101, 'review.second', { sprint: 6, module: 'M10', data: { module: 'M10', verdict: 'AGREE', model: 'opus' } });
+  put(102, 'design.picked', { sprint: 6, data: { screen: 'rsvp', title: 'Cards', others: 2 } });
+  const { events } = audit.rangeEvents('pos', { sprint: 6 });
+  const m = audit.metrics(events, INFO);
+  assert.deepEqual(m.process.secondOpinions, { total: 2, disagree: ['M09'] }); assert.equal(m.process.designPicks, 1);
+  assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.secondOpinions \| 2 second opinions on risky modules, DISAGREE on M09/);
+});
