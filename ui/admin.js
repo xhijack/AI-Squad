@@ -80,6 +80,8 @@ function changesHtml(d) {
 }
 
 const LIMIT = { building: t('Building maximum'), ram: t('free RAM'), cpu: t('CPU load') };
+// keys, so the line is translated as a whole (not word by word from the server's English)
+const LIMIT_TEXT = { building: 'Building maximum of {n} agents at once', ram: '{ram} GB RAM free, about {per} GB per session, 2 GB kept free', cpu: 'CPU load {load} on {cpus} cores' };
 function dispatcherHtml(x) {
   const c = x.capacity, q = x.quota, p = x.prefs;
   return `<p class="note">${t('Every start goes through one queue: the owner\'s own work first (P0), then a waiting squad (P1), normal work (P2) and background work (P3). Waiting 30 minutes moves an item up one level. Automated work waits outside its Space\'s shift and while the quota guard pauses.')}</p>
@@ -89,8 +91,8 @@ function dispatcherHtml(x) {
       <div><b>${esc(LIMIT[c.limiting] || c.limiting)}</b><span class="note">${t('limits it now')}</span></div>
       <div><b class="${q.paused ? 'warnText' : ''}">${q.paused ? t('Paused') : t('OK')}</b><span class="note">${t('quota guard')}</span></div>
     </div>
-    <ul class="list note">${c.limits.map((l) => `<li>${esc(tx(l.text))}: ${l.cap}</li>`).join('')}</ul>
-    ${q.paused ? `<p class="warnText">${esc(tx(q.reason))}${q.until ? ` · ${t('until {time}', { time: new Date(q.until).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) })}` : ''}</p>` : ''}
+    <ul class="list note">${c.limits.map((l) => `<li>${esc(LIMIT_TEXT[l.key] ? t(LIMIT_TEXT[l.key], l.vars) : l.text)}: ${l.cap}</li>`).join('')}</ul>
+    ${q.paused ? `<p class="warnText">${esc(q.reasonKey ? t(q.reasonKey, { ...q.vars, label: t(q.vars.label || '') }) : q.reason)}${q.until ? ` · ${t('until {time}', { time: new Date(q.until).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) })}` : ''}</p>` : ''}
     <div class="section"><div class="sectionHead"><h3 class="grow">${t('Queue')}</h3></div>
     ${x.queue.length ? `<div class="adminList">${x.queue.map((it) => `<div class="adminRow"><div class="row"><span class="badge">${esc(it.effective)}</span><b class="grow">${esc(it.agentName)} · ${esc(it.floorName)}</b><span class="note">${esc(it.action)} · ${esc(it.via)} · ${ago(it.createdAt)}</span></div>
       <div class="note">${esc(it.title)}</div>

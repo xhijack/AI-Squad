@@ -21,6 +21,8 @@ import './design.js';
 import './health.js';
 import './signin.js';
 import './admin.js';
+import './people.js';
+import './chat.js';
 import { attentionIndexHtml } from './convo.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';

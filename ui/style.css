@@ -682,3 +682,23 @@ ul.jobs li.job.failed .badge { background: var(--bad-soft); color: var(--bad); }
 .dispStats > div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 .dispStats b { font-size: 18px; }
 @media (max-width: 640px) { .dispStats { grid-template-columns: 1fr 1fr; } }
+
+/* People and chat (0.14) */
+body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { display: none; }
+.peopleRoot, .chatRoot { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.pinShown { border: 1px solid var(--line2); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: var(--chip); }
+.chatLog { display: flex; flex-direction: column; gap: 10px; min-height: 240px; }
+.chatLog .msg { display: flex; flex-direction: column; max-width: 82%; gap: 2px; }
+.chatLog .msg.person { align-self: flex-end; text-align: right; }
+.chatLog .msg.system { align-self: center; max-width: 100%; }
+.chatLog .bubble { border-radius: 14px; padding: 8px 12px; background: var(--chip); white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+.chatLog .msg.person .bubble { background: var(--accent-soft); }
+.chatLog .msg.agent .bubble { white-space: normal; }
+.chatForm { display: flex; gap: 8px; align-items: flex-end; padding: 10px 20px 16px; border-top: 1px solid var(--line); }
+.chatForm textarea { resize: vertical; min-height: 44px; }
+.peopleRoot .list li { padding: 6px 0; }
+.peopleRoot .list li b.grow { min-width: 120px; }
+.peopleRoot select, .peopleRoot .row button, .addAgent select, .addAgent button { width: auto; flex: none; }
+.peopleRoot form.row input { flex: 1; min-width: 180px; width: auto; }
+.chatRoot .seg { flex-wrap: nowrap; }
+.chatRoot .seg button { flex: none; white-space: nowrap; }

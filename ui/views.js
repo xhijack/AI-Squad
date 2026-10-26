@@ -279,7 +279,8 @@ function independentDeskSections(floor, d, routeScreen) {
 }
 
 // stopped: Resume is the main action after a crash; otherwise Start, with Resume of the last session beside it
-function startButtons(d) {
+function startButtons(d) { return startButtonsOnly(d) + `<button class="ghost" data-act="chat" data-agent="${d.id}" title="${tt('Talk to this agent directly')}">${tt('Chat')}</button>`; }
+function startButtonsOnly(d) {
   if (d.running) return `<button class="ghost" data-act="stop" data-agent="${d.id}">${tt('Stop')}</button>`;
   if (d.crash && !d.crash.withLead && d.resume) return `<button class="gold" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session')}">${tt('Resume')}</button><button class="ghost small" data-act="start" data-agent="${d.id}" title="${tt('A new session without the earlier context')}">${tt('Start fresh')}</button>`;
   return `<button class="ok" data-act="start" data-agent="${d.id}">${tt('Start')}</button>${d.resume ? `<button class="ghost small" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session ({id})', { id: esc(d.resume.sessionId.slice(0, 8)) })}">${tt('Resume last session')}</button>` : ''}`;
