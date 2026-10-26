@@ -168,6 +168,19 @@ The first scan of a Floor only records a baseline (the current board and files a
 {"v":1,"id":"785f02cafb95","ts":"2026-10-26T02:18:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"commit","summary":"commit 9b1e0c2d4f6a: feat(cart): M01 add and remove items","data":{"sha":"9b1e0c2d4f6a","subject":"feat(cart): M01 add and remove items"}}
 ```
 
+**`job.started`** (0.11): a background job (headless runner) started for an agent. `via` is `aisquad` (the owner's
+Desk) or the part of The AI Squad that started it.
+
+```json
+{"v":1,"id":"1f0a6c3e9b21","ts":"2026-10-26T02:19:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"sonnet","type":"job.started","summary":"budi-dev started a background job: write the README","data":{"job":"j-20261026-a1b2c3d4","kind":"task","title":"write the README","budgetUsd":2,"permissionMode":"dontAsk","via":"aisquad"}}
+```
+
+**`job.ended`** (0.11): the job ended: `done`, `failed` (with `error`, e.g. stopped at its budget) or `stopped`.
+
+```json
+{"v":1,"id":"7c2d1e0f4a65","ts":"2026-10-26T02:21:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"claude-sonnet-5-5","type":"job.ended","summary":"budi-dev's background job done ($0.04)","data":{"job":"j-20261026-a1b2c3d4","kind":"task","status":"done","cost":0.0421,"turns":2,"ms":121000}}
+```
+
 
 ### Communication (`communication`)
 

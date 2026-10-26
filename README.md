@@ -167,6 +167,19 @@ Agents started by The AI Squad load this plugin's hooks (`--plugin-dir`), which 
 
 On the Floor, desk screens show what each agent is doing: the file it is editing, its terminal, QA screenshots, or a question waiting for you. Idle agents wander to the lounge and run back when work arrives. Click a monitor (or **Look at screen** on the Desk) to look over the agent's shoulder at its live terminal.
 
+### Background jobs (Runner v2, 0.11)
+
+An agent runs in one of two runners (`server/runner.js`):
+
+- **tmux**: the interactive Claude Code session of its Desk (you type, answer dialogs and watch its screen). Its status comes from the plugin hooks and the transcript.
+- **headless**: a **background job**, `claude -p --output-format stream-json` with the same agent file, model, effort, denied tools and linked repositories. Claude Code writes one JSON event per line (the session id, tool calls, text, the result with its cost and turns), so nothing is read from a screen. A job runs detached in its own process group with its output in `~/.aisquad/jobs/<id>.jsonl`, survives a server restart, and stops at its budget (`--max-budget-usd`, default $2). It cannot answer permission prompts: it runs in `dontAsk` mode (only what the project's settings allow), or `acceptEdits` when you tick "May edit files".
+
+On a Desk: Send task → **Run in the background** (budget, may edit files). The agent shows as working ("background: …") while its job runs; **Background jobs** on the Desk lists them with status and cost, **Open** shows the answer and every step, **Stop** ends it. `job.started` and `job.ended` go to the Squad Log. Jobs count towards the machine's agents at once. Records older than 30 days are cleared.
+
+API: `POST /api/floors/:id/agents/:agent/jobs { prompt, budgetUsd, permissionMode }`, `GET /api/jobs?floor=&agent=`, `GET /api/jobs/:id`, `POST /api/jobs/:id/stop`.
+
+**Claude sign-in** (Menu): background runs (jobs, audits, squad recommendations) sign in with this machine's `claude` login, or with an **API key** (`ANTHROPIC_API_KEY`, kept write-only in `~/.aisquad/secrets.json`), so unattended work is billed to a Console organization. In API-key mode without a key, background runs are refused rather than falling back to a personal login. See `docs/BILLING.md`.
+
 ### Role Templates and overrides
 
 Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json` as a directory (`"path"`) or a git repository (`"url"`).
