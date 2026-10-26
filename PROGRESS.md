@@ -651,6 +651,32 @@ Owner bug: "Test voice" only showed "ElevenLabs answered 402". The real cause, f
   - In `test/squad.test.js`: the agent, then Floor, then defaults order and unknown languages dropped.
 - No real ElevenLabs call was made (no key here); one real test call when the owner sets a key and asks for it.
 
+## 0.8.8: long-running commands (owner request, 26 Oct 2026)
+
+A 10-minute docker build or e2e run writes nothing to the transcript, so the agent looked idle or stalled and Autopilot could nudge it. Now (`server/tasks.js`, pure, plus wiring in `squad.js`, `watchdog.js`, `transcripts.js`):
+
+- **Running commands from the transcript:**
+  - a Bash call whose result has not come yet;
+  - a background shell (`run_in_background`), from "running in background with ID … Output is being written to …" until its task notification, a kill, or a final output read with a status;
+  - a `Monitor` wait.
+  - Each gets a kind and a label: e2e Playwright or Cypress, vitest, jest, pytest, docker build, docker compose, tests, build, install, or the command's description.
+- **The agent stays working.** Its state is "working" with a timer ("e2e Playwright · 7m 32s") in the agent list, the name tag ("· 8 min") and the Desk. The Watchdog's idle stall and the Autopilot idle nudge leave it alone (they already go by the state).
+- **The last output lines** (scrubbed with `redact`) are on the Desk card and in the agent row's tooltip. They come from the background shell's output file, else the agent's own tmux screen.
+- **3D:**
+  - the agent sits back and watches the screen instead of typing;
+  - an hourglass stands on the desk and turns over every 3 s (one frame each time, not 30 a second);
+  - a progress bar floats above the screen when the output counts (`[18/40]`, "Running 40 tests" plus ticks, pytest `[ 45%]`, docker `#7 [3/9]`), and turns amber when stalled.
+- **When it ends** (2 min or longer): a calm "Command ended" card, for example "e2e Playwright failed in 8m 00s: 40 passed, 2 failed", with OK and Open log (the agent's Desk).
+  - Counts are parsed for vitest, jest, Playwright, pytest and `node --test`. docker build and compose get built/up or failed.
+- **A real stall warning:** the output has not moved for 10 minutes, or the command runs past max(3 × typical, typical + 10 min). The typical time is the median of earlier `task.ended` events of the same kind in the Log.
+- **Log:** `task.started` (once a command has run a minute) and `task.ended` (duration, status, passed / failed) for the Audit.
+- Tests:
+  - `test/tasks.test.js`: kinds, open calls, background shells (notification, kill, final read), output tail, progress, results for every runner, stalls, durations;
+  - `test/watchdog.test.js`: no idle stall while a command runs, plus the command's own stall;
+  - `test/finished.test.js`: end to end with the fake Claude. Still working after 8 silent minutes, then the card, OK, and the Log events.
+- Screenshots: `playground/reference/task-0.8.8-desk.png`, `task-0.8.8-hourglass.png` (task data injected in the page for the picture).
+- One existing test (`Autopilot off: nothing is answered or nudged`) failed once under the full suite's load and passed on the rerun and alone. It waits for a fake agent's question in tmux, so it is timing-sensitive, not related to this change.
+
 ## How to run
 
 ```
