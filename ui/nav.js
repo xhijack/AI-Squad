@@ -1,9 +1,11 @@
 // Navigation (Phase 3, "nothing passes through anything"): an occupancy grid of the Floor built from the real
 // footprints of desks, chairs, devices and walls (rotated, inflated by the character radius), A* paths on it with
 // string pulling, character avoidance (keep apart, wait, re-route), and layout checks for Edit Mode.
-// No DOM or three.js here: the same code runs in the browser and in the unit tests.
+// No DOM or three.js here: the same code runs in the browser and in the unit tests. Coordinates are the room's
+// (layout.js toRoom), not the saved ones.
+import { FW, FD, toRoom } from './layout.js';
 
-export const ROOM = { x0: -8, x1: 8, z0: -6.5, z1: 6.5 };
+export const ROOM = { x0: -FW / 2, x1: FW / 2, z0: -FD / 2, z1: FD / 2 };
 export const CELL = .2;
 export const RADIUS = .34;                         // a character's radius on the floor (chibi at station scale)
 export const STATION_SCALE = 1.3;
@@ -269,7 +271,7 @@ export class Seats {
 // a layout is refused when two things overlap or a desk cannot be reached from the room
 // layout: { desks: [{ agent, x, z, ry }], devices: [{ id, type, x, z, ry }] } -> { ok, problems: [{ id, reason }] }
 // sizes: the measured device footprints of the Floor (see footprints)
-export function checkLayout(layout, { entrance = { x: 0, z: 5.6 }, sizes = {} } = {}) {
+export function checkLayout(layout, { entrance = toRoom({ x: 0, z: 5.6 }), sizes = {} } = {}) {
   const rects = footprints(layout, { sizes }), problems = [];
   const overlap = (a, b) => {
     // separating axis test for two rotated rectangles

@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildChibi, HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
-import { FW, FD, FH, floorY, desksFor } from './layout.js';
+import { FW, FD, FH, floorY, desksFor, toRoom } from './layout.js';
 import { makeScreen, drawScreen } from './screens.js';
 import { loungeSpots, updateLife, deskHome, seatRoot, MEETING_SEATS, meetingSeats } from './life.js';
 import { Quality, contactShadow } from './render.js';
@@ -231,22 +231,23 @@ function buildDevice(d) {
 }
 
 // ---------- the room (fixed architecture) ----------
+const WINDOWS = [-4.2, .2, 4.4].map((z) => toRoom({ x: 0, z }).z), BRAND_X = toRoom({ x: -4.3, z: 0 }).x;   // on the left and back walls
 // cutaway office: wood floor, the back and left walls with baseboards, windows on the left wall, and a brand
 // wall with the Floor name and tagline on the back wall
 function buildRoom(g, f, accent) {
   const lobby = !f;
-  if (REAL) realRoom(g, { FW, FD, FH, TOP, missing: f?.missing });                            // realistic look: PBR floor, plaster, windows
+  if (REAL) realRoom(g, { FW, FD, FH, TOP, missing: f?.missing, windows: WINDOWS });                            // realistic look: PBR floor, plaster, windows
   else buildToonRoom(g, f);
   box(FW + .5, .07, .07, basic(accent), 0, .27, FD / 2 + .25, g, 0);                          // brand colour stripe
   box(.07, .07, FD + .5, basic(accent), FW / 2 + .25, .27, 0, g, 0);
   if (lobby) return;
   // brand wall: a dark panel with the Floor name and its tagline
-  box(5.6, FH - .4, .05, mat('#2f4858'), -4.3, TOP + FH / 2 + .1, -FD / 2 + .03, g, 0);
-  box(3.2, .06, .02, basic(accent), -4.3, TOP + 1.25, -FD / 2 + .07, g, 0);
+  box(5.6, FH - .4, .05, mat('#2f4858'), BRAND_X, TOP + FH / 2 + .1, -FD / 2 + .03, g, 0);
+  box(3.2, .06, .02, basic(accent), BRAND_X, TOP + 1.25, -FD / 2 + .07, g, 0);
   const lines = [{ text: f.name || 'Floor', size: 220, weight: 800, color: '#ffe7b0', glow: '#ffb347', y: .4 }];
   if (f.tagline) lines.push({ text: f.tagline, size: 96, weight: 600, color: '#cbd5e1', y: .78 });
   const sign = textPlane(lines, 5.2, 2.2);
-  sign.position.set(-4.3, TOP + 2.25, -FD / 2 + .08); g.add(sign);
+  sign.position.set(BRAND_X, TOP + 2.25, -FD / 2 + .08); g.add(sign);
 }
 function buildToonRoom(g, f) {
   box(FW + .5, .3, FD + .5, mat('#e7dfd1'), 0, .15, 0, g, .02);                              // slab
@@ -258,7 +259,7 @@ function buildToonRoom(g, f) {
   box(.06, .32, FD, mat('#2f3a4a'), -FW / 2 + .03, TOP + .16, 0, g, 0);
   // windows on the left wall
   const glass = mat('#bfe3f5', { emissive: '#bfe3f5', emissiveIntensity: .35, roughness: .1 });
-  for (const z of [-4.2, .2, 4.4]) {
+  for (const z of WINDOWS) {
     box(.08, 1.7, 2.8, glass, -FW / 2 + .02, TOP + 2.05, z, g, 0);
     for (const y of [1.2, 2.9]) box(.12, .1, 3, mat('#2f3a4a'), -FW / 2 + .05, TOP + y, z, g, 0);
     box(.12, 1.8, .1, mat('#2f3a4a'), -FW / 2 + .05, TOP + 2.05, z, g, 0);
@@ -583,8 +584,9 @@ export class BuildingScene {
     buildRoom(room, f, accent);
     mergeStatic(room);
     const o = { g, stations: new Map(), devices: new Map(), sig: sigOf(f) };
-    for (const d of f.devices || []) { const dg = buildDevice(d); g.add(dg); o.devices.set(d.id, dg); }
-    const desks = desksFor(f.agents || [], f.desks, f.layout);
+    const devices = (f.devices || []).map(toRoom);                          // saved positions -> the wider room (layout.js)
+    for (const d of devices) { const dg = buildDevice(d); g.add(dg); o.devices.set(d.id, dg); }
+    const desks = desksFor(f.agents || [], f.desks, f.layout).map(toRoom);
     (f.agents || []).forEach((a, i) => {
       const st = buildStation(a, desks[i], accent);
       g.add(st.g, st.human); o.stations.set(a.id, st);
@@ -593,7 +595,7 @@ export class BuildingScene {
       chip.style.pointerEvents = 'auto'; chip.style.cursor = 'pointer';
       chip.addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
     });
-    o.spots = loungeSpots(f.devices || []);
+    o.spots = loungeSpots(devices);
     // the walkable grid of this Floor: desks, chairs and devices with their real footprints (rebuilt with the Floor)
     // footprints measured from the devices actually built (models differ from the table in nav.js), in each
     // device's own frame; the grid is rebuilt with the Floor (also once the models have loaded)
@@ -605,9 +607,9 @@ export class BuildingScene {
       dg.position.copy(p); dg.rotation.y = ry; dg.updateMatrixWorld(true);
       if (!b.isEmpty()) o.sizes[id] = [b.max.x - b.min.x, b.max.z - b.min.z, (b.max.x + b.min.x) / 2, (b.max.z + b.min.z) / 2];
     }
-    o.nav = new NavGrid(footprints({ desks, devices: f.devices || [] }, { sizes: o.sizes }));
+    o.nav = new NavGrid(footprints({ desks, devices }, { sizes: o.sizes }));
     if (NAV_DEBUG) g.add(navOverlay(o.nav));
-    o.seats = meetingSeats(f.devices || []);
+    o.seats = meetingSeats(devices);
     o.occupied = new Map();
     if (f.missing) label('Directory not found', 'alabel warnlabel', g, 0, 1.4, 0);
     else if (!(f.agents || []).length) o.empty = label(f.independent ? 'No independent agents right now.' : 'No agents yet. Add one from the dock.', 'alabel', g, 0, 1.3, 0);

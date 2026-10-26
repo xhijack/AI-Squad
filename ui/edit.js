@@ -2,13 +2,15 @@
 // Everything is a draft previewed in 3D until "Save", which writes floor.json (and team.json for looks).
 import { $, esc, api, toast, avatar } from './lib.js';
 import { checkLayout, problemsOf } from './nav.js';
-import { desksFor, presetSpots, loungeFor, FW, FD, LAYOUT_NAMES } from './layout.js';
+import { desksFor, presetSpots, loungeFor, FW, FD, LAYOUT_NAMES, toRoom, toBase, layoutToRoom } from './layout.js';
 import { DEVICE_LABELS } from './scene.js';
 import { ctx } from './ctx.js';
 
 const STYLES = ['bob', 'spiky', 'pony', 'buns', 'farmer'];
 let draft = null, selected = null, drag = null, base = null;
 const round = (n) => +n.toFixed(2);
+// the draft keeps saved coordinates; the scene, the pointer and the checks are in the (wider) room's (layout.js)
+const check = () => checkLayout(layoutToRoom(draft), { sizes: ctx.scene.floors.get(draft.id)?.sizes });
 
 function enter() {
   const f = ctx.state.floor;
@@ -76,16 +78,16 @@ function drawBar() {
   $('eAddDev').onclick = () => {
     const type = $('eDevType').value;
     let n = 1; while (draft.devices.some((d) => d.id === `${type}-${n}`)) n++;
-    const dev = { id: `${type}-${n}`, type, x: round((Math.random() - .5) * 3), z: round(FD / 2 - 1.6), ry: 0 };
+    const dev = { id: `${type}-${n}`, type, x: round((Math.random() - .5) * 3), z: round(toBase({ x: 0, z: FD / 2 - 1.6 }).z), ry: 0 };
     draft.devices.push(dev);
     selected = { device: dev.id };
     rebuild(); select();
   };
   const rotate = (k) => {
     if (!sel) return;
-    const id = selected.agent || selected.device, before = problemsOf(checkLayout(draft, { sizes: ctx.scene.floors.get(draft.id)?.sizes }), id).length, prev = sel.ry || 0;
+    const id = selected.agent || selected.device, before = problemsOf(check(), id).length, prev = sel.ry || 0;
     sel.ry = round((prev + k * Math.PI / 4) % (Math.PI * 2));
-    const bad = problemsOf(checkLayout(draft, { sizes: ctx.scene.floors.get(draft.id)?.sizes }), id);
+    const bad = problemsOf(check(), id);
     if (bad.length > before) { sel.ry = prev; toast(`Cannot turn it here: it ${bad[0].reason}.`, 3500); return; }
     const g = ctx.scene.objectFor(draft.id, selected); if (g) g.rotation.y = sel.ry;
   };
@@ -131,7 +133,8 @@ function onDown(e) {
   const item = hit.agent ? draft.desks.find((d) => d.agent === hit.agent) : draft.devices.find((d) => d.id === hit.device);
   const p = ctx.scene.floorPoint(e, draft.id);
   if (!item || !p) return;
-  drag = { item, id: hit.agent || hit.device, from: { x: item.x, z: item.z }, before: problemsOf(checkLayout(draft, { sizes: ctx.scene.floors.get(draft.id)?.sizes }), hit.agent || hit.device).length, dx: item.x - p.x, dz: item.z - p.z, moved: false };
+  const at = toRoom(item);
+  drag = { item, id: hit.agent || hit.device, from: { x: item.x, z: item.z }, before: problemsOf(check(), hit.agent || hit.device).length, dx: at.x - p.x, dz: at.z - p.z, moved: false };
   ctx.scene.controls.enabled = false;
   el().setPointerCapture(e.pointerId);
   e.stopPropagation();
@@ -140,21 +143,21 @@ function onMove(e) {
   if (!drag) return;
   const p = ctx.scene.floorPoint(e, draft.id);
   if (!p) return;
-  drag.item.x = round(Math.max(-FW / 2 + .6, Math.min(FW / 2 - .6, p.x + drag.dx)));
-  drag.item.z = round(Math.max(-FD / 2 + .6, Math.min(FD / 2 - .4, p.z + drag.dz)));
+  const at = { x: Math.max(-FW / 2 + .6, Math.min(FW / 2 - .6, p.x + drag.dx)), z: Math.max(-FD / 2 + .6, Math.min(FD / 2 - .4, p.z + drag.dz)) };
+  const b = toBase(at); drag.item.x = round(b.x); drag.item.z = round(b.z);
   drag.moved = true;
   const g = ctx.scene.objectFor(draft.id, selected);
-  if (g) { g.position.x = drag.item.x; g.position.z = drag.item.z; }
-  drag.bad = problemsOf(checkLayout(draft, { sizes: ctx.scene.floors.get(draft.id)?.sizes }), drag.id).length > drag.before;    // red ghost: worse than before the drag
+  if (g) { g.position.x = at.x; g.position.z = at.z; }
+  drag.bad = problemsOf(check(), drag.id).length > drag.before;    // red ghost: worse than before the drag
   ctx.scene.warnSelection(drag.bad);
 }
 function onUp(e) {
   if (!drag) return;
   // nothing may stand inside anything else, and every desk must stay reachable: such a drop is undone
   if (drag.bad) {
-    const why = problemsOf(checkLayout(draft, { sizes: ctx.scene.floors.get(draft.id)?.sizes }), drag.id)[0];
+    const why = problemsOf(check(), drag.id)[0];
     Object.assign(drag.item, drag.from);
-    const g = ctx.scene.objectFor(draft.id, selected); if (g) { g.position.x = drag.from.x; g.position.z = drag.from.z; }
+    const g = ctx.scene.objectFor(draft.id, selected), back = toRoom(drag.from); if (g) { g.position.x = back.x; g.position.z = back.z; }
     toast(why ? `Not here: it ${why.reason}. Leave room to walk around it.` : 'Not here: leave room to walk around it.', 4000);
   }
   ctx.scene.warnSelection(false);

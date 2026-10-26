@@ -46,14 +46,14 @@ const mat = {
 const fabric = (color, size = .3) => pbrSet('poly_wool_herringbone', { size, color });
 
 // ---------- the room: floor, walls, baseboards, windows ----------
-export function realRoom(g, { FW, FD, FH, TOP, missing }) {
+export function realRoom(g, { FW, FD, FH, TOP, missing, windows }) {
   const slab = mesh(rbox(FW + .5, .3, FD + .5, .02), new THREE.MeshStandardMaterial({ color: 0xd9d3c8, roughness: .8 }), 0, .15, 0); g.add(slab);
   const floor = mesh(rbox(FW, .06, FD, .005, 1), missing ? new THREE.MeshStandardMaterial({ color: 0xcfc8bb }) : pbrSet('laminate_floor_02', { size: 1.7 }), 0, TOP - .03, 0); g.add(floor);
   const plaster = pbrSet('beige_wall_001', { size: 1.5, color: 0xffffff });
   g.add(mesh(rbox(FW + .3, FH, .3, .01, 1), plaster, -.15, TOP + FH / 2, -FD / 2 - .15), mesh(rbox(.3, FH, FD, .01, 1), plaster, -FW / 2 - .15, TOP + FH / 2, 0));
   const base = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: .45 });
   g.add(mesh(rbox(FW, .14, .03, .008), base, 0, TOP + .07, -FD / 2 + .015), mesh(rbox(.03, .14, FD, .008), base, -FW / 2 + .015, TOP + .07, 0));
-  for (const z of [-4.2, .2, 4.4]) {                                 // tall windows with thin aluminium frames
+  for (const z of windows) {                                         // tall windows with thin aluminium frames
     const w = new THREE.Group(); w.position.set(-FW / 2 + .03, TOP + 2.05, z); g.add(w);
     const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.7), mat.glass); pane.rotation.y = Math.PI / 2; pane.position.x = .01; w.add(pane);
     for (const y of [-.87, .87]) w.add(mesh(rbox(.07, .05, 2.9, .01), mat.frame, .02, y, 0));

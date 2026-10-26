@@ -1,12 +1,22 @@
-// Floor geometry and desk layout presets (Rows, Pods, Circle, Open Space). Units are metres; the office spans
-// x -8..8 and z -6.5..6.5. The isometric camera looks from +x +z, so the back wall (z -6.5) and the left wall
-// (x -8) are the two walls you see; the front half holds the lounge (right) and the ping-pong table (left).
-export const FW = 16, FD = 13, FH = 3.4, SLAB = .4, GAP = 3.2;
+// Floor geometry and desk layout presets (Rows, Pods, Circle, Open Space). Units are metres. The isometric camera
+// looks from +x +z, so the back wall and the left wall are the two walls you see; the front half holds the lounge
+// (right) and the ping-pong table (left).
+// Saved desks and devices (and the presets below) are in the original office's coordinates, 16 x 13 m
+// (x -8..8, z -6.5..6.5); since 0.8.4 the office is drawn wider, 22 x 16 m, so there is room between desks, around
+// the lounge and the meeting table (furniture keeps its size). toRoom spreads saved positions out when a Floor
+// is drawn, toBase turns them back when Edit Mode saves; the server and older versions keep the same files.
+export const BASE_W = 16, BASE_D = 13;
+export const FW = 22, FD = 16, FH = 3.4, SLAB = .4, GAP = 3.2;
+const SX = FW / BASE_W, SZ = FD / BASE_D;
+export const toRoom = (p) => ({ ...p, x: +(p.x * SX).toFixed(3), z: +(p.z * SZ).toFixed(3) });
+export const toBase = (p) => ({ ...p, x: +(p.x / SX).toFixed(3), z: +(p.z / SZ).toFixed(3) });
+// a layout ({ desks, devices }) in room coordinates
+export const layoutToRoom = (l) => ({ ...l, desks: (l.desks || []).map(toRoom), devices: (l.devices || []).map(toRoom) });
 // the Lobby stacks the Floors with air between them (a cutaway dollhouse) so every office stays visible
 export const floorY = (n) => n * (FH + SLAB + GAP);
 export const LAYOUT_NAMES = { rows: 'Rows', pods: 'Pods', circle: 'Circle', 'open-space': 'Open Space' };
 
-// desks live in the work zone: the back two thirds of the room, clear of the pantry on the left wall
+// desks live in the work zone: the back two thirds of the room, clear of the pantry on the left wall (base coordinates)
 const WORK = { x0: -5.8, x1: 7, z0: -4.6, z1: 1.6 };
 const clampX = (x) => Math.max(WORK.x0, Math.min(WORK.x1, x));
 const clampZ = (z) => Math.max(WORK.z0, Math.min(WORK.z1 + 2.4, z));

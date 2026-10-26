@@ -16,7 +16,7 @@ test('footprints are rotated and the grid inflates them by the character radius'
   const at = (x, z) => { const c = g.cellOf(x, z); return g.free(c.i, c.j); };
   assert.equal(at(desk.cx, 0), false); assert.equal(at(desk.cx + desk.hd + .2, 0), false, 'within the radius');
   assert.equal(at(desk.cx + desk.hd + .7, 0), true);
-  assert.equal(at(-7.9, 0), false, 'walls'); assert.equal(at(3, 3), true);
+  assert.equal(at(nav.ROOM.x0 + .1, 0), false, 'walls'); assert.equal(at(3, 3), true);
 });
 
 test('A* goes around obstacles with string pulled paths; no way is no path', () => {
@@ -33,7 +33,8 @@ test('A* goes around obstacles with string pulled paths; no way is no path', () 
 });
 
 test('narrow gaps: a character fits through a door of its size, not through a slit', () => {
-  const doorWith = (gap) => [{ cx: 0, cz: -3 - gap / 2, hw: .2, hd: 3, ry: 0, id: 'top' }, { cx: 0, cz: 3 + gap / 2, hw: .2, hd: 3, ry: 0, id: 'bottom' }];
+  const H = nav.ROOM.z1;                                             // walls from the door to the room's walls
+  const doorWith = (gap) => [{ cx: 0, cz: -H / 2 - gap / 2, hw: .2, hd: H / 2, ry: 0, id: 'top' }, { cx: 0, cz: H / 2 + gap / 2, hw: .2, hd: H / 2, ry: 0, id: 'bottom' }];
   assert.ok(new NavGrid(doorWith(1.2)).path({ x: -3, z: 0 }, { x: 3, z: 0 }), 'a 1.2 m door');
   assert.equal(new NavGrid(doorWith(.5)).path({ x: -3, z: 0 }, { x: 3, z: 0 }), null, 'a 0.5 m slit');
 });
@@ -62,7 +63,7 @@ test('Edit Mode: overlapping things and unreachable desks are refused', () => {
   assert.deepEqual(nav.checkLayout({ desks: [desk('a', 0, -3), desk('b', 4, -3)], devices: [{ id: 'plant-1', type: 'plant', x: -6, z: -5 }] }), { ok: true, problems: [] });
   const r = nav.checkLayout({ desks: [desk('a', 0, -3), desk('b', .8, -3)], devices: [] });
   assert.equal(r.ok, false); assert.match(r.problems[0].reason, /overlaps a/);
-  assert.match(nav.checkLayout({ desks: [desk('a', 7.6, 0)], devices: [] }).problems[0].reason, /outside the room/);
+  assert.match(nav.checkLayout({ desks: [desk('a', nav.ROOM.x1 - .4, 0)], devices: [] }).problems[0].reason, /outside the room/);
   // a desk walled in by bookshelves: no way to its chair
   const walls = [[-1.6, -4.4, 0], [1.6, -4.4, 0], [0, -5.6, 0], [-2.3, -3.6, Math.PI / 2], [2.3, -3.6, Math.PI / 2]].map(([x, z, ry], i) => ({ id: `shelf-${i}`, type: 'bookshelf', x, z, ry }));
   const enclosed = nav.checkLayout({ desks: [desk('a', 0, -2.6, Math.PI)], devices: [...walls, { id: 'pp', type: 'pingpong', x: 0, z: -.6 }] });
@@ -112,11 +113,11 @@ async function officeSoak(sizes = {}) {
   const THREE = await import('three');
   const { buildChibi } = await import('../ui/chibi.js');
   const life = await import('../ui/life.js');
-  const { desksFor } = await import('../ui/layout.js');
+  const { desksFor, toRoom } = await import('../ui/layout.js');
   const MEETING = { id: 'meeting-table-1', type: 'meeting-table', x: .3, z: 4.5, ry: 0 };   // added to every Floor (floors.js)
-  const devices = [...JSON.parse(fs.readFileSync(new URL('./fixtures/dtamu-devices.json', import.meta.url))), MEETING];
+  const devices = [...JSON.parse(fs.readFileSync(new URL('./fixtures/dtamu-devices.json', import.meta.url))), MEETING].map(toRoom);   // saved -> room
   const agents = Array.from({ length: 9 }, (_, i) => ({ id: `a${i}` }));
-  const desks = desksFor(agents, [], 'pods');
+  const desks = desksFor(agents, [], 'pods').map(toRoom);
   const rects = footprints({ desks, devices }, { sizes }), grid = new NavGrid(rects);
   const spots = life.loungeSpots(devices), seats = life.meetingSeats(devices), occupied = new Map();
   const look = { eye: '#2f3a4a', pants: '#334155', shoe: '#1f2937', hat: '#f08a24', skin: '#f6d2b0', hair: '#2b2440', shirt: '#3d82d6', sleeve: '#3d82d6', style: 'bob' };
