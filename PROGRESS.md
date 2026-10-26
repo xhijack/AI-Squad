@@ -398,6 +398,16 @@ Brief: `PHASE-2.5-RITUALS.md` (concepts from CLAW3D and gstack, our own text and
 - **Security Engineer** role (v1) with the `security-review` skill (STRIDE for plans, OWASP Top 10 for releases, evidence per finding, local and staging only). It is an optional role in **Software House v3**, which also has the premise check and plan review in the lead's rules. project-manager v4 and sprint-lead v5 have `plan-review` and the scope mode rule. Floors on older versions show "Update available".
 - Tests: collect (scope parsing, events, plan review), audit (plan review metrics), retro-squad (Scope change item and "Back to"), blueprints (v3, the Security role), and version updates. No screenshots: the only new screen element is a standard Attention card.
 
+### 0.5.2: the conversation view (owner priority, between Phase 2.5 parts)
+- The owner asked for this as "0.4.3". 0.5.0 and 0.5.1 were already released, and `/aisquad` compares versions to decide whether to restart the server, so it ships as **0.5.2**. The remaining Phase 2.5 parts move up by one: office rituals 0.5.3, shipping safety 0.5.4, design and second opinions 0.5.5.
+- Any Attention item opens large (`ui/convo.js`). Click a card's text or its ⤢ button, a row in the Needs you index, or the Desk. The dialog is 900 px wide and up to 85vh on desktop, and a full-screen sheet on phones.
+- The portrait (`ui/portrait.js`) is the agent's own chibi in one small WebGL canvas: same look, colours and desk toy, idle breathing, blinking and a talking animation, drawn once with reduced motion, and disposed on close.
+- The message is a speech bubble with readable markdown (16 px, line-height 1.6, 72ch, headings, lists, zebra tables with horizontal scroll, code blocks, links). `mdLite` now renders `[text](https://…)` and bare https URLs, only http and https.
+- The action bar is chosen per kind (`ui/convo-model.js`): options as large buttons with the recommended one highlighted, free text, Reply with OK or Dismiss, Open desk, and Resume / Start fresh for crashes. "n of m" with previous and next, the arrow keys, and Esc to close.
+- The office camera eases to the agent (only on the Floor in view) and a short bubble appears over its head ("Finished: …", "Question for you").
+- The Needs you popover is an index with a one-line preview; for dialogs the preview shows the question, not the dialog's header.
+- Tests: `test/convo.test.js` (previews, bubbles, actions per kind, n of m, markdown and safe links). Screenshots (swap 73 %): `playground/reference/convo-finished-1440.png`, `convo-question-1440.png`, `convo-finished-390.png`, `convo-index-1440.png`.
+
 ## How to run
 
 ```
