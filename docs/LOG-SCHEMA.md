@@ -235,6 +235,17 @@ not start (`error`; `dropped` after three attempts). **`dispatch.removed`**: the
 ```
 
 
+**`chat.message`** (0.14): a person sent an agent a direct message (Desk → Chat). `context` is `space` or
+`general`; `delivery` is `typed` (into the running Desk session), `job` (a background job answers) or `queued`;
+`text` is the first 200 characters. **`chat.reply`**: the agent's answer reached the chat (`status`).
+
+```json
+{"v":1,"id":"5d1c0b9e7a33","ts":"2026-10-27T02:00:00.000Z","floor":"sales","sprint":null,"module":null,"agent":"rudi-researcher","role":"lead-researcher","session":null,"model":null,"type":"chat.message","summary":"Dewi → rudi-researcher (chat): Who are the three biggest coffee chains in Bandung?","data":{"context":"space","delivery":"job","from":"Dewi","text":"Who are the three biggest coffee chains in Bandung?","by":"Dewi"}}
+```
+
+Since 0.14, an event caused by a person other than the Owner (a member's start, stop, task or chat) carries
+`data.by` with their name.
+
 ### Tools (`tools`)
 
 **`tool.call`**: One tool call: `data.tool`, `data.target` (a path relative to the project, a trimmed command or a pattern, never file contents), `data.ms`, `data.ok`, `data.error` (first 200 characters).

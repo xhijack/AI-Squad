@@ -771,6 +771,16 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `test/dispatcher.test.js` (capacity, aging, plan with reserve / shift / quota / Space maximum / one start per agent, the queue on disk, retries, idle stop rules, quota parsing and the cost proxy, and end to end: a job waits for the machine's only slot, the tick starts it after the first job stops, a scheduled job waits outside the shift). `test/resume.test.js` now expects the queue instead of the 409.
 - Known limits: interactive Desk sessions report their limits only on their screen, so the quota guard reads signals from background jobs and the cost proxy; the cost proxy is an estimate.
 
+## Phase 4, Sprint 5: people, roles and direct chat, 0.14.0 (27 Oct 2026)
+
+- **People (`server/users.js`)**: Owner (the existing PIN), members and viewers with their own 8-digit PINs (scrypt hashes in `~/.aisquad/users.json`, 0600; shown once; a new PIN replaces the old one at once; a match is cached by SHA-256 for 10 minutes).
+- **Roles (`server/access.js`)**: every route needs viewer (reads), member (work) or Owner (Building settings, sign-in key, backups, Company Brain, dispatcher settings and queue, people, Spaces and agents configuration, repositories, merges and approvals, applying audit fixes, template libraries). 403 with "Only the Owner can do this". Owner-only Spaces are 404 for everyone else and left out of the Building, Admin, Changes, jobs and the queue (also for reads without a PIN). The acting person is kept per request (`AsyncLocalStorage`): Changes record their name, Squad Log events get `data.by` (not for the Owner).
+- **Direct chat (`server/chat.js`)**: a thread per agent and context. Space: typed into the running Desk session (its answer is read from the transcript by a 5 s tick), else a background job (P0, $1, `dontAsk`, continues the chat's own session, the last 10 turns in the prompt). General: a neutral folder with only the agent file and the Company Brain, no repositories, the thread outside the Space. The lead's note in `docs/squad/DIRECT.md`; `chat.message` / `chat.reply` in the Squad Log. Agents' context section says people may message them.
+- **UI**: Menu → People (add, role, new PIN, remove; the PIN shown once); the page hides Owner-only menu items for members and viewers (`GET /api/me`); Desk → Chat (This Space / General, live answers). EN + ID.
+- Tests: `test/people.test.js` (people and hashes, roles over HTTP, Owner-only Spaces hidden, a reset PIN, chat by job in a Space with the thread, the lead's note, `data.by` and a resumed chat session, General's neutral folder, a typed chat whose session stopped). `test/repos-squad.test.js` waits for a merge to end before the next one (a race between the merge log and the worktree cleanup).
+- Checked in headless Chromium (Playwright, Indonesian UI): Admin → Spaces and Dispatcher, Menu → People, Desk → Chat render without page errors. The capacity and quota lines of the Dispatcher are now translated as whole sentences (a word-by-word match of the server's English gave mixed text).
+- Known limits: viewers still see action buttons (the server refuses them); the Owner's browser without a PIN shows no Owner-only Spaces until the PIN is entered.
+
 ## How to run
 
 ```
