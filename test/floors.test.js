@@ -179,3 +179,18 @@ test('recovery settings: defaults, update, and the lead is told the maximum of c
   floors.updateFloorConfig(proj, { layout: 'rows' });
   assert.equal(floors.readFloor(proj).floor.recovery.maxAgents, 3, 'kept when other settings change');
 });
+
+test('Autopilot: older floor.json files stay off; the level and timeout reach the lead\'s agent file', () => {
+  const raw = JSON.parse(read('.claude/aisquad/floor.json'));
+  assert.equal(raw.autopilot, 'balanced', 'a Floor created by the wizard starts Balanced');
+  delete raw.autopilot; fs.writeFileSync(path.join(proj, '.claude/aisquad/floor.json'), JSON.stringify(raw));
+  assert.equal(floors.readFloor(proj).floor.autopilot, 'off', 'a floor.json from before 0.4.0');
+  floors.updateFloorConfig(proj, { autopilot: 'full', autopilotTimeoutSec: 240 });
+  const f = floors.readFloor(proj).floor;
+  assert.deepEqual([f.autopilot, f.autopilotTimeoutSec], ['full', 240]);
+  const lead = read('.claude/agents/rina-project-manager.md');
+  assert.match(lead, /## Autopilot\n- Autopilot is \*\*full\*\*/); assert.match(lead, /\n  - Money: prices/); assert.match(lead, /within 4 minutes/);
+  assert.doesNotMatch(read('.claude/agents/ramdani-frappe-developer.md'), /## Autopilot/);
+  floors.updateFloorConfig(proj, { autopilot: 'off' });
+  assert.doesNotMatch(read('.claude/agents/rina-project-manager.md'), /## Autopilot/);
+});

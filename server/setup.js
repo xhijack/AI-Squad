@@ -26,7 +26,7 @@ export async function createSquad(input) {
   const r = await floors.createFloor({
     name, goal: input.goal, tagline: input.tagline || `${bp.title} squad`, directory: { mode, path: target }, team: team.map((m) => ({ displayName: m.displayName || m.template, template: m.template, lead: !!m.lead })),
     workflow: bp.workflow, layout: floors.LAYOUTS.includes(bp.layout) ? bp.layout : 'rows', budget: input.budget, blueprint: { id: bp.id, version: bp.version },
-    git: { qualityGate: String(input.qualityGate || '') }, installSkills: input.installSkills !== false,
+    git: { qualityGate: String(input.qualityGate || '') }, installSkills: input.installSkills !== false, autopilot: input.autopilot,
   });
   const lead = r.team.agents.find((a) => a.lead);
   return { ok: true, id: r.entry.id, number: r.entry.number, path: r.entry.path, lead: lead?.id || null, blueprint: { id: bp.id, version: bp.version } };

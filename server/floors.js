@@ -14,6 +14,7 @@ import * as sprint from './sprint.js';
 import * as blueprints from './blueprints.js';
 import * as skills from './skills.js';
 import * as recovery from './recovery.js';
+import * as autopilot from './autopilot.js';
 
 const run = promisify(execFile);
 
@@ -88,6 +89,8 @@ export function cleanFloor(f = {}, prev = {}) {
     audit: auditSettings({ ...prev.audit, ...f.audit }, WORKFLOWS.includes(pick('workflow')) ? pick('workflow') : 'free-team'),
     // after a crash: resume automatically (off by default); how many agents may run at once (the lead is told)
     recovery: recovery.cleanRecovery({ ...prev.recovery, ...f.recovery }),
+    // Autopilot level and auto-answer timeout (server/autopilot.js); a floor.json without it stays "off"
+    ...autopilot.cleanSettings({ autopilot: pick('autopilot'), autopilotTimeoutSec: pick('autopilotTimeoutSec') }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
@@ -167,7 +170,8 @@ export function generate(root) {
     wanted.add(a.id + '.md');
     const standard = bp ? { title: bp.title, version: bp.version, text: blueprints.standardText(bp, lead), roleRules: blueprints.roleRules(bp, a.role.template), lead } : null;
     writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard, skillName: (n) => skills.agentSkillName(root, n),
-      memory: a === runsSquad ? recovery.memoryRules(floor.recovery.maxAgents) : null }));
+      memory: a === runsSquad ? recovery.memoryRules(floor.recovery.maxAgents) : null,
+      autopilot: a === runsSquad ? autopilot.leadRules(floor.autopilot, { timeoutSec: floor.autopilotTimeoutSec, questionsFile: sprint.hasPack(root) ? 'docs/squad/QUESTIONS.md' : 'docs/QUESTIONS.md' }) : null }));
   }
   // remove generated files of agents that left the team (hand-written agent files are never touched)
   for (const f of safeReaddir(agentsDir(root))) {
@@ -407,7 +411,7 @@ export async function createFloor(input) {
     const has = await run('git', ['-C', root, 'remote'], { timeout: 10000 }).then((r) => r.stdout.split('\n').includes('origin'), () => true);
     if (!has && gitOk(git.remote)) await run('git', ['-C', root, 'remote', 'add', 'origin', git.remote], { timeout: 10000 }).catch(() => {});
   }
-  const floor = cleanFloor({ ...input, name, accent: input.accent || ACCENTS[(number - 1) % ACCENTS.length], desks: [], devices: undefined });
+  const floor = cleanFloor({ ...input, name, accent: input.accent || ACCENTS[(number - 1) % ACCENTS.length], desks: [], devices: undefined, autopilot: input.autopilot || autopilot.DEFAULT_LEVEL });
   writeFloor(root, floor);
   writeGit(root, git);
   for (const t of templates) lockTemplate(root, t);
