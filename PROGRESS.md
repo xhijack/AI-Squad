@@ -572,6 +572,18 @@ Fixed at the root (`ui/nav.js`, `ui/life.js`, `ui/scene.js`):
 
 Tests (`test/nav.test.js`): two ten-minute soaks of the real office life (`updateLife`, chibi rigs) on the owner's exact Floor. It uses the `pods` layout, nine agents, its 13 devices from `floor.json` (copied to `test/fixtures/dtamu-devices.json`: positions only) plus the meeting table. Agents switch between work and idle, and there are meetings. Every step, every character is checked against every footprint, allowing only the furniture it sits on. One run uses the footprint table, one the realistic look's measured furniture (`test/fixtures/realistic-sizes.json`). Zero penetrations, about 9,800 moves each.
 
+## 0.8.3: a realistic laptop (Phase 3.3 item 3, 26 Oct 2026)
+
+- `laptopModel` (`ui/realistic-props.js`) is used at every laptop desk in both looks. It replaces the flat box with a drawn keyboard and the step 1b plate.
+  - A thin aluminium base and lid with rounded edges.
+  - Separate keys (instanced, one draw call) in a dark keyboard well, and a glass trackpad.
+  - A hinge, and a glossy black bezel with a camera dot around the live screen. The screen is the same canvas as before, so the Screen view and clicks work as they did.
+  - Real proportions: 16" laptop ratios, 0.46 station units wide (0.6 m at 1.3×, about a third of the desk) instead of 0.62.
+  - The meeting table's laptop is the same model.
+- Monitors use the realistic housing (bezel, back, aluminium neck and foot) in the default look too, instead of a box on a post.
+- No CC0 modern laptop model was found (Poly Haven's only laptop is a 1990s one), so it is built in code, like the office chair; there is no new asset file.
+- Screenshots: `playground/reference/laptop-0.8.3-desk.png` (a desk facing the camera, default and realistic look) and `laptop-0.8.3-screen.png` (the Screen view of the same desk).
+
 ## How to run
 
 ```
