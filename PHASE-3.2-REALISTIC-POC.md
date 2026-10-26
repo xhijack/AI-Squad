@@ -53,3 +53,24 @@ A separate scene `?look=realistic` (the current look stays the default) with ONE
 Replace every Floor's furniture and all characters with the realistic set, keep navigation,
 collisions, seats, Edit Mode, props per role, first person, conversation portraits and voices
 working; agent identity via clothing colour, hair and a name tag instead of chibi styles.
+
+## Owner correction after step 1 (26 Oct 2026)
+
+"Realistic" did NOT mean human characters. The owner wants:
+- **Keep the chibi characters** (identity of the product) but make them **smooth and polished,
+  not boxy**: high enough segment counts, rounded shapes, real-looking materials (soft skin,
+  fabric clothes, glossy hair with sculpted strands, shoes), proper hands, smooth shading and
+  soft shadows. Same proportions, faces, hair styles, colours and props as today.
+- **Keep the isometric office concept** exactly (camera, layout, walls with windows, brand wall,
+  lounge, meeting table, server rack, Floors in the Lobby dollhouse).
+- **Make the furniture and props realistic** like the step 1 desk: Poly Haven / ambientCG CC0
+  desk, office chair, laptop, monitor, lamp, mug, keyboard, mouse, plants, sofa, shelves, rug,
+  PBR wood floor and plaster walls, HDRI lighting, soft and contact shadows. Nothing toy-like or
+  boxy.
+
+Step 1b (do now, then STOP and report with screenshots): one Squad Sprint Floor at
+`?look=realistic` in the normal isometric view with 3-4 upgraded chibi agents at realistic desks
+(working and idle in the lounge), plus a close-up of one chibi at its desk, side by side with
+today's look. If good CC0 / CC-BY rigged chibi models exist that match our style better than an
+upgraded procedural chibi, show one as an alternative in the same screenshots (licence first).
+Rocketbox humans are dropped from the plan.
