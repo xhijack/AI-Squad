@@ -521,3 +521,9 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 /* "Finished": an agent's report, calm (it blocks nothing) */
 .att.finished { border-left-color: var(--info); }
 .att.finished .replyMsg { max-height: 220px; }
+
+/* Retro dialog */
+.retroList { margin: 4px 0 0; padding-left: 20px; }
+.retroList li + li { margin-top: 4px; }
+.retroTrend > div { display: grid; grid-template-columns: 80px 1fr 64px; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0; }
+.retroTrend b { text-align: right; }
