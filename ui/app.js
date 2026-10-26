@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { createSceneHost } from './renderer.js';
+import { OVERVIEWS, defaultOverview } from './scene-model.js';
 import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
@@ -57,12 +58,17 @@ addEventListener('hashchange', () => {
 // ---------- scene ----------
 const scene = createSceneHost($('scene'), {
   onPickFloor: (id) => { if (state.route.mode === 'lobby' && !ctx.editing) location.hash = `#/floor/${id}`; },
-  onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
+  onPickAgent: (floorId, agentId) => { if (!ctx.editing && (state.route.floorId === floorId || state.route.mode === 'lobby')) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
+  onPickQueue: () => ctx.actions.admin?.({ dataset: { tab: 'dispatcher' } }),                          // Office / List: the Lobby
+  onPickOwner: () => document.querySelector('[data-pop="attPop"]')?.click(),                            // Office / List: approvals
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
   onPickRack: () => { if (!ctx.editing) ctx.actions.meter(); },
   onPickEyes: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/eyes`; },
 });
 ctx.scene = scene;
+// the Lobby's overview: Building (stacked Floors), Office (one floor plan) or List; phones start with the List
+const OVERVIEW_KEY = 'aisquad.overview';
+ctx.overview = (() => { try { const v = localStorage.getItem(OVERVIEW_KEY); return OVERVIEWS.includes(v) ? v : defaultOverview({ phone: isPhone() }); } catch { return defaultOverview({ phone: isPhone() }); } })();
 window.aisquad = ctx;                     // handy in the console and for scripted UI checks
 
 // ---------- polling ----------
@@ -327,6 +333,7 @@ function dockHtml(b, route, f) {
   const w = WORST(b.meter), voice = voiceOn(), floor = route.mode !== 'lobby' && f && !f.missing;
   const out = [];
   if (!floor) out.push(btn('setup-squad', 'spark', tt('Set up Squad'), '', tt('Set up Squad')), '<span class="dsep"></span>');
+  if (!floor) out.push(`<span class="ovSeg" role="group" aria-label="${tt('Overview')}">${[['building', tt('Building')], ['office', tt('Office')], ['list', tt('List')]].map(([v, l]) => `<button class="dk ov" data-act="overview" data-v="${v}" aria-pressed="${ctx.overview === v}">${l}</button>`).join('')}</span>`, '<span class="dsep"></span>');
   if (floor && state.floor?.board) out.push(btn('board', 'board', tt('Board')));
   if (floor && f.workflow === 'squad-sprint') out.push(btn('performance', 'chart', tt('Performance and cost projection')));
   if (floor) out.push(btn('log', 'log', tt('Squad Log: timeline and conversation')));
@@ -387,11 +394,12 @@ function render() {
 
   // 3D
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
-  scene.route(route, !!ctx.editing);                                  // three.js or Iso Pixel (ui/renderer.js)
+  scene.route(route, !!ctx.editing, ctx.overview);                     // three.js, Iso Pixel or the List (ui/renderer.js)
   scene.sync(floorsForScene);
+  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits });
   showRenderer();
-  const viewKey = routeKey(route) + (state.desk ? '' : '-');
-  if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route }); }
+  const viewKey = routeKey(route) + (state.desk ? '' : '-') + ctx.overview;
+  if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route, overview: ctx.overview }); }
 
   // monitors: live tmux text in the over-the-shoulder view, latest QA screenshot on QA screens
   scene.setLiveText(route.screen && state.desk?.running ? state.desk.screen : null);
@@ -526,6 +534,7 @@ const actions = Object.assign(ctx.actions, {
     body.closest('dialog').classList.add('xwide');
     body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
+  overview(el) { ctx.overview = el.dataset.v; try { localStorage.setItem(OVERVIEW_KEY, ctx.overview); } catch { /* private mode */ } render(); showRenderer(); },
   voice() { const on = !voiceOn(); setVoice(on); if (on) speak(tt('Voice is on, boss.')); render(); },
   async start(el) { const r = await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`); if (r) toast(r.waiting ? queuedText(r) : tt('Starting agent…'), r.waiting ? 6000 : 2800); },
   // continue the agent's last Claude Code session (after a crash this is the main action)

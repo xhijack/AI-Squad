@@ -5,8 +5,11 @@
 // use is disposed, so its memory (and the WebGL context) is given back.
 //   Auto: Iso on phones, on devices with 4 GB or less, or with more than 12 agents; three.js otherwise.
 //   The first person, screen and follow views and Edit Mode always use three.js.
+// The Lobby has three overviews (0.17): the Building (stacked Floors, in the chosen renderer), the Office (one floor
+// plan for the whole company, Iso Pixel) and the List (plain DOM, the default on phones).
 import { BuildingScene } from './scene.js';
 import { IsoScene } from './iso.js';
+import { ListScene } from './list.js';
 import { autoRenderer as auto } from './scene-model.js';
 
 export const RENDERERS = ['auto', 'three', 'iso'];
@@ -20,13 +23,16 @@ export function createSceneHost(container, handlers) {
     chosen: savedRenderer(),
     kind: null, impl: null, last: {},
     // what the page wants now: the route and Edit Mode decide when only three.js can do it
-    want(route = host.last.view || {}, editing = false) {
+    overview: null,
+    want(route = host.last.view || {}, editing = false, overview = host.overview) {
       if (editing || route.eyes || route.screen || route.follow) return 'three';
+      if (route.mode === 'lobby' && overview === 'office') return 'iso';
+      if (route.mode === 'lobby' && overview === 'list') return 'list';
       if (host.chosen !== 'auto') return host.chosen;
       const agents = (host.last.floors || []).reduce((n, f) => n + (f.agents?.length || 0), 0);
       return autoRenderer({ agents });
     },
-    route(route, editing) { host.use(host.want(route, editing)); },
+    route(route, editing, overview) { host.overview = overview; host.use(host.want(route, editing, overview)); },
     choose(kind) {
       host.chosen = RENDERERS.includes(kind) ? kind : 'auto';
       try { localStorage.setItem(KEY, host.chosen); } catch { /* private mode */ }
@@ -37,11 +43,12 @@ export function createSceneHost(container, handlers) {
       if (host.kind === kind && host.impl) return host.impl;
       host.impl?.dispose?.();
       host.kind = kind;
-      host.impl = kind === 'iso' ? new IsoScene(container, handlers) : new BuildingScene(container, handlers);
+      host.impl = kind === 'iso' ? new IsoScene(container, handlers) : kind === 'list' ? new ListScene(container, handlers) : new BuildingScene(container, handlers);
       const l = host.last;
       if (l.theme) host.impl.setTheme(...l.theme);
       if (l.insets) host.impl.setInsets(l.insets);
       if (l.floors) host.impl.sync(l.floors);
+      if (l.company) host.impl.setCompany?.(l.company);
       if (l.view) host.impl.setView(l.view);
       host.impl._viewKey = null;
       return host.impl;
@@ -50,6 +57,7 @@ export function createSceneHost(container, handlers) {
     setView(view) { host.last.view = view; host.impl.setView(view); },
     setInsets(insets) { host.last.insets = insets; host.impl.setInsets(insets); },
     setTheme(...a) { host.last.theme = a; host.impl.setTheme(...a); },
+    setCompany(c) { host.last.company = c; host.impl.setCompany?.(c); },
   };
   host.use(host.want());
   // everything else goes to the renderer in use (Edit Mode reaches three.js internals this way)
