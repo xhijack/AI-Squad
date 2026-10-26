@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config, paths } from '../server/config.js';
+import { config, paths, VERSION } from '../server/config.js';
 import * as service from '../server/service.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,8 +41,18 @@ async function ensureServer() {
   const b = await get('/api/building');
   const up = !!(b && (b.floors || b.locked));
   const mode = service.detectMode();
-  if (up && !(mode !== 'detached' && service.installed({ mode }))) return 'running';   // a server we did not install: leave it
-  const r = service.start({ port: PORT, host: HOST, root: ROOT }, { mode });
+  // a running server from another version or checkout (e.g. before a plugin update or git pull) is replaced
+  const v = up ? await get('/api/version') : null;
+  const outdated = up && !(v && v.version === VERSION && v.root === ROOT);
+  if (up && outdated && !(mode !== 'detached' && service.installed({ mode }))) {
+    if (!service.stop({ mode: 'detached' }).stopped) throw new Error(`An older AI Squad server (${v?.version || 'before 0.2.2'}) is running on port ${PORT} and could not be stopped. Stop it and run /aisquad again.`);
+    for (let i = 0; i < 20 && await get('/api/building'); i++) await sleep(250);
+    service.start({ port: PORT, host: HOST, root: ROOT }, { mode: 'detached' });
+    for (let i = 0; i < 60; i++) { await sleep(250); if (await get('/api/building')) return 'restarted'; }
+    throw new Error(`The server did not start; see ${LOG}`);
+  }
+  if (up && !outdated && !(mode !== 'detached' && service.installed({ mode }))) return 'running';   // a server we did not install: leave it
+  const r = service.start({ port: PORT, host: HOST, root: ROOT, force: outdated }, { mode });
   if (up && !r.changed) return 'running';
   if (up) await sleep(1500);                         // the old process is being replaced
   for (let i = 0; i < 60; i++) {
@@ -82,6 +92,8 @@ async function status() {
   for (const a of s.alerts) lines.push(`  ! ${a.kind}${a.floorName ? ` (${a.floorName})` : ''}: ${a.text}`);
   const r = s.resources;
   const sv = service.status();
+  const rv = await get('/api/version');
+  lines.push(`Version: plugin ${VERSION}, server ${rv?.version || 'older than 0.2.2'}${rv && rv.version === VERSION && rv.root === ROOT ? '' : ' (outdated: run /aisquad to restart it)'}`);
   lines.push(sv.mode === 'systemd' ? (sv.installed ? `Service: aisquad.service ${sv.active}, ${sv.enabled}${sv.linger === 'no' ? ' (stops at logout; run "loginctl enable-linger" to keep it running)' : ''}` : 'Service: not installed (run /aisquad to install it)')
     : sv.mode === 'launchd' ? `Service: launchd agent ${sv.installed ? sv.active : 'not installed'}` : 'Service: detached process (no systemd or launchd)');
   lines.push(`Machine: RAM ${gb(r.mem.available)} free of ${gb(r.mem.total)}, swap ${r.swap.total ? Math.round(r.swap.used / r.swap.total * 100) : 0} %, disk ${r.disk ? gb(r.disk.free) : '?'} free.`);
@@ -107,7 +119,7 @@ async function main() {
   const started = await ensureServer();
   const url = `${BASE}/${cmd === 'new-floor' ? '#/new-floor' : ''}`;
   const opened = openBrowser(url);
-  console.log(`${{ started: 'Started', restarted: 'Updated and restarted', running: 'Running' }[started]}: The AI Squad at ${url}`);
+  console.log(`${{ started: 'Started', restarted: 'Updated and restarted', running: 'Running' }[started]}: The AI Squad ${VERSION} at ${url}`);
   console.log(opened ? 'Opened in your browser.' : 'Open that address in your browser.');
   console.log(`Changes need the local PIN: cat ${paths.pin()}`);
 }

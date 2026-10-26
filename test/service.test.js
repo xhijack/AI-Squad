@@ -47,6 +47,14 @@ test('start writes the unit once, enables and starts it; a moved plugin rewrites
   assert.ok(r.calls.includes('systemctl --user restart aisquad.service'));
 });
 
+test('force restarts an unchanged unit (same path, new version after a git pull)', () => {
+  const r = recorder();
+  svc.start({ unitFile, root: '/plug/v3' }, { run: r.run, mode: 'systemd' });
+  r.calls.length = 0;
+  assert.equal(svc.start({ unitFile, root: '/plug/v3', force: true }, { run: r.run, mode: 'systemd' }).changed, true);
+  assert.deepEqual(r.calls, ['systemctl --user enable aisquad.service', 'systemctl --user restart aisquad.service']);
+});
+
 test('status, stop and uninstall', () => {
   const r = recorder((f, a) => a.includes('is-enabled'));
   const st = svc.status({ run: r.run, mode: 'systemd', unitFile });

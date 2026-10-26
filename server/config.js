@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// version of this checkout; /aisquad compares it with the running server to restart it after an update
+export const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch { return '0.0.0'; } })();
 
 export const config = {
   home: process.env.AISQUAD_HOME || path.join(os.homedir(), '.aisquad'),

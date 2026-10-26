@@ -359,7 +359,7 @@ function openPopover(id, anchor) {
   const el = $(id), r = anchor.getBoundingClientRect();
   if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
   if (id === 'attPop') { el._html = null; patch(el, `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${state.building.attention.length}</span></div>${attentionHtml(state.building.attention)}`); }
-  if (id === 'legendPop') patch(el, LEGEND);
+  if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');
   // under hud buttons, above dock buttons, kept on screen

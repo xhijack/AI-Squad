@@ -2,7 +2,7 @@
 // screen needs the local PIN (header x-aisquad-pin); on any other address every /api call needs it.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT } from './config.js';
+import { ROOT, VERSION } from './config.js';
 import { HttpError, notFound, lineDiff } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
@@ -57,6 +57,7 @@ const floorRoot = (id) => building.floorEntry(id).path;
 // [method, pattern, handler(params, body, req), { pin, raw }]
 const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
+  ['GET', /^\/api\/version$/, () => ({ version: VERSION, root: ROOT })],
   ['GET', /^\/api\/watchdog$/, () => squad.watchdogStatus()],
   ['GET', /^\/api\/meter$/, () => meter.detail()],
   ['PATCH', /^\/api\/building$/, (p, b) => {

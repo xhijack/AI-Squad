@@ -94,15 +94,15 @@ export function start(opts = {}, { run = realRun, mode = detectMode({ run }), sp
     const changed = writeIfChanged(opts.unitFile || unitPath(), renderUnit(cmd));
     if (changed) run('systemctl', ['--user', 'daemon-reload']);
     run('systemctl', ['--user', 'enable', UNIT]);
-    run('systemctl', ['--user', changed ? 'restart' : 'start', UNIT]);
-    return { mode, changed, started: true };
+    run('systemctl', ['--user', changed || opts.force ? 'restart' : 'start', UNIT]);
+    return { mode, changed: changed || !!opts.force, started: true };
   }
   if (mode === 'launchd') {
     const file = opts.plistFile || plistPath();
     const changed = writeIfChanged(file, renderPlist(cmd));
-    if (changed) { try { run('launchctl', ['unload', file]); } catch { /* not loaded */ } }
+    if (changed || opts.force) { try { run('launchctl', ['unload', file]); } catch { /* not loaded */ } }
     try { run('launchctl', ['load', '-w', file]); } catch { /* already loaded */ }
-    return { mode, changed, started: true };
+    return { mode, changed: changed || !!opts.force, started: true };
   }
   spawnDetached(cmd);
   return { mode, changed: false, started: true };
