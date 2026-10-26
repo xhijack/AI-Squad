@@ -221,6 +221,10 @@ The Floor's status pill shows **Autopilot: Balanced** (or that something critica
 
 Menu → **Graphics**: **Auto** (default: High, and Low when frames get slow), **High** (soft image-based light from a small studio HDRI, ambient occlusion, warm colour grading with a light vignette, SMAA, soft shadows under the characters) or **Low** (one render pass, as fast as before). The setting is kept per browser. The furniture comes from the KayKit packs by Kay Lousberg (CC0): desks, chairs, sofa, rug, plants, pantry counter and fridge, meeting table, bookshelf and floor lamp, packed into one 390 KB GLB (`ui/assets/kaykit/office.glb`, sources and licences in `ASSETS.md`). Devices without a KayKit model (monitors, whiteboard, TV, beanbags, ping-pong, server rack, printer) and the whole room while the file loads are drawn by the procedural builders. The frame loop slows to a third of its rate when nothing moves: no input, no camera move, nobody walking.
 
+### Walking (no one passes through anything)
+
+Every Floor has a walkable grid (`ui/nav.js`) built from the real footprints of desks, chairs, devices and walls, rotated and inflated by a character's size. Characters walk A* routes with smoothed corners to the lounge, the pantry, the meeting table and back. They keep their distance from each other (slide past, wait, or go around), and each seat holds one character. The last short step into a chair, sofa place or seat is a straight docking move. Edit Mode refuses to place or turn a desk or device where it would overlap something or cut a desk off from the room: the selection ring turns red, and the piece goes back with a hint. The follow camera stops in front of walls and furniture. Add `?nav=1` to the address for an overlay with the blocked cells and the routes being walked.
+
 ### Merges
 
 Merges are done by The AI Squad server, never by an agent (decision D3). The policy lives in `git.json` (merge policy, squash or merge commit, quality gate, push policy); the one-time approval per Floor is stored on this machine in `~/.aisquad/approvals.json`, never in the repo.

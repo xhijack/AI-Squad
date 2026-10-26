@@ -442,6 +442,16 @@ Brief: `PHASE-3-VISUAL.md`. The owner put Phase 3 before the rest of Phase 2.5. 
 - Baked lighting with Blender was skipped: the disk is 86 % full and memory is shared. Part A (HDRI and AO) carries the look.
 - Screenshots: `playground/reference/p3-kit-1440.png`, `p3-kit-desk-1440.png`, `p3-kit-lobby-1440.png`, `p3-kit-390.png`.
 
+### 0.6.2: real collisions
+- `ui/nav.js` (pure, tested in Node): footprints of desks and chairs (station scale) and of every device type, including the meeting table's chairs, as rotated rectangles. A 0.2 m occupancy grid inflated by the character radius plus half a cell diagonal, so every point of a free cell keeps a full radius from obstacles and walls. A* (8 directions, no corner cutting) with string pulling. Avoidance (`stepAvoiding`): never closer than two radii, sliding along the one in the way, waiting, and re-routing around it (the higher id detours; anyone re-routes after 3 s; "close enough" when the goal is taken). Seats are reserved slots, and `checkLayout` / `problemsOf` serve Edit Mode.
+- Office: each Floor builds its grid with the Floor (rebuilt when the layout changes). Every walk (to the lounge, pantry, whiteboard, the meeting table, and back to the desk) routes through the grid with the other characters as moving obstacles, then docks straight into the seat. Every step is checked against the real footprints before it is taken.
+- Edit Mode: dragging shows a red selection ring when the piece is worse than before (overlap, outside the room, a desk nobody can reach). The drop is undone with a hint, and turning a piece is refused the same way. Problems that were already there do not block other edits.
+- Cameras: the follow camera raycasts from the agent's head and stops in front of the first wall or piece of furniture (10 times a second, eased). The first person camera is the character's own head, which can no longer be inside anything. Name tags are DOM overlays above the scene.
+- Debug: `?nav=1` shows the blocked cells and the routes being walked.
+- Tests: `test/nav.test.js` covers footprints and rotation, inflation, walls, A* around a wall, an unreachable goal, a door versus a slit, two characters crossing (never closer than two radii, both arrive), seats, the Edit Mode checks, and a **soak test: 8 characters walking for 10 simulated minutes at 0.1 s steps** with zero contacts with furniture, walls or each other, and more than 80 arrivals (about 300 in practice).
+- The first soak runs found two real problems, both fixed: characters deadlocked when a goal was next to someone standing there, and they could not pass each other at exactly two radii (no sliding). A third run showed a character clipping a desk corner after sliding, which led to the per-step footprint check.
+- Screenshots: `playground/reference/p3-nav-1440.png` (overlay and routes), `p3-walk-1440.png`, `p3-eyes-1440.png`, `p3-floor1-1440.png`, `p3-desk-390.png`, `p3-lobby-390.png`.
+
 ## How to run
 
 ```
