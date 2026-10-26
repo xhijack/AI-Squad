@@ -330,11 +330,20 @@ function buildStation(agent, desk, accent) {
   human.scale.setScalar(STATION_SCALE);
   const st = { id: agent.id, g, human, rig, screens, ringMat, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6, accent };
   // name chip in the agent's colour above the head, its status under it, zzz when idle (as in squad-3d)
-  st.label = label('<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div>', 'nlabel', human, 0, 1.95, 0);
+  st.label = label('<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div><div class="r"></div>', 'nlabel', human, 0, 1.95, 0);
   st.label.center.set(.5, 1);
   const color = (agent.appearance && agent.appearance.shirt) || '#3d82d6';
   Object.assign(st.label.element.querySelector('.n').style, { background: color, color: inkOn(color) });
   st.say = label('', 'say', human, 0, 2.75, 0); st.say.center.set(.5, 1); st.say.visible = false;   // lead shout
+  // the linked repositories it writes in (Phase 3.4): a small name plate standing on the desk, readable from both sides
+  if (agent.repos?.length) {
+    const plaque = new THREE.Group(); plaque.position.set(-.5, .955 + .05, .98); g.add(plaque);
+    box(.52, .09, .03, mat('#2f3a4a'), 0, 0, 0, plaque, .008);
+    for (const side of [1, -1]) {
+      const tp = textPlane([{ text: `⎇ ${agent.repos.join(' · ')}`, size: 300, weight: 700, color: '#e8eef6', y: .5 }], .5, .085);
+      tp.position.z = .016 * side; tp.rotation.y = side > 0 ? 0 : Math.PI; tp.userData.keep = true; plaque.add(tp);
+    }
+  }
   mergeStatic(g);                                                             // desk, chair, props: one mesh per material
   deskHome(st);
   updateStation(st, agent);
@@ -393,6 +402,8 @@ function updateStation(st, a) {
   const n = el.querySelector('.n'), s = el.querySelector('.a');
   if (n.textContent !== name) n.textContent = name;
   if (s.textContent !== status) s.textContent = status;
+  const rp = el.querySelector('.r'), repos = a.repos?.length ? `⎇ ${a.repos.join(' · ')}` : '';   // linked repositories it writes in
+  if (rp.textContent !== repos) { rp.textContent = repos; rp.hidden = !repos; }
   el.title = `${a.displayName}: ${st.away || a.activity || a.state}`;
   st.ringMat.color.set(STATE_RING[a.state] || STATE_RING.stopped);
   st.label.visible = !!st.labelsOn;
@@ -450,7 +461,7 @@ function drawPaths(o) {
 
 // ---------- floors ----------
 function sigOf(f) {
-  return JSON.stringify([kitStamp(), officeStamp(), f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf])]);
+  return JSON.stringify([kitStamp(), officeStamp(), f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf, a.repos])]);
 }
 
 function dispose(o) {

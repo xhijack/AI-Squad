@@ -333,6 +333,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
       <dt>${tt('Tools')}</dt><dd>${pills(e.tools || []) || `<span class="note">${tt('all')}</span>`}</dd>
       <dt>${tt('Not allowed')}</dt><dd>${pills(e.permissions?.deny || [])}</dd>
       <dt>${tt('Rules')}</dt><dd>${(e.rules || []).length ? `<ul style="margin:0;padding-left:18px">${e.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : `<span class="note">${tt('none')}</span>`}${o.rules?.length ? `<div class="note">${tt('{n} added by override', { n: o.rules.length })}</div>` : ''}</dd>
+      ${d.repos?.length ? `<dt>${tt('Repositories')}</dt><dd>${d.repos.map((r) => `<span class="pill" title="${esc(r.abs)}">${esc(r.id)} · ${r.access === 'write' ? tt('write') : tt('read only')}</span>`).join(' ')}</dd>` : ''}
       <dt>${tt('Cost today')}</dt><dd>${money(d.costToday)}</dd>
       <dt>${tt('Voice')}</dt><dd>${d.agent.voice ? tt('chosen voice') : tt("the role's default voice")} <button class="small ghost" data-act="choose-voice" data-agent="${d.id}" data-name="${esc(d.displayName)}" data-voice="${esc(d.agent.voice || '')}" data-lang="${esc(d.agent.voiceLang || '')}" data-vs="${d.agent.voiceSettings ? esc(JSON.stringify(d.agent.voiceSettings)) : ''}">${tt('Change')}</button></dd>
     </dl>

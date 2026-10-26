@@ -393,7 +393,8 @@ function summary(fs_) {
   const { entry } = fs_;
   if (fs_.missing) return { id: entry.id, number: entry.number, path: entry.path, missing: true, name: path.basename(entry.path), error: fs_.error || 'Directory not found', agents: [], attention: 0 };
   const { cfg, lives, cost } = fs_;
-  const agents = lives.map((l) => agentView(entry.path, l, cost));
+  const repoList = reposLib.readRepos(entry.path);
+  const agents = lives.map((l) => ({ ...agentView(entry.path, l, cost), repos: repoList.filter((r) => r.access === 'write' && r.agents.includes(l.agent.id)).map((r) => r.id) }));
   const count = (s) => agents.filter((a) => a.state === s).length;
   const asks = fs_.attention.filter((a) => !a.muted);
   const lamp = asks.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
@@ -562,6 +563,7 @@ export function deskDetail(floorId, agentId) {
   try { effective = floors.effectiveOf(entry.path, agent); } catch (e) { error = e.message; }
   return {
     floorId, ...agentView(entry.path, l, cost), agent, effective, error,
+    repos: floors.agentReposOf(entry.path, agentId).map((r) => ({ id: r.id, path: r.path, access: r.access, abs: r.abs })),   // its linked repositories
     skills: (effective?.skills || []).map((n) => skillsLib.skillStatus(entry.path, n)),
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(),

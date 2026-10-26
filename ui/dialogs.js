@@ -5,6 +5,7 @@ import { openWizard } from './wizard.js';
 import { openTemplates } from './templates.js';
 import { ctx } from './ctx.js';
 import { voiceControlsHtml, bindVoiceControls, readVoiceControls, previewVoice } from './voice.js';
+import { loadRepos } from './repos.js';
 import { t as tt, tx, LANG, LANGS, setLang } from './i18n.js';
 
 const floorId = () => ctx.state.route.floorId;
@@ -96,6 +97,7 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="auditAuto" ${c.audit?.auto ? 'checked' : ''}> ${tt('Audit automatically after a sprint closes')}</label>
     <label>${tt('Audit model')}</label>${segHtml('auditModel', [['sonnet', 'Sonnet'], ['haiku', 'Haiku'], ['opus', 'Opus']], c.audit?.model || 'sonnet')}
     <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
+    <h3 style="margin-top:18px">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
     <h3 style="margin-top:18px">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
   `<button class="ghost danger" data-remove>${tt('Remove Floor')}</button><span class="spacer"></span><button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
   bindSegs(body);
@@ -103,6 +105,7 @@ async function floorSettings() {
   bindVoiceControls(body);
   body.querySelector('[data-vpreview]').onclick = () => { const c = readVoiceControls(body); previewVoice({ lang: c.lang, settings: c.settings }, body.querySelector('#dVErr')); };
   loadMerges(f.id, body.querySelector('#dMerges'));
+  loadRepos(f.id, body.querySelector('#dRepos'), f.agents);
   body.querySelector('[data-remove]').onclick = async () => {
     if (!confirm(tt('Remove this Floor from the Building? The project directory and its files stay untouched.'))) return;
     try { await api('DELETE', `/api/floors/${f.id}`); closeModal(); toast(tt('Floor removed')); location.hash = '#/'; } catch (e) { fail(e); }

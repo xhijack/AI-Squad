@@ -15,7 +15,7 @@ ctx.actions['setup-squad'] = async () => {
   const order = ['software-house', 'digital-marketing', 'sales-crm'];
   blueprints.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
   s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, autopilot: 'balanced', prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
-    dirMode: 'new', path: '', pathTouched: false, startLead: true, installSkills: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
+    dirMode: 'new', path: '', pathTouched: false, repos: [], startLead: true, installSkills: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
   draw();
 };
 
@@ -67,7 +67,26 @@ function folderHtml() {
     ${segHtml('dirMode', [['new', tt('Create a new folder (git init)')], ['existing', tt('Use an existing repository')]], s.dirMode)}
     <label for="ssPath">${s.dirMode === 'new' ? tt('New folder (absolute path; must not exist yet or be empty)') : tt('Repository folder (absolute path)')}</label>
     <input id="ssPath" value="${esc(s.path)}" spellcheck="false" placeholder="/home/you/projects/restaurant-pos">
-    ${s.dirMode === 'new' ? `<p class="note">${tt('New squads go to <code>{dir}</code> by default (a setting in <code>~/.aisquad/building.json</code>).', { dir: esc(s.squadsDir) })} <button type="button" class="small ghost" data-squadsdir>${tt('Change the default')}</button></p>` : ''}`;
+    ${s.dirMode === 'new' ? `<p class="note">${tt('New squads go to <code>{dir}</code> by default (a setting in <code>~/.aisquad/building.json</code>).', { dir: esc(s.squadsDir) })} <button type="button" class="small ghost" data-squadsdir>${tt('Change the default')}</button></p>` : ''}
+    <div class="sectionHead" style="margin-top:14px"><h3 class="grow">${tt('Linked repositories')}</h3><button type="button" class="small" data-addrepo>${tt('+ Add linked repository')}</button></div>
+    <p class="note">${tt('This folder is the primary repository (the Floor, the board, the docs). A squad can also read or write other repositories: a path on this machine or a clone URL.')}</p>
+    ${s.repos.map((r, i) => `<div class="card" data-repoi="${i}"><div class="grid2"><div><label>${tt('Path or clone URL')}</label><input data-rk="where" value="${esc(r.where)}" placeholder="../dtamu-landing-page"></div>
+      <div><label>${tt('Access')}</label><select data-rk="access"><option value="read" ${r.access !== 'write' ? 'selected' : ''}>${tt('Read only (context)')}</option><option value="write" ${r.access === 'write' ? 'selected' : ''}>${tt('Write (its agents commit there)')}</option></select></div></div>
+      <label>${tt('Agents')}</label><div class="row wrap">${s.team.map((m, k) => `<label class="inline" style="margin:0 10px 0 0"><input type="checkbox" data-rteam="${k}" ${r.team.includes(k) ? 'checked' : ''}> ${esc(String(m.displayName).split(' - ')[0])}</label>`).join('')}</div>
+      <div class="row"><span class="grow"></span><button type="button" class="small ghost danger" data-rmrepo="${i}">${tt('Remove')}</button></div></div>`).join('')}`;
+}
+// a linked repository from the Folder step -> repos.json entry (path relative to the squad folder; a URL is cloned
+// next to it); team indexes become agent ids once the Floor exists
+const isUrl = (w) => /^(https:\/\/|ssh:\/\/|git@)/.test(w);
+function relative(from, to) {
+  const a = from.split('/').filter(Boolean), b = to.split('/').filter(Boolean);
+  let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return [...a.slice(i).map(() => '..'), ...b.slice(i)].join('/') || '.';
+}
+function repoEntry(r, ids) {
+  const where = r.where.trim(), name = (isUrl(where) ? where.replace(/\.git$/, '').split(/[/:]/).pop() : where.replace(/\/$/, '').split('/').pop()) || 'repo';
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'repo';
+  return { id, path: isUrl(where) ? `../${name}` : where.startsWith('/') ? relative(s.path, where) : where, ...(isUrl(where) ? { remote: where } : {}), access: r.access, agents: r.team.map((k) => ids[k]).filter(Boolean) };
 }
 
 const AUTOPILOT = [['balanced', tt('Balanced (recommended)')], ['full', tt('Full')], ['off', tt('Off')]];
@@ -111,6 +130,8 @@ function draw(error = '') {
   }));
   body.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { collect(); const [m] = s.team.splice(+b.dataset.rm, 1); if (m.lead && s.team[0]) s.team[0].lead = true; draw(); }));
   body.querySelector('#ssPath')?.addEventListener('input', () => { s.pathTouched = true; });
+  body.querySelector('[data-addrepo]')?.addEventListener('click', () => { collect(); s.repos.push({ where: '', access: 'read', team: [] }); draw(); });
+  body.querySelectorAll('[data-rmrepo]').forEach((b) => b.addEventListener('click', () => { collect(); s.repos.splice(+b.dataset.rmrepo, 1); draw(); }));
   body.querySelector('[data-squadsdir]')?.addEventListener('click', async () => {
     const dir = prompt(tt('Default folder for new squads (absolute path)'), s.squadsDir);
     if (!dir) return;
@@ -128,7 +149,10 @@ function collect() {
     const lead = document.querySelector('[data-lead]:checked');
     if (lead) s.team.forEach((m, i) => { m.lead = i === +lead.dataset.lead; });
   }
-  if (s.step === 2) s.path = v('ssPath').value.trim();
+  if (s.step === 2) {
+    s.path = v('ssPath').value.trim();
+    document.querySelectorAll('[data-repoi]').forEach((el) => { const r = s.repos[+el.dataset.repoi]; r.where = el.querySelector('[data-rk=where]').value.trim(); r.access = el.querySelector('[data-rk=access]').value; r.team = [...el.querySelectorAll('[data-rteam]:checked')].map((x) => +x.dataset.rteam); });
+  }
   if (s.step === 3) { s.startLead = v('ssStart').checked; s.installSkills = v('ssSkills').checked; s.autopilot = v('ssAutopilot').value; }
 }
 
@@ -155,6 +179,16 @@ async function next() {
   s.busy = true; draw();
   try {
     const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead, installSkills: s.installSkills, autopilot: s.autopilot });
+    const linked = s.repos.filter((x) => x.where);
+    if (linked.length) {
+      // the agents now have ids: map the team by display name, save the list, clone what was given as a URL
+      try {
+        const f = await api('GET', `/api/floors/${r.id}`), ids = s.team.map((m) => f.agents.find((a) => a.displayName === m.displayName)?.id);
+        const list = linked.map((x) => repoEntry(x, ids));
+        await api('PUT', `/api/floors/${r.id}/repos`, { repos: list });
+        for (const e of list.filter((x) => x.remote)) api('POST', `/api/floors/${r.id}/repos/${e.id}/clone`).then(() => toast(tt('Cloned {id}', { id: e.id })), (x) => toast(tx(x.message), 6000));
+      } catch (e) { toast(tt('The squad is created, but its linked repositories were not saved: {error}', { error: tx(e.message) }), 7000); }
+    }
     closeModal();
     toast(r.leadStarted ? tt('Floor {n} created; the lead is starting', { n: r.number }) : r.leadError ? tt('Floor {n} created; the lead did not start: {error}', { n: r.number, error: tx(r.leadError) }) : tt('Floor {n} created', { n: r.number }), 5000);
     location.hash = r.lead ? `#/floor/${r.id}/desk/${r.lead}` : `#/floor/${r.id}`;
