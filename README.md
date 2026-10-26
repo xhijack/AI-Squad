@@ -38,6 +38,7 @@ A user service stops when you log out unless lingering is on for your account (`
 ```
 /plugin marketplace update aisquad
 /plugin update aisquad@aisquad
+# quit Claude Code and open it again, then:
 /aisquad
 ```
 

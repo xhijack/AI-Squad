@@ -28,8 +28,18 @@ Open `claude` in a terminal and type:
 ```
 /plugin marketplace update aisquad
 /plugin update aisquad@aisquad
+```
+
+Then **quit Claude Code and open it again** (Claude Code says "Restart to apply changes"; until
+then `/aisquad` still runs the old version), and run:
+
+```
 /aisquad
 ```
+
+It prints `Updated and restarted: The AI Squad <version>`. Check the version with
+`/aisquad status` (plugin and server must match) or the (i) button in the dock. Reload the
+browser tab afterwards.
 
 ## Option 2: git clone (to work on the code)
 
