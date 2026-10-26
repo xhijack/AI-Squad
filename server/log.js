@@ -126,7 +126,7 @@ export function append(floorId, ev, { messages = true, pii = true } = {}, now = 
     for (const k of TEXT_FIELDS) if (typeof data[k] === 'string') { data[`${k}Chars`] = data[k].length; delete data[k]; }
   }
   const e = { v: SCHEMA_VERSION, id: ev.id || crypto.randomBytes(6).toString('hex'), ts: new Date(ts).toISOString(), floor: floorId,
-    sprint: n(ev.sprint), module: n(ev.module), agent: n(ev.agent), role: n(ev.role), session: n(ev.session), model: n(ev.model), type: ev.type, summary: '', data };
+    sprint: n(ev.sprint), module: n(ev.module), agent: n(ev.agent), role: n(ev.role), session: n(ev.session), model: n(ev.model), ...(ev.repo ? { repo: String(ev.repo) } : {}), type: ev.type, summary: '', data };
   e.summary = clip(redact(summarize(e), { pii }), 200);
   const file = dayFile(floorId, dayOf(ts));
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -147,7 +147,7 @@ function readFile(file) {
 const toMs = (v, d) => (v == null || v === '' ? d : /^\d+$/.test(String(v)) ? Number(v) : Date.parse(v) || d);
 const matches = (list, value) => !list.length || list.includes(value);
 
-// q: { from, to (ISO or ms), type (comma list of types or categories), agent (comma list), sprint, module, limit }
+// q: { from, to (ISO or ms), type (comma list of types or categories), agent (comma list), sprint, module, repo, limit }
 export function read(floorId, q = {}) {
   const from = toMs(q.from, 0), to = toMs(q.to, Infinity);
   const types = String(q.type || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -162,6 +162,7 @@ export function read(floorId, q = {}) {
     if (ts < from || ts > to) continue;
     if (types.length && !types.some((t) => t === e.type || t === TYPES[e.type] || e.type.startsWith(`${t}.`))) continue;
     if (!matches(agents, e.agent)) continue;
+    if (q.repo && (e.repo || '') !== (q.repo === 'primary' ? '' : q.repo)) continue;   // a linked repository, or 'primary'
     if (q.sprint != null && q.sprint !== '' && String(e.sprint) !== String(q.sprint)) continue;
     if (q.module && e.module !== q.module) continue;
     out.push(e);

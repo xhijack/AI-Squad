@@ -128,6 +128,13 @@ export function metrics(events, info = {}) {
     if ((e.type === 'agent.busy' || e.type === 'agent.stopped' || e.type === 'agent.crashed') && idleSince[e.agent] != null) { inc(idleOpen, e.agent, ms(e.ts) - idleSince[e.agent]); idleSince[e.agent] = null; }
   }
   for (const [a, t] of Object.entries(idleSince)) if (t != null) inc(idleOpen, a, end - t);
+  // per linked repository (Phase 3.4): tool calls, edits, failures and commits; events without a repo are the primary
+  const repoRows = {};
+  for (const e of events.filter((x) => x.type === 'tool.call' || x.type === 'commit')) {
+    const r = (repoRows[e.repo || '(primary)'] ||= { repo: e.repo || '(primary)', toolCalls: 0, edits: 0, failed: 0, commits: 0 });
+    if (e.type === 'commit') r.commits++; else { r.toolCalls++; if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.data.tool)) r.edits++; if (e.data.ok === false) r.failed++; }
+  }
+  const byRepo = Object.keys(repoRows).length > 1 || !repoRows['(primary)'] ? Object.values(repoRows) : [];
   const byAgent = Object.values(agents).map((a) => ({ agent: a.agent, role: a.role, models: Object.keys(a.models).join(', '), cost: r2(a.cost, 4), tokens: a.tokens, turns: a.turns, outputTokens: a.output,
     toolCalls: a.toolCalls, failedTools: a.failedTools, idleWithOpenWorkMin: r2((idleOpen[a.agent] || 0) / 60e3, 1) })).sort((x, y) => y.cost - x.cost);
   const efficiency = {
@@ -138,6 +145,7 @@ export function metrics(events, info = {}) {
     cacheHitRate: inputAll ? r2(sum(usage, (e) => e.data.cacheRead) / inputAll) : null,
     costByModel: Object.fromEntries(Object.entries(costByModel).map(([k, v]) => [k, { cost: r2(v, 4), share: totalCost ? r2(v / totalCost) : 0 }])),
     byAgent,
+    byRepo,
     byModule: modules.filter((m) => m.turns).map((m) => ({ module: m.id, sp: m.sp, cost: r2(m.cost, 4), tokens: m.tokens, turns: m.turns, costPerSP: m.sp ? r2(m.cost / m.sp, 4) : null })),
     repeatedReads: Object.entries(reads).filter(([, n]) => n >= REPEAT_READS).map(([k, n]) => { const [agent, target] = k.split('\t'); return { agent, target, count: n }; }).sort((a, b) => b.count - a.count).slice(0, 10),
     failedTools: { total: sum(Object.values(failed), (x) => x), retries, top: Object.entries(failed).map(([k, n]) => { const [tool, target] = k.split('\t'); return { tool, target, count: n }; }).sort((a, b) => b.count - a.count).slice(0, 8) },
@@ -264,6 +272,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['efficiency.expensiveModelOnSimpleWork', E.expensiveModelOnSimpleWork.map((x) => `${x.agent} (${x.reason}, $${x.cost})`).join('; ') || 'none'],
     ]),
     '### Per agent (efficiency.byAgent)', table(['agent', 'role', 'models', 'cost $', 'tokens', 'turns', 'tool calls', 'failed', 'idle with open work (min)'], E.byAgent.map((a) => [a.agent, a.role, a.models, a.cost, a.tokens, a.turns, a.toolCalls, a.failedTools, a.idleWithOpenWorkMin])),
+    ...(E.byRepo?.length ? ['### Per repository (efficiency.byRepo)', table(['repository', 'tool calls', 'edits', 'failed', 'commits'], E.byRepo.map((x) => [x.repo, x.toolCalls, x.edits, x.failed, x.commits]))] : []),
     '### Per module (efficiency.byModule)', table(['module', 'SP', 'cost $', 'tokens', 'turns', 'cost / SP'], E.byModule.map((x) => [x.module, x.sp, x.cost, x.tokens, x.turns, x.costPerSP])),
     '### Files read 3+ times by one agent (efficiency.repeatedReads)', table(['agent', 'file', 'reads'], E.repeatedReads.map((x) => [x.agent, x.target, x.count])),
     '### Failing tool calls (efficiency.failedTools.top)', table(['tool', 'target', 'failures'], E.failedTools.top.map((x) => [x.tool, clip(x.target, 80), x.count])),

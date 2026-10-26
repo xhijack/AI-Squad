@@ -78,11 +78,25 @@ function gitRules(git) {
   return out;
 }
 
+// several repositories (Phase 3.4): this repository is the primary one (the Floor, the board); the linked ones are
+// open to the agent with --add-dir, and read-only ones are also denied every write at start time
+export function repoRules(repos, lead = false) {
+  const out = ['This repository is the primary one: the board, the docs and the handoffs live here.'];
+  for (const r of repos) {
+    out.push(r.access === 'write'
+      ? `\`${r.path}\` (${r.id}, ${r.abs}): you may edit and commit there on your sprint branch (${r.branch.strategy === 'trunk' ? `directly on \`${r.branch.main}\`` : `not on \`${r.branch.main}\``}). Never push.${r.gate ? ` Its quality gate: \`${r.gate}\`.` : ''}`
+      : `\`${r.path}\` (${r.id}, ${r.abs}): read only, for context. Never change files there and never run git writes in it; a change it needs goes into the module handoff for its maintainer.`);
+  }
+  if (lead) out.push('In docs/squad PLAN and TASKS, name the repository of every module (a module may span two). Gates, QA and merges run per repository touched.');
+  return out;
+}
+
 // Standard Claude Code agent file. Permissions are enforced at start time (--disallowedTools);
 // they are also listed here so the agent knows its limits.
 // standard: the Floor's Blueprint ({ title, version, text, roleRules, lead }), written into every agent prompt
 // skillName(name): the name the skill is known by in Claude Code (aisquad:<name> for our plugin's copy)
-export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null, autopilot = null } = {}) {
+// repos: this agent's linked repositories ({ id, path, abs, access, branch, gate }); lead: it plans the board
+export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null, autopilot = null, repos = [], lead = false } = {}) {
   const fm = {
     name: eff.id,
     description: `${eff.displayName} (${eff.title}) on ${floorName || 'this Floor'}. ${eff.description || ''}`.trim(),
@@ -115,6 +129,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
   if (autopilot?.length) sections.push(`## Autopilot\n${autopilot.map((r) => (r.startsWith('  ') ? r : `- ${r}`)).join('\n')}`);
   const g = gitRules(git);
   if (g.length) sections.push(`## Git\n${g.map((r) => `- ${r}`).join('\n')}`);
+  if (repos.length) sections.push(`## Repositories\n${repoRules(repos, lead).map((r) => `- ${r}`).join('\n')}`);
   if (usable.length) sections.push(`## Skills\nUse these skills through the Skill tool when relevant: ${usable.map((s) => `\`${s}\``).join(', ')}.`);
   if (eff.permissions.deny.length) sections.push(`## Not allowed\n${eff.permissions.deny.map((d) => `- \`${d}\``).join('\n')}`);
   if (eff.prompt) sections.push(`## Prompt\n${eff.prompt}`);

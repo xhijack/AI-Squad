@@ -51,6 +51,18 @@ export function registerFloor(dir, { name, number } = {}) {
   return entry;
 }
 
+// linked repositories (Phase 3.4): where each one is on this machine, when it is not at its relative path
+// ({ repoId: absolute path }; machine-local, never in the repository). abs '' removes the override.
+export function setRepoPath(floorId, repoId, abs) {
+  const b = loadBuilding();
+  const f = b.floors.find((x) => x.id === floorId);
+  if (!f) throw notFound(`Floor not found: ${floorId}`);
+  f.repos ||= {};
+  if (abs) { if (!path.isAbsolute(abs)) throw bad('The folder must be an absolute path'); f.repos[repoId] = path.resolve(abs); } else delete f.repos[repoId];
+  if (!Object.keys(f.repos).length) delete f.repos;
+  saveBuilding(b);
+}
+
 export function unregisterFloor(id) {
   const b = loadBuilding();
   const n = b.floors.length;

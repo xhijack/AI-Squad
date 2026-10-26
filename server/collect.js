@@ -68,12 +68,21 @@ export function resolveAgent(team = [], name) {
   return hit.length === 1 ? hit[0].id : name;
 }
 // ctx: { team: [{ id, displayName, lead, role: { template } }], sprint, options: { messages, pii } } -> emit(ev)
+// the linked repository an event touched (Phase 3.4): a tool call's file inside it, or a command that names its path
+export function repoFor(e, repos = []) {
+  if (e.repo || !repos.length || e.type !== 'tool.call') return e.repo || '';
+  const t = String(e.data?.target || '');
+  const hit = repos.find((r) => t === r.abs || t.startsWith(`${r.abs}/`) || (e.data?.tool === 'Bash' && (t.includes(r.abs) || t.includes(r.path))));
+  return hit ? hit.id : '';
+}
 export function emitter(floorId, ctx = {}) {
   const team = ctx.team || [];
   return (ev) => {
     const e = normalize(ev, team);
+    const repo = repoFor(e, ctx.repos);
     return log.append(floorId, {
       ...e,
+      ...(repo ? { repo } : {}),
       role: e.role ?? team.find((a) => a.id === e.agent)?.role?.template ?? null,
       module: e.module ?? currentModule(floorId, e.agent),
       sprint: e.sprint ?? ctx.sprint ?? null,

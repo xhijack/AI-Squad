@@ -16,6 +16,7 @@ import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as tasksLib from './tasks.js';
+import * as reposLib from './repos.js';
 import { redact } from './redact.js';
 import * as blueprintsLib from './blueprints.js';
 import * as skillsLib from './skills.js';
@@ -601,7 +602,10 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
     ...(resume ? ['--resume', resume] : [])];
   const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
     ...floors.commitIdentity(agent, floors.readFloor(entry.path).git) };   // per-agent commit identity (git.json)
-  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: eff.permissions.deny, extraArgs, env });
+  // linked repositories: --add-dir for each, and every write denied in the read-only ones (Phase 3.4)
+  const repos = floors.agentReposOf(entry.path, agentId);
+  extraArgs.push(...reposLib.addDirArgs(repos));
+  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], extraArgs, env });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -902,21 +906,69 @@ export async function floorMerges(floorId) {
   const sprintMode = floor.workflow === 'squad-sprint';
   return { policy: git, approval: merge.approval(floorId), running: merge.isMerging(floorId), log: merge.mergeLog(floorId, 20),
     candidates: await merge.candidates(floorId, entry.path, git, team.agents.map((a) => a.id), { extraPrefixes: sprintMode ? ['sprint-'] : [] }),
-    sprint: sprintMode && sprint.hasPack(entry.path) ? { ...(await sprint.sprintStatus(entry.path)), autoNext: floor.sprint.autoNext } : null };
+    sprint: sprintMode && sprint.hasPack(entry.path) ? { ...(await sprint.sprintStatus(entry.path)), autoNext: floor.sprint.autoNext } : null,
+    repos: await repoMerges(floorId, entry.path, git) };
 }
 
-export function startMerge(floorId, branch) {
+// ---------- linked repositories (Phase 3.4): status, merges per repository, each with its own approval and gate ----------
+export const repoKey = (floorId, repoId) => `${floorId}~${repoId}`;
+// the git policy of a linked repository: the Floor's merge method and policy, its own main branch, strategy and gate;
+// never pushed
+export const repoGit = (git, repo) => ({ ...git, mainBranch: repo.branch.main, branchStrategy: repo.branch.strategy, qualityGate: repo.gate || '', pushPolicy: 'never' });
+function linkedRepos(root) {
+  const local = floors.localRepoPaths(root);
+  return reposLib.readRepos(root).map((r) => ({ ...r, abs: reposLib.resolve(root, r, local), local: !!local[r.id] }));
+}
+export async function floorRepos(floorId) {
+  const entry = building.floorEntry(floorId);
+  const out = [];
+  for (const r of linkedRepos(entry.path)) out.push({ ...r, status: await reposLib.status(r.abs), approval: r.access === 'write' ? merge.approval(repoKey(floorId, r.id)) : null });
+  return { repos: out, primary: { path: entry.path, status: await reposLib.status(entry.path) } };
+}
+async function repoMerges(floorId, root, git) {
+  const out = [];
+  for (const r of linkedRepos(root).filter((x) => x.access === 'write')) {
+    const key = repoKey(floorId, r.id), g = repoGit(git, r);
+    out.push({ id: r.id, path: r.path, gate: r.gate || '', main: r.branch.main, approval: merge.approval(key), running: merge.isMerging(key), log: merge.mergeLog(key, 10),
+      candidates: fs.existsSync(r.abs) ? await merge.candidates(key, r.abs, g, r.agents) : [] });
+  }
+  return out;
+}
+export function updateRepos(floorId, list) { const repos = floors.updateRepos(building.floorEntry(floorId).path, list); invalidate(); return { repos }; }
+export function relinkRepo(floorId, repoId, abs) { building.setRepoPath(floorId, repoId, abs); invalidate(); return floorRepos(floorId); }
+export async function cloneRepo(floorId, repoId) {
+  const entry = building.floorEntry(floorId), r = linkedRepos(entry.path).find((x) => x.id === repoId);
+  if (!r) throw notFound(`Repository not found: ${repoId}`);
+  await reposLib.clone(r, r.abs);
+  return floorRepos(floorId);
+}
+export function setRepoApproval(floorId, repoId, approved) {
+  const r = linkedRepos(building.floorEntry(floorId).path).find((x) => x.id === repoId);
+  if (!r || r.access !== 'write') throw bad('Only a "write" repository is merged');
+  if (approved && !r.gate) throw bad('Automatic merges need a quality gate for this repository');
+  merge.setApproval(repoKey(floorId, repoId), !!approved);
+  return { ok: true };
+}
+
+export function startMerge(floorId, branch, repoId = '') {
   const entry = building.floorEntry(floorId);
   const { git } = floors.readFloor(entry.path);
+  if (repoId) {
+    const r = linkedRepos(entry.path).find((x) => x.id === repoId && x.access === 'write');
+    if (!r) throw bad('Only a "write" repository is merged');
+    if (merge.isMerging(repoKey(floorId, repoId))) throw bad('A merge is already running in this repository');
+    runMerge(floorId, r.abs, repoGit(git, r), String(branch || ''), { trigger: 'manual' }, r.id).then(invalidate);
+    return { ok: true, started: true };
+  }
   if (merge.isMerging(floorId)) throw bad('A merge is already running on this Floor');
   runMerge(floorId, entry.path, git, String(branch || ''), { trigger: 'manual' }).then(invalidate);
   return { ok: true, started: true };
 }
 
-// every merge attempt (and its quality gate) goes to the Squad Log
-async function runMerge(floorId, root, git, branch, opts) {
-  const r = await merge.mergeBranch(floorId, root, git, branch, opts);
-  for (const ev of collect.fromMerge(r)) logEvent(floorId, ev);
+// every merge attempt (and its quality gate) goes to the Squad Log; repoId: a linked repository (its own merge log)
+async function runMerge(floorId, root, git, branch, opts, repoId = '') {
+  const r = await merge.mergeBranch(repoId ? repoKey(floorId, repoId) : floorId, root, git, branch, opts);
+  for (const ev of collect.fromMerge(r)) logEvent(floorId, repoId ? { ...ev, repo: repoId } : ev);
   return r;
 }
 
@@ -937,6 +989,15 @@ export async function mergeTick({ checkMemory = true } = {}) {
       const entry = building.floorEntry(f.id);
       const { git, team, floor } = floors.readFloor(entry.path);
       if (git.mergePolicy !== 'auto') continue;
+      // linked "write" repositories with their own approval and gate: finished work of their agents
+      for (const r of linkedRepos(entry.path).filter((x) => x.access === 'write' && x.gate && merge.approval(repoKey(f.id, x.id)) && fs.existsSync(x.abs))) {
+        const work = workOf(f.id);
+        for (const c of await merge.candidates(repoKey(f.id, r.id), r.abs, repoGit(git, r), r.agents)) {
+          const a = c.agent && f.agents.find((x) => x.id === c.agent);
+          if (c.lastResult || !a || !work[c.agent]?.doneAt || a.state === 'working' || a.state === 'waiting') continue;
+          done.push(await runMerge(f.id, r.abs, repoGit(git, r), c.branch, { trigger: 'auto' }, r.id));
+        }
+      }
       if (floor.workflow === 'squad-sprint') { const r = await sprintTick(f, entry, git, team, floor); if (r) done.push(r); continue; }
       if (git.branchStrategy === 'trunk') continue;
       const work = workOf(f.id);
@@ -1180,7 +1241,7 @@ const stoppedByUs = new Map();                 // floorId -> agent ids stopped t
 function logCtx(floorId, root, cfg) {
   if (floorId === ind.FLOOR_ID || !root) return { team: [], sprint: null, options: {} };
   const c = cfg || floors.readFloor(root);
-  return { team: c.team.agents, sprint: sprint.hasPack(root) ? Number(sprint.readConfig(root).SPRINT) || null : null,
+  return { team: c.team.agents, sprint: sprint.hasPack(root) ? Number(sprint.readConfig(root).SPRINT) || null : null, repos: linkedRepos(root),
     options: { messages: c.floor.log.messages, pii: c.floor.log.maskPersonalData } };
 }
 // logging never breaks the action that is logged
@@ -1228,6 +1289,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
         collectTranscripts(entry.id, entry.path, emit, now);
         for (const ev of collect.scanDocs(entry.id, entry.path, { blueprint: blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint) }, now)) emit(ev);
         if (commits) for (const ev of await collect.scanCommits(entry.id, entry.path, cfg.team.agents.map((a) => a.id), now)) emit(ev);
+        if (commits) for (const r of linkedRepos(entry.path).filter((x) => x.access === 'write' && fs.existsSync(x.abs))) for (const ev of await collect.scanCommits(entry.id, r.abs, r.agents, now)) emit({ ...ev, repo: r.id });
         const f = snap.floors.find((x) => x.id === entry.id);
         if (f?.agents) {
           const own = {};

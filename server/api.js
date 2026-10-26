@@ -123,6 +123,10 @@ const routes = [
     return { ok: true };
   }, { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
+  ['GET', /^\/api\/floors\/([\w-]+)\/repos$/, ([id]) => squad.floorRepos(id)],
+  ['PUT', /^\/api\/floors\/([\w-]+)\/repos$/, ([id], b) => squad.updateRepos(id, b.repos), { pin: true }],
+  ['PATCH', /^\/api\/floors\/([\w-]+)\/repos\/([a-z0-9-]+)$/, ([id, rid], b) => (b.approved !== undefined ? squad.setRepoApproval(id, rid, b.approved) : squad.relinkRepo(id, rid, String(b.path || ''))), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/repos\/([a-z0-9-]+)\/clone$/, ([id, rid]) => squad.cloneRepo(id, rid), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/performance$/, ([id]) => squad.performance(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/audits$/, ([id]) => squad.floorAudits(id), { pin: true }],
   ['GET', /^\/api\/voice$/, () => squad.voiceInfo()],
@@ -147,7 +151,7 @@ const routes = [
   ['POST', /^\/api\/floors\/([\w-]+)\/audits\/([\w-]+)\/findings\/(F\d+)\/dismiss$/, ([id, aid, fid], b) => squad.dismissFinding(id, aid, fid, b.reason), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/blueprint\/update$/, ([id]) => squad.updateFloorBlueprint(id), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/log$/, ([id], b, req) => squad.floorLog(id, Object.fromEntries(new URL(req.url, 'http://x').searchParams)), { pin: true }],
-  ['POST', /^\/api\/floors\/([\w-]+)\/merges$/, ([id], b) => squad.startMerge(id, b.branch), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/merges$/, ([id], b) => squad.startMerge(id, b.branch, b.repo || ''), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/merge-approval$/, ([id], b) => { building.floorEntry(id); setApproval(id, !!b.approved); squad.invalidate(); return { ok: true, approved: !!b.approved }; }, { pin: true }],
   ['DELETE', /^\/api\/floors\/([\w-]+)$/, ([id]) => { building.unregisterFloor(id); squad.invalidate(); return { ok: true }; }, { pin: true }],
 

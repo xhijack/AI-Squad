@@ -16,6 +16,7 @@ import * as skills from './skills.js';
 import * as recovery from './recovery.js';
 import * as autopilot from './autopilot.js';
 import * as voiceLib from './voice.js';
+import * as reposLib from './repos.js';
 import { cleanStandup } from './rituals.js';
 
 const run = promisify(execFile);
@@ -137,7 +138,21 @@ export function readFloor(root) {
   const floor = readJson(file(root, 'floor.json'), null);
   if (!floor) throw notFound(`No AI Squad Floor in ${root}`);
   const team = readJson(file(root, 'team.json'), { agents: [] });
-  return { floor: cleanFloor(floor), team: { agents: Array.isArray(team.agents) ? team.agents : [] }, git: cleanGit(readJson(file(root, 'git.json'), {})) };
+  return { floor: cleanFloor(floor), team: { agents: Array.isArray(team.agents) ? team.agents : [] }, git: cleanGit(readJson(file(root, 'git.json'), {})), repos: reposLib.readRepos(root) };
+}
+// linked repositories (Phase 3.4): this machine's paths (building.json overrides) and what one agent gets
+export const localRepoPaths = (root) => building.loadBuilding().floors.find((f) => f.path === path.resolve(root))?.repos || {};
+export function agentReposOf(root, agentId, repos = reposLib.readRepos(root)) {
+  const { team } = readFloor(root);
+  const lead = team.agents.find((a) => a.lead) || team.agents.find((a) => sprint.roleKind(a) === 'lead');
+  return lead?.id === agentId ? reposLib.leadRepos(root, repos, agentId, localRepoPaths(root)) : reposLib.agentRepos(root, repos, agentId, localRepoPaths(root));
+}
+// the owner edits the list (Floor settings, Set up Squad): checked against the team, then every agent file is redone
+export function updateRepos(root, list) {
+  const { team } = readFloor(root);
+  const repos = reposLib.writeRepos(root, list, { agentIds: team.agents.map((a) => a.id) });
+  generate(root);
+  return repos;
 }
 export const hasFloor = (root) => fs.existsSync(file(root, 'floor.json'));
 export const writeFloor = (root, floor) => writeJson(file(root, 'floor.json'), cleanFloor(floor));
@@ -175,6 +190,7 @@ export function generate(root) {
   const leadAgent = team.agents.find((a) => a.lead);
   const lead = leadAgent ? { id: leadAgent.id, displayName: leadAgent.displayName } : null;
   const runsSquad = leadAgent || team.agents.find((a) => sprint.roleKind(a) === 'lead');
+  const repoList = reposLib.readRepos(root);
   fs.mkdirSync(agentsDir(root), { recursive: true });
   for (const a of team.agents) {
     const eff = effectiveOf(root, a);
@@ -183,7 +199,9 @@ export function generate(root) {
     const standard = bp ? { title: bp.title, version: bp.version, text: blueprints.standardText(bp, lead), roleRules: blueprints.roleRules(bp, a.role.template), lead } : null;
     writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard, skillName: (n) => skills.agentSkillName(root, n),
       memory: a === runsSquad ? recovery.memoryRules(floor.recovery.maxAgents) : null,
-      autopilot: a === runsSquad ? autopilot.leadRules(floor.autopilot, { timeoutSec: floor.autopilotTimeoutSec, questionsFile: sprint.hasPack(root) ? 'docs/squad/QUESTIONS.md' : 'docs/QUESTIONS.md' }) : null }));
+      autopilot: a === runsSquad ? autopilot.leadRules(floor.autopilot, { timeoutSec: floor.autopilotTimeoutSec, questionsFile: sprint.hasPack(root) ? 'docs/squad/QUESTIONS.md' : 'docs/QUESTIONS.md' }) : null,
+      repos: a === runsSquad ? reposLib.leadRepos(root, repoList, a.id, localRepoPaths(root)) : reposLib.agentRepos(root, repoList, a.id, localRepoPaths(root)),
+      lead: a === runsSquad }));
   }
   // remove generated files of agents that left the team (hand-written agent files are never touched)
   for (const f of safeReaddir(agentsDir(root))) {
@@ -207,7 +225,9 @@ function teamTable(root, team) {
 }
 export function writeBrief(root, floor, team, goal) {
   const p = path.join(root, 'AISQUAD.md');
-  const block = `${TEAM_START}\n${teamTable(root, team)}\n${TEAM_END}`;
+  const repos = reposLib.readRepos(root);
+  const repoLines = repos.length ? `\n\n**Repositories:** this one is the primary (the Floor, the board, the docs). Linked: ${repos.map((r) => `\`${r.path}\` (${r.id}, ${r.access}${r.agents.length ? `: ${r.agents.join(', ')}` : ''})`).join(', ')}. Read-only repositories are never changed by the squad.` : '';
+  const block = `${TEAM_START}\n${teamTable(root, team)}${repoLines}\n${TEAM_END}`;
   const cur = readText(p);
   if (cur && cur.includes(TEAM_START) && cur.includes(TEAM_END)) {
     writeText(p, cur.slice(0, cur.indexOf(TEAM_START)) + block + cur.slice(cur.indexOf(TEAM_END) + TEAM_END.length));
