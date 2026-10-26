@@ -58,11 +58,11 @@ export function runDoctor({ service = null, now = Date.now() } = {}) {
   }
 
   const res = readResources();
-  add('ram', 'Memory', res.mem.total < 8 * 2 ** 30 ? 'warn' : 'ok', `${gb(res.mem.available)} free of ${gb(res.mem.total)}`, res.mem.total < 8 * 2 ** 30 ? 'Under 8 GB: keep the number of agents running at once low (Building settings)' : '');
+  add('ram', 'Memory', res.mem.total < 8 * 2 ** 30 ? 'warn' : 'ok', `${gb(res.mem.available)} free of ${gb(res.mem.total)}`, res.mem.total < 8 * 2 ** 30 ? 'Under 8 GB: keep the number of agents running at once low (Menu → Backups and health)' : '');
   if (res.disk) add('disk', 'Disk', res.disk.free < 5 * 2 ** 30 ? 'warn' : 'ok', `${gb(res.disk.free)} free`, res.disk.free < 5 * 2 ** 30 ? 'Free some disk space' : '');
 
   const bs = backup.cleanSettings(b.prefs?.backup), st = backup.readStatus();
-  if (!bs.enabled) add('backup', 'Backups', 'warn', 'nightly backups are off', 'Building settings → Backups, or aisquad backup');
+  if (!bs.enabled) add('backup', 'Backups', 'warn', 'nightly backups are off', 'Menu → Backups and health, or /aisquad backup');
   else add('backup', 'Backups', st.lastBackup && st.lastBackup.ok && now - st.lastBackup.at < 2 * 864e5 ? 'ok' : 'warn',
     st.lastBackup ? `last ${st.lastBackup.ok ? 'backup' : 'attempt failed'} ${new Date(st.lastBackup.at).toISOString().slice(0, 16).replace('T', ' ')}` : `first backup at ${bs.time}`,
     st.lastBackup && !st.lastBackup.ok ? st.lastBackup.error : '');
