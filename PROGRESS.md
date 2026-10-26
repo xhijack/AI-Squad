@@ -457,6 +457,17 @@ Brief: `PHASE-3-VISUAL.md`. The owner put Phase 3 before the rest of Phase 2.5. 
 - **Second opinion**: new **Second Opinion Reviewer** role (v1, opus by default, no Edit) with the `second-opinion` skill. The reviewer reviews modules marked `Risk: high` on a different model than the author's and writes `docs/squad/review/Mxx-second-opinion.md` with VERDICT AGREE or DISAGREE; disagreements go to the lead. `sprint-planning` adds the Risk field. It is an optional role in **Software House v4**. The log records `review.second` once per verdict. The Audit's `process.secondOpinions` lists the disagreements, and `process.designPicks` counts the picks.
 - Tests: design (groups, served files, traversal refused, taste notes), api (list, sandbox header, PIN, pick, Attention), collect (second opinions), audit, templates. Screenshots (swap 79.7 %): `playground/reference/design-variants-1440.png`, `design-variants-390.png`.
 
+## Phase 3.1: voices, 0.7.0 (26 Oct 2026)
+
+Brief: `PHASE-3.1-VOICE.md`. Not an MCP server: the AI Squad server calls the ElevenLabs REST API with Node's own `fetch`, no SDK.
+- **The key** (`server/voice.js`): `ELEVENLABS_API_KEY` in the service environment, or `~/.aisquad/secrets.json` written with mode 600. The API and UI only ever return `{ set, last4, source }`. The key is sent only in the `xi-api-key` header and scrubbed from any error text. Tests check every response (key, settings, building) and `team.json` for it.
+- **Spoken lines**: `spokenText` keeps a message's headline and up to two sentences, without markdown, code, tables or links (no model call). The line runs through `redact` (secrets and personal data) before it is sent. **Listen** in the conversation view reads the whole message (up to 3000 characters).
+- **Cache and budget**: mp3 by sha256 of (voice, model, text), 60 MB cap (oldest evicted). Monthly usage in `~/.aisquad/voice-usage.json`; past the budget (default 50 000), without a key, or on an API error, the reply is a `browser` fallback with the text, and the page uses its own speech synthesis (Indonesian or English by the words). Muted Floors, quiet hours and a hidden tab mean silence. `voice.spoken` is logged and the Audit has `efficiency.voice`.
+- **Voices**: role defaults (ElevenLabs premade voice ids; a voice missing from an account falls back to the Building default), a voice per agent in `team.json` (id only), and `GET /api/voice/voices` for the picker with previews.
+- **UI**: Voice settings (write-only key, Test voice, model, budget meter, quiet hours, visible-only, muted Floors), Desk → Profile → Voice, lines for new Finished reports and questions, the lead's shout, meeting openings, ▶ Listen. Mouths follow the audio through a Web Audio analyser, in the office and in the portrait.
+- Tests: `test/voice.test.js` (mocked ElevenLabs: key storage and status, spoken text, the key only in a header, redaction, cache and usage, budget, no key, API errors, voices, quiet hours) and api (write-only key over HTTP, PIN, audio response, muted Floor, voice id in team.json). No real ElevenLabs call was made: the owner has not set a key here, and the brief allows one only when the owner asks. Screenshot (a dummy key in the playground only): `playground/reference/voice-settings-1440.png`, `voice-settings-390.png`.
+- Not built (the brief's "later"): push-to-talk with speech-to-text.
+
 ## How to run
 
 ```
