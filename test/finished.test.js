@@ -135,3 +135,39 @@ test('a turn keeps its card id whether it reads as a reply or as Finished', asyn
   assert.equal(items().find((a) => a.agentId === 'dewi-devops' && a.kind === 'reply').id, id1, 'the same turn, the same id');
   squad.stopAgent(FLOOR, 'dewi-devops');
 });
+
+test('a long command keeps the agent working with a timer; when it ends, a calm card with duration and result', async () => {
+  await squad.startAgent(FLOOR, 'dewi-devops');
+  assert.ok(await wait(() => items().some((a) => a.kind === 'permission' && a.agentId === 'dewi-devops')) || true);
+  const trust = items().find((a) => a.kind === 'permission' && a.agentId === 'dewi-devops');
+  if (trust) await squad.answerAttention(trust.id, 1);
+  const file = path.join(projectDir(proj), 'sess-dewi.jsonl'), start = Date.now() + 5000 - 8 * 60e3;   // later than the earlier turns
+  const head = [{ type: 'agent-setting', agentSetting: 'dewi-devops', sessionId: 'sess-dewi' },
+    { type: 'user', timestamp: new Date(start - 5000).toISOString(), message: { role: 'user', content: 'Run the e2e suite' } },
+    { type: 'assistant', timestamp: new Date(start).toISOString(), message: { id: 'run', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'tu-e2e', name: 'Bash', input: { command: 'npx playwright test', description: 'e2e suite' } }] } }];
+  fs.writeFileSync(file, jsonl(head));
+  const dewi = () => { squad.invalidate(); return squad.buildingSnapshot().floors.find((f) => f.id === FLOOR).agents.find((a) => a.id === 'dewi-devops'); };
+  assert.ok(await wait(() => dewi().task));
+  const a = dewi();
+  assert.equal(a.state, 'working', 'nothing new in the transcript for 8 minutes, still working');
+  assert.equal(a.task.label, 'e2e Playwright');
+  assert.ok(a.task.elapsedMs >= 7 * 60e3, `${a.task.elapsedMs}`);
+  await squad.logTick();
+  assert.equal(squadLog.read(FLOOR, { type: 'task.started' }).filter((e) => e.agent === 'dewi-devops').length, 1);
+  // it ends
+  const end = start + 8 * 60e3;
+  fs.writeFileSync(file, jsonl([...head,
+    { type: 'user', timestamp: new Date(end).toISOString(), message: { content: [{ type: 'tool_result', tool_use_id: 'tu-e2e', content: [{ type: 'text', text: 'Running 42 tests\n  2 failed\n  40 passed (8.0m)' }] }] } },
+    { type: 'assistant', timestamp: new Date(end + 2000).toISOString(), message: { id: 'end', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Two e2e tests fail; details in the QA report.' }] } }]));
+  assert.ok(await wait(() => items().some((x) => x.kind === 'taskdone')));
+  const card = items().find((x) => x.kind === 'taskdone');
+  assert.equal(card.text, 'e2e Playwright failed in 8m 00s: 40 passed, 2 failed');
+  assert.equal(card.calm, true);
+  assert.equal(dewi().task, null);
+  await squad.logTick();
+  const ended = squadLog.read(FLOOR, { type: 'task.ended' }).filter((e) => e.agent === 'dewi-devops');
+  assert.deepEqual(ended.map((e) => [e.data.kind, e.data.ms, e.data.passed, e.data.failed]), [['e2e', 8 * 60e3, 40, 2]]);
+  await squad.answerAttention(card.id, 0);
+  assert.equal(items().some((x) => x.kind === 'taskdone'), false, 'OK dismisses it');
+  squad.stopAgent(FLOOR, 'dewi-devops');
+});

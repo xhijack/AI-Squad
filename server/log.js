@@ -19,6 +19,7 @@ export const TYPES = {
   'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.resumed': 'lifecycle', 'agent.model': 'lifecycle',
   'task.given': 'work', 'board.changed': 'work', 'handoff.written': 'work', 'qa.report': 'work', 'bug.opened': 'work', 'bug.closed': 'work',
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
+  'task.started': 'work', 'task.ended': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
@@ -85,6 +86,8 @@ function summarize(e) {
     case 'permission.answered': return `${who} got permission after ${secs(d.waitMs)}`;
     case 'tool.call': return `${who} ${d.tool}${d.target ? ` ${oneLine(d.target, 60)}` : ''}${d.ok ? '' : ' FAILED'}${d.ms != null ? ` (${secs(d.ms)})` : ''}`;
     case 'usage.turn': return `${who} turn: ${d.input + d.cacheRead + d.cacheWrite} in, ${d.output} out, $${(+d.cost || 0).toFixed(4)}`;
+    case 'task.started': return `${who} started ${d.label || d.kind}`;
+    case 'task.ended': return `${who} ${d.label || d.kind} ${d.status === 'completed' ? 'finished' : d.status} after ${secs(d.ms)}${d.summary ? `: ${d.summary}` : ''}`;
     case 'agent.idle': return `${who} idle${d.openWork ? ' with open work' : ''}`;
     case 'agent.busy': return `${who} working again after ${secs(d.idleMs)}`;
     case 'watchdog.alert': return `watchdog ${d.kind}${t(d.text)}`;

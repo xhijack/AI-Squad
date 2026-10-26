@@ -36,9 +36,14 @@ export function resourceWarnings(r, limits = LIMITS) {
 }
 
 // agents: [{ id, displayName, lead, state, lastTs }], work: { [agentId]: { assignedAt, doneAt } }
+// agents: [{ id, displayName, lead, state, lastTs, task }]; an agent with a running command (task) is working, never
+// idle; its command can stall by itself (task.stall: its output stopped moving, or it runs far longer than usual)
 export function stallAlerts(agents, work, now = Date.now(), stallMs = STALL_MS) {
+  const taskStalls = agents.filter((a) => a.task?.stall).map((a) => ({ kind: 'stall', scope: 'task', agent: a.id,
+    text: a.task.stall === 'quiet' ? `${a.displayName}: "${a.task.label}" has written no output for ${Math.round((now - a.task.lastOutputAt) / 60000)} min`
+      : `${a.displayName}: "${a.task.label}" has run ${Math.round(a.task.elapsedMs / 60000)} min, far longer than usual (${Math.round(a.task.typicalMs / 60000)} min)` }));
   const open = agents.filter((a) => work[a.id] && !work[a.id].doneAt);
-  if (!open.length) return [];
+  if (!open.length) return taskStalls;
   const quietFor = (a) => now - Math.max(a.lastTs || 0, work[a.id]?.assignedAt || 0);
   const idle = (a) => a.state !== 'working' && a.state !== 'waiting';
   const out = [];
@@ -47,12 +52,12 @@ export function stallAlerts(agents, work, now = Date.now(), stallMs = STALL_MS) 
   if (everyoneIdle) {
     const since = Math.min(...open.map(quietFor));
     out.push({ kind: 'stall', scope: 'floor', text: `Team is stalled: pending work but ${agents.find((a) => a.lead) ? 'the lead and ' : ''}all agents idle for ${Math.round(since / 60000)} min` });
-    return out;
+    return [...out, ...taskStalls];
   }
   for (const a of open) {
-    if (idle(a) && quietFor(a) >= stallMs) out.push({ kind: 'stall', scope: 'agent', agent: a.id, text: `${a.displayName} has assigned work but has been idle for ${Math.round(quietFor(a) / 60000)} min` });
+    if (idle(a) && !a.task && quietFor(a) >= stallMs) out.push({ kind: 'stall', scope: 'agent', agent: a.id, text: `${a.displayName} has assigned work but has been idle for ${Math.round(quietFor(a) / 60000)} min` });
   }
-  return out;
+  return [...out, ...taskStalls];
 }
 
 // budget: { usd, period: day|month }, spent: { today, month }

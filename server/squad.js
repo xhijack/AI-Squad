@@ -15,6 +15,8 @@ import * as hooks from './events.js';
 import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
+import * as tasksLib from './tasks.js';
+import { redact } from './redact.js';
 import * as blueprintsLib from './blueprints.js';
 import * as skillsLib from './skills.js';
 import * as collect from './collect.js';
@@ -149,7 +151,9 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const h = hooks.agentState(entry.id, a.id, now);
     const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
     const hookWaiting = hookFresh && h.state === 'waiting';
-    const working = busy || (hookFresh ? h.state === 'working' : recent);
+    // a long command (e2e, docker build) writes nothing while it runs: the agent is working all the same
+    const task = running ? liveTask(entry.id, a.id, st, own ? screen : '', now) : null;
+    const working = busy || !!task || (hookFresh ? h.state === 'working' : recent);
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
     // the turn of an agent the owner talks to directly (its own session: the lead, or started from its Desk) ended:
@@ -171,7 +175,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
+      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
   // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
   const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
@@ -183,6 +187,71 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     if (l.withLead) l.stopNote = `${l.ended?.withLead ? `stopped with the lead (${recovery.causeText(l.ended)})` : 'not running'}${l.status?.activity ? ` · last: ${l.status.activity}` : ''}`;
   }
   return lives;
+}
+// ---------- long-running commands (server/tasks.js) ----------
+// the agent's latest running command with its last output lines (the background shell's output file, else its own
+// tmux screen), progress, how long it usually takes (task.ended in the Log, per kind) and whether it stalls
+const outputSeen = new Map();                  // floor/agent/task -> { hash, at } (screens have no mtime)
+const typicalCache = new Map();                // floorId -> { at, history }
+function taskHistory(floorId, now) {
+  const c = typicalCache.get(floorId);
+  if (c && now - c.at < 5 * 60e3) return c.history;
+  let history = [];
+  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }
+  typicalCache.set(floorId, { at: now, history });
+  return history;
+}
+function readTail(file, bytes = 16 * 1024) {
+  try {
+    const st = fs.statSync(file), fd = fs.openSync(file, 'r');
+    const len = Math.min(bytes, st.size), buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, st.size - len); fs.closeSync(fd);
+    return { text: buf.toString('utf8'), mtime: st.mtimeMs };
+  } catch { return null; }
+}
+export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
+  const t = st?.tasks?.running?.at(-1);
+  if (!t) return null;
+  let text = '', lastOutputAt = 0;
+  if (t.file) { const r = readTail(t.file); if (r) { text = r.text; lastOutputAt = r.mtime; } }
+  else if (screen) {
+    text = screen;
+    const key = `${floorId}/${agentId}/${t.id}`, hash = crypto.createHash('sha1').update(tasksLib.tailLines(screen, 12).join('\n')).digest('hex');
+    const seen = outputSeen.get(key);
+    if (!seen || seen.hash !== hash) outputSeen.set(key, { hash, at: now });
+    lastOutputAt = outputSeen.get(key).at;
+    if (outputSeen.size > 500) outputSeen.delete(outputSeen.keys().next().value);
+  }
+  const typical = tasksLib.typicalMs(t.kind, taskHistory(floorId, now));
+  return { id: t.id, kind: t.kind, label: t.label, command: redact(t.command), background: t.background, startedAt: t.startedAt, elapsedMs: now - t.startedAt,
+    lines: tasksLib.tailLines(text, 6).map((l) => redact(l).slice(0, 200)), progress: tasksLib.progressOf(t.kind, text), lastOutputAt: lastOutputAt || t.startedAt, typicalMs: typical,
+    stall: tasksLib.stallOf({ startedAt: t.startedAt, lastOutputAt: lastOutputAt || t.startedAt, now, typical, hasOutput: !!text }) };
+}
+// commands that ended in the last half hour and ran at least TASK_CARD_MS: the owner gets a calm card
+const TASK_CARD_MS = 2 * 60e3, TASK_RECENT_MS = 30 * 60e3;
+export function endedTasks(st, now = Date.now()) {
+  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS)
+    .map((t) => ({ id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '', ...tasksLib.resultOf(t.kind, t.output || (t.file ? readTail(t.file)?.text || '' : ''), t.status) }));
+}
+// "e2e Playwright finished in 7m 32s: 40 passed, 2 failed"
+export const taskDoneText = (tk) => `${tk.label} ${tk.status === 'completed' ? (tk.ok === false ? 'failed' : 'finished') : tk.status} in ${tasksLib.duration(tk.ms)}${tk.summary && !['done', tk.status].includes(tk.summary) ? `: ${tk.summary}` : ''}`;
+// the Log: task.started once a command has run a minute, task.ended (duration, result) when it ends
+const TASK_LOG_MS = 60e3;
+function taskEvents(floorId, lives, now = Date.now()) {
+  const S = collect.stateOf(floorId);
+  S.tasks ||= { started: {}, ended: {} };
+  const out = [];
+  for (const l of lives) {
+    const tk = l.task;
+    if (tk && tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background } }); }
+    for (const e of l.tasksEnded || []) if (S.tasks.started[e.id] && !S.tasks.ended[e.id]) {
+      S.tasks.ended[e.id] = now;
+      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
+      typicalCache.delete(floorId);
+    }
+  }
+  for (const k of ['started', 'ended']) { const ids = Object.keys(S.tasks[k]); if (ids.length > 300) for (const id of ids.slice(0, ids.length - 300)) delete S.tasks[k][id]; }
+  return out;
 }
 const TEAMMATE_LIVE_MS = 10 * 60e3;          // a teammate run of the running lead counts as alive this long after its last line
 const replyKey = (floorId, agentId, ts) => `${floorId}/${agentId}@${ts}`;
@@ -204,6 +273,7 @@ function agentView(root, l, cost) {
     id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead,
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
+    task: l.task || null,                                // a long-running command: label, start, last lines, progress, stall
     standby: l.standby || null, waitingReply: !!l.reply, finished: l.finished ? l.finished.ts : null,
     // stopped agents: how they ended (crash: Resume is the main action), the session Resume continues, the last state
     crash: l.ended?.kind === 'crashed' ? { cause: l.ended.cause, at: l.ended.at, text: recovery.crashText(l.ended), withLead: l.ended.withLead || null } : null,
@@ -218,8 +288,15 @@ const attId = (...parts) => crypto.createHash('sha1').update(parts.join('|')).di
 const PERMISSION = /(do you want to|allow|permission|proceed|trust|make this edit|run this command)/i;
 
 function floorAttention(entry, floor, lives, cost) {
-  const out = [];
+  const out = [], dismissedNow = new Set(loadRuntime().dismissedReplies);
   for (const l of lives) {
+    // a long command ended (2 min or more): a calm card with its duration and result, OK or Open log
+    for (const tk of l.tasksEnded || []) {
+      const key = replyKey(entry.id, l.agent.id, `task:${tk.id}`);
+      if (dismissedNow.has(key)) continue;
+      out.push({ id: attId(entry.id, l.agent.id, 'task', tk.id), kind: 'taskdone', replyKey: key, floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+        agentId: l.agent.id, agentName: l.agent.displayName, text: taskDoneText(tk), task: tk, options: [], answerable: true, calm: true, canReply: false, ts: tk.endedAt });
+    }
     if (l.dialog) {
       out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
@@ -248,7 +325,7 @@ function floorAttention(entry, floor, lives, cost) {
     }
   }
   const work = workOf(entry.id);
-  for (const s of wd.stallAlerts(lives.map((l) => ({ id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead, state: l.state, lastTs: l.lastTs })), work)) {
+  for (const s of wd.stallAlerts(lives.map((l) => ({ id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead, state: l.state, lastTs: l.lastTs, task: l.task })), work)) {
     out.push({ id: attId('stall', entry.id, s.agent || ''), kind: 'stall', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
   }
   for (const m of merge.mergeProblems(entry.id, loadRuntime().dismissedMerges)) {
@@ -744,6 +821,7 @@ export async function answerAttention(id, option, text = '', { force = false, fl
   const item = attentionItems().find((x) => x.id === id);
   if (!item) return answerGone({ floorId, agentId, kind }, option, text);
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
+  if (item.kind === 'taskdone') { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'reply' || item.kind === 'finished') {
     if (!Number(option) && !String(text).trim()) { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
     if (item.canReply === false) throw bad('This agent runs on its own: reply in its own terminal');
@@ -1159,6 +1237,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
           for (const ev of collect.stateChanges(entry.id, f.agents, { teamOpen, own, stoppedByUs: stoppedByUs.get(entry.id) }, now)) emit(ev);
           stoppedByUs.delete(entry.id);
           for (const ev of reportEvents(entry.id, snap.attention)) emit(ev);
+          for (const ev of taskEvents(entry.id, floorState(entry).lives || [], now)) emit(ev);
           const S = collect.stateOf(entry.id);
           S.models ||= {};
           for (const a of f.agents) {

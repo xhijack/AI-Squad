@@ -50,3 +50,13 @@ test('memory is read from the configured /proc (tests use a scratch one)', async
     assert.equal(r.mem.available, 4000000 * 1024); assert.equal(r.swap.used, 7200000 * 1024);
   } finally { configure({ procDir: before }); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('a running command keeps an agent off the idle list; the command itself can stall', () => {
+  const now = Date.now(), work = { a: { assignedAt: now - 30 * 60e3 } };
+  const task = { label: 'e2e Playwright', elapsedMs: 25 * 60e3, lastOutputAt: now - 12 * 60e3, typicalMs: 7 * 60e3, stall: '' };
+  assert.deepEqual(wd.stallAlerts([{ id: 'a', displayName: 'Qori', state: 'working', lastTs: now - 25 * 60e3, task }], work, now), [], 'working on its command');
+  const quiet = wd.stallAlerts([{ id: 'a', displayName: 'Qori', state: 'working', lastTs: now - 25 * 60e3, task: { ...task, stall: 'quiet' } }], work, now);
+  assert.deepEqual(quiet.map((x) => [x.scope, x.text]), [['task', 'Qori: "e2e Playwright" has written no output for 12 min']]);
+  const long = wd.stallAlerts([{ id: 'a', displayName: 'Qori', state: 'working', lastTs: now, task: { ...task, stall: 'long' } }], {}, now);
+  assert.deepEqual(long.map((x) => x.text), ['Qori: "e2e Playwright" has run 25 min, far longer than usual (7 min)'], 'even without assigned work');
+});

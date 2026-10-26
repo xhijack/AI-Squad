@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { paths } from './config.js';
 import { safeReaddir, statOf, readJson, oneLine, clip } from './util.js';
+import * as tasksLib from './tasks.js';
 
 export const ACTIVE_MS = 90 * 1000;
 const TAIL = 256 * 1024;
@@ -129,7 +130,8 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
       }
     }
   }
-  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, reply, model, modelTs, messages, peek, ...(events ? { events: evs.slice(-120) } : {}) };
+  // long-running commands: running (open calls, background shells, Monitor waits) and ended (server/tasks.js)
+  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, reply, model, modelTs, messages, peek, tasks: tasksLib.scan(recs), ...(events ? { events: evs.slice(-120) } : {}) };
 }
 
 // ---------- session ownership ----------
