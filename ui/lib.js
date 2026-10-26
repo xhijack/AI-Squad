@@ -18,6 +18,43 @@ export function avatar(a, cls = '') {
   return `<span class="avatar ${cls}" style="--shirt:${esc(ap.shirt || '#3d82d6')};--hair:${esc(ap.hair || '#2b2440')}" aria-hidden="true">${esc(initials(a.displayName))}</span>`;
 }
 export const STATE_TEXT = { working: 'Working', waiting: 'Waiting for you', idle: 'Idle', stopped: 'Stopped' };
+// teammates on Squad Sprint / Blueprint Floors the lead has not started yet are "not started", not "stopped"
+export const stateText = (a) => (a.standby ? 'Not started' : a.waitingReply ? 'Waiting for your reply' : STATE_TEXT[a.state]);
+
+// unsent replies in Attention cards, kept across re-renders (item id -> text)
+export const drafts = new Map();
+
+// a small, safe subset of markdown for agent messages: paragraphs, headings, bold, italics, code, lists, tables
+export function mdLite(src) {
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[\s(])[*_]([^*_\s][^*_]*)[*_](?=[\s.,;:)!?]|$)/g, '$1<i>$2</i>');
+  const out = [];
+  let para = [], list = null, table = null, code = null;
+  const flush = () => {
+    if (para.length) out.push(`<p>${para.map(inline).join('<br>')}</p>`);
+    if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`);
+    if (table) out.push(`<div class="mdTable"><table>${table.map((r, k) => `<tr>${r.map((c) => (k ? `<td>${inline(c)}</td>` : `<th>${inline(c)}</th>`)).join('')}</tr>`).join('')}</table></div>`);
+    para = []; list = null; table = null;
+  };
+  for (const line of String(src || '').split('\n')) {
+    const t = line.trim();
+    if (code) { if (t.startsWith('```')) { out.push(`<pre>${esc(code.join('\n'))}</pre>`); code = null; } else code.push(line); continue; }
+    if (t.startsWith('```')) { flush(); code = []; continue; }
+    if (!t) { flush(); continue; }
+    let m;
+    if (/^\|.*\|$/.test(t)) { if (!/^\|[\s:|-]+\|$/.test(t)) { if (!table) { flush(); table = []; } table.push(t.slice(1, -1).split('|').map((c) => c.trim())); } continue; }
+    if ((m = t.match(/^#{1,6}\s+(.*)$/))) { flush(); out.push(`<h5>${inline(m[1])}</h5>`); continue; }
+    if ((m = t.match(/^([-*•]|\d{1,3}[.)])\s+(.*)$/))) {
+      const tag = /\d/.test(m[1]) ? 'ol' : 'ul';
+      if (!list || list.tag !== tag) { flush(); list = { tag, items: [] }; }
+      list.items.push(m[2]); continue;
+    }
+    if (list || table) flush();
+    para.push(t);
+  }
+  if (code) out.push(`<pre>${esc(code.join('\n'))}</pre>`);
+  flush();
+  return out.join('');
+}
 
 export function toast(text, ms = 2800) {
   const t = $('toast');

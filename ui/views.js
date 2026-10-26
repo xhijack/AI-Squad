@@ -1,9 +1,9 @@
 // Panel content for the three places: Lobby, Floor, Desk. Each view returns sections
 // { id, title, card: top | main | tabs, html, head?, count? }; app.js lays them out as floating cards in the right
 // panel (desktop) or as tabs of the bottom sheet (phone).
-import { esc, money, ago, avatar, STATE_TEXT } from './lib.js';
+import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 
-const KIND_TEXT = { question: 'Question', permission: 'Permission', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge' };
+const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge' };
 
 // ---------- Attention ----------
 export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
@@ -11,7 +11,11 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
   return items.map((a) => {
     const where = [KIND_TEXT[a.kind] || a.kind, showFloor && a.floorNumber ? `Floor ${a.floorNumber} · ${esc(a.floorName)}` : '', a.agentName ? esc(a.agentName) : ''].filter(Boolean).join(' · ');
     let body = '';
-    if (a.answerable && a.options?.length) {
+    if (a.kind === 'reply') {
+      const who = esc(String(a.agentName || 'the agent').split(' - ')[0]);
+      body = `<form class="replyForm" data-act="reply" data-id="${a.id}"><textarea name="text" rows="3" data-draft="${a.id}" placeholder="Reply to ${who}…" aria-label="Your reply to ${who}" required>${esc(drafts.get(a.id) || '')}</textarea>
+        <div class="row"><span class="note grow">Sent to ${who} as the next task.</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}" title="Hide this until the agent asks again">Dismiss</button><button class="small gold">Send reply</button></div></form>`;
+    } else if (a.answerable && a.options?.length) {
       body = `<div class="opts">${a.options.map((o) => o.free
         ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${esc(o.label)}" aria-label="Your answer" required><button class="gold">Send</button></form>`
         : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${esc(o.label)}</button>`).join('')}</div>`;
@@ -24,7 +28,8 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">Open desk</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">Open Floor</a>`);
     if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
-    return `<div class="att ${a.kind} ${a.level || ''}"><div class="where">${where} · ${ago(a.ts)}</div><div class="q">${esc(a.text)}</div>${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
+    const text = a.kind === 'reply' ? `<div class="replyMsg md" data-scroll="reply-${a.id}" tabindex="0" aria-label="Message from ${esc(a.agentName || 'the agent')}">${mdLite(a.text)}</div>` : `<div class="q">${esc(a.text)}</div>`;
+    return `<div class="att ${a.kind} ${a.level || ''}"><div class="where">${where} · ${ago(a.ts)}</div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
   }).join('');
 }
 
@@ -63,12 +68,12 @@ const ROLE_SHORT = (a) => [a.lead ? 'Lead' : '', a.title, a.model].filter(Boolea
 const STATE_SHORT = { working: 'working', waiting: 'needs you', idle: 'idle', stopped: 'stopped' };
 // one row per agent: colour dot, name, role, one status chip, what it is doing
 export function agentRow(floorId, a, selected) {
-  const act = a.state === 'stopped' ? (a.independent ? a.activity || 'not running' : `stopped${a.lastTs ? ` · last seen ${ago(a.lastTs)}` : ''}`)
+  const act = a.standby ? a.activity : a.state === 'stopped' ? (a.independent ? a.activity || 'not running' : `stopped${a.lastTs ? ` · last seen ${ago(a.lastTs)}` : ''}`)
     : a.state === 'idle' ? `idle${a.lastTs ? ` ${ago(a.lastTs).replace(' ago', '')}` : ''}` : a.activity || STATE_TEXT[a.state];
   return `<div class="arow${selected ? ' sel' : ''}" data-href="#/floor/${floorId}/desk/${a.id}" role="button" tabindex="0">
     <i class="adot" style="--c:${esc(a.appearance?.shirt || '#3d82d6')}"></i>
     <span class="grow"><span class="nm"><b>${esc(String(a.displayName).split(' - ')[0])}</b> <span class="role">${esc(ROLE_SHORT(a))}</span></span><span class="act">${esc(act)}</span></span>
-    <span class="st ${a.state}">${STATE_SHORT[a.state]}</span></div>`;
+    ${a.standby ? '<span class="st standby">not started</span>' : `<span class="st ${a.state}">${STATE_SHORT[a.state]}</span>`}</div>`;
 }
 
 function feedHtml(feed) {
@@ -141,6 +146,9 @@ export function floorSections(f, deskAgentId = null) {
 }
 
 // ---------- Desk ----------
+// the status line under the agent's name: state, then what it is doing (a standby text says it all)
+const deskState = (d) => (d.standby ? d.activity.replace(/^./, (c) => c.toUpperCase())
+  : `${stateText(d)}${d.activity && d.state !== 'stopped' && !d.waitingReply ? ` · ${d.activity}` : ''}`);
 const SKILL_STATE = { project: ['ok', 'in project'], user: ['ok', 'in user skills'], bundled: ['info', 'from plugin'], missing: ['warn', 'not installed'] };
 function skillsHtml(d) {
   const list = d.skills || [];
@@ -153,10 +161,10 @@ function skillsHtml(d) {
     <div class="note">Plugin skills work in sessions The AI Squad starts; installing copies them into <code>.claude/skills/</code> so every session of this project has them.</div>`;
 }
 function independentDeskSections(floor, d, routeScreen) {
-  const dialog = d.dialog ? (floor.attentionItems || []).filter((a) => a.agentId === d.id) : [];
+  const dialog = (floor.attentionItems || []).filter((a) => a.agentId === d.id && (d.dialog || a.kind === 'reply'));
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
       <div class="note">${esc(d.title)}${d.models?.observed ? ` · last reply from ${esc(d.models.observed)}` : ''}</div>
-      <div class="note"><i class="dot ${d.state}"></i> ${esc(STATE_TEXT[d.state])}${d.activity && d.state !== 'stopped' ? ` · ${esc(d.activity)}` : ''}</div></div>
+      <div class="note"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div>
       <div class="row" style="flex-direction:column;align-items:stretch;gap:6px"><button class="gold" data-act="adopt-agent" data-agent="${d.id}">Adopt into a squad</button>
       <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a></div></div>`;
   const overview = `${head}
@@ -183,7 +191,7 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
   const e = d.effective || {};
   const ts = d.templateStatus || {};
   const o = d.agent.overrides || {};
-  const dialog = d.dialog ? (floor.attentionItems || []).filter((a) => a.agentId === d.id) : [];
+  const dialog = (floor.attentionItems || []).filter((a) => a.agentId === d.id && (d.dialog || a.kind === 'reply'));
   const mr = d.models || {};
   const modelWarn = mr.mismatch
     ? `<div class="att budget warn" style="margin-top:10px"><div class="where">Model differs</div><div class="q">Configured: <b>${esc(mr.configured)}</b>. The latest reply (${ago(mr.observedAt)}) came from <b>${esc(mr.observed)}</b>.${mr.restartNeeded ? ' The session was started with an older configuration.' : d.running ? ' The model may have been switched inside the session, or a lead spawned this agent with another model.' : ''}</div>
@@ -192,7 +200,7 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
       <button class="small" data-act="restart" data-agent="${d.id}">Restart</button></div>` : '';
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
       <div class="note">${esc(e.title || '')} · model ${esc(mr.configured || '?')}${mr.observed ? ` · last reply from <span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span>` : ''}</div>
-      <div class="note"><i class="dot ${d.state}"></i> ${esc(STATE_TEXT[d.state])}${d.activity && d.state !== 'stopped' ? ` · ${esc(d.activity)}` : ''}</div></div>
+      <div class="note"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div>
       <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">${d.running ? `<button class="ghost" data-act="stop" data-agent="${d.id}">Stop</button>` : `<button class="ok" data-act="start" data-agent="${d.id}">Start</button>`}
       <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a></div></div>`;
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">Update available</div><div class="q">${esc(e.title)} template v${d.agent.role.version} → v${ts.latestVersion}</div>

@@ -1,6 +1,6 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -244,6 +244,7 @@ function hudHtml(b, route, f) {
   if (!f.independent && !f.missing) {
     if (f.budget?.level === 'over') warn = `<span class="hpill warn">${icon('alert')}Budget reached</span>`;
     else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<button class="hpill warn" data-act="start-all" title="Start every agent of this Floor">${icon('alert')}Squad not running</button>`;
+    else if (f.waitingFor) warn = `<button class="hpill wait" data-act="waiting-for" title="${esc(f.waitingFor.docs ? `Not approved yet: ${f.waitingFor.docs.join(', ')}` : 'Open what the squad waits for')}">${icon('alert')}<span class="ellipsis">${esc(f.waitingFor.text)}</span></button>`;
     else if (f.budget?.level === 'warn') warn = `<span class="hpill warn">${icon('alert')}Budget ${Math.round(f.budget.pct)} %</span>`;
   }
   return `<div class="bar"><a class="iconBtn" href="#/" title="Lobby" aria-label="Back to the Lobby">${icon('building')}</a><span class="lamp ${f.lamp}"></span>
@@ -287,7 +288,7 @@ function dockHtml(b, route, f) {
   return out.join('');
 }
 
-const LEGEND = `<div class="lgGrid"><span><i class="st working">working</i></span><span><i class="st waiting">needs you</i></span><span><i class="st idle">idle</i></span><span><i class="st stopped">stopped</i></span></div>
+const LEGEND = `<div class="lgGrid"><span><i class="st working">working</i></span><span><i class="st waiting">needs you</i></span><span><i class="st idle">idle</i></span><span><i class="st stopped">stopped</i></span><span><i class="st standby">not started</i></span></div>
   <ul class="lgList"><li><b>Click a character</b> to look through its eyes</li><li><b>Click a name chip</b> for the desk</li><li><b>Click a monitor</b> for the screen view</li>
   <li><b>Drag</b> to move around, <b>scroll</b> to zoom</li><li><b>Esc</b> goes back one level</li></ul>`;
 
@@ -454,6 +455,15 @@ const actions = Object.assign(ctx.actions, {
   },
   async answer(el) { el.disabled = true; await api('POST', `/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n }); toast('Answer sent'); },
   async dismiss(el) { await api('POST', `/api/attention/${el.dataset.id}/answer`, { option: 0 }); toast('Dismissed'); },
+  // the Floor pill: source documents open the Standard tab, a reply or answer opens Attention
+  'waiting-for'(el) {
+    const f = state.building.floors.find((x) => x.id === state.route.floorId);
+    const sec = f?.waitingFor?.kind === 'docs' ? 'standard' : 'f-attention';
+    if (!lastSections?.some((x) => x.id === sec)) { openPopover('attPop', el); return; }
+    if (!$('sheet').hidden) state.tab.sheet = sec; else state.tab.tabs = sec;
+    layoutPanels(lastSections);
+    requestAnimationFrame(() => document.querySelector(sec === 'standard' ? '#side .docRow, #sheet .docRow' : '#side .att, #sheet .att')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  },
   async 'work-done'(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/work-done`, {}); },
   async 'remove-floor'(el) {
     if (!confirm('Remove this Floor from the Building? The project directory and its files stay untouched.')) return;
@@ -493,6 +503,17 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('keydown', (e) => {
   const nav = (e.key === 'Enter' || e.key === ' ') && e.target.closest?.('[data-href][role=button]');
   if (nav) { e.preventDefault(); location.hash = nav.dataset.href; }
+});
+// a reply to an agent that waits for the owner: sent as its next task; the draft survives re-renders
+document.addEventListener('input', (e) => { const id = e.target.dataset?.draft; if (id) drafts.set(id, e.target.value); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.dataset?.draft) { e.preventDefault(); e.target.form.requestSubmit(); } });
+document.addEventListener('submit', async (e) => {
+  const r = e.target.closest('form[data-act="reply"]');
+  if (!r) return;
+  e.preventDefault();
+  const btn = r.querySelector('button.gold'); btn.disabled = true;
+  try { await api('POST', `/api/attention/${r.dataset.id}/answer`, { option: 1, text: r.elements.text.value }); drafts.delete(r.dataset.id); r.elements.text.blur(); toast('Reply sent'); } catch (err) { btn.disabled = false; toast(err.message); }
+  refresh();
 });
 document.addEventListener('submit', async (e) => {
   const f = e.target.closest('form[data-act="answer-free"]');

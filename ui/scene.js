@@ -279,8 +279,8 @@ function updateStation(st, a) {
   st.state = a.state; st.data = a;
   const el = st.label.element;
   const name = String(a.displayName || '').split(' - ')[0];
-  const status = st.away || (a.state === 'working' && a.activity ? shortActivity(a.activity) : STATUS_TEXT[a.state] || a.state || '');
-  const cls = `nlabel ${a.state || 'stopped'}${st.away ? ' away' : ''}`;
+  const status = st.away || (a.standby ? 'not started' : a.waitingReply ? 'waiting for your reply' : a.state === 'working' && a.activity ? shortActivity(a.activity) : STATUS_TEXT[a.state] || a.state || '');
+  const cls = `nlabel ${a.state || 'stopped'}${a.standby ? ' standby' : ''}${st.away ? ' away' : ''}`;
   if (el.className !== cls) el.className = cls;
   const n = el.querySelector('.n'), s = el.querySelector('.a');
   if (n.textContent !== name) n.textContent = name;
