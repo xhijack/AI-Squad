@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { readJson, writeJson, writeText, statOf, bad, notFound, HttpError } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
@@ -812,6 +813,9 @@ export async function dispatchTick(now = Date.now(), { res } = {}) {
   return { started: r.started, failed: r.failed, stopped };
 }
 
+// things other modules follow without a cycle of imports (0.15: the Notification Gateway forwards chat answers)
+export const bus = new EventEmitter();
+
 // ---------- direct chat with one agent (0.14), see server/chat.js ----------
 function chatPlace(floorId, agentId, context) {
   const { entry, cfg, agent, name } = locate(floorId, agentId);
@@ -856,6 +860,7 @@ function chatAnswered(job) {
   chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost });
   chatLib.setState(p.key, { awaiting: undefined, ...(job.sessionId ? { sessionId: job.sessionId } : {}) });
   logEvent(job.floorId, { type: 'chat.reply', agent: job.agentId, data: { context: c.context, status: job.status, job: job.id } });
+  bus.emit('chat.reply', { floorId: job.floorId, agentId: job.agentId, agentName: p.agent.displayName, context: c.context, text });
 }
 // every few seconds: the answer of a Desk session that got a typed chat message goes back into the thread
 export function chatTick(now = Date.now()) {
@@ -870,6 +875,7 @@ export function chatTick(now = Date.now()) {
       chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context, text: reply.text, replyTo: st.awaiting.msgId }, now);
       chatLib.setState(key, { awaiting: undefined });
       logEvent(floorId, { type: 'chat.reply', agent: agentId, data: { context, status: 'done', via: 'desk' } });
+      bus.emit('chat.reply', { floorId, agentId, agentName: p.agent.displayName, context, text: reply.text });
       done.push(key);
     } else if (!tm.isRunning(p.name)) {
       chatLib.append(p.file, { from: 'system', context, text: 'The Desk session stopped before it answered. Send the message again to get an answer from a background job.' }, now);

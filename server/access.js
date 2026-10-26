@@ -13,7 +13,11 @@ export const currentActor = () => actorStore.getStore()?.user || null;
 
 const OWNER_ROUTES = [
   /^(PATCH|PUT|POST|DELETE) \/api\/(building|auth\/key|company|backups|users|libraries|roles|voice\/key|squads$|squads\/recommend|independents)/,
-  /^PATCH \/api\/(auth|voice|dispatcher)$/,
+  /^PATCH \/api\/(auth|voice|dispatcher|notify|insights)$/,
+  /^(PUT|DELETE) \/api\/notify\//,
+  /^POST \/api\/notify\/(test)$/,
+  /^POST \/api\/insights\//,
+  /^GET \/api\/(notify|insights)$/,
   /^GET \/api\/(auth|backups|doctor|users)(\/|$)/,
   /^(POST|PATCH|DELETE) \/api\/dispatcher\/queue\//,
   /^POST \/api\/history\/[\w-]+\/rollback$/,

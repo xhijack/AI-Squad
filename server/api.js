@@ -29,6 +29,9 @@ import * as company from './company.js';
 import * as admin from './admin.js';
 import * as users from './users.js';
 import * as access from './access.js';
+import * as notify from './notify.js';
+import * as inbox from './inbox.js';
+import * as insight from './insight.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -231,6 +234,21 @@ const routes = [
   ['POST', /^\/api\/dispatcher\/queue\/([\w-]+)\/start$/, ([id]) => squad.startQueued(id), { pin: true }],
   ['PATCH', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id], b) => { dispatcher.setPriority(id, String(b.priority || '')); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['DELETE', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id]) => squad.dropQueued(id), { pin: true }],
+  // the Notification Gateway (0.15): Telegram token (write-only), settings, pairing, chats, test, digest
+  ['GET', /^\/api\/notify$/, () => notify.status(), { pin: true }],
+  ['PATCH', /^\/api\/notify$/, (p, b) => { building.setPrefs({ notify: notify.cleanNotify({ ...notify.settings(), ...b, quiet: { ...notify.settings().quiet, ...(b.quiet || {}) } }) }); notify.restart(); return notify.status(); }, { pin: true, history: () => ({ label: 'Notification settings' }) }],
+  ['PUT', /^\/api\/notify\/telegram\/token$/, async (p, b) => ({ token: await notify.setToken(b.token, { check: b.check !== false }) }), { pin: true }],
+  ['DELETE', /^\/api\/notify\/telegram\/token$/, () => ({ token: notify.clearToken() }), { pin: true }],
+  ['POST', /^\/api\/notify\/pair$/, (p, b, req) => notify.newPairing(req.user), { pin: true }],
+  ['DELETE', /^\/api\/notify\/chats\/(-?\d+)$/, ([id]) => notify.removeChat(id), { pin: true }],
+  ['POST', /^\/api\/notify\/test$/, () => notify.sendTest(), { pin: true }],
+  ['POST', /^\/api\/notify\/digest$/, (p, b, req) => notify.sendDigestNow(req.user), { pin: true }],
+  // Daily Insight and the Improvement Inbox (0.15): suggestions only; the Owner accepts or dismisses
+  ['GET', /^\/api\/insights$/, () => inbox.list(), { pin: true }],
+  ['PATCH', /^\/api\/insights$/, (p, b) => { building.setPrefs({ insight: insight.cleanInsight({ ...building.loadBuilding().prefs.insight, ...b }) }); return inbox.list(); }, { pin: true, history: () => ({ label: 'Daily Insight settings' }) }],
+  ['POST', /^\/api\/insights\/run$/, () => { const r = inbox.run(); return { ...inbox.list(), added: r.added.length }; }, { pin: true }],
+  ['POST', /^\/api\/insights\/([\w-]+)\/accept$/, ([id], b, req) => inbox.accept(id, req.user), { pin: true }],
+  ['POST', /^\/api\/insights\/([\w-]+)\/dismiss$/, ([id], b, req) => inbox.dismiss(id, req.user, b.reason), { pin: true }],
   // direct chat with one agent (0.14): ?context=space|general
   ['GET', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat$/, ([id, a], b, req) => squad.chatThread(id, a, new URL(req.url, 'http://x').searchParams.get('context') || 'space'), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat$/, ([id, a], b, req) => squad.sendChat(id, a, b.text, { context: b.context || 'space', user: req.user }), { pin: true }],
