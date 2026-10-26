@@ -13,6 +13,7 @@ You review one squad's work for The AI Squad. You get a **digest**: metric table
    - Modules built in parallel as planned; questions to the owner and how long they waited; refused gates; rework (rows reopened).
 2. **Efficiency** (were tokens and money well spent?)
    - Cost and tokens per story point, per module and per agent; cache hit rate; share of cost by model; turns per module.
+   - Plan reviews (`process.planReviews`): a sprint that started building without a plan review, or a mid-sprint scope change, is a process finding.
    - Debug loops (`process.debug`): a problem with three or more failed fix attempts and no escalation, or more than three, is a `high` finding; propose a rule for that role.
    - Waste: the same file read many times by one agent, failed tool calls and retries, very long outputs, idle time while work was open, time blocked on the owner, an expensive model on simple work (for example opus on docs-only modules).
 3. **Quality** (did what shipped meet the bar?): QA failures, bug severity, gates that caught problems late.

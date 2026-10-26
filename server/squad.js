@@ -252,6 +252,12 @@ function floorAttention(entry, floor, lives, cost) {
   }
   const b = wd.budgetStatus(floor.budget, cost);
   if (b.level === 'over') out.push({ id: attId('budget', entry.id, floor.budget.period), kind: 'budget', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, text: `Budget reached: $${b.used.toFixed(2)} of $${floor.budget.usd} this ${floor.budget.period}`, ts: Date.now() });
+  // the scope mode changed mid-sprint: the owner decides (critical, also under Autopilot)
+  const sc = collect.stateOf(entry.id).scope;
+  if (sc?.changed && !sc.changed.acked) out.push({ id: attId('scope', entry.id, sc.sprint, sc.changed.ts), kind: 'scope', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+    text: `Sprint ${sc.sprint}: the lead changed the scope mode from ${sc.changed.from} to ${sc.changed.to}${sc.changed.reason ? ` (${sc.changed.reason})` : ''}.`,
+    options: [{ n: 1, label: `Accept ${sc.changed.to}` }, { n: 2, label: `Back to ${sc.changed.from}` }], answerable: true, ts: sc.changed.ts,
+    autopilot: { level: floor.autopilot, critical: true, reasons: ['scope'], recommended: null, auto: false, autoAt: null } });
   if (floor.autopilot !== 'off') autopilotItems(entry, floor, out);
   return out;
 }
@@ -730,6 +736,18 @@ export async function answerAttention(id, option, text = '', { force = false } =
     logEvent(item.floorId, { type: 'autopilot.changed', agent: item.agentId, data: { question: d.question.slice(0, 300), from: d.option, to: label } });
     invalidate();
     return r;
+  }
+  if (item.kind === 'scope') {
+    const S = collect.stateOf(item.floorId), ch = S.scope?.changed;
+    if (!ch) throw notFound('This scope change is gone');
+    ch.acked = Date.now(); collect.saveState(item.floorId);
+    logEvent(item.floorId, { type: 'question.answered', data: { channel: 'scope mode', answer: Number(option) === 2 ? `back to ${ch.from}` : `accept ${ch.to}`, waitMs: Date.now() - ch.ts } });
+    invalidate();
+    if (Number(option) !== 2) return { ok: true };
+    const team = floors.readFloor(building.floorEntry(item.floorId).path).team.agents;
+    const lead = team.find((a) => a.lead) || team.find((a) => sprint.roleKind(a) === 'lead');
+    if (!lead) throw bad('This Floor has no lead');
+    return sendTask(item.floorId, lead.id, `The owner does not accept the scope change of sprint ${S.scope.sprint}: go back to scope mode ${ch.from} in docs/squad/PLAN.md and re-plan what changed.`);
   }
   if (item.kind === 'crash') {
     if (Number(option) === 1) return resumeAgent(item.floorId, item.agentId, { guard: !force });

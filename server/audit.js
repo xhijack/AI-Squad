@@ -155,6 +155,15 @@ export function metrics(events, info = {}) {
     blocked: of('autopilot.blocked').length, nudges: of('autopilot.nudged').length,
     timeSavedMin: avgWait == null ? null : r2((byLead.length * avgWait + sum(byServer, (e) => Math.max(0, avgWait - (e.data.waitedMs || 0)))) / 60e3, 1),
   };
+  // plan reviews: each planned sprint reviewed before its first BUILD started; scope mode and changes the owner had to decide
+  const firstBuild = {};
+  for (const e of of('board.changed')) if (/^BUILD\b/i.test(e.data.task) && e.data.to === 'IN_PROGRESS' && e.sprint != null) firstBuild[e.sprint] ??= ms(e.ts);
+  const planned = [...new Set(of('sprint.planned').map((e) => e.sprint).filter((x) => x != null))];
+  const reviews = of('plan.reviewed');
+  const planReviews = { sprints: planned.length, reviewed: reviews.length,
+    beforeBuild: reviews.filter((e) => firstBuild[e.sprint] == null || ms(e.ts) <= firstBuild[e.sprint]).length,
+    designScores: reviews.map((e) => e.data.designScore).filter((x) => x != null), changesAsked: reviews.filter((e) => e.data.engineering === 'CHANGES' || e.data.security === 'CHANGES').length,
+    scope: of('sprint.scope').map((e) => ({ sprint: e.sprint, mode: e.data.mode })), scopeChanges: of('scope.changed').length };
   // root cause first: fix attempts per problem; three or more failed attempts without an escalation is a loop
   const dbg = {};
   for (const e of of('debug.attempt')) (dbg[e.data.issue] ||= { issue: e.data.issue, agent: e.agent, attempts: 0, escalated: false }).attempts = Math.max(dbg[e.data.issue]?.attempts || 0, e.data.attempt);
@@ -164,7 +173,7 @@ export function metrics(events, info = {}) {
     loops: debugList.filter((d) => d.attempts > 3 || (d.attempts >= 3 && !d.escalated)).map((d) => ({ issue: d.issue, agent: d.agent, attempts: d.attempts, escalated: d.escalated })) };
   // quality: what QA and the gates caught
   const quality = { qaFailures: of('qa.report').filter((e) => e.data.status === 'FAIL').length, bugsBySeverity: bySeverity, crashes: of('agent.crashed').length, watchdogAlerts: of('watchdog.alert').length };
-  return { range: { from: events[0]?.ts || null, to: events.at(-1)?.ts || null, events: events.length }, process: process_, efficiency, quality, autopilot, debug };
+  return { range: { from: events[0]?.ts || null, to: events.at(-1)?.ts || null, events: events.length }, process: process_, efficiency, quality, autopilot, debug, planReviews };
 }
 
 // ---------- digest: what the reviewer reads ----------
@@ -184,6 +193,9 @@ const relevant = (e, m) => {
     case 'message.sent': case 'task.delegated': case 'task.given': return 1;
     case 'autopilot.decided': return e.data.critical ? 5 : 2;
     case 'debug.escalated': return 4;
+    case 'scope.changed': return 5;
+    case 'plan.reviewed': return 3;
+    case 'sprint.scope': return 2;
     case 'debug.attempt': return (e.data.attempt || 0) >= 3 ? 4 : 1;
     case 'autopilot.changed': return 4;
     case 'autopilot.blocked': return 3;
@@ -222,6 +234,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['process.permissions', `${P.permissions.asked} prompts, ${P.permissions.totalWaitMin} min waiting`],
       ['process.gatesRefused', `${P.gatesRefused.total} (${Object.entries(P.gatesRefused.byGate).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}), ${P.gatesPassed} passed`],
       ['process.rework', `${P.rework.reopened} rows reopened`],
+      ...(m.planReviews?.sprints || m.planReviews?.reviewed ? [['process.planReviews', `${m.planReviews.reviewed} of ${m.planReviews.sprints} planned sprints reviewed (${m.planReviews.beforeBuild} before the first BUILD)${m.planReviews.designScores.length ? `, design ${m.planReviews.designScores.join(', ')}/10` : ''}, ${m.planReviews.changesAsked} asked for changes; scope ${m.planReviews.scope.map((x) => `sprint ${x.sprint} ${x.mode}`).join(', ') || 'not stated'}${m.planReviews.scopeChanges ? `; ${m.planReviews.scopeChanges} mid-sprint scope changes` : ''}`]] : []),
       ...(m.debug?.issues ? [['process.debug', `${m.debug.issues} problems investigated, ${m.debug.attempts} fix attempts, ${m.debug.escalated} escalated${m.debug.loops.length ? `; LOOPS (3+ failed attempts without escalation, or more than 3): ${m.debug.loops.map((d) => `${d.issue} by ${d.agent || '?'} (${d.attempts})`).join(', ')}` : ''}`]] : []),
       ...(P.sprintClose ? [['process.sprintClose', `sprint ${P.sprintClose.sprint}: ${Object.entries(P.sprintClose.checks).map(([k, ok]) => `${k} ${ok ? 'yes' : 'NO'}`).join(', ')}; the server merges only when all are yes`]] : []),
     ]),

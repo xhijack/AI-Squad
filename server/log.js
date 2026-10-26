@@ -19,7 +19,7 @@ export const TYPES = {
   'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.resumed': 'lifecycle', 'agent.model': 'lifecycle',
   'task.given': 'work', 'board.changed': 'work', 'handoff.written': 'work', 'qa.report': 'work', 'bug.opened': 'work', 'bug.closed': 'work',
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
-  'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'commit': 'work',
+  'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
@@ -53,6 +53,9 @@ function summarize(e) {
     case 'debug.attempt': return `${who}: fix attempt ${d.attempt} on ${d.issue}`;
     case 'debug.escalated': return `${who} escalated ${d.issue} to the lead after ${d.attempts} attempts`;
     case 'retro.done': return `retro for sprint ${e.sprint}: ${d.wentWell} went well, ${d.wentBadly} did not, ${d.changes} changes`;
+    case 'sprint.scope': return `sprint ${e.sprint} scope mode: ${d.mode}${d.reason ? ` (${oneLine(d.reason, 60)})` : ''}`;
+    case 'scope.changed': return `scope mode changed mid-sprint: ${d.from} -> ${d.to}`;
+    case 'plan.reviewed': return `plan of sprint ${e.sprint} reviewed: engineering ${d.engineering || '?'}, design ${d.designScore ?? '?'}/10, security ${d.security || '?'}`;
     case 'agent.model': return `${who} runs ${d.observed}, configured ${d.configured}`;
     case 'task.given': return `${d.by || 'owner'} gave ${who} a task${t(d.text)}`;
     case 'task.delegated': return `${who} delegated to ${d.to}${t(d.text)}`;

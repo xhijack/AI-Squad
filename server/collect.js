@@ -25,7 +25,7 @@ export function stateOf(floorId) {
   let s = states.get(floorId);
   if (!s) {
     s = readJson(stateFile(floorId), null) || {};
-    s.files ||= {}; s.board ||= null; s.handoffs ||= null; s.qa ||= null; s.bugs ||= null; s.docs ||= null; s.commits ||= null; s.planned ||= {}; s.gates ||= 0; s.questions ||= null; s.debug ||= null;
+    s.files ||= {}; s.board ||= null; s.handoffs ||= null; s.qa ||= null; s.bugs ||= null; s.docs ||= null; s.commits ||= null; s.planned ||= {}; s.gates ||= 0; s.questions ||= null; s.debug ||= null; s.scope ||= null; s.reviewed ||= {};
     states.set(floorId, s);
   }
   return s;
@@ -289,6 +289,18 @@ export function scanDocs(floorId, root, { blueprint = null } = {}, now = Date.no
       S.planned[sprint] = now;
       out.push({ type: 'sprint.planned', id: `plan:${sprint}`, sprint, data: { modules: mods.length, sp, list: mods.map((l) => { const c = l.split('|').map((x) => x.trim()); return { module: modId(c[1]), sp: parseFloat(c[3]) || 0, owner: c[4] || '' }; }) } });
     }
+    // the sprint's scope mode (first line of PLAN.md); a different mode later in the same sprint is a change the owner decides
+    const sm = scopeMode(plan);
+    if (sprint != null && sm) {
+      if (!S.scope || S.scope.sprint !== sprint) { S.scope = { sprint, mode: sm.mode, changed: null }; out.push({ type: 'sprint.scope', id: `scope:${sprint}`, sprint, data: sm }); }
+      else if (S.scope.mode !== sm.mode) {
+        out.push({ type: 'scope.changed', id: `scope:${sprint}:${S.scope.mode}:${sm.mode}:${now}`, sprint, data: { from: S.scope.mode, to: sm.mode, reason: sm.reason } });
+        S.scope = { ...S.scope, mode: sm.mode, changed: { from: S.scope.mode, to: sm.mode, reason: sm.reason, ts: now, acked: false } };
+      }
+    }
+    // the plan review of the sprint (docs/squad/sprint-<N>/PLAN-REVIEW.md), once
+    const review = sprint != null && !S.reviewed[sprint] ? readText(path.join(squad, `sprint-${sprint}`, 'PLAN-REVIEW.md'), '') : '';
+    if (review) { S.reviewed[sprint] = now; out.push({ type: 'plan.reviewed', id: `review:${sprint}`, sprint, data: planReview(review) }); }
   }
   // investigate records (docs/squad/debug/*.md): each new "## Attempt N" is a fix attempt, STATUS: ESCALATED an escalation
   const ddir = pack ? path.join(squad, 'debug') : path.join(root, 'docs', 'debug');
@@ -336,6 +348,23 @@ export function scanDocs(floorId, root, { blueprint = null } = {}, now = Date.no
   }
   for (const e of out) { e.sprint ??= sprint; e.ts ??= now; }
   return baseline ? out.filter((e) => ['sprint.planned', 'doc.status', 'gate.passed', 'gate.failed'].includes(e.type)) : out;
+}
+
+export const SCOPE_MODES = ['Expand', 'Selective expand', 'Hold', 'Reduce'];
+// "Scope mode: Hold — reason" -> { mode, reason } (placeholders in angle brackets are not a reason)
+export function scopeMode(plan) {
+  const m = String(plan || '').match(/^\**Scope mode:?\**\s*(Expand|Selective expand|Hold|Reduce)\b[ \t]*(?:[—–:-][ \t]*(.*))?$/mi);
+  if (!m) return null;
+  const mode = SCOPE_MODES.find((x) => x.toLowerCase() === m[1].toLowerCase());
+  const reason = (m[2] || '').trim();
+  return { mode, reason: /^</.test(reason) ? '' : reason.slice(0, 300) };
+}
+// PLAN-REVIEW.md -> { engineering, security: OK | CHANGES | '', designScore: number | null }
+export function planReview(text) {
+  const part = (title) => (String(text).split(/^## /m).find((x) => x.toLowerCase().startsWith(title)) || '');
+  const verdict = (t) => ((t.match(/^VERDICT:\s*(OK|CHANGES)/mi) || [])[1] || '').toUpperCase();
+  const score = (text.match(/DESIGN SCORE:\s*(\d+(?:\.\d+)?)\s*\/\s*10/i) || [])[1];
+  return { engineering: verdict(part('engineering')), security: verdict(part('security')), designScore: score != null ? +score : null };
 }
 
 // ---------- git commits ----------
