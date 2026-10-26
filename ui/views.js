@@ -290,6 +290,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
       <dt>Not allowed</dt><dd>${pills(e.permissions?.deny || [])}</dd>
       <dt>Rules</dt><dd>${(e.rules || []).length ? `<ul style="margin:0;padding-left:18px">${e.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : '<span class="note">none</span>'}${o.rules?.length ? `<div class="note">${o.rules.length} added by override</div>` : ''}</dd>
       <dt>Cost today</dt><dd>${money(d.costToday)}</dd>
+      <dt>Voice</dt><dd>${d.agent.voice ? 'chosen voice' : 'the role\'s default voice'} <button class="small ghost" data-act="choose-voice" data-agent="${d.id}" data-name="${esc(d.displayName)}" data-voice="${esc(d.agent.voice || '')}">Change</button></dd>
     </dl>
     ${o.prompt ? `<details><summary>Prompt override</summary><div class="note" style="white-space:pre-wrap">${esc(o.prompt)}</div></details>` : ''}
     <details><summary>Full prompt</summary><div class="note" style="white-space:pre-wrap">${esc(e.prompt)}</div></details>

@@ -18,6 +18,7 @@ import './retro.js';
 import './ship.js';
 import './design.js';
 import { attentionIndexHtml } from './convo.js';
+import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
@@ -330,11 +331,16 @@ function render() {
 
   $('dock').hidden = !!ctx.editing;
   patch($('dock'), dockHtml(b, route, f));
+  // a meeting starts at the table: the lead opens it in one short line
+  if (f?.meeting && f.meeting.since !== lastMeeting[f.id]) {
+    if (lastMeeting[f.id] !== undefined) playLine({ floorId: f.id, agentId: f.meeting.agents[0], kind: 'meeting', text: `${f.meeting.label}. Let's start.` });
+    lastMeeting[f.id] = f.meeting.since;
+  }
   // lead shout when the whole team of the Floor in view is idle
   if (state.floor && !state.floor.missing && route.floorId === state.floor.id) {
     const { idle, lead } = floorIdle(state.floor);
     const text = shoutStep(shouts[state.floor.id] ||= {}, idle, Date.now());
-    if (text && lead) { scene.say(state.floor.id, lead.id, text); speak(text); }
+    if (text && lead) { scene.say(state.floor.id, lead.id, text); playLine({ floorId: state.floor.id, agentId: lead.id, kind: 'shout', text }); }
   }
   // elevator (Floor switcher): a slim card on the left
   const elev = $('elevator');
@@ -372,12 +378,16 @@ ctx.isPhone = isPhone;
 ctx.panelBody = () => (isPhone() ? $('sheetBody') : $('sideMain'));
 
 // ---------- new Attention: open it by itself, badge the tab, notify when the tab is in the background ----------
+const lastMeeting = {};                // floorId -> the meeting already announced
 let seenAtt = null;
 try { seenAtt = new Set(JSON.parse(sessionStorage.getItem('aisquad.seenAtt') || '[]')); } catch { seenAtt = new Set(); }
 function announceAttention(list, route) {
   document.title = list.length ? `(${list.length}) The AI Squad` : 'The AI Squad';
   const fresh = list.filter((a) => !seenAtt.has(a.id));
   if (!fresh.length) return;
+  // the newest report or question is said aloud by its character (short; the full text is in the conversation view)
+  const say = fresh.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
+  if (say && seenAtt.size) playLine({ floorId: say.floorId, agentId: say.agentId, kind: say.kind, text: say.text });
   fresh.forEach((a) => seenAtt.add(a.id));
   try { sessionStorage.setItem('aisquad.seenAtt', JSON.stringify([...seenAtt].slice(-200))); } catch { /* private mode */ }
   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
@@ -599,6 +609,7 @@ $('menu').addEventListener('click', (e) => {
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('aisquad.theme', next); } catch { /* private mode */ }
     applyTheme(); toast(`Theme: ${THEMES[next]}`);
+  } else if (b.dataset.menu === 'voice') { ctx.actions['voice-settings']();
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
     scene.quality.set(next); showQuality(); toast(`Graphics: ${QUALITY_TEXT[next]}`);

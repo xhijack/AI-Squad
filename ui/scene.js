@@ -767,6 +767,8 @@ export class BuildingScene {
     return true;
   }
   unfocus() { if (!this.convoFocus) return; this.convoFocus = false; if (!this.view.eyes) this.flyTo(this.poseFor(this.view), 600); }
+  // voice: the mouth follows the audio level (0..1) while the agent speaks
+  setTalk(floorId, agentId, level) { const st = this.floors.get(floorId)?.stations.get(agentId); if (st) st.talkLevel = level; }
   // speech bubble over an agent for ms milliseconds
   say(floorId, agentId, text, ms = 7000) {
     const st = this.floors.get(floorId)?.stations.get(agentId);
@@ -894,6 +896,7 @@ export class BuildingScene {
         const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, nav: o.nav, others, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
         if (/walk|return/i.test(st.life?.mode || '')) walking = true;
+        if (st.talkLevel > .02) st.rig.mouth.scale.y = .6 + st.talkLevel * 2.2;
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view
         st.label.visible = !!st.labelsOn && !focus;

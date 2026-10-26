@@ -25,7 +25,7 @@ export function createPortrait(canvas, agent, { reducedMotion = false } = {}) {
     const t = new THREE.Group(); t.position.set(.5, .5, .1); t.scale.setScalar(1.8); TOYS[toy](t); scene.add(t);
   }
   const st = { rig: R, blinkAt: 0 };
-  let talkUntil = 0, raf = 0, disposed = false;
+  let talkUntil = 0, raf = 0, disposed = false, level = 0;
   const size = () => {
     const w = canvas.clientWidth || 200, h = canvas.clientHeight || 240;
     renderer.setSize(w, h, false); camera.aspect = w / h;
@@ -43,8 +43,8 @@ export function createPortrait(canvas, agent, { reducedMotion = false } = {}) {
     if (t > st.blinkAt) st.blinkAt = t + 2.5 + Math.random() * 3;
     const blink = st.blinkAt - t < .12 ? .12 : 1;
     for (const e of R.eyes) e.scale.y = blink;
-    const talking = performance.now() < talkUntil;
-    R.mouth.scale.set(1, talking ? .6 + Math.abs(Math.sin(t * 14)) * 1.4 : 1, 1);
+    const talking = performance.now() < talkUntil || level > .02;
+    R.mouth.scale.set(1, level > .02 ? .6 + level * 2.2 : talking ? .6 + Math.abs(Math.sin(t * 14)) * 1.4 : 1, 1);
     R.head.rotation.set(talking ? Math.sin(t * 6) * .05 : 0, Math.sin(t * .5) * .08, talking ? Math.sin(t * 3.1) * .04 : 0);
     if (talking) arms(R, null, [-.55 - Math.sin(t * 4) * .15, -.35, -1.1]);   // a small gesture while talking
   };
@@ -60,6 +60,7 @@ export function createPortrait(canvas, agent, { reducedMotion = false } = {}) {
   ro?.observe(canvas);
   return {
     talk(ms) { if (!reducedMotion) talkUntil = performance.now() + ms; },
+    setLevel(v) { level = reducedMotion ? 0 : v; },                       // the voice's amplitude moves the mouth
     dispose() {
       disposed = true; cancelAnimationFrame(raf); ro?.disconnect();
       scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });      // materials are shared with the office (cached): keep them

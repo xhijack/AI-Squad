@@ -5,6 +5,7 @@
 import { esc, api, toast, ago, mdLite, drafts } from './lib.js';
 import { ctx } from './ctx.js';
 import { preview, bubbleText, actionsFor, step, ofText } from './convo-model.js';
+import { playLine, stopVoice } from './voice.js';
 
 let C = null;            // { list, i, portrait, dlg }
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -57,7 +58,7 @@ function render() {
       <div class="convoWho"><div class="where">${esc(KIND[item.kind] || item.kind)}</div><h3 id="convoName">${esc(ag.displayName)}</h3>
         <div class="note">${esc([ag.title, item.floorNumber ? `Floor ${item.floorNumber} · ${item.floorName}` : item.floorName].filter(Boolean).join(' · '))}</div><div class="note">${ago(item.ts)}</div></div>
       <div class="convoNav">${C.list.length > 1 ? `<button type="button" class="iconBtn ghost" data-prev aria-label="Previous item">‹</button><span class="note">${ofText(C.i, C.list.length)}</span><button type="button" class="iconBtn ghost" data-next aria-label="Next item">›</button>` : ''}
-        <button type="button" class="iconBtn ghost" data-close aria-label="Close">×</button></div></div>
+        ${item.agentId && item.text ? '<button type="button" class="small ghost" data-listen title="Read the whole message aloud">▶ Listen</button>' : ''}<button type="button" class="iconBtn ghost" data-close aria-label="Close">×</button></div></div>
     <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">Decided automatically: <b>${esc(item.chosen)}</b>. Pick another option to change it.</p>` : ''}</div></div>
     <div class="convoActions">${actionsHtml(item, a)}</div>`;
   if (!d.open) d.showModal();
@@ -83,6 +84,7 @@ const answer = (item, body) => api('POST', `/api/attention/${item.id}/answer`, b
 
 function wire(d, item, a) {
   d.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => d.close(); });
+  d.querySelector('[data-listen]')?.addEventListener('click', () => playLine({ floorId: item.floorId, agentId: item.agentId, kind: item.kind, text: item.text, full: true }, { force: true, onLevel: (v) => C?.portrait?.setLevel(v) }));
   d.querySelector('[data-prev]')?.addEventListener('click', () => go(-1));
   d.querySelector('[data-next]')?.addEventListener('click', () => go(1));
   d.querySelector('[data-desk]')?.addEventListener('click', () => d.close());
@@ -107,6 +109,7 @@ function wire(d, item, a) {
 function go(dir) { if (!C || C.list.length < 2) return; C.i = step(C.i, C.list.length, dir); render(); }
 
 function cleanup() {
+  stopVoice();
   C?.portrait?.dispose();
   ctx.scene?.unfocus();
   C = null;
