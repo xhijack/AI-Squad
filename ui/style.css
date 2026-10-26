@@ -662,3 +662,18 @@ ul.jobs li.job { padding: 6px 0; border-bottom: 1px solid var(--line, rgba(127,1
 ul.jobs li.job.running .badge { background: var(--info-soft); color: var(--info-ink); }
 ul.jobs li.job.done .badge { background: var(--ok-soft); color: var(--ok-ink); }
 ul.jobs li.job.failed .badge { background: var(--bad-soft); color: var(--bad); }
+
+/* Admin (0.12) */
+.adminTabs { margin: 0 0 12px; }
+.adminList { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.adminRow { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.adminRow .row { gap: 8px; align-items: center; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.grid4 label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.grid4 .span2 { grid-column: span 2; }
+.shiftRow { gap: 6px; align-items: center; }
+.shiftRow input[type=time] { width: auto; }
+.shiftRow label.day { margin: 0; font-size: 12px; }
+.addAgent { gap: 6px; margin-top: 6px; }
+.addAgent input { flex: 1; min-width: 180px; }
+@media (max-width: 640px) { .grid4 { grid-template-columns: 1fr 1fr; } }
