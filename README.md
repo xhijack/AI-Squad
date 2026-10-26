@@ -217,6 +217,10 @@ The Floor's status pill shows **Autopilot: Balanced** (or that something critica
 
 - **Shipping safety** (0.5.4): **Ship readiness** (Floor menu, Squad Sprint Floors) lists what ran for the sprint and what is missing: QA pass for every module, the final smoke test, release notes, the plan review, the design review (needed when the team has a designer), the security review (needed with a Security Engineer: no open Critical or High finding) and `Rollback tried: <date>` in `docs/ENVIRONMENTS.md` (needed to deploy). Automatic sprint merges wait until the merge list is complete (`ship.blocked` in the Log). DevOps checks the same list before every deploy and watches each deploy with the **canary** skill: it rolls back staging by itself and asks you before rolling back production. **Edit locks** (a hook in the Squad Sprint pack): a developer may edit only its modules' "Owned folders" from PLAN.md and `docs/squad/`, shared files are the lead's, and destructive commands (`rm -rf`, `git reset --hard`, force push, `git clean`, dropping tables, `docker … prune`) ask for confirmation first.
 
+### Graphics quality
+
+Menu → **Graphics**: **Auto** (default: High, and Low when frames get slow), **High** (soft image-based light from a small studio HDRI, ambient occlusion, warm colour grading with a light vignette, SMAA, soft shadows under the characters) or **Low** (one render pass, as fast as before). The setting is kept per browser. The frame loop slows to a third of its rate when nothing moves: no input, no camera move, nobody walking.
+
 ### Merges
 
 Merges are done by The AI Squad server, never by an agent (decision D3). The policy lives in `git.json` (merge policy, squash or merge commit, quality gate, push policy); the one-time approval per Floor is stored on this machine in `~/.aisquad/approvals.json`, never in the repo.

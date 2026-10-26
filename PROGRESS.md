@@ -422,6 +422,17 @@ Brief: `PHASE-2.5-RITUALS.md` (concepts from CLAW3D and gstack, our own text and
 - **Edit locks** (`.claude/hooks/edit-lock.cjs`, PreToolUse in the Squad Sprint pack; older packs get the script on the next settings merge): a developer with modules in PLAN.md may edit only those "Owned folders" and `docs/squad/`, while the lead, QA, the designer and unknown agents are not limited. Destructive commands ask for confirmation (a background teammate cannot confirm, so for it they are refused). Both are recorded as gate events for the Log.
 - Tests: `test/ship.test.js`, sprint (edit locks through the real hook script, missing hook scripts), skills (canary, DevOps v3), audit. Screenshots (swap 72 %): `playground/reference/ship-1440.png`, `ship-390.png`.
 
+## Phase 3: "soft 3D" office (from 26 Oct 2026)
+
+Brief: `PHASE-3-VISUAL.md`. The owner put Phase 3 before the rest of Phase 2.5. When the brief arrived, Phase 2.5 parts 3 and 4 were already done (0.5.3 rituals, 0.5.4 shipping safety); part 5 (design variants, second opinion) is paused after its server module and continues after Phase 3. Phase 3.1 (voices, 0.7.0) comes after that.
+
+### 0.6.0: rendering quality without new assets
+- `ui/render.js`: image-based light from a vendored 1k studio HDRI (Poly Haven "Studio Small 09", CC0, 1.6 MB, `ASSETS.md`), a GTAO ambient occlusion pass, OutputPass (ACES tone mapping, sRGB), a small grading and vignette shader, and SMAA. Soft contact shadows under every character. **Graphics** in the menu: Auto (default), High or Low, kept in the browser; Low renders exactly as before.
+- The three.js addons for this (post-processing passes and shaders, RGBELoader, GLTFLoader, the meshopt decoder) are vendored from the same `three@0.160.0` tarball, hash checked again. GTAOPass 0.160 does not set its camera define, so `ui/render.js` sets it, which matters for the orthographic camera.
+- Smooth motion: characters turn smoothly towards where they walk. The frame loop runs at a third of the rate when nothing moves. The camera already eased and the orbit was already damped.
+- Frame times (headless Chrome with SwiftShader, a software GPU, 1440×900 Floor view): median 33 ms on both Low and High, 90th percentile 217 ms on Low and 1550 ms on High. On this machine Auto would drop to Low. Real GPUs were not measured here.
+- Screenshots: `playground/reference/p3-floor-high-1440.png` and `p3-floor-low-1440.png`.
+
 ## How to run
 
 ```
