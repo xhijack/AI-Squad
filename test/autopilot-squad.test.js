@@ -132,3 +132,7 @@ test('Autopilot off: nothing is answered or nudged', async () => {
   assert.deepEqual(await squad.autopilotTick(later(10), { res: calm }), []);
   squad.stopAgent(FLOOR, LEAD);
 });
+
+test('the Lobby counts the decisions Autopilot took today', () => {
+  assert.equal(snap().autopilotToday, 2, 'one by the server timeout, one by the lead');
+});

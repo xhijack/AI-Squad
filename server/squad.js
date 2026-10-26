@@ -331,13 +331,24 @@ export function buildingSnapshot() {
     name: b.name, now: Date.now(), floors: floorsOut, attention, detected,
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
-    meter: meter.summary(),
+    meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
       projectsDir: suggestProjectsDir(b) },
   };
   snapCache = { at: Date.now(), value };
   return value;
+}
+// the Lobby digest "Decided by autopilot today: N" (read from the Squad Log at most once a minute)
+let apToday = { at: 0, day: '', n: 0 };
+function autopilotToday(list) {
+  const day = squadLog.dayOf(Date.now());
+  if (apToday.day === day && Date.now() - apToday.at < 60e3) return apToday.n;
+  const from = new Date(); from.setHours(0, 0, 0, 0);
+  let n = 0;
+  for (const f of list) { try { n += squadLog.read(f.id, { type: 'autopilot.decided', from: from.getTime(), limit: 5000 }).length; } catch { /* no log yet */ } }
+  apToday = { at: Date.now(), day, n };
+  return n;
 }
 // where new project directories probably go: next to existing Floors, else ~/projects
 function suggestProjectsDir(b) {
@@ -384,7 +395,7 @@ export function watchdogStatus() {
   };
 }
 
-export const invalidate = () => { snapCache.at = 0; tx.resetDiscoveryCache(); for (const c of costs.values()) c.at = 0; };
+export const invalidate = () => { snapCache.at = 0; apToday.at = 0; tx.resetDiscoveryCache(); for (const c of costs.values()) c.at = 0; };
 
 export function floorDetail(id) {
   if (id === ind.FLOOR_ID) return independentDetail();
