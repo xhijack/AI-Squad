@@ -85,6 +85,7 @@ Status: PASS dengan 2 catatan minor. Next steps: fullstack-developer-1 fixes the
 
 test('a teammate\'s status report or review is not a question for the owner', () => {
   assert.equal(asksOwner(REVIEW, { teammate: true }), false);
+  assert.equal(asksOwner(REVIEW), false, 'questions it answers on the same line are findings, also from a lead');
   assert.equal(asksOwner('Review done. Findings: 3 minor issues, see docs/squad/review/M162.md. Is the contrast enough? It passes WCAG AA.', { teammate: true }), false);
   assert.equal(asksOwner('M162 review is ready. Do you want the gold accent kept on the RSVP page?', { teammate: true }), true, 'addressed to the owner');
   assert.equal(asksOwner('Mohon kamu setujui palet warna baru di DESIGN.md.', { teammate: true }), true);

@@ -11,10 +11,10 @@ const ASKS = [
   new RegExp(`\\b(next steps?|langkah (berikut(nya)?|selanjutnya))\\s*:?\\**\\s*${VERB}\\b`, 'i'),
   /\b(please|kindly)\s+(send|share|provide|confirm|approve|review|answer|reply|decide|choose|pick|check|paste|upload|tell|let me know)\b/i,
   /\blet me know\b/i, /\b(waiting|blocked) (for|on) (you|your|the owner|owner)\b/i, /\bi need (you|your|from you)\b/i,
-  /\b(your|owner'?s?) (approval|decision|answer|input|go-ahead|confirmation)\b/i, /\b(do|would|should|can|could) (you|we|i)\b[^.?!\n]*\?/i,
+  /\b(your|owner'?s?) (approval|decision|answer|input|go-ahead|confirmation)\b/i, /\b(do|would|should|can|could) (you|we|i)\b[^.?!\n]*\?\s*$/im,
   /\b(needs? (your )?approval|for (your )?approval|please approve)\b/i,
   new RegExp(`\\b(tolong|mohon|silakan|harap)\\b[^.\\n]*\\b${VERB}`, 'i'),
-  /\b(menunggu|perlu) (jawaban|keputusan|persetujuan|konfirmasi)\b/i, /\bperlu kamu\b/i, /\b(apakah|mana yang|yang mana)\b[^\n]*\?/i,
+  /\b(menunggu|perlu) (jawaban|keputusan|persetujuan|konfirmasi)\b/i, /\bperlu kamu\b/i, /\b(apakah|mana yang|yang mana)\b[^\n]*\?\s*$/im,
 ];
 // words that address the owner: a teammate's message only asks the owner when it says so
 const ADDRESSED = /\b(you|your|owner|kamu|anda|bapak|ibu|pak|bu|boss|bos)\b/i;
