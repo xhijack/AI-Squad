@@ -478,6 +478,40 @@ Brief: `PHASE-3.1-VOICE.md`. Not an MCP server: the AI Squad server calls the El
   - Reply and Finished cards get one id per turn (agent, session file and end of turn), the same whether the turn reads as a reply or as Finished.
 - Tests: finished (text delivered as a message, the question prefix, 409 for an option, a dismiss, an unknown agent refused, a stable id when the card changes kind) and api (the same over HTTP).
 
+## Phase 3.2: realistic look, proof of concept, 0.8.0-poc (26 Oct 2026)
+
+Not the default look: the office is unchanged unless the URL says `?look=realistic`. Stopped after step 1b for the owner's verdict.
+
+- **Step 1** (`?look=desk-poc`, first called `?look=realistic`): one desk corner in real metres. An oak desk, an office chair, a monitor, a laptop, a keyboard, a mouse and a mug are built in code with PBR materials. The lamp, plant and notepads are Poly Haven models; the floor, wall, fabric and oak are Poly Haven textures.
+  - One Microsoft Rocketbox person (Business_Male_04, MIT) runs a loop: types, pushes the chair back, stands up, walks a few steps, sits down and pulls in. It uses Rocketbox's own motion-capture clips, with root motion taken into the scene, two-bone arm IK putting the hands on the keys, and head and finger movement on top.
+  - Lighting: HDRI, a soft VSM sun, the desk lamp, contact shadows (new `ContactShadows` in `render.js`), GTAO on High, AgX tone mapping.
+  - Screenshots: `playground/reference/realistic-poc-{wide,close,walk,wide-low}.png`, today's look in `realistic-poc-today-{wide,close}.png`.
+- **Owner correction**: realistic meant the furniture, not the people. The chibis stay; Rocketbox is dropped from the plan.
+- **Step 1b** (`?look=realistic`): the normal isometric office with the same layout, camera, brand wall, lounge, meeting table and server rack.
+  - The room: a PBR laminate floor, white plaster walls, aluminium windows and white baseboards (`ui/realistic-office.js`).
+  - Each station: the oak desk, an office chair at chibi scale, monitor housings with an aluminium stand around the live screens, an aluminium laptop, a real keyboard, mouse and ceramic mug in the agent's colour. The role toys stay, as glossy plastic.
+  - Devices: a modern fabric sofa, a fabric rug, slumped fabric beanbags, a ping-pong table, a floor lamp with a linen shade, a whiteboard with an aluminium frame, a steel server rack (the LEDs still follow the load), a white pantry with an oak worktop and espresso machine, and an oval oak meeting table with office chairs. Plants and the TV cabinet are Poly Haven models.
+  - The chibis (`ui/chibi.js`, same proportions, faces, hair styles and colours): no outlines, 2 to 3x the segments, physical skin with sheen, woven cloth, glossy hair with a strand normal map, leather shoes, mitten hands with a thumb, a collar, rounded brows. Desk toys use smoother geometry.
+  - Screenshots: `playground/reference/realistic-1b-{floor,closeup}.png` and today's look in `realistic-1b-today-{floor,closeup}.png`. Side by side: `realistic-1b-compare-floor.png` and `realistic-1b-compare-closeup.png`.
+  - Debug for screenshots: `?states=working,idle,…` overrides states in the view only, and `?demo` makes idle agents get up after 2 s.
+- Sources and licences: Poly Haven (CC0) and Microsoft Rocketbox (MIT, kept in `ui/assets/realistic/LICENSE-rocketbox.txt` and `NOTICE`); no CC-BY was needed. Every file, author and change is in `ASSETS.md`.
+- Sizes: the office look adds `office-props.glb` (3.3 MB) and 1 MB of textures. Step 1 adds `desk-props.glb` (1.9 MB) and `character.glb` (2.8 MB). Everything under `ui/assets/realistic` is 8.9 MB.
+- Frame time: only measured on this machine's software GPU (SwiftShader). Step 1 runs about 3.6 s per frame on High; Low draws 84 calls and 95k triangles. That says nothing about a laptop GPU, and a real measurement needs a GPU browser.
+- Not done, and why:
+  - Blender Cycles baking: the download of a portable Blender was refused by the session's permission check. The Poly Haven AO maps, GTAO and contact shadows stand in.
+  - meshopt and KTX2: gltfpack was refused the same way.
+  - LODs: `potted_plant_02` is 70k triangles and appears four times per Floor. It needs a lighter plant or an LOD.
+  - An alternative ready-made chibi: not shown. The CC0 rigged ones I know of (Kenney Mini Characters, KayKit Adventurers) are low-poly, fantasy, or blockier than our upgraded chibi.
+- Tests: `test/realistic.test.js` covers the root motion taken out of a clip, two-bone IK (reach, lengths, weight 0), angle wrap, and one full loop on a synthetic skeleton. All 278 tests pass.
+- For the whole office (step 2, after approval):
+  - the Lobby dollhouse and other Floor sizes;
+  - the realistic look as a setting rather than a URL;
+  - lighter plants, KTX2 and meshopt once the tools are allowed;
+  - the first-person and screen views checked with the new chair and monitors;
+  - Edit Mode footprints checked against the new furniture;
+  - conversation portraits with the polished chibi (`portrait.js` already builds it under `?look=realistic`);
+  - a real GPU frame-time check.
+
 ## How to run
 
 ```
