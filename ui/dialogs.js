@@ -4,6 +4,7 @@ import { memberHtml, readMember, gitHtml, readGit } from './forms.js';
 import { openWizard } from './wizard.js';
 import { openTemplates } from './templates.js';
 import { ctx } from './ctx.js';
+import { voiceControlsHtml, bindVoiceControls, readVoiceControls, previewVoice } from './voice.js';
 import { t as tt, tx, LANG, LANGS, setLang } from './i18n.js';
 
 const floorId = () => ctx.state.route.floorId;
@@ -85,6 +86,10 @@ async function floorSettings() {
     <div class="grid2"><div><label>${tt('Daily standup at (local time)')}</label><input name="standupTime" type="time" value="${esc(c.standup?.time || '09:30')}"></div>
       <label class="inline" style="align-self:end"><input type="checkbox" name="standupMeeting" ${c.standup?.meeting !== false ? 'checked' : ''}> ${tt('The team meets at the table for it')}</label></div>
     <p class="note">${tt('Made from the Squad Log (done, doing, blocked by per agent), no model call. It shows in the Standup tab.')}</p>
+    <h3 style="margin-top:18px">${tt('Voice (this Floor\'s default)')}</h3>
+    <p class="note">${tt('How this Floor\'s agents speak unless an agent sets its own (Desk → Profile → Voice). Auto picks Indonesian or English from the words of each line.')}</p>
+    ${voiceControlsHtml(c.voice?.lang || 'auto', c.voice?.settings || null)}
+    <div class="row"><button type="button" class="small ghost" data-vpreview>${tt('Preview')}</button><div class="grow" id="dVErr"></div></div>
     <h3 style="margin-top:18px">${tt('Squad Log and Audit')}</h3>
     <label class="inline"><input type="checkbox" name="logMessages" ${c.log?.messages !== false ? 'checked' : ''}> ${tt('Log message text (tasks, messages between agents, questions and answers). Off: metadata only.')}</label>
     <label class="inline"><input type="checkbox" name="logMask" ${c.log?.maskPersonalData !== false ? 'checked' : ''}> ${tt('Mask personal data (e-mail, phone, national id and bank account numbers). Secrets are always removed.')}</label>
@@ -95,6 +100,8 @@ async function floorSettings() {
   `<button class="ghost danger" data-remove>${tt('Remove Floor')}</button><span class="spacer"></span><button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
   bindSegs(body);
   body.querySelector('#dLang').onchange = (e) => setLang(e.target.value);   // per browser, not saved with the Floor
+  bindVoiceControls(body);
+  body.querySelector('[data-vpreview]').onclick = () => { const c = readVoiceControls(body); previewVoice({ lang: c.lang, settings: c.settings }, body.querySelector('#dVErr')); };
   loadMerges(f.id, body.querySelector('#dMerges'));
   body.querySelector('[data-remove]').onclick = async () => {
     if (!confirm(tt('Remove this Floor from the Building? The project directory and its files stay untouched.'))) return;
@@ -108,7 +115,7 @@ async function floorSettings() {
         budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked },
         log: { messages: form.elements.logMessages.checked, maskPersonalData: form.elements.logMask.checked },
         audit: { auto: form.elements.auditAuto.checked, model: segValue(form, 'auditModel') }, recovery: { autoResume: form.elements.autoResume.checked, maxAgents: Number(v('maxAgents')) || 4 },
-        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form) });
+        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form), voice: readVoiceControls(form) });
       closeModal(); toast(tt('Floor saved')); ctx.refresh();
     } catch (e) { fail(e); }
   };

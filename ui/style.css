@@ -631,3 +631,8 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .pocCredit { position: fixed; bottom: 10px; left: 12px; font: 12px system-ui, sans-serif; color: #5d5750; background: rgba(255, 255, 255, .7); padding: 4px 8px; border-radius: 8px; }
 .pocErr { position: fixed; top: 70px; left: 12px; background: #fff; padding: 12px; border-radius: 8px; color: #8a1f11; font: 14px system-ui, sans-serif; }
 .pocBar select { width: auto; margin: 0; }
+/* voice: ElevenLabs' answer and the voice settings */
+.vErrBox { border: 1px solid var(--bad, #c0392b); border-radius: 10px; padding: 8px 10px; margin: 6px 0; background: color-mix(in srgb, var(--bad, #c0392b) 8%, transparent); }
+.vErrBox .mono { font-size: 12px; margin: 4px 0; word-break: break-word; }
+.vSliders input[type=range] { width: 100%; }
+.vSliders output { font-variant-numeric: tabular-nums; color: var(--muted, #6b7280); margin-left: 4px; }
