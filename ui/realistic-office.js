@@ -5,7 +5,7 @@
 // chibi scale of each place (the stations are 1.3x), materials follow real ones.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { pbrSet, officeChair, oakDesk, keyboard, mouse, mug, M, rbox, mesh, editorTexture } from './realistic-props.js';
+import { pbrSet, officeChair, oakDesk, keyboard, mouse, mug, M, rbox, mesh, laptopModel } from './realistic-props.js';
 
 // ---------- the Poly Haven models (one GLB, loaded once) ----------
 const lib = new Map();
@@ -42,7 +42,6 @@ const mat = {
   glass: new THREE.MeshPhysicalMaterial({ color: 0xdfeef5, roughness: .05, transmission: .85, thickness: .02, ior: 1.5, transparent: true, opacity: .55 }),
   frame: new THREE.MeshStandardMaterial({ color: 0x3a3d42, metalness: .7, roughness: .4 }),
   shade: new THREE.MeshPhysicalMaterial({ color: 0xf6eedf, roughness: .9, sheen: .6, sheenColor: 0xffffff, emissive: 0xffd9a0, emissiveIntensity: .35, side: THREE.DoubleSide }),
-  screen: () => new THREE.MeshPhysicalMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: editorTexture(), emissiveIntensity: .8, roughness: .08, clearcoat: 1 }),
 };
 const fabric = (color, size = .3) => pbrSet('poly_wool_herringbone', { size, color });
 
@@ -75,12 +74,6 @@ export function realMonitor(grp, w, h, deskTop, centreY) {
   const neckH = centreY - deskTop;
   grp.add(mesh(rbox(.06, neckH, .03, .008), M.aluminium, 0, -neckH / 2, .06));
   const foot = mesh(rbox(.26, .012, .2, .005), M.aluminium, 0, -neckH + .006, .04); grp.add(foot);
-}
-export const realLid = (grp, w, h) => { grp.add(mesh(rbox(w, h, .014, .006), M.aluminium, 0, 0, .004)); grp.add(mesh(rbox(w - .01, h - .01, .004, .002), M.satinBlack, 0, 0, -.004)); };
-export function realLaptop(g, top) {
-  g.add(mesh(rbox(.6, .022, .42, .008), M.aluminium, 0, top + .011, .55));
-  const deck = new THREE.Mesh(new THREE.PlaneGeometry(.52, .2).rotateX(-Math.PI / 2), M.keycap); deck.position.set(0, top + .0225, .5); g.add(deck);
-  const pad = new THREE.Mesh(new THREE.PlaneGeometry(.2, .12).rotateX(-Math.PI / 2), new THREE.MeshPhysicalMaterial({ color: 0xb9bcc0, metalness: .8, roughness: .45 })); pad.position.set(0, top + .0225, .38); g.add(pad);
 }
 // keyboard, mouse and a mug in the agent's colour, real materials (dual: a separate keyboard; laptop: its own keys)
 export function realDeskProps(g, top, dual, mugColor) {
@@ -192,7 +185,7 @@ export const REAL_DEVICES = {
     g.add(top);
     g.add(mesh(new THREE.CylinderGeometry(.09, .12, .7, 32), M.steel, 0, .37, 0), mesh(new THREE.CylinderGeometry(.5, .5, .025, 48), M.steel, 0, .013, 0));
     g.add(mesh(rbox(.42, .02, .3, .006), mat.paper(0xf4f1ea), -.3, .815, .05));
-    const lap = new THREE.Group(); realLaptop(lap, .79 - .022); lap.scale.setScalar(.7); lap.position.set(.45, 0, -.45); g.add(lap);
+    const lap = laptopModel({ w: .34 }); lap.position.set(.45, .785, -.3); lap.rotation.y = Math.PI; g.add(lap);
     for (const s of seats) { const c = officeChair({ back: .42 }); c.scale.setScalar(1.06); c.position.set(s.x, 0, s.z); c.rotation.y = s.face; g.add(c); }
     return g;
   },

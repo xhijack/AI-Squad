@@ -133,6 +133,34 @@ export function laptop() {
   return g;
 }
 
+// ---------- a realistic laptop for the desk stations (both looks) ----------
+// w: width (the proportions of a real 16" laptop follow from it); open: the lid's tilt back (radians).
+// The user sits at -z: keys near the hinge (+z), the trackpad at the front, the lid at the back facing -z.
+// userData.lid is the lid group and userData.screen { w, h, y, z } where the live screen plane goes (facing -z).
+const glossBlack = new THREE.MeshPhysicalMaterial({ color: 0x0b0c0e, roughness: .08, clearcoat: 1, clearcoatRoughness: .04 });
+const padGlass = new THREE.MeshPhysicalMaterial({ color: 0x9fa3a8, metalness: .2, roughness: .32, clearcoat: .6 });
+const wellMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: .8 });
+export function laptopModel({ w = .46, open = .3 } = {}) {
+  const d = w * .7, t = w * .034, h = d;                                  // base depth and thickness, lid height
+  const g = new THREE.Group(); g.name = 'laptop';
+  g.add(mesh(rbox(w, t, d, t * .45, 4), M.aluminium, 0, t / 2, 0));
+  const well = new THREE.Mesh(rbox(w * .9, t * .2, d * .44, t * .08, 2), wellMat); well.position.set(0, t - t * .06, d * .14); g.add(well);
+  const cols = 14, kw = w * .86 / cols, key = new RoundedBoxGeometry(kw * .84, t * .16, kw * .8, 2, kw * .12);
+  const keys = new THREE.InstancedMesh(key, M.keycap, cols * 5 + 1), m4 = new THREE.Matrix4(); let n = 0;
+  for (let r = 0; r < 5; r++) for (let c = 0; c < cols; c++) { m4.makeTranslation(-w * .43 + kw * (c + .5), t + t * .05, d * .14 + d * .19 - r * kw * .95 - kw * .5); keys.setMatrixAt(n++, m4); }
+  m4.compose(new THREE.Vector3(0, t + t * .05, d * .14 + d * .19 - 5 * kw * .95 - kw * .5), new THREE.Quaternion(), new THREE.Vector3(6.5, 1, 1)); keys.setMatrixAt(n++, m4);   // space bar
+  keys.count = n; keys.castShadow = keys.receiveShadow = true; g.add(keys);
+  g.add(mesh(rbox(w * .42, t * .08, d * .3, t * .1, 2), padGlass, 0, t + t * .01, -d * .27));    // trackpad
+  const hinge = mesh(new THREE.CylinderGeometry(t * .42, t * .42, w * .78, 24), M.satinBlack, 0, t * .9, d / 2 - t * .25); hinge.rotation.z = Math.PI / 2; g.add(hinge);
+  const lid = new THREE.Group(); lid.position.set(0, t * .9, d / 2 - t * .3); lid.rotation.x = open; g.add(lid);
+  lid.add(mesh(rbox(w, h, t * .55, t * .25, 4), M.aluminium, 0, h / 2, t * .28));
+  const bezel = new THREE.Mesh(new THREE.PlaneGeometry(w - t * .6, h - t * .6), glossBlack); bezel.rotation.y = Math.PI; bezel.position.set(0, h / 2, -.0008); lid.add(bezel);
+  const cam = new THREE.Mesh(new THREE.CircleGeometry(t * .12, 16), new THREE.MeshBasicMaterial({ color: 0x1f2a36 })); cam.rotation.y = Math.PI; cam.position.set(0, h - t * .55, -.0012); lid.add(cam);
+  g.userData.lid = lid;
+  g.userData.screen = { w: w * .93, h: h * .84, y: h * .5 - t * .05, z: -.0016 };
+  return g;
+}
+
 // ---------- keyboard and mouse ----------
 export function keyboard() {
   const g = new THREE.Group(); g.name = 'keyboard';

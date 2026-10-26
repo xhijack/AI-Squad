@@ -115,8 +115,7 @@ export function deskProps(g, agent, device) {
   });
 }
 function basics(g, agent, device) {
-  if (device === 'dual-monitor') keyboard(g, 0, .977, .45, .48, .16);
-  else keyboard(g, 0, .997, .45, .54, .17);               // the laptop's own keys
+  if (device === 'dual-monitor') keyboard(g, 0, .977, .45, .48, .16);   // a laptop has its own keys (laptopModel)
   mesh(rbox(.24, .006, .2, .003), M('#2f3a4a'), -.48, TOP + .003, .45, g);            // mouse pad, on the agent's right (-x)
   mesh(ball(.04, 14, 10), M('#f1f4f9'), -.48, TOP + .02, .45, g).scale.set(1, .55, 1.5);
   const mugColor = agent.appearance?.shirt || '#e2574c';

@@ -13,9 +13,10 @@ import { Quality, contactShadow } from './render.js';
 import { loadKit, kit, kitStamp } from './kit.js';
 import { NavGrid, footprints } from './nav.js';
 import { deskProps, propsFor } from './props.js';
+import { laptopModel } from './realistic-props.js';
 import { REAL } from './look.js';
 import { mergeStatic } from './merge.js';
-import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realLid, realLaptop, realDeskProps, REAL_DEVICES } from './realistic-office.js';
+import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realDeskProps, REAL_DEVICES } from './realistic-office.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -284,22 +285,26 @@ function buildStation(agent, desk, accent) {
     for (const x of [-.72, .72]) box(.06, .9, .66, mat('#2f3a4a', { metalness: .5, roughness: .4 }), x, .46, .62, g, .02);
   }
   const screens = [];
-  // a screen = dark bezel + canvas plane facing the chair (-z); clicking it opens the over-the-shoulder view
+  // a monitor = housing (bezel, back, neck, foot) + canvas plane facing the chair (-z); clicking it opens the
+  // over-the-shoulder view
+  const live = (parent, w, h, x, y, z, part) => {
+    const S = makeScreen(w, h);
+    S.mesh.position.set(x, y, z); S.mesh.rotation.y = Math.PI; S.mesh.userData.screen = true; S.part = part;
+    parent.add(S.mesh); screens.push(S);
+  };
   const screen = (x, y, z, w, h, rx, ry, part) => {
     const grp = new THREE.Group(); grp.position.set(x, y, z); grp.rotation.set(rx, ry, 0); g.add(grp);
-    if (REAL) (desk.device === 'dual-monitor' ? realMonitor(grp, w, h, .955, y) : realLid(grp, w, h)); else box(w, h, .03, mat('#111827', { roughness: .3 }), 0, 0, 0, grp, .01);
-    const S = makeScreen(w - .04, h - .04);
-    S.mesh.position.z = -.017; S.mesh.rotation.y = Math.PI; S.mesh.userData.screen = true; S.part = part;
-    grp.add(S.mesh); screens.push(S);
+    realMonitor(grp, w, h, .955, y);
+    live(grp, w - .04, h - .04, 0, 0, -.017, part);
   };
   if (desk.device === 'dual-monitor') {
-    if (!REAL) for (const x of [-.36, .36]) box(.05, .22, .05, mat('#3b4258'), x, 1.06, .8, g, .01);
     screen(-.36, 1.3, .8, .62, .38, 0, .5 * .36, 'main');
     screen(.36, 1.3, .8, .62, .38, 0, -.5 * .36, 'side');
     if (!REAL) box(.5, .02, .18, mat('#c9ced6'), 0, .965, .45, g, .005);      // keyboard
   } else {
-    if (REAL) realLaptop(g, .955); else box(.62, .04, .42, mat('#cbd5e1', { metalness: .5, roughness: .3 }), 0, .975, .55, g, .01);   // laptop base
-    screen(0, 1.17, .76, .6, .38, .25, 0, 'main');
+    const lap = laptopModel({ w: .46 }); lap.position.set(0, .955, .5); g.add(lap);              // a real laptop's proportions
+    const sc = lap.userData.screen;
+    live(lap.userData.lid, sc.w, sc.h, 0, sc.y, sc.z, 'main');
   }
   if (REAL) realDeskProps(g, .955, desk.device === 'dual-monitor', (agent.appearance && agent.appearance.shirt) || '#e2574c');
   deskProps(g, agent, desk.device);
