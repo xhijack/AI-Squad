@@ -121,6 +121,7 @@ test('end to end with a fake Claude Code in tmux: dialog, answer, typed task', {
   assert.equal(name, 'aisquad-acme-rina-pm');
   const r = await tm.startSession({ name, cwd, agentId: 'rina-pm', disallowedTools: ['Bash(git push*)'] });
   assert.equal(r.ok, true);
+  assert.equal(r.unit, '', 'no systemd scope: no unit for the journal');
   assert.deepEqual(tm.listSessions(), [name]);
   // its own tmux server: nothing on the shared one
   const own = tm.socketOf(name);

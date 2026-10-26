@@ -225,3 +225,16 @@ test('the next sprint waits until the lead has finished its turn', async () => {
   assert.equal(await squad.startNextSprint('shop'), null, 'only once');
   tm.stopSession(tm.sessionName('shop', 'lina-sprint-lead'));
 });
+
+test('a sprint has started: a sprint folder, a sprint past 1, or tasks on a board', () => {
+  const dir = path.join(root, 'started');
+  write(dir, '.claude/squad/config.sh', 'SPRINT="1"\n');
+  write(dir, 'docs/squad/TASKS.md', '| Task | Owner | Blocked by | Status |\n|---|---|---|---|\n');
+  assert.equal(sprint.sprintStarted(dir), false, 'a fresh pack');
+  write(dir, 'docs/BOARD.md', '| Task | Owner | Status |\n|---|---|---|\n| M01 Login | dev-one | TODO |\n');
+  assert.equal(sprint.sprintStarted(dir), true, 'a Blueprint board with tasks');
+  fs.rmSync(path.join(dir, 'docs/BOARD.md'));
+  write(dir, 'docs/squad/sprint-3/PLAN.md', 'plan');
+  assert.equal(sprint.sprintStarted(dir), true, 'a sprint folder');
+  assert.equal(sprint.sprintStarted(path.join(root, 'nothing-here')), false);
+});

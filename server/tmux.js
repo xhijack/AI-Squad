@@ -202,14 +202,16 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
   const env = { ...process.env, PATH: `${process.execPath.replace(/\/node$/, '')}:${process.env.PATH || ''}` };
   delete env.TMUX;
   const exec = (file, args) => new Promise((ok, no) => execFile(file, args, { env, timeout: 15000 }, (e) => (e ? no(e) : ok())));
+  let unit = `${name}-${Date.now()}`;                   // the scope's name; the journal names it when systemd-oomd kills it
   try {
     if (!config.useSystemd) throw new Error('systemd disabled');
-    await exec('systemd-run', ['--user', '--scope', '--quiet', `--unit=${name}-${Date.now()}`, ...tm]);
+    await exec('systemd-run', ['--user', '--scope', '--quiet', `--unit=${unit}`, ...tm]);
   } catch {
+    unit = '';
     if (!isRunning(name)) await exec(tm[0], tm.slice(1));
   }
   if (isRunning(name)) { keepSize(name); sized.add(name); }
-  return { ok: isRunning(name) };
+  return { ok: isRunning(name), unit };
 }
 
 // kill-session only hangs up the panes; Claude Code can outlive that, so make sure the pane processes end

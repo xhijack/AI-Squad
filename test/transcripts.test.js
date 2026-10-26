@@ -137,3 +137,10 @@ test('peek: the code being written, or the last command with its output', () => 
   const p = tx.transcriptStatus(f, proj).peek;
   assert.deepEqual([p.type, p.command, p.output, p.error], ['terminal', 'node --test', '# pass 3\n# fail 0', false], 'reads do not replace the monitor');
 });
+
+test('an agent\'s own sessions and the session a subagent run belongs to', () => {
+  assert.deepEqual(tx.agentSessions(proj, 'rina-pm').map((s) => s.id), ['sess-pm']);
+  assert.deepEqual(tx.agentSessions(proj, 'nobody'), []);
+  assert.equal(tx.parentSession(path.join(sub, 'agent-abc.jsonl')), 'sess-pm');
+  assert.equal(tx.parentSession(path.join(pdir, 'sess-pm.jsonl')), 'sess-pm');
+});

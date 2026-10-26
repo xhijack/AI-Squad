@@ -148,6 +148,14 @@ export function sessionsOf(root) {
     .filter((s) => s.st).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
 }
 
+// the agent's own Claude Code sessions (started with --agent <id>), newest first: [{ id, file, mtime }]
+export const agentSessions = (root, agentId) => sessionsOf(root).filter((s) => sessionAgent(s.file) === agentId).map((s) => ({ id: s.id, file: s.file, mtime: s.st.mtimeMs }));
+// the session a transcript file belongs to (subagent runs live under <session id>/subagents/)
+export function parentSession(file) {
+  const dir = path.basename(path.dirname(file));
+  return dir === 'subagents' ? path.basename(path.dirname(path.dirname(file))) : path.basename(file).replace(/\.jsonl$/, '');
+}
+
 // latest transcript file per agent id (main sessions started with --agent and subagent/teammate runs)
 export function agentTranscripts(root, recentSessions = 8) {
   const out = new Map();

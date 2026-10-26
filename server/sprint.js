@@ -105,6 +105,12 @@ export function readConfig(root, text = readText(CONFIG(root))) {
   return out;
 }
 export const hasPack = (root) => fs.existsSync(CONFIG(root));
+// a sprint has started once a sprint folder exists, the configured sprint is past 1, or a board has tasks
+export function sprintStarted(root) {
+  let dirs = []; try { dirs = fs.readdirSync(SQUAD(root)); } catch { /* no pack */ }
+  if (dirs.some((d) => /^sprint-\d+$/.test(d)) || Number(readConfig(root).SPRINT) > 1) return true;
+  return ['docs/squad/TASKS.md', 'docs/BOARD.md'].some((f) => parseTasks(readText(path.join(root, f))).length > 0);
+}
 
 // TASKS.md: the first table with "Task" and "Status" columns
 export function parseTasks(md) {
