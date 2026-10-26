@@ -380,6 +380,17 @@ Owner question: "Is there an automation mode, so that when something is not real
 - **Why the DevOps question was missed:** its last line, "3. PO memberi tahu: bolehkah saya mulai … ?", ends with a question mark. But the 0.4.0 rule treated every non-lead on a squad Floor as a lead-spawned teammate and only counted messages that address the owner as "you / kamu / anda / owner". This was read from the transcript only; nothing was typed into the session. Agents with their own session now use the normal rules. Reports without an ask become Finished cards, which handles the designer's review that the strict rule was added for.
 - Tests: `test/reply.test.js` (the DevOps message shape, one card per turn), `test/finished.test.js` (fake Claude Code: a Desk-started DevOps report, its question variant, report.delivered once, Reply and OK, no card for a lead-spawned teammate). Screenshots (swap 74 %): `playground/reference/finished-1440.png`, `finished-390.png`, and `autopilot-pill-390.png` (the 0.4.0 phone re-shot: the Autopilot level in the Agents card).
 
+## Phase 2.5: rituals, methods and quality gates (from 26 Oct 2026)
+
+Brief: `PHASE-2.5-RITUALS.md` (concepts from CLAW3D and gstack, our own text and code). One release per part.
+
+### 0.5.0: token-saving methods
+- **`investigate` skill**: root cause first, with a record per problem in `docs/squad/debug/` and escalation after three failed attempts. It is in fullstack-developer v3, sprint-developer v5, frappe-developer v3, qa-engineer v3 and sprint-qa v5, each with a rule. The log scanner turns new `## Attempt N` sections into `debug.attempt` and `STATUS: ESCALATED` into `debug.escalated`. The Audit has `process.debug` with loops (three or more failed attempts without an escalation, or more than three), and the reviewer treats a loop as a high finding.
+- **Retro** (`server/retro.js`): a sprint's audit (automatic after a sprint closes, or an audit of one sprint) also builds a Retro from its metrics, its findings and the Performance data. No extra model call. It is saved in the audit and as `<id>-retro.md`, logged as `retro.done`, and shown in the Retro dialog (Floor menu, or from the audit). **Send to lead** writes `docs/squad/retro/sprint-N.md` and queues the lead's LEARNINGS task.
+- **LEARNINGS.md** (`server/learnings.js`): every agent file tells the agent to read it before a module, and the lead's file has a Learnings section. The Audit has a new target, `project`: its rule lines become dated entries when the owner applies the finding (diff shown first).
+- Screenshots (playground with the fake `claude -p`, two seeded sprints, swap 74 %): `playground/reference/retro-1440.png`, `retro-390.png`. When Performance has no board data, the cost per story point trend comes from the audits of earlier sprints.
+- Tests: `test/retro.test.js`, `test/retro-squad.test.js` (fake `claude -p`: the sprint audit's Retro, Send to lead), collect (debug events), audit (loops), improve (project target), plus role version updates.
+
 ## How to run
 
 ```

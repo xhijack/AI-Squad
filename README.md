@@ -203,6 +203,12 @@ How it works:
 
 The Floor's status pill shows **Autopilot: Balanced** (or that something critical waits), and the Lobby shows **Decided by autopilot today**. The Squad Log records `autopilot.decided`, `autopilot.nudged`, `autopilot.blocked` and `autopilot.changed`. The Audit has an Autopilot section with the decisions taken, how many you changed later, critical items decided without you (must be 0) and the waiting saved.
 
+### Rituals and methods (0.5)
+
+- **Root cause first** (`investigate` skill for developers and QA): before fixing a failure, the agent writes the symptom, the reproduction, the cause and the evidence in `docs/squad/debug/<slug>.md`, records every fix attempt, and escalates to the lead after three failed attempts. The Squad Log records `debug.attempt` and `debug.escalated`, and the Audit flags debug loops.
+- **Retro**: when a sprint closes, its audit is also its Retro. It lists what went well, what did not, three concrete changes (the most severe findings first), a per-agent breakdown with Performance data, and the cost per story point trend. It is built from the audit and needs no extra model call. Open it from the Floor menu (**Retro**) or from the sprint's audit. **Send to lead** writes it to `docs/squad/retro/sprint-N.md` and asks the lead to add entries to LEARNINGS.md.
+- **LEARNINGS.md** (`docs/squad/LEARNINGS.md`): the project's memory, one line per entry with date and source. Every generated agent prompt says to read it before a module. The lead adds entries after each Retro. Audit findings with target `project` add entries once you apply them.
+
 ### Merges
 
 Merges are done by The AI Squad server, never by an agent (decision D3). The policy lives in `git.json` (merge policy, squash or merge commit, quality gate, push policy); the one-time approval per Floor is stored on this machine in `~/.aisquad/approvals.json`, never in the repo.
