@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, config } from './config.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { safeReaddir, readText, writeText, readJson, writeJson, kebab, uniq, notFound } from './util.js';
+import { safeReaddir, readText, writeText, readJson, writeJson, kebab, uniq, notFound, bad } from './util.js';
 import { listTemplates } from './roles.js';
 import { SECRET_DENY } from './sprint.js';
 
@@ -155,6 +155,45 @@ export function sourceDocsStatus(root, bp) {
     const st = text == null ? 'missing' : /^STATUS:\s*APPROVED/mi.test(text) ? 'approved' : 'draft';
     return { path: String(d.path), title: String(d.title || d.path), purpose: String(d.purpose || ''), owner: String(d.owner || ''), status: st };
   });
+}
+
+// ---------- source documents: view and approve (only the paths the Blueprint names) ----------
+export function sourceDocPath(root, bp, rel) {
+  const want = String(rel || '').trim();
+  const doc = (bp?.sourceDocs || []).find((d) => d && String(d.path) === want);
+  const full = doc && path.resolve(root, want);
+  if (!doc || !full.startsWith(path.resolve(root) + path.sep) || /(^|\/)\.env/.test(want)) throw notFound('Not a source document of this Blueprint');
+  return full;
+}
+export function readSourceDoc(root, bp, rel) {
+  const full = sourceDocPath(root, bp, rel);
+  const text = readText(full);
+  if (text == null) throw notFound(`${rel} does not exist yet`);
+  return { path: String(rel), text: text.slice(0, 400000), truncated: text.length > 400000 };
+}
+const APPROVED_BY = /^Approved by the owner on:.*$/m;
+// sets the first STATUS line to APPROVED and fills "Approved by the owner on: <date>" (inserted after STATUS when
+// missing); every other line stays as it is. An approved document with its date is left alone.
+export function approveText(text, date) {
+  const lines = String(text).split('\n');
+  let i = lines.findIndex((l) => /^STATUS:/.test(l));
+  const j = lines.findIndex((l) => APPROVED_BY.test(l));
+  if (i >= 0 && /^STATUS:\s*APPROVED\s*$/.test(lines[i]) && j >= 0 && lines[j].replace(/^Approved by the owner on:/, '').trim()) return text;
+  if (i < 0) {                                         // no STATUS line: after the title, else at the top
+    if (/^#\s/.test(lines[0] || '')) { lines.splice(1, 0, '', 'STATUS: APPROVED'); i = 2; } else { lines.unshift('STATUS: APPROVED', ''); i = 0; }
+  } else lines[i] = 'STATUS: APPROVED';
+  const stamp = `Approved by the owner on: ${date}`;
+  const k = lines.findIndex((l) => APPROVED_BY.test(l));
+  if (k >= 0) lines[k] = stamp; else lines.splice(i + 1, 0, stamp);
+  return lines.join('\n');
+}
+export function approveSourceDoc(root, bp, rel, date) {
+  const full = sourceDocPath(root, bp, rel);
+  const text = readText(full);
+  if (text == null) throw bad(`${rel} does not exist yet; ask the lead to draft it first`);
+  const next = approveText(text, date);
+  if (next !== text) writeText(full, next);
+  return { path: String(rel), changed: next !== text };
 }
 
 // the "source documents approved" gate: blocking while any source document is missing or still DRAFT

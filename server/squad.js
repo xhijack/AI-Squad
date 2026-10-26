@@ -1047,6 +1047,39 @@ export function dismissFinding(floorId, auditId, findingId, reason) {
   logEvent(floorId, { type: 'improvement.decided', data: { decision: 'dismissed', target: d.target ? `${d.target.kind} ${d.target.id}` : `${findingId} (advice)`, finding: findingId, audit: auditId, reason: d.reason } });
   return { ok: true, decision: d };
 }
+// ---------- source documents (Blueprint gate) ----------
+function floorBp(floorId) {
+  const entry = building.floorEntry(floorId);
+  const cfg = floors.readFloor(entry.path);
+  const bp = blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint);
+  if (!bp) throw bad('This Floor has no Blueprint');
+  return { entry, cfg, bp };
+}
+export function sourceDocs(floorId) {
+  const { entry, bp } = floorBp(floorId);
+  const docs = blueprintsLib.sourceDocsStatus(entry.path, bp);
+  return { docs: [...docs.filter((d) => d.status !== 'approved'), ...docs.filter((d) => d.status === 'approved')], gate: squadOf(entry.path, floors.readFloor(entry.path).floor).gate };
+}
+export function sourceDocText(floorId, rel) { const { entry, bp } = floorBp(floorId); return blueprintsLib.readSourceDoc(entry.path, bp, rel); }
+const DATE = (ts) => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+export function approveSourceDoc(floorId, rel, now = Date.now()) {
+  const { entry, bp } = floorBp(floorId);
+  const r = blueprintsLib.approveSourceDoc(entry.path, bp, rel, DATE(now));
+  if (r.changed) logEvent(floorId, { type: 'doc.approved', data: { doc: r.path, by: 'owner' } });
+  invalidate();
+  return { ok: true, ...r, ...sourceDocs(floorId) };
+}
+// "Request changes": the owner's notes go to the Blueprint lead as its next task
+export async function requestDocChanges(floorId, rel, text) {
+  const { entry, cfg, bp } = floorBp(floorId);
+  blueprintsLib.sourceDocPath(entry.path, bp, rel);
+  if (!String(text || '').trim()) throw bad('Write what should change');
+  const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  if (!lead) throw bad('This Floor has no lead to send the changes to');
+  const r = await sendTask(floorId, lead.id, `The owner requests changes to the source document ${rel} (keep it STATUS: DRAFT until the owner approves it): ${String(text).trim()}`);
+  return { ...r, lead: lead.id };
+}
+
 // a newer Blueprint version (e.g. lessons applied from an audit) replaces the Floor's snapshot; pack files stay as they are
 export function updateFloorBlueprint(floorId) {
   const entry = building.floorEntry(floorId);

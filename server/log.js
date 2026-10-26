@@ -19,7 +19,7 @@ export const TYPES = {
   'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.resumed': 'lifecycle', 'agent.model': 'lifecycle',
   'task.given': 'work', 'board.changed': 'work', 'handoff.written': 'work', 'qa.report': 'work', 'bug.opened': 'work', 'bug.closed': 'work',
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
-  'doc.status': 'work', 'commit': 'work',
+  'doc.status': 'work', 'doc.approved': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'permission.answered': 'communication',
   'tool.call': 'tools',
@@ -59,6 +59,7 @@ function summarize(e) {
     case 'sprint.planned': return `sprint ${e.sprint} planned: ${d.modules} modules, ${d.sp} SP`;
     case 'sprint.closed': return `sprint ${e.sprint} closed`;
     case 'doc.status': return `${d.doc} is ${d.status}`;
+    case 'doc.approved': return `${d.doc} approved by the ${d.by || 'owner'}`;
     case 'commit': return `commit ${d.sha}${t(d.subject)}`;
     case 'message.sent': return `${who} -> ${d.to}${t(d.text)}`;
     case 'question.asked': return `${who} asked the owner${t(d.text)}`;

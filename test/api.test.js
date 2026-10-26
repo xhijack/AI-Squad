@@ -251,3 +251,45 @@ test('three.js is served locally from ui/vendor and cached', async () => {
     assert.match(r.headers.get('cache-control'), /immutable/);
   }
 });
+
+test('source documents: view and approve only the Blueprint\'s paths; only STATUS and approval lines change', async () => {
+  const building = await import('../server/building.js');
+  const squadLog = await import('../server/log.js');
+  building.setPrefs({ squadsDir: path.join(root, 'squads') });
+  const made = await call('POST', '/api/squads', { blueprint: 'software-house', name: 'Docs Kiosk', team: [{ template: 'project-manager', displayName: 'Rina - PM' }, { template: 'fullstack-developer', displayName: 'Budi - Dev' }] });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const id = made.body.id, dir = made.body.path;
+  const list = await call('GET', `/api/floors/${id}/docs`);
+  assert.deepEqual(list.body.docs.map((d) => d.path), ['docs/PRD.md', 'docs/TECH.md', 'docs/DESIGN.md', 'docs/ENVIRONMENTS.md']);
+  assert.equal(list.body.gate.blocking, true);
+  fs.writeFileSync(path.join(dir, '.env'), 'SECRET=1');
+  for (const bad of ['../../etc/passwd', '.env', 'docs/../.env', 'AISQUAD.md', '/etc/passwd', 'docs/PRD.md/../../.env']) {
+    assert.equal((await call('GET', `/api/floors/${id}/docs/text?path=${encodeURIComponent(bad)}`)).status, 404, bad);
+    assert.equal((await call('POST', `/api/floors/${id}/docs/approve`, { path: bad })).status, 404, bad);
+  }
+  assert.equal((await call('GET', `/api/floors/${id}/docs/text?path=docs/PRD.md`, null, false)).status, 401, 'the text needs the PIN');
+  const before = fs.readFileSync(path.join(dir, 'docs/ENVIRONMENTS.md'), 'utf8');
+  const view = await call('GET', `/api/floors/${id}/docs/text?path=docs/ENVIRONMENTS.md`);
+  assert.equal(view.body.text, before);
+  const ok = await call('POST', `/api/floors/${id}/docs/approve`, { path: 'docs/ENVIRONMENTS.md' });
+  assert.equal(ok.status, 200); assert.equal(ok.body.changed, true);
+  const after = fs.readFileSync(path.join(dir, 'docs/ENVIRONMENTS.md'), 'utf8');
+  const a = before.split('\n'), b = after.split('\n');
+  assert.equal(a.length, b.length, 'no lines added when both lines exist');
+  const diff = a.map((l, i) => [l, b[i]]).filter(([x, y]) => x !== y);
+  assert.deepEqual(diff.map(([, y]) => y.replace(/\d+ \w+ \d{4}$/, 'DATE')), ['STATUS: APPROVED', 'Approved by the owner on: DATE']);
+  assert.equal(ok.body.docs.find((d) => d.path === 'docs/ENVIRONMENTS.md').status, 'approved');
+  assert.equal(ok.body.docs.at(-1).path, 'docs/ENVIRONMENTS.md', 'pending documents first');
+  assert.equal((await call('POST', `/api/floors/${id}/docs/approve`, { path: 'docs/ENVIRONMENTS.md' })).body.changed, false, 'approving twice changes nothing');
+  assert.equal(squadLog.read(id, { type: 'doc.approved' }).length, 1);
+  for (const d of ['PRD', 'TECH', 'DESIGN']) await call('POST', `/api/floors/${id}/docs/approve`, { path: `docs/${d}.md` });
+  const fl = await call('GET', `/api/floors/${id}`);
+  assert.equal(fl.body.waitingFor, null, 'the gate and the pill update right away');
+  // Request changes: the notes go to the lead as a task (the lead starts and gets it queued)
+  assert.equal((await call('POST', `/api/floors/${id}/docs/changes`, { path: 'docs/PRD.md', text: '' })).status, 400);
+  const ch = await call('POST', `/api/floors/${id}/docs/changes`, { path: 'docs/PRD.md', text: 'Add the refund flow.' });
+  assert.equal(ch.status, 200, JSON.stringify(ch.body)); assert.equal(ch.body.lead, 'rina-pm');
+  const desk = await call('GET', `/api/floors/${id}/agents/rina-pm`);
+  assert.match(desk.body.pending, /changes to the source document docs\/PRD\.md .*Add the refund flow\./);
+  await call('POST', `/api/floors/${id}/agents/rina-pm/stop`, {});
+});

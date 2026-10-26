@@ -140,3 +140,16 @@ test('Blueprint body sections and per-role rules', () => {
   assert.equal(bp.roleRules(b, 'frappe-developer'), '');
   assert.match(b.kickoff, /marketing brief, the brand rules and the channel plan/);
 });
+
+test('approving a source document touches only its STATUS and approval lines', () => {
+  const doc = '# Env\n\nSTATUS: DRAFT\nOwner: devops\nApproved by the owner on:\n\n<!-- STATUS: DRAFT while it is being written -->\nBody STATUS: x\n';
+  assert.equal(bp.approveText(doc, '26 Oct 2026'), '# Env\n\nSTATUS: APPROVED\nOwner: devops\nApproved by the owner on: 26 Oct 2026\n\n<!-- STATUS: DRAFT while it is being written -->\nBody STATUS: x\n');
+  assert.equal(bp.approveText('# T\nbody', '1 Nov 2026'), '# T\n\nSTATUS: APPROVED\nApproved by the owner on: 1 Nov 2026\nbody', 'inserted after the title');
+  assert.equal(bp.approveText('# T\n\nSTATUS: DRAFT\nbody', 'D'), '# T\n\nSTATUS: APPROVED\nApproved by the owner on: D\nbody');
+  const done = '# T\n\nSTATUS: APPROVED\nApproved by the owner on: 2 Oct 2026 (PO)\nbody';
+  assert.equal(bp.approveText(done, 'D'), done, 'an approved document is left alone');
+  assert.match(bp.approveText('# T\n\nSTATUS: DRAFT\nApproved by the owner on: 2 Oct 2026\n', 'D'), /on: D\n/, 'a stale date of a draft is replaced');
+  const blue = { sourceDocs: [{ path: 'docs/PRD.md' }] };
+  assert.throws(() => bp.sourceDocPath('/r', blue, '../x'), /Not a source document/);
+  assert.equal(bp.sourceDocPath('/r', blue, 'docs/PRD.md'), '/r/docs/PRD.md');
+});
