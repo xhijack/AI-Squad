@@ -517,3 +517,7 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .apMini { font-size: 11px; padding: 2px 8px; margin-left: 8px; display: none; }
 .apMini.crit { color: var(--bad); }
 @media (max-width: 760px) { .hpill.ap { display: none; } .apMini { display: inline-flex; } }
+
+/* "Finished": an agent's report, calm (it blocks nothing) */
+.att.finished { border-left-color: var(--info); }
+.att.finished .replyMsg { max-height: 220px; }

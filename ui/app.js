@@ -375,7 +375,7 @@ function announceAttention(list, route) {
   try { sessionStorage.setItem('aisquad.seenAtt', JSON.stringify([...seenAtt].slice(-200))); } catch { /* private mode */ }
   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
     const a = fresh[0];
-    try { new Notification(`${a.agentName || 'An agent'} needs you`, { body: String(a.text || '').slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
+    try { new Notification(`${a.agentName || 'An agent'} ${a.kind === 'finished' ? 'finished' : 'needs you'}`, { body: String(a.text || '').slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
   }
   // do not interrupt: typing, an open dialog, another popover, or the screen / first person view
   const busy = route.screen || route.eyes || $('modal').open || POPS.some((id) => id !== 'attPop' && !$(id).hidden)
