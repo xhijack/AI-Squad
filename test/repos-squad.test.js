@@ -87,6 +87,8 @@ test('merges and gates per repository: its own approval, gate and log; red gates
   squad.startMerge(FLOOR, `${seo}/m01-seo`, 'landing');
   for (let i = 0; i < 100 && !log().length; i++) await new Promise((r) => setTimeout(r, 100));
   assert.equal(log()[0].result, 'merged');
+  // the log is written before the temporary worktree is removed: wait until the merge has really ended
+  for (let i = 0; i < 100 && mergeLib.isMerging(squad.repoKey(FLOOR, 'landing')); i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(fs.existsSync(path.join(landing, 'index.html')) || g('show', 'main:index.html').includes('DTamu'), 'in the landing repository\'s main');
   assert.equal(mergeLib.mergeLog(FLOOR).length, 0, 'the primary repository\'s merge log is separate');
   // a gate that fails on this branch's merged result
