@@ -22,3 +22,4 @@ working sopwer-hr/dian-frappe-developer Bash '{"command":"bench run-tests --app 
 working acme-coffee-shop/budi-fullstack-developer Edit '{"file_path":"src/catalogue.css"}'
 sleep 2
 node scripts/shot.js scripts/shots/acceptance.json
+node scripts/shot.js scripts/shots/acceptance-iso.json        # the same views in the Iso Pixel renderer (0.16)
