@@ -343,3 +343,19 @@ test('answering an item that moved on over HTTP: typed text delivered, a clicked
   assert.equal((await call('POST', '/api/attention/0123456789ab/answer', { option: 0 })).status, 200, 'dismissing something gone is fine');
   await call('POST', '/api/floors/acme/agents/rina-pm/stop', {});
 });
+
+test('open reads carry an ETag and answer 304 when unchanged; reads behind the PIN stay no-store', async () => {
+  const a = await fetch(`${base}/api/floors/acme`);
+  const tag = a.headers.get('etag');
+  assert.match(tag, /^"[\w-]{20}"$/);
+  assert.equal(a.headers.get('cache-control'), 'no-cache');
+  const b = await fetch(`${base}/api/floors/acme`, { headers: { 'if-none-match': tag } });
+  assert.equal(b.status, 304);
+  assert.equal(await b.text(), '');
+  const c = await fetch(`${base}/api/floors/acme`, { headers: { 'if-none-match': '"stale"' } });
+  assert.equal(c.status, 200);
+  const agent = (await (await fetch(`${base}/api/floors/acme`)).json()).agents[0];
+  const d = await fetch(`${base}/api/floors/acme/agents/${agent.id}`, { headers: { 'x-aisquad-pin': pin } });
+  assert.equal(d.headers.get('cache-control'), 'no-store');
+  assert.equal(d.headers.get('etag'), null);
+});

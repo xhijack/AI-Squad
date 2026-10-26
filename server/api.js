@@ -1,6 +1,7 @@
 // JSON API + static UI. On a loopback address (the default) reads are open and every change and agent
 // screen needs the local PIN (header x-aisquad-pin); on any other address every /api call needs it.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { ROOT, VERSION } from './config.js';
 import { HttpError, notFound, lineDiff } from './util.js';
@@ -24,6 +25,16 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 function send(res, code, body, type = 'application/json') {
   res.writeHead(code, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
   res.end(type === 'application/json' ? JSON.stringify(body) : body);
+}
+
+// a GET's JSON with an ETag: the browser revalidates (no-cache) and an unchanged answer is a bodiless 304
+export const etagOf = (text) => `"${crypto.createHash('sha1').update(text).digest('base64url').slice(0, 20)}"`;
+function sendJsonGet(req, res, body) {
+  const text = JSON.stringify(body), tag = etagOf(text);
+  const head = { etag: tag, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' };
+  if (req.headers['if-none-match'] === tag) { res.writeHead(304, head); return res.end(); }
+  res.writeHead(200, { ...head, 'content-type': 'application/json; charset=utf-8' });
+  res.end(text);
 }
 
 function readRaw(req, max) {
@@ -194,7 +205,8 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
           return res.end(fs.readFileSync(out.__file));
         }
         if (out && out.__file) return send(res, 200, fs.readFileSync(out.__file), TYPES[path.extname(out.__file).toLowerCase()] || 'image/jpeg');
-        return send(res, 200, out);
+        // reads open without the PIN (building, Floors) revalidate with an ETag; anything behind the PIN stays no-store
+        return method === 'GET' && !opts.pin && !lockReads ? sendJsonGet(req, res, out) : send(res, 200, out);
       }
       send(res, 404, { error: 'Not found' });
     } catch (e) {
