@@ -1223,7 +1223,7 @@ export function startAudit(floorId, { sprint: sprintNo = null, model = '' } = {}
     improve.recordOutcomes(floorId, a);                // earlier applied changes get their "after" metrics
     if (n != null && !a.error) {                         // a sprint's audit is also its Retro
       let perf = null; try { perf = cfg.floor.workflow === 'squad-sprint' ? performance(floorId) : null; } catch { /* no board data */ }
-      const r = retroLib.buildRetro(a, perf);
+      const r = retroLib.buildRetro(a, perf, auditLib.listAudits(floorId).filter((x) => x.id !== a.id));
       auditLib.saveRetro(floorId, a.id, r, retroLib.retroMd(r, cfg.floor.name));
       logEvent(floorId, { type: 'retro.done', sprint: n, data: { audit: a.id, wentWell: r.wentWell.length, wentBadly: r.wentBadly.length, changes: r.changes.length } });
       return { ...a, retro: r };

@@ -37,6 +37,13 @@ test('a calm sprint: no Performance data and no findings still gives a Retro', (
   assert.deepEqual(r.wentBadly, []); assert.deepEqual(r.changes, []); assert.deepEqual(r.costPerSPTrend, []);
 });
 
+test('without Performance data the trend comes from the audits of earlier sprints', () => {
+  const old = { id: 'a1', range: { sprint: 1 }, metrics: { efficiency: { costPerSP: 0.2, doneSP: 5, plannedSP: 5 } } };
+  const r = retro.buildRetro({ ...AUDIT, metrics: metrics({ efficiency: { ...metrics().efficiency, costPerSP: 0.15 } }) }, null, [old, { id: 'x', range: {}, metrics: {} }]);
+  assert.deepEqual(r.costPerSPTrend.map((t) => [t.sprint, t.costPerSP]), [[1, 0.2], [2, 0.15]]);
+  assert.ok(r.wentWell.includes('cost per story point $0.15 (sprint 1: $0.2)'));
+});
+
 test('LEARNINGS.md: created with a header, entries dated with their source, no duplicates', () => {
   const proj = path.join(root, 'shop');
   learnings.ensure(proj);

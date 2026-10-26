@@ -6,11 +6,18 @@
 const pct = (v) => `${Math.round(v * 100)} %`;
 const SEV = { critical: 0, high: 1, medium: 2, low: 3 };
 
-// audit: a saved audit (metrics, findings, range.sprint); perf: floorPerformance() or null
-export function buildRetro(audit, perf = null) {
+// audit: a saved audit (metrics, findings, range.sprint); perf: floorPerformance() or null; history: earlier audits
+// (the cost per story point trend comes from Performance, else from the audits of earlier sprints)
+export function buildRetro(audit, perf = null, history = []) {
   const m = audit.metrics || {}, P = m.process || {}, E = m.efficiency || {};
   const sprint = audit.range?.sprint ?? null;
-  const trend = (perf?.sprints || []).filter((s) => s.costPerSP != null).map((s) => ({ sprint: s.sprint, costPerSP: s.costPerSP, doneSP: s.doneSP, plannedSP: s.plannedSP }));
+  const fromAudits = () => {
+    const by = new Map();
+    for (const a of [...history, audit]) if (a.range?.sprint != null && a.metrics?.efficiency?.costPerSP != null) by.set(String(a.range.sprint), { sprint: a.range.sprint, costPerSP: a.metrics.efficiency.costPerSP, doneSP: a.metrics.efficiency.doneSP, plannedSP: a.metrics.efficiency.plannedSP });
+    return [...by.values()].sort((a, b) => Number(a.sprint) - Number(b.sprint));
+  };
+  const perfTrend = (perf?.sprints || []).filter((s) => s.costPerSP != null).map((s) => ({ sprint: s.sprint, costPerSP: s.costPerSP, doneSP: s.doneSP, plannedSP: s.plannedSP }));
+  const trend = perfTrend.length ? perfTrend : fromAudits();
   const now = trend.find((t) => String(t.sprint) === String(sprint)), prev = now ? trend.filter((t) => Number(t.sprint) < Number(sprint)).at(-1) : null;
   const findings = [...(audit.findings || [])].sort((a, b) => (SEV[a.severity] ?? 9) - (SEV[b.severity] ?? 9));
   const well = [], badly = findings.filter((x) => x.severity === 'critical' || x.severity === 'high').map((f) => f.title);   // the reviewer's worst first
