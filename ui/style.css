@@ -527,3 +527,5 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .retroList li + li { margin-top: 4px; }
 .retroTrend > div { display: grid; grid-template-columns: 80px 1fr 64px; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0; }
 .retroTrend b { text-align: right; }
+.retroTrend .sbar { display: block; height: 8px; background: var(--chip); border-radius: 6px; overflow: hidden; }
+.retroTrend .sbar i { display: block; height: 100%; background: var(--info); }

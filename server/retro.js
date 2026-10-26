@@ -25,7 +25,8 @@ export function buildRetro(audit, perf = null, history = []) {
   if (E.plannedSP) (E.doneSP >= E.plannedSP ? well : badly).push(`${E.doneSP} of ${E.plannedSP} story points done`);
   if (P.qaBeforeMerge?.merges) (P.qaBeforeMerge.mergesWithAllQa === P.qaBeforeMerge.merges ? well : badly).push(`${P.qaBeforeMerge.mergesWithAllQa} of ${P.qaBeforeMerge.merges} merges had QA for every module`);
   if (E.cacheHitRate != null && E.cacheHitRate >= 0.7) well.push(`cache hit rate ${pct(E.cacheHitRate)}`);
-  if (now && prev) (now.costPerSP <= prev.costPerSP ? well : badly).push(`cost per story point $${now.costPerSP} (sprint ${prev.sprint}: $${prev.costPerSP})`);
+  const money = (v) => `$${+(+v).toFixed(2)}`;
+  if (now && prev) (now.costPerSP <= prev.costPerSP ? well : badly).push(`cost per story point ${money(now.costPerSP)} (sprint ${prev.sprint}: ${money(prev.costPerSP)})`);
   if (P.bugs?.open) badly.push(`${P.bugs.open} bug${P.bugs.open === 1 ? '' : 's'} still open`);
   if (P.rework?.reopened) badly.push(`${P.rework.reopened} board row${P.rework.reopened === 1 ? '' : 's'} reopened`);
   if (m.debug?.loops?.length) badly.push(`debug loops: ${m.debug.loops.map((d) => `${d.issue} (${d.attempts} attempts)`).join(', ')}`);
