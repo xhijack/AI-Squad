@@ -1,7 +1,7 @@
 // "Waiting for your reply": the text heuristic, trimming, and when an agent counts as waiting for the owner.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { asksOwner, trimReply, replyWait, REPLY_MAX } from '../server/reply.js';
+import { asksOwner, trimReply, replyWait, finishedReport, REPLY_MAX } from '../server/reply.js';
 
 // shaped like the real case (Software House lead, Indonesian): a status table, assumptions, a next step
 const LEAD = `Tech Spec sudah disetujui. Draf Design dan Environments siap kamu tinjau.
@@ -83,15 +83,32 @@ const REVIEW = `Design review M162 (premium template) selesai.
 
 Status: PASS dengan 2 catatan minor. Next steps: fullstack-developer-1 fixes the padding, then QA retests.`;
 
-test('a teammate\'s status report or review is not a question for the owner', () => {
-  assert.equal(asksOwner(REVIEW, { teammate: true }), false);
-  assert.equal(asksOwner(REVIEW), false, 'questions it answers on the same line are findings, also from a lead');
-  assert.equal(asksOwner('Review done. Findings: 3 minor issues, see docs/squad/review/M162.md. Is the contrast enough? It passes WCAG AA.', { teammate: true }), false);
-  assert.equal(asksOwner('M162 review is ready. Do you want the gold accent kept on the RSVP page?', { teammate: true }), true, 'addressed to the owner');
-  assert.equal(asksOwner('Mohon kamu setujui palet warna baru di DESIGN.md.', { teammate: true }), true);
+// shaped like the real case (0.4.2): the DevOps agent, started from its Desk, ends a long report with a question to the PO
+const DEVOPS = `## Temuan
+- **Server:** dtamu-dev berbagi mesin dengan 6 aplikasi lain; port 8300-8399 bebas.
+- **Netlify:** belum ada \`netlify.toml\`. Tolong jangan kirim token lewat chat.
+
+## Langkah berikutnya
+1. PM atau PO menjawab K1–K7.
+2. \`Dockerfile.api\` perlu masuk ke \`main\`.
+3. PO memberi tahu: bolehkah saya mulai dengan sisi server saja (\`ssh\`, siapkan \`~/dtamu-dev\`), sambil menunggu jawaban soal Netlify?`;
+
+test('a report that ends with a question to the owner asks; a review with findings does not', () => {
+  assert.equal(asksOwner(DEVOPS), true, 'the DevOps case');
+  assert.equal(asksOwner(REVIEW), false, 'questions it answers on the same line are findings');
+  assert.equal(asksOwner('Review done. Findings: 3 minor issues, see docs/squad/review/M162.md. Is the contrast enough? It passes WCAG AA.'), false);
+  assert.equal(asksOwner('M162 review is ready. Do you want the gold accent kept on the RSVP page?'), true);
   assert.equal(asksOwner('Design review done.\n\nNext steps: fullstack-developer-1 fixes the padding.'), false, '"next steps" for the team is not an ask');
-  const ts = 5;
-  const live = { running: true, inLead: false, status: { turnOpen: false, reply: { ts, text: REVIEW }, ask: null }, work: null, pending: false, dialog: null, busy: false };
-  assert.equal(replyWait(live, { teammate: true }), null);
-  assert.ok(replyWait({ ...live, status: { ...live.status, reply: { ts, text: 'Which font do you want for headings?' } } }, { teammate: true }));
+});
+
+test('one card per ended turn: "Waiting for your reply" when it asks, "Finished" otherwise; never for lead-spawned teammates', () => {
+  const ts = Date.now() - 60e3;
+  const live = (text, extra = {}) => ({ running: true, inLead: false, status: { turnOpen: false, reply: { ts, text }, ask: null }, work: null, pending: false, dialog: null, busy: false, ...extra });
+  assert.ok(replyWait(live(DEVOPS))); assert.equal(finishedReport(live(DEVOPS)), null, 'not two cards');
+  assert.equal(replyWait(live(REVIEW)), null); assert.deepEqual(finishedReport(live(REVIEW)), { ts, text: REVIEW });
+  assert.equal(finishedReport(live(REVIEW, { inLead: true })), null, 'a teammate reports to the lead');
+  assert.equal(finishedReport(live(REVIEW, { status: { turnOpen: true, reply: { ts, text: REVIEW } } })), null, 'working again clears it');
+  assert.equal(finishedReport(live(REVIEW, { dialog: { options: [] } })), null, 'a dialog is its own item');
+  assert.equal(finishedReport(live(REVIEW, { work: { assignedAt: ts + 1 } })), null, 'the owner already gave the next task');
+  assert.equal(finishedReport(live(REVIEW), ts + 13 * 3600e3), null, 'old turns are not news');
 });

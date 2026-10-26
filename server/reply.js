@@ -16,22 +16,18 @@ const ASKS = [
   new RegExp(`\\b(tolong|mohon|silakan|harap)\\b[^.\\n]*\\b${VERB}`, 'i'),
   /\b(menunggu|perlu) (jawaban|keputusan|persetujuan|konfirmasi)\b/i, /\bperlu kamu\b/i, /\b(apakah|mana yang|yang mana)\b[^\n]*\?\s*$/im,
 ];
-// words that address the owner: a teammate's message only asks the owner when it says so
-const ADDRESSED = /\b(you|your|owner|kamu|anda|bapak|ibu|pak|bu|boss|bos)\b/i;
 
 // markdown decoration off a line, for checking whether it ends with a question
 const plain = (l) => l.replace(/[*_`>#|]+/g, '').replace(/^\s*([-+•]|\d+[.)])\s+/, '').trim();
 
-// -> true when the text asks the owner for something. teammate: an agent that is not the lead; its status
-// reports and reviews (findings, recommendations, questions it answers itself) are not asks
-export function asksOwner(text, { teammate = false } = {}) {
+// -> true when the text asks the owner for something (only agents the owner talks to directly are asked: the lead,
+// agents started from their Desk, independent agents; a lead-spawned teammate's report goes to the lead)
+export function asksOwner(text) {
   const t = String(text || '').trim();
   if (!t) return false;
   const lines = t.split('\n').map(plain).filter(Boolean);
   const tail = lines.slice(-12);                                  // asks usually close the message
-  const last = lines.at(-1) || '';
-  if (teammate) return tail.some((l) => ADDRESSED.test(l) && (l.endsWith('?') || ASKS.some((re) => re.test(l))));
-  if (last.endsWith('?')) return true;
+  if (lines.at(-1)?.endsWith('?')) return true;
   if (ASKS.some((re) => re.test(tail.join('\n')))) return true;
   return tail.filter((l) => l.endsWith('?')).length >= 2;          // a list of questions at the end
 }
@@ -44,13 +40,27 @@ export function trimReply(text, max = REPLY_MAX) {
   return `${clip(t.slice(0, head), head)}\n\n[…]\n\n${t.slice(-tail).replace(/^[^\n]*\n/, '')}`;
 }
 
-// should this agent show "Waiting for your reply"?
-// live: { running, inLead, state, status: { turnOpen, reply }, work, pending }; gate: source documents block work
-export function replyWait(live, { gate = false, isLead = false, teammate = false } = {}) {
+// the message an agent ended its turn with, while nothing else is open: { ts, text } or null.
+// live: { running, inLead, status: { turnOpen, reply, ask }, work, pending, dialog, busy }
+export function turnReport(live) {
   const r = live.status?.reply;
   if (!r || live.status.turnOpen || !live.running || live.inLead) return null;
   if (live.dialog || live.status.ask || live.busy) return null;
   if (live.pending || (live.work && live.work.assignedAt > r.ts)) return null;   // the owner already answered
-  if (!asksOwner(r.text, { teammate: teammate && !isLead }) && !(isLead && gate)) return null;
   return { ts: r.ts, text: trimReply(r.text) };
+}
+
+// should this agent show "Waiting for your reply"? gate: source documents block the squad (the lead waits for them)
+export function replyWait(live, { gate = false, isLead = false } = {}) {
+  const r = turnReport(live);
+  if (!r || (!asksOwner(live.status.reply.text) && !(isLead && gate))) return null;
+  return r;
+}
+
+// "Finished": the turn ended with a report that does not ask the owner anything (recent turns only)
+export const FINISHED_MAX_AGE_MS = 12 * 3600e3;
+export function finishedReport(live, now = Date.now()) {
+  const r = turnReport(live);
+  if (!r || now - r.ts > FINISHED_MAX_AGE_MS || replyWait(live)) return null;
+  return r;
 }
