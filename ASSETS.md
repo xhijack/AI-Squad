@@ -29,6 +29,10 @@ Only CC0 and MIT here; no CC-BY model was needed. Sources were downloaded to `pl
 | `ui/assets/realistic/textures/oak_veneer_01_*.jpg` | Poly Haven "Oak Veneer 01" (desktop): https://polyhaven.com/a/oak_veneer_01 | Jenelle van Heerden | CC0 1.0 | re-saved JPEG quality 84 |
 | `scripts/vendor/three-jsm/**` (dev tool only, not shipped to the browser) | npm `three@0.160.0`, `examples/jsm`: FBXLoader, TGALoader, fflate, NURBS curves, GLTFExporter, TextureUtils (same tarball as `ui/vendor/three`, sha512 checked again) | three.js authors | MIT | none |
 
-Built in code, no asset file: the office chair, monitor, laptop, keyboard, mouse, mug and oak desk (`ui/realistic-props.js`), with the textures above and plain PBR materials.
+| `ui/assets/realistic/office-props.glb` (3.3 MB, step 1b: the office at `?look=realistic`) | Poly Haven models, glTF 1k: `potted_plant_02` (Rico Cilliers), `modern_wooden_cabinet` (Patrik Pangerl, the TV console): https://polyhaven.com/models | as listed | CC0 1.0 | packed with `scripts/pack-glb.js`, textures resized to 512, `arm` wired as occlusion; the cabinet's door animations dropped (it stays closed) |
+
+Built in code, no asset file: the office chair, monitor, laptop, keyboard, mouse, mug and oak desk (`ui/realistic-props.js`), and for the office (step 1b, `ui/realistic-office.js`) the room, sofa, rug, beanbags, ping-pong table, floor lamp, whiteboard, server rack, pantry and meeting table, with the textures above and plain PBR materials. The polished chibis are the same procedural chibis (`ui/chibi.js`) with physical materials.
+
+Step 1 (`?look=desk-poc`) uses the Rocketbox person; after the owner's correction (chibis stay, no human characters) `character.glb` is only used by that step 1 page and goes away if step 2 is approved.
 
 Not done in this step: Blender Cycles baking (the download of a portable Blender was refused by the permission check in this session; the models' own baked AO maps, GTAO and contact shadows stand in), meshopt and KTX2 (gltfpack was refused the same way; the PoC is 5.7 MB without them).

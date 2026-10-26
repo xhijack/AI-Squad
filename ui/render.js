@@ -57,8 +57,9 @@ function setCameraDefine(pass, cam) {
 
 export class Quality {
   // renderer, scene; hemi: the hemisphere light (dimmed when the environment lights the room)
-  constructor(renderer, scene, { hemi = null, hdri = './assets/hdri/studio_small_09_1k.hdr' } = {}) {
-    Object.assign(this, { renderer, scene, hemi, hdri, chosen: savedQuality(), active: null, composer: null, env: null, frames: [], size: { w: 1, h: 1 } });
+  // exposure: tone mapping exposure per level (the realistic look uses AgX, which needs more)
+  constructor(renderer, scene, { hemi = null, hdri = './assets/hdri/studio_small_09_1k.hdr', exposure = { high: .8, low: 1.05 } } = {}) {
+    Object.assign(this, { renderer, scene, hemi, hdri, exposure, chosen: savedQuality(), active: null, composer: null, env: null, frames: [], size: { w: 1, h: 1 } });
     this.apply(this.chosen === 'low' ? 'low' : 'high');
   }
   set(q) { if (!QUALITIES.includes(q)) return; this.chosen = q; saveQuality(q); this.frames = []; this.apply(q === 'low' ? 'low' : 'high'); }
@@ -69,7 +70,7 @@ export class Quality {
     if (high && !this.env) this.loadEnv();
     this.scene.environment = high ? this.env : null;
     if (this.hemi) this.hemi.intensity = high && this.env ? .35 : 1.15;
-    this.renderer.toneMappingExposure = high ? .8 : 1.05;
+    this.renderer.toneMappingExposure = high ? this.exposure.high : this.exposure.low;
     if (!high) { this.composer?.dispose(); this.composer = null; }
     else this.buildComposer();
   }

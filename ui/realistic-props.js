@@ -26,8 +26,8 @@ function metricUv(geo) {
   }
   return geo;
 }
-const rbox = (w, h, d, r, seg = 4) => metricUv(new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4)));
-const mesh = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; };
+export const rbox = (w, h, d, r, seg = 4) => metricUv(new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4)));
+export const mesh = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; };
 
 // shared materials (no toy colours: greys, black plastic, aluminium, oak)
 export const M = {
@@ -43,9 +43,10 @@ export const M = {
 };
 
 // ---------- office chair (seat top at 0.48 m; origin on the floor under the gas lift; faces +z) ----------
-export function officeChair() {
+// back: the cushion's height (lower for the chibis, so the head stays in view); fabric: its colour
+export function officeChair({ back: bh = .55, fabric: fc = 0x6d7076 } = {}) {
   const g = new THREE.Group(); g.name = 'office-chair';
-  const fabric = pbrSet('poly_wool_herringbone', { size: .25, color: 0x6d7076 });
+  const fabric = pbrSet('poly_wool_herringbone', { size: .25, color: fc });
   // five-star base with casters
   for (let i = 0; i < 5; i++) {
     const a = i / 5 * Math.PI * 2, leg = new THREE.Group();
@@ -63,8 +64,8 @@ export function officeChair() {
   const seat = mesh(rbox(.5, .07, .48, .032, 6), fabric, 0, .445, .02); seat.name = 'seat'; g.add(seat);
   // back: a spine bar and a slightly reclined cushion
   const spine = mesh(rbox(.06, .36, .025, .01), M.satinBlack, 0, .55, -.25); spine.rotation.x = -.12; g.add(spine);
-  const back = new THREE.Group(); back.position.set(0, .82, -.29); back.rotation.x = -.14;
-  back.add(mesh(rbox(.46, .56, .025, .012), M.blackPlastic, 0, 0, -.03), mesh(rbox(.45, .55, .065, .03, 6), fabric, 0, 0, .01));
+  const back = new THREE.Group(); back.position.set(0, .545 + bh / 2, -.29); back.rotation.x = -.14;
+  back.add(mesh(rbox(.46, bh + .01, .025, .012), M.blackPlastic, 0, 0, -.03), mesh(rbox(.45, bh, .065, .03, 6), fabric, 0, 0, .01));
   g.add(back);
   // armrests on T-posts
   for (const s of [-1, 1]) {
@@ -75,7 +76,7 @@ export function officeChair() {
 }
 
 // ---------- monitor (27", screen texture: an editor) ----------
-function editorTexture() {
+export function editorTexture() {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 576;
   const x = c.getContext('2d');
   x.fillStyle = '#1e2127'; x.fillRect(0, 0, 1024, 576);
@@ -155,9 +156,9 @@ export function mug() {
 }
 
 // ---------- oak desk (1.6 x 0.8 m top at 0.75 m, black steel T-legs; origin on the floor, front edge at +z) ----------
-export function oakDesk({ w = 1.6, d = .8, h = .75 } = {}) {
+export function oakDesk({ w = 1.6, d = .8, h = .75, tint = 0xffffff } = {}) {
   const g = new THREE.Group(); g.name = 'oak-desk';
-  const oak = pbrSet('oak_veneer_01', { size: 1.2 });
+  const oak = pbrSet('oak_veneer_01', { size: 1.2, color: tint });
   const top = mesh(rbox(w, .028, d, .006), oak, 0, h - .014, 0); top.name = 'desktop'; g.add(top);
   for (const s of [-1, 1]) {
     const x = s * (w / 2 - .09);

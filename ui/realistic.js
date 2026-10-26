@@ -1,10 +1,10 @@
-// Realistic look, proof of concept (Phase 3.2 step 1): one desk corner at ?look=realistic, next to (not instead of)
+// Realistic look, proof of concept (Phase 3.2 step 1): one desk corner at ?look=desk-poc, next to (not instead of)
 // the default look. Real-size furniture and props with physically based materials (Poly Haven CC0 models and
 // textures, plus pieces built in realistic-props.js), one Microsoft Rocketbox person (MIT) who types, stands up,
 // walks a few steps and sits back down, image-based light from the studio HDRI, a soft sun shadow, a warm desk lamp,
 // contact shadows, ambient occlusion (the models' own baked AO maps plus GTAO on High) and AgX tone mapping.
 // Two cameras: the office's isometric view and a closer 3/4 view of the desk.
-//   ?look=realistic[&view=wide|close][&desk=oak|metal][&quality=high|low][&t=seconds into the loop][&cam=x,y,z&at=x,y,z]
+//   ?look=desk-poc[&view=wide|close][&desk=oak|metal][&quality=high|low][&t=seconds into the loop][&cam=x,y,z&at=x,y,z]
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';

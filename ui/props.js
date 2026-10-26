@@ -3,15 +3,17 @@
 // Props come from the role template appearance (`props`, `screen`); without them the role kind decides.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { REAL } from './look.js';
 
-const M = (c, o = {}) => new THREE.MeshToonMaterial({ color: c, ...o });
+// toon by default; in the realistic look the toys are glossy plastic and ceramic (physical, smoother)
+const M = (c, o = {}) => (REAL ? new THREE.MeshPhysicalMaterial({ color: c, roughness: .35, clearcoat: .5, clearcoatRoughness: .2, ...o }) : new THREE.MeshToonMaterial({ color: c, ...o }));
 const B = (c) => new THREE.MeshBasicMaterial({ color: c });
 const TOP = .955;                                      // desk surface height in the station group
 
 function mesh(geo, m, x, y, z, parent) { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o; }
-const rbox = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 1, r);
-const ball = (r, w = 12, h = 8) => new THREE.SphereGeometry(r, w, h);
-const cylg = (rt, rb, h, s = 12) => new THREE.CylinderGeometry(rt, rb, h, s);
+const rbox = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, REAL ? 4 : 1, r);
+const ball = (r, w = 12, h = 8) => new THREE.SphereGeometry(r, REAL ? w * 3 : w, REAL ? h * 3 : h);
+const cylg = (rt, rb, h, s = 12) => new THREE.CylinderGeometry(rt, rb, h, REAL ? s * 3 : s);
 
 // keys drawn once and shared by every keyboard
 let keysTex = null;
@@ -101,9 +103,18 @@ export function propsFor(agent) {
   return { props: props.filter((p) => TOYS[p]).slice(0, 2), screen };
 }
 
-// device: laptop | dual-monitor; mug in the shirt colour
+// device: laptop | dual-monitor; mug in the shirt colour (the realistic look builds these in realistic-office.js
+// and only takes the toys from here)
 export function deskProps(g, agent, device) {
   const { props } = propsFor(agent);
+  if (!REAL) basics(g, agent, device);
+  [[.56, .86], [-.52, .84]].forEach(([x, z], i) => {
+    if (!props[i]) return;
+    const t = new THREE.Group(); t.position.set(x, TOP, z); g.add(t);
+    TOYS[props[i]](t);
+  });
+}
+function basics(g, agent, device) {
   if (device === 'dual-monitor') keyboard(g, 0, .977, .45, .48, .16);
   else keyboard(g, 0, .997, .45, .54, .17);               // the laptop's own keys
   mesh(rbox(.24, .006, .2, .003), M('#2f3a4a'), -.48, TOP + .003, .45, g);            // mouse pad, on the agent's right (-x)
@@ -112,9 +123,4 @@ export function deskProps(g, agent, device) {
   mesh(cylg(.055, .05, .12), M(mugColor), .56, TOP + .06, .42, g);
   mesh(new THREE.TorusGeometry(.034, .011, 8, 16), M(mugColor), .505, TOP + .06, .42, g).rotation.y = Math.PI / 2;
   mesh(new THREE.CircleGeometry(.048, 16), M('#5b3a1e'), .56, TOP + .115, .42, g).rotation.x = -Math.PI / 2;
-  [[.56, .86], [-.52, .84]].forEach(([x, z], i) => {
-    if (!props[i]) return;
-    const t = new THREE.Group(); t.position.set(x, TOP, z); g.add(t);
-    TOYS[props[i]](t);
-  });
 }

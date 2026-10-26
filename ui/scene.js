@@ -13,6 +13,8 @@ import { Quality, contactShadow } from './render.js';
 import { loadKit, kit, kitStamp } from './kit.js';
 import { NavGrid, footprints } from './nav.js';
 import { deskProps, propsFor } from './props.js';
+import { REAL } from './look.js';
+import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realLid, realLaptop, realDeskProps, REAL_DEVICES } from './realistic-office.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -219,7 +221,8 @@ const KIT_DEVICES = {
 function buildDevice(d) {
   const g = new THREE.Group();
   g.userData.device = d.id;
-  if (!KIT_DEVICES[d.type]?.(g, d)) (DEVICE_BUILDERS[d.type] || DEVICE_BUILDERS.plant)(g, d);
+  const built = REAL ? REAL_DEVICES[d.type]?.(g, d, FD, MEETING_SEATS) : KIT_DEVICES[d.type]?.(g, d);
+  if (!built) (DEVICE_BUILDERS[d.type] || DEVICE_BUILDERS.plant)(g, d);
   g.position.set(d.x, TOP, d.z); g.rotation.y = d.ry || 0;
   return g;
 }
@@ -229,22 +232,10 @@ function buildDevice(d) {
 // wall with the Floor name and tagline on the back wall
 function buildRoom(g, f, accent) {
   const lobby = !f;
-  box(FW + .5, .3, FD + .5, mat('#e7dfd1'), 0, .15, 0, g, .02);                              // slab
-  box(FW, .06, FD, f?.missing ? mat('#cfc8bb') : mat('#ffffff', { map: wood(), roughness: .6 }), 0, TOP - .03, 0, g, 0);
-  const wall = mat('#f6f2ea');
-  box(FW + .3, FH, .3, wall, -.15, TOP + FH / 2, -FD / 2 - .15, g, 0);                       // back wall
-  box(.3, FH, FD, wall, -FW / 2 - .15, TOP + FH / 2, 0, g, 0);                                // left wall
-  box(FW, .32, .06, mat('#2f3a4a'), 0, TOP + .16, -FD / 2 + .03, g, 0);                       // baseboards
-  box(.06, .32, FD, mat('#2f3a4a'), -FW / 2 + .03, TOP + .16, 0, g, 0);
+  if (REAL) realRoom(g, { FW, FD, FH, TOP, missing: f?.missing });                            // realistic look: PBR floor, plaster, windows
+  else buildToonRoom(g, f);
   box(FW + .5, .07, .07, basic(accent), 0, .27, FD / 2 + .25, g, 0);                          // brand colour stripe
   box(.07, .07, FD + .5, basic(accent), FW / 2 + .25, .27, 0, g, 0);
-  // windows on the left wall
-  const glass = mat('#bfe3f5', { emissive: '#bfe3f5', emissiveIntensity: .35, roughness: .1 });
-  for (const z of [-4.2, .2, 4.4]) {
-    box(.08, 1.7, 2.8, glass, -FW / 2 + .02, TOP + 2.05, z, g, 0);
-    for (const y of [1.2, 2.9]) box(.12, .1, 3, mat('#2f3a4a'), -FW / 2 + .05, TOP + y, z, g, 0);
-    box(.12, 1.8, .1, mat('#2f3a4a'), -FW / 2 + .05, TOP + 2.05, z, g, 0);
-  }
   if (lobby) return;
   // brand wall: a dark panel with the Floor name and its tagline
   box(5.6, FH - .4, .05, mat('#2f4858'), -4.3, TOP + FH / 2 + .1, -FD / 2 + .03, g, 0);
@@ -253,6 +244,22 @@ function buildRoom(g, f, accent) {
   if (f.tagline) lines.push({ text: f.tagline, size: 96, weight: 600, color: '#cbd5e1', y: .78 });
   const sign = textPlane(lines, 5.2, 2.2);
   sign.position.set(-4.3, TOP + 2.25, -FD / 2 + .08); g.add(sign);
+}
+function buildToonRoom(g, f) {
+  box(FW + .5, .3, FD + .5, mat('#e7dfd1'), 0, .15, 0, g, .02);                              // slab
+  box(FW, .06, FD, f?.missing ? mat('#cfc8bb') : mat('#ffffff', { map: wood(), roughness: .6 }), 0, TOP - .03, 0, g, 0);
+  const wall = mat('#f6f2ea');
+  box(FW + .3, FH, .3, wall, -.15, TOP + FH / 2, -FD / 2 - .15, g, 0);                       // back wall
+  box(.3, FH, FD, wall, -FW / 2 - .15, TOP + FH / 2, 0, g, 0);                                // left wall
+  box(FW, .32, .06, mat('#2f3a4a'), 0, TOP + .16, -FD / 2 + .03, g, 0);                       // baseboards
+  box(.06, .32, FD, mat('#2f3a4a'), -FW / 2 + .03, TOP + .16, 0, g, 0);
+  // windows on the left wall
+  const glass = mat('#bfe3f5', { emissive: '#bfe3f5', emissiveIntensity: .35, roughness: .1 });
+  for (const z of [-4.2, .2, 4.4]) {
+    box(.08, 1.7, 2.8, glass, -FW / 2 + .02, TOP + 2.05, z, g, 0);
+    for (const y of [1.2, 2.9]) box(.12, .1, 3, mat('#2f3a4a'), -FW / 2 + .05, TOP + y, z, g, 0);
+    box(.12, 1.8, .1, mat('#2f3a4a'), -FW / 2 + .05, TOP + 2.05, z, g, 0);
+  }
 }
 
 // ---------- agents at desks ----------
@@ -267,8 +274,9 @@ function buildStation(agent, desk, accent) {
   g.position.set(desk.x, TOP, desk.z); g.rotation.y = desk.ry || 0; g.scale.setScalar(STATION_SCALE);
   g.userData.agent = agent.id;
   const lead = agent.lead || agent.kindOf === 'lead';
-  const kd = kit(lead ? 'table_medium' : 'table_medium_long', { w: 1.6, d: .8, h: .955, uniform: false });   // KayKit desk when loaded
-  if (kd) { kd.position.set(0, 0, .62); g.add(kd); }
+  const kd = !REAL && kit(lead ? 'table_medium' : 'table_medium_long', { w: 1.6, d: .8, h: .955, uniform: false });   // KayKit desk when loaded
+  if (REAL) realDesk(g, lead);                                                  // oak desk and an office chair
+  else if (kd) { kd.position.set(0, 0, .62); g.add(kd); }
   else {
     box(1.6, .07, .8, mat(lead ? '#8a5a35' : '#f4efe6', { roughness: .5 }), 0, .92, .62, g);         // desk
     for (const x of [-.72, .72]) box(.06, .9, .66, mat('#2f3a4a', { metalness: .5, roughness: .4 }), x, .46, .62, g, .02);
@@ -277,23 +285,25 @@ function buildStation(agent, desk, accent) {
   // a screen = dark bezel + canvas plane facing the chair (-z); clicking it opens the over-the-shoulder view
   const screen = (x, y, z, w, h, rx, ry, part) => {
     const grp = new THREE.Group(); grp.position.set(x, y, z); grp.rotation.set(rx, ry, 0); g.add(grp);
-    box(w, h, .03, mat('#111827', { roughness: .3 }), 0, 0, 0, grp, .01);
+    if (REAL) (desk.device === 'dual-monitor' ? realMonitor(grp, w, h, .955, y) : realLid(grp, w, h)); else box(w, h, .03, mat('#111827', { roughness: .3 }), 0, 0, 0, grp, .01);
     const S = makeScreen(w - .04, h - .04);
     S.mesh.position.z = -.017; S.mesh.rotation.y = Math.PI; S.mesh.userData.screen = true; S.part = part;
     grp.add(S.mesh); screens.push(S);
   };
   if (desk.device === 'dual-monitor') {
-    for (const x of [-.36, .36]) box(.05, .22, .05, mat('#3b4258'), x, 1.06, .8, g, .01);
+    if (!REAL) for (const x of [-.36, .36]) box(.05, .22, .05, mat('#3b4258'), x, 1.06, .8, g, .01);
     screen(-.36, 1.3, .8, .62, .38, 0, .5 * .36, 'main');
     screen(.36, 1.3, .8, .62, .38, 0, -.5 * .36, 'side');
-    box(.5, .02, .18, mat('#c9ced6'), 0, .965, .45, g, .005);                 // keyboard
+    if (!REAL) box(.5, .02, .18, mat('#c9ced6'), 0, .965, .45, g, .005);      // keyboard
   } else {
-    box(.62, .04, .42, mat('#cbd5e1', { metalness: .5, roughness: .3 }), 0, .975, .55, g, .01);   // laptop base
+    if (REAL) realLaptop(g, .955); else box(.62, .04, .42, mat('#cbd5e1', { metalness: .5, roughness: .3 }), 0, .975, .55, g, .01);   // laptop base
     screen(0, 1.17, .76, .6, .38, .25, 0, 'main');
   }
+  if (REAL) realDeskProps(g, .955, desk.device === 'dual-monitor', (agent.appearance && agent.appearance.shirt) || '#e2574c');
   deskProps(g, agent, desk.device);
-  const kc = kit('chair_C', { h: 1.12 });
-  if (kc) { kc.position.set(0, 0, -.08); kc.rotation.y = KIT_CHAIR_TURN; g.add(kc); }
+  const kc = !REAL && kit('chair_C', { h: 1.12 });
+  if (REAL) { /* the office chair came with the desk */ }
+  else if (kc) { kc.position.set(0, 0, -.08); kc.rotation.y = KIT_CHAIR_TURN; g.add(kc); }
   else {
     const chair = mat('#1f2937');
     box(.62, .1, .6, chair, 0, .55, -.05, g, .04);                              // chair
@@ -369,6 +379,8 @@ function poseDesk(st, t, awake = false) {
 
 // ?nav=1: the walkable grid (blocked cells in red) and the paths characters walk (navigation debug overlay)
 const NAV_DEBUG = typeof location !== 'undefined' && new URLSearchParams(location.search).get('nav') === '1';
+// ?states=working,idle,...: agent states by position, shown in the view only (screenshots of a look; nothing is sent)
+const DEMO_STATES = typeof location !== 'undefined' && new URLSearchParams(location.search).get('states')?.split(',');
 function navOverlay(grid) {
   const n = grid.blocked.reduce((a, b) => a + b, 0);
   const m = new THREE.InstancedMesh(new THREE.PlaneGeometry(grid.cell * .9, grid.cell * .9), basic('#dc2626', { transparent: true, opacity: .28, depthWrite: false }), n);
@@ -390,7 +402,7 @@ function drawPaths(o) {
 
 // ---------- floors ----------
 function sigOf(f) {
-  return JSON.stringify([kitStamp(), f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf])]);
+  return JSON.stringify([kitStamp(), officeStamp(), f.number, f.name, f.tagline, f.accent, f.layout, f.desks, f.devices, f.missing, (f.agents || []).map((a) => [a.id, a.appearance, a.lead, a.kindOf])]);
 }
 
 function dispose(o) {
@@ -421,7 +433,7 @@ export class BuildingScene {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = REAL ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
     this.labels = new CSS2DRenderer();
@@ -455,14 +467,17 @@ export class BuildingScene {
     this.roofSign = label('<b>The AI Squad</b>', 'rooflabel', this.roof, 0, 1.2, 0);
 
     // rendering quality: Low (one pass, as before), High (environment light, AO, grading, SMAA), Auto
-    this.quality = new Quality(this.renderer, this.scene, { hemi: this.hemi });
+    this.quality = new Quality(this.renderer, this.scene, { hemi: this.hemi, ...(REAL ? { exposure: { high: 1.45, low: 1.5 } } : {}) });
     // KayKit furniture (one small GLB): the Floors are rebuilt with it once it has loaded
-    loadKit('./assets/kaykit/office.glb', () => { if (this.lastFloors) this.sync(this.lastFloors); });
+    // realistic look (?look=realistic): Poly Haven furniture (one GLB) instead
+    if (REAL) loadOffice(() => { if (this.lastFloors) this.sync(this.lastFloors); });
+    else loadKit('./assets/kaykit/office.glb', () => { if (this.lastFloors) this.sync(this.lastFloors); });
     this.ray = new THREE.Raycaster();
     this.clock = new THREE.Clock();
     this.camAnim = null;
     this.bindPointer();
     this.resize();
+    if (DEMO_STATES) window.__scene = this;                                     // screenshots of a look reach the camera
     addEventListener('resize', () => this.resize());
     // the loop slows to a third of the frame rate when nothing moves (no input, no camera move, nobody walking)
     for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) addEventListener(ev, () => { this.lastInput = performance.now(); }, { passive: true });
@@ -516,7 +531,8 @@ export class BuildingScene {
       let o = this.floors.get(f.id);
       const d = this.draft && this.draft.id === f.id ? this.draft : null;
       // Edit Mode draft: layout, desks, devices and appearance previewed before saving
-      const view = d ? { ...f, layout: d.layout, desks: d.desks, devices: d.devices, agents: (f.agents || []).map((a) => (d.appearance[a.id] ? { ...a, appearance: { ...a.appearance, ...d.appearance[a.id] } } : a)) } : f;
+      let view = d ? { ...f, layout: d.layout, desks: d.desks, devices: d.devices, agents: (f.agents || []).map((a) => (d.appearance[a.id] ? { ...a, appearance: { ...a.appearance, ...d.appearance[a.id] } } : a)) } : f;
+      if (DEMO_STATES) view = { ...view, agents: (view.agents || []).map((a, i) => (DEMO_STATES[i] ? { ...a, state: DEMO_STATES[i] } : a)) };
       if (o && o.sig !== sigOf(view)) { dispose(o.g); o = null; }
       if (!o) { o = this.buildFloor(view); this.floors.set(f.id, o); }
       o.data = view;

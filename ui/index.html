@@ -84,8 +84,8 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <noscript>The AI Squad needs JavaScript.</noscript>
 <script type="module">
-// ?look=realistic opens the realistic-look proof of concept (Phase 3.2) instead of the office
-if (new URLSearchParams(location.search).get('look') === 'realistic') import('./realistic.js'); else import('./app.js');
+// ?look=desk-poc opens the Phase 3.2 step 1 desk corner instead of the office (?look=realistic is the office itself)
+if (new URLSearchParams(location.search).get('look') === 'desk-poc') import('./realistic.js'); else import('./app.js');
 </script>
 </body>
 </html>
