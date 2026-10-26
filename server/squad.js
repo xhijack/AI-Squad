@@ -171,7 +171,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
+      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
   // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
   const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
@@ -234,10 +234,11 @@ function floorAttention(entry, floor, lives, cost) {
         agentId: l.agent.id, agentName: l.agent.displayName, text: q.map((x) => x.question).join('\n\n'),
         options: (q[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.status.ask.ts });
     } else if (l.reply) {
-      out.push({ id: attId(entry.id, l.agent.id, 'reply', l.reply.ts), kind: 'reply', replyKey: replyKey(entry.id, l.agent.id, l.reply.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+      // the id is the agent's turn (session + end of turn), the same whether the card reads as a reply or as Finished
+      out.push({ id: attId(entry.id, l.agent.id, 'turn', l.turnKey), kind: 'reply', replyKey: replyKey(entry.id, l.agent.id, l.reply.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: l.reply.text, options: [], answerable: true, ts: l.reply.ts });
     } else if (l.finished) {
-      out.push({ id: attId(entry.id, l.agent.id, 'finished', l.finished.ts), kind: 'finished', replyKey: replyKey(entry.id, l.agent.id, l.finished.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+      out.push({ id: attId(entry.id, l.agent.id, 'turn', l.turnKey), kind: 'finished', replyKey: replyKey(entry.id, l.agent.id, l.finished.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: l.finished.text, options: [], answerable: true, calm: true, ts: l.finished.ts });
     } else if (!l.running && l.ended?.kind === 'crashed' && !l.ended.withLead && !l.ended.dismissed) {
       // teammates that went down with their lead are covered by the lead's item
@@ -724,10 +725,24 @@ export async function flushPending() {
   } finally { flushing = false; }
 }
 
-export async function answerAttention(id, option, text = '', { force = false } = {}) {
+// an answer to an item that is no longer there (the agent went on working, the snapshot moved on): typed text is
+// never lost, it goes to the agent as a message; a clicked option is "already answered" (409), a dismiss is fine
+export const GONE_PREFIX = { question: "Owner's answer to your earlier question: ", permission: "Owner's answer to your earlier question: " };
+async function answerGone({ floorId, agentId, kind }, option, text) {
+  const t = String(text || '').trim();
+  if (t && floorId && agentId && floorId !== ind.FLOOR_ID) {
+    locate(floorId, agentId);                                   // the agent must exist (404 otherwise)
+    const r = await sendTask(floorId, agentId, `${GONE_PREFIX[kind] || ''}${t}`);
+    return { ...r, ok: true, delivered: 'as-message' };
+  }
+  if (!Number(option) && !t) return { ok: true, gone: true };    // a dismiss of something already gone
+  throw new HttpError(409, 'Already answered');
+}
+
+export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '' } = {}) {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
-  if (!item) throw notFound('This item is gone (maybe already answered)');
+  if (!item) return answerGone({ floorId, agentId, kind }, option, text);
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'reply' || item.kind === 'finished') {
     if (!Number(option) && !String(text).trim()) { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
@@ -736,7 +751,7 @@ export async function answerAttention(id, option, text = '', { force = false } =
   }
   if (item.kind === 'decided') {
     const rt = loadRuntime(), d = rt.autopilot.decided.find((x) => x.id === item.decidedId);
-    if (!d) throw notFound('This decision is gone');
+    if (!d) throw new HttpError(409, 'Already answered');
     const opt = item.options.find((o) => o.n === Number(option));
     const label = opt ? opt.label : String(text || '').trim();
     if (!label) { d.acked = Date.now(); saveRuntime(rt); invalidate(); return { ok: true }; }   // OK: the owner keeps it
@@ -749,7 +764,7 @@ export async function answerAttention(id, option, text = '', { force = false } =
   }
   if (item.kind === 'scope') {
     const S = collect.stateOf(item.floorId), ch = S.scope?.changed;
-    if (!ch) throw notFound('This scope change is gone');
+    if (!ch) throw new HttpError(409, 'Already answered');
     ch.acked = Date.now(); collect.saveState(item.floorId);
     logEvent(item.floorId, { type: 'question.answered', data: { channel: 'scope mode', answer: Number(option) === 2 ? `back to ${ch.from}` : `accept ${ch.to}`, waitMs: Date.now() - ch.ts } });
     invalidate();
@@ -771,7 +786,7 @@ export async function answerAttention(id, option, text = '', { force = false } =
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
   if (item.independent) {
     const dialog = tm.parsePrompt(tm.capturePane(item.target, config.scanTmuxSocket));
-    if (!dialog) throw notFound('The dialog is gone (maybe already answered)');
+    if (!dialog) throw new HttpError(409, 'Already answered');
     const r = tm.answerDialog('', dialog, Number(option), text, { target: item.target, socket: config.scanTmuxSocket });
     if (!r.ok) throw bad(r.error);
     ind.resetCache(); invalidate();
@@ -779,7 +794,7 @@ export async function answerAttention(id, option, text = '', { force = false } =
   }
   const name = tm.sessionName(item.floorId, item.agentId);
   const dialog = tm.parsePrompt(tm.capture(name));
-  if (!dialog) throw notFound('The dialog is gone (maybe already answered)');
+  if (!dialog) return answerGone({ floorId: item.floorId, agentId: item.agentId, kind: item.kind }, option, text);
   const r = tm.answerDialog(name, dialog, Number(option), text);
   if (!r.ok) throw bad(r.error);
   invalidate();

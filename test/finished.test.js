@@ -91,3 +91,47 @@ test('a teammate spawned by the lead reports to the lead: no card', async () => 
   assert.equal(items().some((a) => a.agentId === 'budi-dev'), false);
   squad.stopAgent(FLOOR, 'rina-pm');
 });
+
+test('answers to items that moved on: typed text still reaches the agent, a clicked option is "already answered"', async () => {
+  await squad.startAgent(FLOOR, 'dewi-devops');
+  assert.ok(await wait(() => items().some((a) => a.kind === 'permission')) || true);
+  const trust = items().find((a) => a.kind === 'permission' && a.agentId === 'dewi-devops');
+  if (trust) await squad.answerAttention(trust.id, 1);
+  const where = { floorId: FLOOR, agentId: 'dewi-devops' };
+  // a reply typed into a card whose id no longer exists
+  let r = await squad.answerAttention('deadbeef0001', 1, 'Please also check the backups.', { ...where, kind: 'finished' });
+  assert.deepEqual([r.ok, r.delivered], [true, 'as-message']);
+  assert.ok(await wait(() => fs.readFileSync(LOG, 'utf8').includes('TASK Please also check the backups.')));
+  // free text for a question whose dialog is gone
+  r = await squad.answerAttention('deadbeef0002', 3, 'Use port 8310', { ...where, kind: 'question' });
+  assert.equal(r.delivered, 'as-message');
+  assert.ok(await wait(() => fs.readFileSync(LOG, 'utf8').includes("TASK Owner's answer to your earlier question: Use port 8310")));
+  // only an option clicked: already answered (409), never a 404
+  await assert.rejects(squad.answerAttention('deadbeef0003', 2, '', { ...where, kind: 'question' }), (e) => e.status === 409 && e.message === 'Already answered');
+  await assert.rejects(squad.answerAttention('deadbeef0004', 1, ''), (e) => e.status === 409, 'no context at all');
+  // a dismiss of something already gone is fine
+  assert.deepEqual(await squad.answerAttention('deadbeef0005', 0, '', where), { ok: true, gone: true });
+  // an unknown agent is refused, not messaged
+  await assert.rejects(squad.answerAttention('deadbeef0006', 1, 'hello', { floorId: FLOOR, agentId: 'nobody', kind: 'reply' }), (e) => e.status === 404);
+  squad.stopAgent(FLOOR, 'dewi-devops');
+});
+
+test('a turn keeps its card id whether it reads as a reply or as Finished', async () => {
+  await squad.startAgent(FLOOR, 'dewi-devops');
+  assert.ok(await wait(() => items().some((a) => a.kind === 'permission' && a.agentId === 'dewi-devops')) || true);
+  const trust = items().find((a) => a.kind === 'permission' && a.agentId === 'dewi-devops');
+  if (trust) await squad.answerAttention(trust.id, 1);
+  const file = path.join(projectDir(proj), 'sess-dewi.jsonl');
+  const ts = new Date(Date.now() + 2000).toISOString();          // after the tasks the earlier tests sent
+  const write = (text) => fs.writeFileSync(file, jsonl([{ type: 'agent-setting', agentSetting: 'dewi-devops', sessionId: 'sess-dewi' },
+    { type: 'user', timestamp: new Date(Date.now() - 90e3).toISOString(), message: { role: 'user', content: 'x' } },
+    { type: 'assistant', timestamp: ts, message: { id: 'turn-1', stop_reason: 'end_turn', content: [{ type: 'text', text }] } }]));
+  write('Inventory done.');
+  assert.ok(await wait(() => items().some((a) => a.agentId === 'dewi-devops' && a.kind === 'finished')));
+  const id1 = items().find((a) => a.agentId === 'dewi-devops' && a.kind === 'finished').id;
+  assert.equal(items().find((a) => a.agentId === 'dewi-devops' && a.kind === 'finished').id, id1, 'stable across snapshots');
+  write('Inventory done. Shall I start the staging install?');
+  assert.ok(await wait(() => items().some((a) => a.agentId === 'dewi-devops' && a.kind === 'reply')));
+  assert.equal(items().find((a) => a.agentId === 'dewi-devops' && a.kind === 'reply').id, id1, 'the same turn, the same id');
+  squad.stopAgent(FLOOR, 'dewi-devops');
+});

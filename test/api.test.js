@@ -334,3 +334,12 @@ test('voice: the key is write-only over HTTP; speak returns audio; an agent keep
   assert.deepEqual((await call('DELETE', '/api/voice/key')).body.key, { set: false, last4: '', source: '' });
   voice.setFetch(null);
 });
+
+test('answering an item that moved on over HTTP: typed text delivered, a clicked option 409', async () => {
+  const sent = await call('POST', '/api/attention/0123456789ab/answer', { option: 1, text: 'Ship it after QA.', floorId: 'acme', agentId: 'rina-pm', kind: 'reply' });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body)); assert.equal(sent.body.delivered, 'as-message');
+  const opt = await call('POST', '/api/attention/0123456789ab/answer', { option: 2, floorId: 'acme', agentId: 'rina-pm', kind: 'question' });
+  assert.deepEqual([opt.status, opt.body.error], [409, 'Already answered']);
+  assert.equal((await call('POST', '/api/attention/0123456789ab/answer', { option: 0 })).status, 200, 'dismissing something gone is fine');
+  await call('POST', '/api/floors/acme/agents/rina-pm/stop', {});
+});

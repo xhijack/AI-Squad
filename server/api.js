@@ -163,7 +163,7 @@ const routes = [
 
   ['POST', /^\/api\/independents\/rescan$/, () => squad.rescanIndependents(), { pin: true }],
   ['POST', /^\/api\/independents\/([\w-]+)\/adopt$/, ([id], b) => squad.adoptIndependent(id, b), { pin: true }],
-  ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text, { force: !!b.force }), { pin: true }],
+  ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text, { force: !!b.force, floorId: String(b.floorId || ''), agentId: String(b.agentId || ''), kind: String(b.kind || '') }), { pin: true }],
 ];
 
 // 127.0.0.0/8, ::1 and localhost; 0.0.0.0, :: and real addresses are not
