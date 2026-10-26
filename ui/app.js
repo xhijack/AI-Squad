@@ -542,7 +542,7 @@ document.addEventListener('submit', async (e) => {
   const r = e.target.closest('form[data-act="reply"]');
   if (!r) return;
   e.preventDefault();
-  const btn = r.querySelector('button.gold'); btn.disabled = true;
+  const btn = r.querySelector('button:not([type=button])'); btn.disabled = true;   // Send reply (reply card) or Reply (Finished card)
   try { await api('POST', `/api/attention/${r.dataset.id}/answer`, { option: 1, text: r.elements.text.value }); drafts.delete(r.dataset.id); r.elements.text.blur(); toast('Reply sent'); } catch (err) { btn.disabled = false; toast(err.message); }
   refresh();
 });
