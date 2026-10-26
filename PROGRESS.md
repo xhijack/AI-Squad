@@ -594,6 +594,30 @@ Tests (`test/nav.test.js`): two ten-minute soaks of the real office life (`updat
 - Navigation and Edit Mode work in the wider room (`ROOM` follows `FW` and `FD`), and the camera frames the larger room by itself (Floor, Desk and Lobby views). The office life soak on the owner's layout runs in the wider room and still finds no penetrations.
 - Screenshots: `playground/reference/wider-0.8.4-owner-floor.png` (owner's layout, after), `wider-0.8.4-before-owner-floor.png` (before) and `wider-0.8.4-realistic-rows-lobby.png`.
 
+## 0.8.5: Bahasa Indonesia (Phase 3.3 item 5, 26 Oct 2026)
+
+- Language switch: Menu → Language (English ⇄ Bahasa Indonesia) and Floor settings → "Language (this browser)". It is stored per browser (`aisquad.lang`), and switching reloads the page.
+- All UI copy goes through one table. `t('English text', { vars })` in the UI: the English text is the key, `ui/i18n/en.json` lists the 1,106 keys and `ui/i18n/id.json` translates each.
+  - This covers the HUD, dock, panels, Attention cards, dialogs, wizard, Set up Squad, Edit Mode, conversation view, Squad Log, Audit, Retro, Ship readiness, designs, voice settings, screens drawn in 3D, name tags, lounge labels and lead shouts.
+  - Static `index.html` text uses `data-i18n` attributes.
+- Server text shown in the UI goes through `tx()`, which also matches keys with placeholders. That covers:
+  - agent activity ("mengedit {file}");
+  - waiting, budget, stall, resource, merge, scope and crash texts;
+  - the 58 fixed error messages;
+  - Floor 1's name;
+  - toasts, which pass everything through `tx()`.
+  - Agent-written text (questions, replies, reports, transcripts, documents) is never translated. Code, file names, model names and JSON keys stay English (D5).
+- Indonesian copy: friendly and natural, "kamu", no emoji, one glossary (`ui/i18n/GLOSSARY.md`: Gedung, Lantai, Lobi, Meja, agen, …). When the UI is Indonesian, lead shouts use an Indonesian browser voice.
+- Server fix found on the way: a static `.json` file under `ui/` was sent JSON-encoded as a Buffer object. It is now served as it is.
+- Tests (`test/i18n.test.js`):
+  - both files have the same keys, and every `t('…')` / `tt('…')` literal in `ui/*.js` has one;
+  - placeholders and HTML tags match in every translation;
+  - no "Anda", no emoji;
+  - `tx()` matches patterns.
+  - Plus an api test that the table is served as JSON.
+- Tooling: `scripts/i18n-merge.js` folds translation fragments into the table.
+- The conversion was split over four helper agents by file. Their key sets were checked against the code and merged, and six duplicate keys were settled to one wording.
+
 ## How to run
 
 ```
