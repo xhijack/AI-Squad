@@ -311,3 +311,26 @@ test('design variants: listed, served sandboxed, picked into DESIGN.md; paths ou
   assert.match(fs.readFileSync(path.join(proj, 'docs/DESIGN.md'), 'utf8'), /## Taste notes[\s\S]*rsvp: the owner picked "List" over "Cards"\. Why: denser/);
   assert.equal((await call('GET', '/api/building')).body.attention.some((a) => a.kind === 'design'), false, 'picked: no longer waiting');
 });
+
+test('voice: the key is write-only over HTTP; speak returns audio; an agent keeps a voice id', async () => {
+  const voice = await import('../server/voice.js');
+  delete process.env.ELEVENLABS_API_KEY;
+  voice.setFetch(async (url, init) => (url.endsWith('/voices') ? new Response(JSON.stringify({ voices: [] }), { status: 200 }) : new Response(Buffer.from('ID3fake-mp3'), { status: 200 })));
+  const KEY = 'sk_api_test_9876543210abcdQRST';
+  assert.equal((await call('PUT', '/api/voice/key', { key: KEY }, false)).status, 401, 'needs the PIN');
+  const set = await call('PUT', '/api/voice/key', { key: KEY });
+  assert.deepEqual(set.body.key, { set: true, last4: 'QRST', source: 'settings' });
+  const all = [JSON.stringify(set.body), JSON.stringify((await call('GET', '/api/voice')).body), JSON.stringify((await call('GET', '/api/building')).body)];
+  for (const t of all) assert.ok(!t.includes(KEY) && !t.includes(KEY.slice(0, 12)), 'the key never comes back');
+  const r = await fetch(`${base}/api/voice/speak`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-aisquad-pin': pin }, body: JSON.stringify({ floorId: 'acme', agentId: 'rina-pm', kind: 'finished', text: '## Done\n\nAll tests pass.' }) });
+  assert.equal(r.headers.get('content-type'), 'audio/mpeg'); assert.equal(Buffer.from(await r.arrayBuffer()).toString(), 'ID3fake-mp3');
+  const muted = await call('PATCH', '/api/voice', { mutedFloors: ['acme'] });
+  assert.deepEqual(muted.body.settings.mutedFloors, ['acme']);
+  assert.equal((await call('POST', '/api/voice/speak', { floorId: 'acme', agentId: 'rina-pm', text: 'Hello.' })).body.reason, 'this Floor is muted');
+  await call('PATCH', '/api/voice', { mutedFloors: [] });
+  assert.equal((await call('PATCH', '/api/floors/acme/agents/rina-pm', { voice: 'AZnzlk1XvdvUeBnXmlld' })).status, 200);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(proj, '.claude/aisquad/team.json'), 'utf8')).agents.find((a) => a.id === 'rina-pm').voice, 'AZnzlk1XvdvUeBnXmlld');
+  assert.ok(!fs.readFileSync(path.join(proj, '.claude/aisquad/team.json'), 'utf8').includes(KEY), 'never in the repo');
+  assert.deepEqual((await call('DELETE', '/api/voice/key')).body.key, { set: false, last4: '', source: '' });
+  voice.setFetch(null);
+});

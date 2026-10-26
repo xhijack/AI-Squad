@@ -23,7 +23,7 @@ export const TYPES = {
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
-  'usage.turn': 'usage',
+  'usage.turn': 'usage', 'voice.spoken': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
   'audit.done': 'audit', 'improvement.decided': 'audit', 'retro.done': 'audit',
   'autopilot.decided': 'autopilot', 'autopilot.nudged': 'autopilot', 'autopilot.blocked': 'autopilot', 'autopilot.changed': 'autopilot',
@@ -60,6 +60,7 @@ function summarize(e) {
     case 'ship.blocked': return `${d.branch} not merged: missing ${(d.missing || []).join(', ')}`;
     case 'design.picked': return `the owner picked "${d.title}" for ${d.screen} over ${d.others} other variant${d.others === 1 ? '' : 's'}`;
     case 'review.second': return `second opinion on ${e.module || d.module}: ${d.verdict}${d.model ? ` (${d.model})` : ''}`;
+    case 'voice.spoken': return `${who} spoke (${d.chars} characters${d.cached ? ', from the cache' : ''})`;
     case 'agent.model': return `${who} runs ${d.observed}, configured ${d.configured}`;
     case 'task.given': return `${d.by || 'owner'} gave ${who} a task${t(d.text)}`;
     case 'task.delegated': return `${who} delegated to ${d.to}${t(d.text)}`;

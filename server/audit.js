@@ -143,6 +143,7 @@ export function metrics(events, info = {}) {
     failedTools: { total: sum(Object.values(failed), (x) => x), retries, top: Object.entries(failed).map(([k, n]) => { const [tool, target] = k.split('\t'); return { tool, target, count: n }; }).sort((a, b) => b.count - a.count).slice(0, 8) },
     longOutputs: usage.filter((e) => e.data.output > LONG_OUTPUT).length,
     idleWithOpenWorkMin: r2(sum(Object.values(idleOpen), (x) => x) / 60e3, 1),
+    voice: { lines: of('voice.spoken').length, chars: sum(of('voice.spoken').filter((e) => !e.data.cached), (e) => e.data.chars || 0), cached: of('voice.spoken').filter((e) => e.data.cached).length },
     blockedOnOwnerMin: r2((sum(waits, (x) => x) + sum(permWaits, (x) => x)) / 60e3, 1),
     expensiveModelOnSimpleWork: Object.values(agents).filter((a) => a.models.opus && a.edits && a.editsDocsOnly).map((a) => ({ agent: a.agent, role: a.role, cost: r2(a.models.opus, 4), reason: 'opus for docs-only edits' })),
   };
@@ -256,6 +257,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['efficiency.cacheHitRate', E.cacheHitRate == null ? '–' : `${Math.round(E.cacheHitRate * 100)} %`],
       ['efficiency.costByModel', Object.entries(E.costByModel).map(([k, v]) => `${k} $${v.cost} (${Math.round(v.share * 100)} %)`).join(', ') || '–'],
       ['efficiency.failedTools', `${E.failedTools.total} failed, ${E.failedTools.retries} retried right away`],
+      ...(E.voice?.lines ? [['efficiency.voice', `${E.voice.lines} spoken lines, ${E.voice.chars} ElevenLabs characters (${E.voice.cached} from the cache)`]] : []),
       ['efficiency.longOutputs', `${E.longOutputs} replies over ${LONG_OUTPUT} output tokens`],
       ['efficiency.idleWithOpenWorkMin', E.idleWithOpenWorkMin],
       ['efficiency.blockedOnOwnerMin', E.blockedOnOwnerMin],

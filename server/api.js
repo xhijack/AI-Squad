@@ -16,6 +16,7 @@ import { meter } from './meter.js';
 import * as blueprints from './blueprints.js';
 import { recommend } from './recommend.js';
 import { createSquad, squadsDir } from './setup.js';
+import * as voice from './voice.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -111,6 +112,13 @@ const routes = [
   ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/performance$/, ([id]) => squad.performance(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/audits$/, ([id]) => squad.floorAudits(id), { pin: true }],
+  ['GET', /^\/api\/voice$/, () => squad.voiceInfo()],
+  ['PATCH', /^\/api\/voice$/, (p, b) => squad.setVoiceSettings(b), { pin: true }],
+  ['PUT', /^\/api\/voice\/key$/, (p, b) => { voice.setKey(b.key); return squad.voiceInfo(); }, { pin: true }],
+  ['DELETE', /^\/api\/voice\/key$/, () => { voice.clearKey(); return squad.voiceInfo(); }, { pin: true }],
+  ['GET', /^\/api\/voice\/voices$/, async () => ({ voices: await squad.voiceList() }), { pin: true }],
+  ['POST', /^\/api\/voice\/test$/, async () => { const r = await squad.voiceTest(); return r.audio ? { __audio: r.audio } : { ok: false, ...r }; }, { pin: true }],
+  ['POST', /^\/api\/voice\/speak$/, async (p, b) => { const r = await squad.speakLine(b); return r.audio ? { __audio: r.audio } : { ok: false, fallback: r.fallback, reason: r.reason, text: r.text }; }, { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/designs$/, ([id]) => squad.floorDesigns(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/designs\/([a-z0-9-]+)\/([\w.-]+\.html)$/, ([id, screen, file]) => ({ __file: squad.designVariantFile(id, screen, file), sandbox: true }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/designs\/([a-z0-9-]+)\/pick$/, ([id, screen], b) => squad.pickDesign(id, screen, String(b.file || ''), b.note), { pin: true }],
@@ -178,6 +186,7 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if ((opts.pin || lockReads) && !checkPin(pin, req.headers['x-aisquad-pin'])) return send(res, 401, { error: 'PIN required' });
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
         const out = await handler(m.slice(1), body, req);
+        if (out && out.__audio) { res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); return res.end(out.__audio); }
         if (out && out.__file && out.sandbox) {
           // a design variant: shown in an iframe, sandboxed (no scripts, no access to The AI Squad), nothing from outside
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',

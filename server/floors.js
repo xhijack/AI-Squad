@@ -320,6 +320,8 @@ export function updateAgent(root, id, input) {
     a.overrides = o;
   }
   if (input.appearance !== undefined) a.appearance = { ...a.appearance, ...cleanAppearance(input.appearance) };
+  // the agent's ElevenLabs voice (an id only; the key is never in the repo)
+  if (input.voice !== undefined) { if (/^[A-Za-z0-9]{10,40}$/.test(String(input.voice))) a.voice = String(input.voice); else delete a.voice; }
   if (input.lead !== undefined) { team.agents.forEach((x) => delete x.lead); if (input.lead) a.lead = true; }
   if (input.git !== undefined) { const g = cleanAgentGit(input.git); if (g) a.git = g; else delete a.git; }
   writeTeam(root, team);

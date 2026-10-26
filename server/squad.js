@@ -29,6 +29,7 @@ import * as learnings from './learnings.js';
 import * as rituals from './rituals.js';
 import * as ship from './ship.js';
 import * as design from './design.js';
+import * as voice from './voice.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -1171,6 +1172,29 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
   } finally { logging = false; }
   return n;
 }
+
+// ---------- voices (server/voice.js) ----------
+const voiceSettings = () => voice.cleanSettings(building.loadBuilding().prefs.voice || {});
+export const voiceInfo = () => ({ key: voice.keyStatus(), settings: voiceSettings(), usage: voice.usage(), models: voice.MODELS });
+export function setVoiceSettings(input) { const s = voice.cleanSettings({ ...voiceSettings(), ...input }); building.setPrefs({ voice: s }); return voiceInfo(); }
+export const voiceList = () => voice.voices();
+// who speaks: the agent's voice (team.json), its role's default, or the Building default
+function agentVoice(floorId, agentId) {
+  if (!floorId || floorId === ind.FLOOR_ID) return voice.DEFAULT_VOICE;
+  try { const a = floors.readFloor(building.floorEntry(floorId).path).team.agents.find((x) => x.id === agentId); return voice.voiceFor(a); } catch { return voice.DEFAULT_VOICE; }
+}
+// kind: finished | question | reply | shout | meeting | test; full: the whole message (the play button)
+// -> { audio } or { fallback, reason, text } (the browser then speaks the text itself, or stays silent)
+export async function speakLine({ floorId = '', agentId = '', kind = 'finished', text = '', full = false, visible = true } = {}) {
+  const s = voiceSettings();
+  if (!full && floorId && s.mutedFloors.includes(floorId)) return { fallback: 'silent', reason: 'this Floor is muted', text: '' };
+  if (!full && voice.quietNow(s)) return { fallback: 'silent', reason: 'quiet hours', text: '' };
+  if (!full && s.onlyVisible && !visible) return { fallback: 'silent', reason: 'the tab is not visible', text: '' };
+  const r = await voice.speak({ text, voice: agentVoice(floorId, agentId), settings: s, full });
+  if (r.audio && floorId) logEvent(floorId, { type: 'voice.spoken', agent: agentId || null, data: { kind, chars: r.chars, voice: r.voice, cached: r.cached } });
+  return r;
+}
+export const voiceTest = () => voice.speak({ text: 'Hello, this is The AI Squad. The voice works.', voice: voice.DEFAULT_VOICE, settings: voiceSettings() });
 
 // ---------- design variants (server/design.js) ----------
 export function floorDesigns(floorId) { return { groups: design.groups(building.floorEntry(floorId).path) }; }
