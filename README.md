@@ -177,6 +177,28 @@ Git libraries are cloned into `~/.aisquad/libraries/<name>` and pulled when you 
 { "libraries": [{ "name": "team", "url": "git@github.com:org/roles.git", "ref": "main", "subdir": "roles" }] }
 ```
 
+### Autopilot
+
+Autopilot decides how far a squad keeps going without you. Floor settings → **Autopilot** (also in the Set up Squad review step):
+
+| Level | What happens |
+|---|---|
+| **Off** | Every question waits for you. Floors created before 0.4.0 start here. |
+| **Balanced** (default for new Floors) | The lead decides what is not critical, records it and keeps going. Critical items wait for you. |
+| **Full** | The lead decides everything except the hard-stop list. |
+
+**Always waits for you** (the hard-stop list, any level): money (prices, payments, billing), legal (contracts, licences, personal data and privacy law), production deploys, secrets and credentials, irreversible actions (deleting data, force push, dropping tables, history rewrites), scope or business changes to the PRD or the source documents, and a source document that does not exist yet. Under Balanced, also anything the Blueprint marks as owner-only (`ownerOnly:` in its frontmatter). The list lives in `server/autopilot.js`, and the lead's agent file gets the same list in its `## Autopilot` section. The check is a keyword match in English and Indonesian. When the text is unclear, the item counts as critical.
+
+How it works:
+- The lead decides questions that are not critical, writes each decision to the questions file as `DECIDED BY LEAD (autopilot), owner may correct`, and continues.
+- A question with an option marked "(Recommended)" that is not critical gets that option after the timeout (default 3 minutes, Floor setting). It stays in Attention as a muted **Decided by autopilot** card. **Change answer** sends your choice to the agent as a follow-up task, and **OK** keeps the decision. Permission prompts are never answered.
+- An unanswered **Waiting for your reply** ask that is not critical gets a nudge after the timeout: decide per the Autopilot rules, record it and continue.
+- When the lead and every teammate are idle for 5 minutes while the board has open tasks, the lead gets a nudge to continue (at most once per 15 minutes).
+- Autopilot turns on auto-resume after a crash. Sprint merges and the next sprint still follow their own settings. Nudges and resumes stop when the budget is reached, memory is under pressure, a critical item waits, or the backlog is empty.
+- Autopilot never approves a source document and never pushes. The budget, the memory guard and the source document gate stay in place.
+
+The Floor's status pill shows **Autopilot: Balanced** (or that something critical waits), and the Lobby shows **Decided by autopilot today**. The Squad Log records `autopilot.decided`, `autopilot.nudged`, `autopilot.blocked` and `autopilot.changed`. The Audit has an Autopilot section with the decisions taken, how many you changed later, critical items decided without you (must be 0) and the waiting saved.
+
 ### Merges
 
 Merges are done by The AI Squad server, never by an agent (decision D3). The policy lives in `git.json` (merge policy, squash or merge commit, quality gate, push policy); the one-time approval per Floor is stored on this machine in `~/.aisquad/approvals.json`, never in the repo.
