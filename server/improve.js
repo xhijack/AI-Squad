@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, VERSION } from './config.js';
+import * as learnings from './learnings.js';
 import { lineDiff, bad, notFound, clip, readText, writeText } from './util.js';
 import * as roles from './roles.js';
 import * as blueprints from './blueprints.js';
@@ -106,6 +107,13 @@ export function proposal(floor, auditId, findingId) {
       const same = blueprintWithLessons(before, c) === before;
       return { ...out, fromVersion: bp.version, toVersion: bp.version + 1, diff: lineDiff(before, after), applicable: !same, reason: same ? 'The Blueprint already has this change.' : '' };
     }
+    if (t.kind === 'project') {
+      // project memory: the rule lines become LEARNINGS.md entries (source: the audit finding)
+      if (!floor.root) return { ...out, reason: 'This Floor has no project folder.' };
+      const before = readText(learnings.fileOf(floor.root), '') || '';
+      const after = learnings.withEntries(before, c.addRules.map((text) => ({ source: `audit ${audit.id} ${finding.id}`, text })));
+      return { ...out, id: learnings.FILE, diff: lineDiff(before, after), applicable: after !== before, reason: after === before ? 'LEARNINGS.md already has these entries.' : '' };
+    }
     if (t.kind === 'floor-setting') {
       const s = SETTINGS[c.setting];
       if (!s) return { ...out, reason: `The setting ${c.setting || '(none)'} cannot be changed from an audit.` };
@@ -143,6 +151,8 @@ export function apply(floor, auditId, findingId, { updateFloor } = {}) {
     versionCreated = blueprints.saveBlueprintText(p.id, blueprintWithLessons(blueprints.blueprintText(p.id), c)).version;
   } else if (p.kind === 'floor-setting') {
     updateFloor(SETTINGS[p.setting].patch(p.value, floor.config));
+  } else if (p.kind === 'project') {
+    learnings.add(floor.root, c.addRules.map((text) => ({ source: `audit ${audit.id} ${finding.id}`, text })));
   }
   return decision(floor, audit, finding, { decision: 'applied', fromVersion: p.fromVersion ?? null, versionCreated });
 }
@@ -192,11 +202,11 @@ export function exportBundle({ now = Date.now() } = {}) {
     audits: listAudits(id).map((a) => anonymise({
       createdAt: a.createdAt, label: a.range?.label, events: a.range?.events, sprint: a.range?.sprint, model: a.model, cost: a.cost, scores: a.scores,
       metrics: { process: a.metrics.process, efficiency: a.metrics.efficiency, quality: a.metrics.quality },
-      findings: a.findings.map((f) => ({ area: f.area, severity: f.severity, title: f.title, recommendation: f.recommendation, evidenceCount: f.evidence.length, target: f.target ? { kind: f.target.kind, role: f.target.kind === 'floor-setting' ? undefined : f.target.id, setting: f.target.proposedChange.setting || undefined } : null })),
+      findings: a.findings.map((f) => ({ area: f.area, severity: f.severity, title: f.title, recommendation: f.recommendation, evidenceCount: f.evidence.length, target: f.target ? { kind: f.target.kind, role: f.target.kind === 'floor-setting' || f.target.kind === 'project' ? undefined : f.target.id, setting: f.target.proposedChange.setting || undefined } : null })),
     }, h, '', names)),
   })).filter((f) => f.audits.length);
   const decisions = ledger().map((d) => anonymise({ ts: d.ts, floor: d.floor, decision: d.decision, area: d.finding.area, severity: d.finding.severity,
-    kind: d.target?.kind, role: d.target?.kind === 'floor-setting' ? undefined : d.target?.id, fromVersion: d.fromVersion, versionCreated: d.versionCreated,
+    kind: d.target?.kind, role: d.target?.kind === 'floor-setting' || d.target?.kind === 'project' ? undefined : d.target?.id, fromVersion: d.fromVersion, versionCreated: d.versionCreated,
     reason: d.reason, metricBefore: d.metricBefore, metricAfter: d.outcome?.metricAfter || null }, h, '', names));
   const bundle = { v: 1, product: 'The AI Squad', version: VERSION, createdAt: new Date(now).toISOString(),
     note: 'Anonymised export: metrics, findings and decisions. No message text, no file contents; paths and ids are salted hashes. Nothing was uploaded.', floors, decisions };

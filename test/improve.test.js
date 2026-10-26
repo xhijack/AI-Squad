@@ -85,10 +85,21 @@ test('an audit can propose the Autopilot level as a Floor setting', () => {
   assert.equal(improve.proposal(F, '2026-10-26T13-00-00Z', 'F2').applicable, false);
 });
 
+test('a finding for the project adds LEARNINGS.md entries once the owner applies it', () => {
+  saveAudit('2026-10-26T14-00-00Z', [finding('F1', { kind: 'project', id: 'pos', proposedChange: change({ addRules: ['Cart totals: always round once, at the end.'] }) })]);
+  const proj = path.join(config.home, '..', 'pos-repo');
+  const F = { ...FLOOR, root: proj };
+  const p = improve.proposal(F, '2026-10-26T14-00-00Z', 'F1');
+  assert.equal(p.applicable, true); assert.equal(p.id, 'docs/squad/LEARNINGS.md');
+  assert.ok(p.diff.some((l) => l.op === '+' && /audit 2026-10-26T14-00-00Z F1: Cart totals: always round once/.test(l.text)));
+  improve.apply(F, '2026-10-26T14-00-00Z', 'F1', {});
+  assert.match(fs.readFileSync(path.join(proj, 'docs/squad/LEARNINGS.md'), 'utf8'), /^- \d{4}-\d{2}-\d{2} · audit 2026-10-26T14-00-00Z F1: Cart totals/m);
+});
+
 test('the next audit records the metrics after each applied change', () => {
   const next = saveAudit('2026-10-27T09-00-00Z', [], metricsOf(0.06, 0.75));
   const out = improve.recordOutcomes('pos', next);
-  assert.equal(out.length, 3, 'three applied changes');
+  assert.equal(out.length, 4, 'four applied changes');
   assert.equal(improve.recordOutcomes('pos', next).length, 0, 'once only');
   const l = improve.ledger({ floor: 'pos' });
   const role = l.find((d) => d.target?.kind === 'role-template');
