@@ -389,6 +389,22 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-sp
   .logDetail, .talk p { margin-left: 0; }
 }
 
+.auditRun label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; margin: 0; }
+.auditRun select { width: auto; }
+.kpis .sbar { display: block; height: 6px; background: var(--chip); border-radius: 6px; margin-top: 8px; overflow: hidden; }
+.kpis .sbar i { display: block; height: 100%; background: var(--ok); }
+.kpis .sbar.warn i { background: var(--warn); } .kpis .sbar.bad i { background: var(--bad); }
+.finding { margin-top: 10px; }
+.finding p { margin: 8px 0; }
+.evidence { gap: 6px; }
+.evLink { cursor: pointer; border: 0; font: inherit; font-size: 12px; }
+.auditTarget { margin-top: 10px; background: var(--sunk); border-radius: 12px; padding: 9px 11px; }
+.auditTarget .mono { margin-top: 6px; overflow-wrap: anywhere; }
+.trends { gap: 18px; margin-bottom: 6px; }
+.trend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.trend polyline { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+table.perf tr.pick { cursor: pointer; } table.perf tr.pick:hover, table.perf tr.sel { background: var(--sunk); }
+
 /* edit mode, first person bar, toast */
 #editBar { position: fixed; left: 50%; transform: translateX(-50%); width: max-content; bottom: 16px; z-index: 7; background: var(--panel); border: 1px solid var(--accent); border-radius: 16px; padding: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); box-shadow: var(--shadow); }
 #editBar .lbl { font-weight: 800; color: var(--accent); padding: 0 6px; }

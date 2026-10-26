@@ -5,6 +5,8 @@
 //   aisquad status       Floors, agents, Attention and machine resources as text
 //   aisquad stop         stop the server (agents keep running in tmux)
 //   aisquad uninstall    remove the systemd user service / launchd agent
+//   aisquad audit [floor] [--sprint N] [--model sonnet]   audit a Floor from its Squad Log (claude -p)
+//   aisquad audit export anonymised bundle of audits and decisions in ~/.aisquad/exports (never uploaded)
 // The server runs as a systemd user service (aisquad.service) where systemd exists, as a launchd agent on
 // macOS, otherwise as a detached process, so it survives closing the terminal or editor.
 // Options: --port 8097  --host 127.0.0.1  --no-open
@@ -100,7 +102,41 @@ async function status() {
   console.log(lines.join('\n'));
 }
 
+// the Floor by id or number; with a single squad Floor it may be left out
+function pickFloor(list, arg) {
+  if (arg) return list.find((f) => f.id === arg || String(f.number) === String(arg)) || null;
+  return list.length === 1 ? list[0] : null;
+}
+
+async function audit() {
+  const rest = args.slice(args.indexOf('audit') + 1);
+  const value = (k) => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : undefined; };
+  const floorArg = rest.find((a, i) => !a.startsWith('--') && !['--sprint', '--model'].includes(rest[i - 1]));
+  const { loadBuilding } = await import('../server/building.js');
+  const floors = loadBuilding().floors.sort((a, b) => a.number - b.number);
+  const f = pickFloor(floors, floorArg);
+  if (!f) {
+    console.log(`${floorArg ? `No Floor "${floorArg}".` : 'Which Floor?'} Usage: /aisquad audit <floor> [--sprint N] [--model sonnet|haiku|opus]`);
+    for (const x of floors) console.log(`  ${x.number}. ${x.id}`);
+    process.exitCode = 1;
+    return;
+  }
+  const squad = await import('../server/squad.js');
+  console.log(`Auditing ${f.id}${value('--sprint') ? ` sprint ${value('--sprint')}` : ''}...`);
+  const a = await squad.startAudit(f.id, { sprint: value('--sprint'), model: value('--model') });
+  const dir = path.join(config.home, 'audits', f.id);
+  if (a.error) console.log(`Audit stored with an error: ${a.error}`);
+  console.log(`Audit ${a.id} (${a.range.label}, ${a.range.events} events), reviewed by ${a.model} for $${(+a.cost || 0).toFixed(4)}.`);
+  console.log(`Scores: process ${a.scores.process}, efficiency ${a.scores.efficiency}, quality ${a.scores.quality} (overall ${a.scores.overall}).`);
+  const E = a.metrics.efficiency, P = a.metrics.process;
+  console.log(`Cost ${money(E.totals.cost)}, cost per SP ${E.costPerSP == null ? '-' : money(E.costPerSP)}, QA first-round pass ${P.qaFirstRoundPassRate == null ? '-' : `${Math.round(P.qaFirstRoundPassRate * 100)} %`}, cache hit rate ${E.cacheHitRate == null ? '-' : `${Math.round(E.cacheHitRate * 100)} %`}.`);
+  if (a.summary) console.log(`Summary: ${a.summary}`);
+  for (const x of a.findings) console.log(`  ${x.id} [${x.severity}, ${x.area}] ${x.title}: ${x.recommendation}${x.target ? ` (proposed change to ${x.target.kind} ${x.target.id})` : ''}`);
+  console.log(`Report: ${path.join(dir, `${a.id}.md`)}. Open the Floor's Audit dialog to apply or dismiss proposed changes.`);
+}
+
 async function main() {
+  if (cmd === 'audit') return audit();
   if (cmd === 'status') return status();
   if (cmd === 'stop') {
     if (!(await get('/api/building'))) return console.log('The AI Squad server is not running.');
@@ -112,7 +148,7 @@ async function main() {
     return console.log(r.removed ? `Removed the ${r.mode === 'systemd' ? 'aisquad.service user service' : 'launchd agent'}; the server is stopped. ~/.aisquad and your Floors are untouched.` : 'No service was installed.' + (r.stopped ? ' The detached server was stopped.' : ''));
   }
   if (cmd !== 'start' && cmd !== 'new-floor' && cmd !== 'open') {
-    console.log('Usage: aisquad [start | new-floor | status | stop | uninstall] [--port 8097] [--host 127.0.0.1] [--no-open]');
+    console.log('Usage: aisquad [start | new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export] [--port 8097] [--host 127.0.0.1] [--no-open]');
     process.exitCode = 1;
     return;
   }

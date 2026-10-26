@@ -57,7 +57,7 @@ function listHtml(list) {
 function draw() {
   const d = S.data, list = filtered();
   const opt = (v, label, cur) => `<option value="${esc(v)}" ${String(cur) === String(v) ? 'selected' : ''}>${esc(label)}</option>`;
-  const body = openModal(`<div class="mHead"><h3 class="grow">Squad Log · ${esc(ctx.state.floor?.name || S.floorId)}</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div>
+  const body = openModal(`<div class="mHead">${S.back ? '<button class="ghost small" data-back>← Audit</button>' : ''}<h3 class="grow">Squad Log · ${esc(ctx.state.floor?.name || S.floorId)}</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div>
     <div class="mBody">
       <div class="logFilters">
         <div class="seg" role="group" aria-label="View"><button type="button" data-view="all" aria-pressed="${S.view !== 'talk'}">Timeline</button><button type="button" data-view="talk" aria-pressed="${S.view === 'talk'}">Conversation</button></div>
@@ -72,6 +72,7 @@ function draw() {
     </div>`);
   body.closest('dialog').classList.add('wide');
   body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
+  body.querySelector('[data-back]')?.addEventListener('click', () => ctx.reopenAudit?.());
   body.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { S.view = b.dataset.view; S.shown = PAGE; draw(); });
   body.querySelectorAll('[data-f]').forEach((sel) => sel.onchange = () => { S[sel.dataset.f] = sel.value; S.shown = PAGE; S.focus = null; sel.dataset.f === 'range' ? load() : draw(); });
   body.querySelector('[data-more]')?.addEventListener('click', () => { S.shown += PAGE; draw(); });
@@ -89,7 +90,7 @@ async function load() {
 ctx.actions.log = async (arg) => {
   const opts = arg instanceof Element ? {} : arg || {};
   const floorId = ctx.state.route.floorId;
-  S = { floorId, data: null, agent: opts.agent || '', cat: opts.cat || '', sprint: '', range: opts.range || '7', view: 'all', shown: PAGE, focus: opts.focus || null, open: new Set() };
+  S = { floorId, back: !!opts.back, data: null, agent: opts.agent || '', cat: opts.cat || '', sprint: '', range: opts.range || '7', view: 'all', shown: PAGE, focus: opts.focus || null, open: new Set() };
   if (opts.focus) { S.range = '0'; S.shown = 100000; }
   await load();
 };

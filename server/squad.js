@@ -19,6 +19,7 @@ import * as blueprintsLib from './blueprints.js';
 import * as skillsLib from './skills.js';
 import * as collect from './collect.js';
 import * as squadLog from './log.js';
+import * as auditLib from './audit.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -770,7 +771,15 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
       if (!fs.existsSync(entry.path)) continue;
       let cfg; try { cfg = floors.readFloor(entry.path); } catch { continue; }
       const base = collect.emitter(entry.id, logCtx(entry.id, entry.path, cfg));
-      const emit = (ev) => { const e = base(ev); if (e) { n++; onEvent?.(entry.id, e); } return e; };
+      const emit = (ev) => {
+        const e = base(ev);
+        if (!e) return e;
+        n++;
+        onEvent?.(entry.id, e);
+        // a sprint that closed just now is audited when the Floor has automatic audits on
+        if (e.type === 'sprint.closed' && cfg.floor.audit.auto && now - Date.parse(e.ts) < 3600e3) pendingAudits.set(entry.id, e.sprint);
+        return e;
+      };
       try {
         collectTranscripts(entry.id, entry.path, emit, now);
         for (const ev of collect.scanDocs(entry.id, entry.path, { blueprint: blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint) }, now)) emit(ev);
@@ -806,6 +815,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
     const f1 = snap.floors.find((x) => x.id === ind.FLOOR_ID);
     if (f1) for (const ev of collect.stateChanges(ind.FLOOR_ID, f1.agents, { independent: true }, now)) emit1(ev);
     collect.saveState(ind.FLOOR_ID);
+    runPendingAudits();
   } finally { logging = false; }
   return n;
 }
@@ -816,4 +826,56 @@ export function floorLog(floorId, q = {}) {
   const events = squadLog.read(floorId, q);
   return { floor: floorId, events, types: squadLog.TYPES, categories: squadLog.CATEGORIES,
     agents: [...new Set(events.map((e) => e.agent).filter(Boolean))].sort(), sprints: [...new Set(events.map((e) => e.sprint).filter((x) => x != null))].sort((a, b) => a - b) };
+}
+
+// ---------- Audit (server/audit.js) ----------
+const auditing = new Map();                    // floorId -> { since, sprint }
+const pendingAudits = new Map();               // floorId -> sprint closed, waiting for an automatic audit
+function auditInfo(entry, cfg) {
+  const bp = blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint);
+  return {
+    floorName: cfg.floor.name, workflow: cfg.floor.workflow, blueprint: bp ? `${bp.id} v${bp.version}` : '',
+    sourceDocs: (bp?.sourceDocs || []).map((d) => String(d.path)).filter(Boolean),
+    team: cfg.team.agents.map((a) => { let eff = null; try { eff = floors.effectiveOf(entry.path, a); } catch { /* broken template */ } return { id: a.id, role: a.role?.template || '', model: eff?.model || '', effort: eff?.effort || '' }; }),
+  };
+}
+
+export function floorAudits(floorId) {
+  const entry = building.floorEntry(floorId);
+  const cfg = floors.readFloor(entry.path);
+  const sprints = [...new Set(squadLog.read(floorId, { type: 'sprint', limit: 50000 }).map((e) => e.sprint).filter((x) => x != null))].sort((a, b) => a - b);
+  const r = auditing.get(floorId);
+  return { audits: auditLib.historyOf(floorId).reverse(), running: r ? { since: r.since, sprint: r.sprint } : null, settings: cfg.floor.audit, sprints, models: floors.AUDIT_MODELS };
+}
+export function floorAudit(floorId, auditId) {
+  building.floorEntry(floorId);
+  const a = auditLib.getAudit(floorId, auditId);
+  if (!a) throw notFound('Audit not found');
+  return a;
+}
+
+// runs in the background; returns the promise of the audit (the CLI waits for it, the API does not)
+export function startAudit(floorId, { sprint = null, model = '' } = {}) {
+  const entry = building.floorEntry(floorId);
+  if (auditing.has(floorId)) throw bad('An audit is already running on this Floor');
+  const cfg = floors.readFloor(entry.path);
+  const m = floors.AUDIT_MODELS.includes(model) ? model : cfg.floor.audit.model;
+  const n = sprint === '' || sprint == null ? null : Number(sprint);
+  if (n != null && !Number.isInteger(n)) throw bad('Sprint must be a number');
+  auditing.set(floorId, { since: Date.now(), sprint: n });
+  return auditLib.runAudit(floorId, auditInfo(entry, cfg), { sprint: n, model: m }).then((a) => {
+    logEvent(floorId, { type: 'audit.done', sprint: n, data: { audit: a.id, findings: a.findings.length, cost: a.cost, model: a.model, ...(a.error ? { error: a.error } : {}) } });
+    return a;
+  }).finally(() => auditing.delete(floorId));
+}
+
+function runPendingAudits() {
+  for (const [floorId, n] of pendingAudits) {
+    if (auditing.has(floorId)) continue;
+    const res = wd.readResources();
+    if (res.mem && res.mem.available < wd.LIMITS.freeRamBytes) return;      // claude -p waits for memory, like merges
+    pendingAudits.delete(floorId);
+    if (auditLib.listAudits(floorId).some((a) => a.range?.sprint === n)) continue;
+    try { startAudit(floorId, { sprint: n }).then((a) => console.log(`[audit] ${floorId} sprint ${n}: ${a.error || `${a.findings.length} findings`}`), (e) => console.error('[audit]', e.message)); } catch (e) { console.error('[audit]', e.message); }
+  }
 }

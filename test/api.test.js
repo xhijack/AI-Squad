@@ -143,6 +143,14 @@ test('the Squad Log records start, hook permission wait, tool call and stop; rea
   assert.deepEqual((await call('GET', '/api/floors/acme/log?type=lifecycle')).body.events.map((e) => e.type).filter((t) => !t.startsWith('agent.')), []);
 });
 
+test('audits: settings and history need the PIN; a Free Team Floor has automatic audits off', async () => {
+  assert.equal((await call('GET', '/api/floors/acme/audits', null, false)).status, 401);
+  const r = (await call('GET', '/api/floors/acme/audits')).body;
+  assert.deepEqual([r.audits, r.running, r.settings], [[], null, { auto: false, model: 'sonnet' }]);
+  assert.equal((await call('GET', '/api/floors/acme/audits/nope')).status, 404);
+  assert.equal((await call('POST', '/api/floors/acme/audits', { sprint: 'x' })).status, 400);
+});
+
 test('per-agent commit identity reaches the agent session as git env', async () => {
   assert.equal((await call('PATCH', '/api/floors/acme', { git: { commitIdentity: 'per-agent' } })).status, 200);
   assert.equal((await call('PATCH', '/api/floors/acme/agents/rina-pm', { git: { email: 'rina@sopwer.net' } })).status, 200);

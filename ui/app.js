@@ -11,6 +11,7 @@ import './setup.js';
 import './meter.js';
 import './cost.js';
 import './log.js';
+import './audit.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
@@ -253,7 +254,7 @@ function floorMenuHtml(f) {
   const any = (fn) => f.agents.some(fn);
   return [['floor-settings', 'Floor settings'], ['edit-mode', 'Edit layout and looks'], ['add-agent', 'Add agent'],
     ...(any((a) => !a.running) ? [['start-all', 'Start all agents']] : []), ...(any((a) => a.running) ? [['stop-all', 'Stop all agents']] : []),
-    ...(state.floor?.id === f.id && state.floor.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost'], ['log', 'Squad Log']]
+    ...(state.floor?.id === f.id && state.floor.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost'], ['log', 'Squad Log'], ['audit', 'Audit']]
     .map(([act, text]) => `<button role="menuitem" data-act="${act}">${text}</button>`).join('');
 }
 
@@ -275,6 +276,7 @@ function dockHtml(b, route, f) {
   if (floor && state.floor?.board) out.push(btn('board', 'board', 'Board'));
   if (floor && f.workflow === 'squad-sprint') out.push(btn('performance', 'chart', 'Performance and cost projection'));
   if (floor) out.push(btn('log', 'log', 'Squad Log: timeline and conversation'));
+  if (floor && !f.independent) out.push(btn('audit', 'audit', 'Audit: process and token efficiency'));
   out.push(btn('cost', 'coin', floor ? 'Cost of this Floor' : 'Cost of all Floors', '', money(floor ? f.cost.today : b.costToday)));
   out.push(`<button class="dk ${w.level}" data-act="meter" data-tip="Server meter: CPU, RAM, swap and disk" aria-label="Server meter, ${esc(w.text)}">${icon('server')}<i class="sdot ${w.level}"></i><span>${esc(w.text)}</span></button>`);
   out.push('<span class="dsep"></span>');
