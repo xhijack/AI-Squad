@@ -94,3 +94,4 @@ test('code window around the latest edit; never outside the repo or from .env', 
   assert.equal(squad.codeWindow(proj, { type: 'code', path: '.env', text: 'SECRET=1' }).firstLine, undefined);
   assert.equal(squad.codeWindow(proj, { type: 'code', path: '../../etc/passwd', text: 'root' }).firstLine, undefined);
 });
+

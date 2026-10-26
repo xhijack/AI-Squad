@@ -21,10 +21,11 @@ import * as collect from './collect.js';
 import * as squadLog from './log.js';
 import * as auditLib from './audit.js';
 import * as improve from './improve.js';
+import * as replyLib from './reply.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {} }; };
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {} }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
 
@@ -81,10 +82,12 @@ function costFor(floorId, root) {
 
 // ---------- live view of one Floor ----------
 const ASK_OPEN_MS = 6 * 3600e3;
-function liveAgents(entry, team, sessions, { events = false } = {}) {
+// squad: { gate } on Squad Sprint / Blueprint Floors, where the lead starts the teammates
+function liveAgents(entry, team, sessions, { events = false, squad = null } = {}) {
   const now = Date.now();
   const transcripts = tx.agentTranscripts(entry.path);
   const work = workOf(entry.id);
+  const dismissed = new Set(loadRuntime().dismissedReplies);
   // teammates the lead spawned live inside the lead's session: they count as running while it runs
   const lead = team.agents.find((x) => x.lead) || team.agents.find((x) => sprint.roleKind(x) === 'lead');
   const leadRunning = !!lead && sessions.has(tm.sessionName(entry.id, lead.id));
@@ -105,8 +108,12 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
     const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
     const hookWaiting = hookFresh && h.state === 'waiting';
     const working = busy || (hookFresh ? h.state === 'working' : recent);
-    const state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
+    let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
+    // the turn ended with a plain-text message asking the owner for something: waiting for the owner's reply
+    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking, isLead: a === lead }) : null;
+    if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
+    if (reply) state = 'waiting';
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
     if (dialog && st?.ask?.questions?.length) {
@@ -115,8 +122,15 @@ function liveAgents(entry, team, sessions, { events = false } = {}) {
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead };
+      hook: hookFresh ? h : null, activity, inLead, reply };
   });
+}
+const replyKey = (floorId, agentId, ts) => `${floorId}/${agentId}@${ts}`;
+// Squad Sprint and Blueprint Floors: the lead runs the squad; null on Free Team Floors without a Blueprint
+function squadOf(root, floor) {
+  const bp = blueprintsLib.floorBlueprint(root, floor.blueprint);
+  if (floor.workflow !== 'squad-sprint' && !bp) return null;
+  return { gate: bp ? blueprintsLib.docsGate(root, bp) : { blocking: false, pending: [] } };
 }
 
 function agentView(root, l, cost) {
@@ -125,7 +139,8 @@ function agentView(root, l, cost) {
   return {
     id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead,
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
-    state: l.state, running: l.running, inLead: l.inLead, activity: l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
+    state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
+    waitingReply: !!l.reply,
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
     models: modelReport(eff, l.running, l.started, l.status),
     peek: l.status?.peek ? codeWindow(root, (({ id, ...rest }) => rest)(l.status.peek)) : null, kindOf: sprint.roleKind(l.agent),
@@ -151,6 +166,9 @@ function floorAttention(entry, floor, lives, cost) {
       out.push({ id: attId(entry.id, l.agent.id, l.status.ask.id), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: q.map((x) => x.question).join('\n\n'),
         options: (q[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.status.ask.ts });
+    } else if (l.reply) {
+      out.push({ id: attId(entry.id, l.agent.id, 'reply', l.reply.ts), kind: 'reply', replyKey: replyKey(entry.id, l.agent.id, l.reply.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+        agentId: l.agent.id, agentName: l.agent.displayName, text: l.reply.text, options: [], answerable: true, ts: l.reply.ts });
     }
   }
   const work = workOf(entry.id);
@@ -171,9 +189,10 @@ function floorState(entry, opts = {}) {
   let cfg;
   try { cfg = floors.readFloor(entry.path); } catch (e) { return { entry, missing: true, error: e.message }; }
   const sessions = new Set(opts.sessions || tm.listSessions());
-  const lives = liveAgents(entry, cfg.team, sessions, opts);
+  const squad = squadOf(entry.path, cfg.floor);
+  const lives = liveAgents(entry, cfg.team, sessions, { ...opts, squad });
   const cost = costFor(entry.id, entry.path);
-  return { entry, cfg, lives, cost, attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
+  return { entry, cfg, lives, cost, squad, attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
 }
 
 const round2 = (n) => +(+n || 0).toFixed(2);
@@ -319,7 +338,8 @@ export function deskDetail(floorId, agentId) {
   const cfg = floors.readFloor(entry.path);
   const agent = cfg.team.agents.find((a) => a.id === agentId);
   if (!agent) throw notFound(`Agent not found: ${agentId}`);
-  const [l] = liveAgents(entry, { agents: [agent] }, new Set(tm.listSessions()), { events: true });
+  const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  const l = liveAgents(entry, { agents: [...new Set([agent, lead].filter(Boolean))] }, new Set(tm.listSessions()), { events: true, squad: squadOf(entry.path, cfg.floor) })[0];
   const cost = costFor(entry.id, entry.path);
   let effective = null, error = null;
   try { effective = floors.effectiveOf(entry.path, agent); } catch (e) { error = e.message; }
@@ -435,6 +455,10 @@ export function answerAttention(id, option, text = '') {
   const item = attentionItems().find((x) => x.id === id);
   if (!item) throw notFound('This item is gone (maybe already answered)');
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
+  if (item.kind === 'reply') {
+    if (!Number(option) && !String(text).trim()) { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
+    return sendTask(item.floorId, item.agentId, text);   // the reply goes to the agent as its next task
+  }
   if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
   if (item.independent) {

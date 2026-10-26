@@ -106,6 +106,23 @@ test('a finished turn is closed; a new task opens it again', () => {
   assert.equal(tx.transcriptStatus(f).turnOpen, true);
 });
 
+test('reply: the text the agent ended its turn with, cleared when the turn opens again', () => {
+  const f = path.join(root, 'reply.jsonl');
+  const turn = [
+    { type: 'user', timestamp: iso(5000), message: { content: 'Collect the documents' } },
+    { type: 'assistant', timestamp: iso(4900), message: { stop_reason: 'tool_use', content: [{ type: 'text', text: 'Checking the docs.' }, { type: 'tool_use', id: 'r1', name: 'Read', input: { file_path: 'docs/PRD.md' } }] } },
+    { type: 'user', timestamp: iso(4800), message: { content: [{ type: 'tool_result', tool_use_id: 'r1', content: 'STATUS: DRAFT' }] } },
+    { type: 'assistant', timestamp: iso(4000), message: { stop_reason: null, content: [{ type: 'text', text: 'The PRD is a draft.' }] } },
+    { type: 'assistant', timestamp: iso(3900), message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Please send the newer PRD?' }] } },
+    { type: 'user', isMeta: true, timestamp: iso(3800), message: { content: '<local-command-caveat>' } },
+  ];
+  fs.writeFileSync(f, jsonl(turn));
+  const st = tx.transcriptStatus(f);
+  assert.deepEqual(st.reply, { ts: Date.parse(turn[4].timestamp), text: 'The PRD is a draft.\n\nPlease send the newer PRD?' }, 'text after the last tool result only');
+  fs.writeFileSync(f, jsonl([...turn, { type: 'user', timestamp: iso(100), message: { content: 'Here it is' } }]));
+  assert.equal(tx.transcriptStatus(f).reply, null);
+});
+
 test('peek: the code being written, or the last command with its output', () => {
   const f = path.join(root, 'peek.jsonl');
   fs.writeFileSync(f, jsonl([

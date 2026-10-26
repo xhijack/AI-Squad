@@ -157,6 +157,13 @@ export function sourceDocsStatus(root, bp) {
   });
 }
 
+// the "source documents approved" gate: blocking while any source document is missing or still DRAFT
+export function docsGate(root, bp) {
+  const pending = sourceDocsStatus(root, bp).filter((d) => d.status !== 'approved');
+  const gated = (bp?.gates || []).some((g) => /source doc/i.test(g));
+  return { blocking: gated && pending.length > 0, pending };
+}
+
 // .claude/settings.json for a Blueprint squad: the lead spawns teammates (agent teams), background teammates
 // need allow rules for writing (they cannot answer prompts), and secrets stay denied (merged, idempotent)
 export const TEAM_ALLOW = ['Edit', 'Write', 'Bash(ls*)', 'Bash(mkdir *)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)', 'Bash(git add *)', 'Bash(git commit *)', 'Bash(git switch *)', 'Bash(git branch*)'];

@@ -84,10 +84,12 @@ function peekOf(c, root, ts, kind) {
   return null;
 }
 
-// status of one transcript: last activity, unanswered AskUserQuestion, last end of turn, events
+// status of one transcript: last activity, unanswered AskUserQuestion, last end of turn, the text the
+// agent ended its turn with (reply), events
 export function transcriptStatus(file, root = '', { events = false } = {}) {
   const recs = tailRecords(file);
   let lastTs = 0, activity = '', kind = 'idle', ask = null, lastEndTurn = 0, model = '', modelTs = 0, turnOpen = false;
+  let said = [], reply = null;                       // text since the last user record; reply = text of the last ended turn
   const evs = [];
   const messages = [];
   let peek = null;                                   // what the agent's monitor shows: latest code or command (+ output)
@@ -99,7 +101,8 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
     if (r.type === 'assistant') {
       if (msg.model && msg.model !== '<synthetic>') { model = msg.model; modelTs = ts; }
       turnOpen = msg.stop_reason !== 'end_turn';
-      if (!turnOpen) lastEndTurn = ts;
+      for (const c of content) if (c.type === 'text' && c.text?.trim() && said.at(-1) !== c.text.trim()) said.push(c.text.trim());
+      if (!turnOpen) { lastEndTurn = ts; reply = said.length ? { ts, text: said.join('\n\n') } : null; }
       for (const c of content) {
         if (c.type === 'tool_use') {
           [kind, activity] = describeTool(c.name, c.input, root);
@@ -114,7 +117,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
         }
       }
     } else if (r.type === 'user') {
-      if (!r.isMeta) turnOpen = true;                    // a task or a tool result: the agent continues
+      if (!r.isMeta) { turnOpen = true; said = []; reply = null; }   // a task or a tool result: the agent continues
       if (typeof msg.content === 'string' && events && !r.isMeta && !msg.content.startsWith('<')) evs.push({ ts, kind: 'task', title: 'task from owner', detail: clip(msg.content, 900) });
       for (const c of content) {
         if (c.type === 'tool_result' && ask && c.tool_use_id === ask.id) ask = null;
@@ -124,7 +127,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
       }
     }
   }
-  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, model, modelTs, messages, peek, ...(events ? { events: evs.slice(-120) } : {}) };
+  return { lastTs, activity, kind, ask, lastEndTurn, turnOpen, reply, model, modelTs, messages, peek, ...(events ? { events: evs.slice(-120) } : {}) };
 }
 
 // ---------- session ownership ----------

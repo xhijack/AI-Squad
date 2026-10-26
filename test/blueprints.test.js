@@ -121,6 +121,10 @@ test('the standard is written into AISQUAD.md and every agent file, with the rul
   fs.writeFileSync(path.join(r.path, 'docs/PRD.md'), read('docs/PRD.md').replace('STATUS: DRAFT', 'STATUS: APPROVED'));
   fs.rmSync(path.join(r.path, 'docs/ENVIRONMENTS.md'));
   assert.deepEqual(bp.sourceDocsStatus(r.path, f).map((d) => d.status), ['approved', 'draft', 'draft', 'missing']);
+  const gate = bp.docsGate(r.path, f);
+  assert.equal(gate.blocking, true);
+  assert.deepEqual(gate.pending.map((d) => d.path), ['docs/TECH.md', 'docs/DESIGN.md', 'docs/ENVIRONMENTS.md']);
+  assert.equal(bp.docsGate(r.path, { ...f, gates: ['tests green'] }).blocking, false, 'no source document gate, nothing blocks');
   // regenerating keeps exactly one standard block and does not overwrite the owner's documents
   const { addAgent } = await import('../server/floors.js');
   addAgent(r.path, { displayName: 'Quinn - QA', template: 'qa-engineer' });

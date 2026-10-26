@@ -121,6 +121,36 @@ test('hook events make the agent live: permission prompt in Attention, Stop ends
   assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'idle');
 });
 
+test('a turn that ends asking the owner is "Waiting for your reply"; the reply goes to the agent as a task', async () => {
+  const { projectDir } = await import('../server/transcripts.js');
+  fs.mkdirSync(projectDir(proj), { recursive: true });
+  const now = new Date().toISOString();
+  fs.writeFileSync(path.join(projectDir(proj), 'budi.jsonl'), [{ type: 'agent-setting', agentSetting: 'budi-dev' },
+    { type: 'user', timestamp: now, message: { content: 'Plan the catalogue' } },
+    { type: 'assistant', timestamp: now, message: { stop_reason: 'end_turn', content: [{ type: 'text', text: '**Plan ready.**\n\nNext step: approve the plan or tell me what to change.' }] } }].map((x) => JSON.stringify(x)).join('\n') + '\n');
+  let b = await wait(async () => { const x = (await call('GET', '/api/building')).body; return x.attention.some((a) => a.kind === 'reply') && x; });
+  const item = b && b.attention.find((a) => a.kind === 'reply' && a.agentId === 'budi-dev');
+  assert.ok(item, 'reply item in Attention');
+  assert.match(item.text, /Next step: approve the plan/);
+  assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'waiting');
+  assert.equal((await call('POST', `/api/attention/${item.id}/answer`, { option: 1, text: '' })).status, 400, 'an empty reply is refused');
+  const r = await call('POST', `/api/attention/${item.id}/answer`, { option: 1, text: 'Approved, go ahead' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok(await wait(() => fs.readFileSync(LOG, 'utf8').includes('TASK Approved, go ahead')));
+  assert.ok(await wait(async () => !(await call('GET', '/api/building')).body.attention.some((a) => a.kind === 'reply')), 'cleared once the owner replied');
+});
+
+test('dismissing a reply item keeps it away until the agent asks again', async () => {
+  const { projectDir } = await import('../server/transcripts.js');
+  const later = new Date(Date.now() + 5000).toISOString();
+  fs.appendFileSync(path.join(projectDir(proj), 'budi.jsonl'), [{ type: 'user', timestamp: later, message: { content: 'Approved, go ahead' } },
+    { type: 'assistant', timestamp: later, message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Which colour do you want for the buttons?' }] } }].map((x) => JSON.stringify(x)).join('\n') + '\n');
+  const item = await wait(async () => (await call('GET', '/api/building')).body.attention.find((a) => a.kind === 'reply'));
+  assert.ok(item);
+  assert.equal((await call('POST', `/api/attention/${item.id}/answer`, { option: 0 })).status, 200);
+  assert.ok(await wait(async () => !(await call('GET', '/api/building')).body.attention.some((a) => a.kind === 'reply')));
+});
+
 test('send a task to a running agent, then stop it', async () => {
   const r = await call('POST', '/api/floors/acme/agents/budi-dev/task', { text: 'Add a price filter' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
