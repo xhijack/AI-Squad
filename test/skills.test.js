@@ -15,13 +15,13 @@ import { createSquad } from '../server/setup.js';
 const root = scratch();
 const MIN = { 'project-manager': ['source-docs-intake', 'sprint-planning', 'handoff-review'], 'fullstack-developer': ['implement-from-spec', 'tdd', 'handoff-writing', 'investigate'],
   'qa-engineer': ['test-plan-from-acceptance', 'ui-evidence', 'bug-report', 'investigate'], 'ui-ux-designer': ['design-fidelity-map', 'design-review', 'accessibility-check'],
-  'devops-engineer': ['environment-matrix', 'deploy-and-rollback', 'secrets-hygiene', 'server-discovery', 'staging-install', 'docker-ops', 'git-deploy', 'netlify-setup', 'server-health'] };
+  'devops-engineer': ['environment-matrix', 'deploy-and-rollback', 'secrets-hygiene', 'server-discovery', 'staging-install', 'docker-ops', 'git-deploy', 'netlify-setup', 'server-health', 'canary'] };
 const MARKETING = ['marketing-brief-intake', 'seo-audit', 'content-calendar', 'brand-voice-check', 'campaign-report'];
 const SALES = ['icp-intake', 'lead-qualification', 'crm-hygiene', 'outreach-copy', 'pipeline-report'];
 
 test('every skill a Role Template lists is bundled, in the standard format', () => {
   const bundled = skills.bundledSkills().map((s) => s.name);
-  assert.equal(bundled.length, 35);
+  assert.equal(bundled.length, 36);
   for (const [role, list] of Object.entries(MIN)) for (const s of list) assert.ok(listTemplates().find((t) => t.role === role).skills.includes(s), `${role} lists ${s}`);
   const listed = new Set([...listTemplates().flatMap((t) => t.skills), ...MARKETING, ...SALES]);
   for (const s of listed) if (!['frappe', 'erpnext'].includes(s)) assert.ok(bundled.includes(s), `${s} is bundled`);
@@ -41,8 +41,9 @@ test('DevOps v2: server skills with their safety rules, and the owner / lead spl
   assert.match(read('git-deploy'), /previous tag/); assert.match(read('git-deploy'), /read-only deploy key/);
   assert.match(read('netlify-setup'), /NETLIFY_AUTH_TOKEN/); assert.match(read('netlify-setup'), /Never ask for a token in chat/); assert.match(read('netlify-setup'), /DNS/);
   assert.match(read('server-health'), /neighbour/i);
+  assert.match(read('canary'), /roll back at once/); assert.match(read('canary'), /Production:\*\* do not roll back on your own/); assert.match(read('git-deploy'), /Ship readiness/);
   const t = listTemplates().find((x) => x.role === 'devops-engineer');
-  assert.equal(t.version, 2);
+  assert.equal(t.version, 3);
   const rules = t.rules.join('\n');
   assert.match(rules, /AISQUAD_AGENT/); assert.match(rules, /Task from the owner.*setup preparation/); assert.match(rules, /Task from the lead.*deployment/);
   assert.match(rules, /Desk session prepares and never deploys/);

@@ -7,6 +7,7 @@ description: "Deploy a release to an already approved server environment: the se
 Only for an environment whose install plan the owner approved (`docs/ops/INSTALL-<env>-<host>.md`). Production needs the owner's explicit go-ahead for this release, every time.
 
 ## Before
+0. **Ship readiness** (the same list as the Ship readiness panel in The AI Squad): QA PASS for every module of the release, the final smoke test, release notes (`docs/squad/sprint-<N>/RELEASE.md`), the security review without an open Critical or High finding, and `Rollback tried: <date>` in `docs/ENVIRONMENTS.md`. If something is missing, stop and tell the lead what.
 1. The tag exists and points at a commit where the quality gate passed (`git tag -l`, CI result or the squad's gate).
 2. Migrations in this release are reviewed and backward compatible for one release (a rollback must not lose data).
 3. Write down the **current** tag on the server: that is the rollback target.
@@ -17,10 +18,13 @@ Only for an environment whose install plan the owner approved (`docs/ops/INSTALL
 3. Run the migrations the release notes name.
 4. **Smoke test:** the health URL and the two or three flows listed in `docs/ENVIRONMENTS.md`; check our containers' logs for errors in the first minutes.
 
-## Rollback (when the smoke test fails)
+5. **Canary:** watch the deploy with the **canary** skill (10 minutes on staging, 30 on production).
+
+## Rollback (when the smoke test or the canary fails)
 1. `git checkout <previous tag>`, rebuild and start our project again.
 2. Run down migrations only if the release notes say they are safe; otherwise restore the data snapshot taken before the deploy.
 3. Smoke test again.
+4. The first time you roll back an environment, record it in `docs/ENVIRONMENTS.md` as `Rollback tried: <date>` (ship readiness looks for it).
 
 ## Never
 - Push from the server or from an agent, or use a key with write access.
