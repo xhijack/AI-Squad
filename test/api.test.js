@@ -359,3 +359,10 @@ test('open reads carry an ETag and answer 304 when unchanged; reads behind the P
   assert.equal(d.headers.get('cache-control'), 'no-store');
   assert.equal(d.headers.get('etag'), null);
 });
+
+test('static JSON (the UI translations) is served as it is', async () => {
+  const r = await fetch(`${base}/i18n/id.json`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j['Send task'], 'Kirim tugas');
+});

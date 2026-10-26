@@ -60,7 +60,9 @@ function serveStatic(res, pathname) {
     res.end(fs.readFileSync(file));
     return true;
   }
-  send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] || 'application/octet-stream');
+  // the file as it is (send() would JSON-encode a .json file's Buffer)
+  res.writeHead(200, { 'content-type': `${TYPES[path.extname(file)] || 'application/octet-stream'}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+  res.end(fs.readFileSync(file));
   return true;
 }
 
