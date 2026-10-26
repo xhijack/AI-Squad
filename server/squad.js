@@ -362,7 +362,7 @@ export function deskDetail(floorId, agentId) {
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(),
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
-    attach: `tmux attach -t ${l.session}`,
+    attach: tm.attachCommand(l.session),
   };
 }
 

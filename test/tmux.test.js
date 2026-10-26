@@ -122,12 +122,18 @@ test('end to end with a fake Claude Code in tmux: dialog, answer, typed task', {
   const r = await tm.startSession({ name, cwd, agentId: 'rina-pm', disallowedTools: ['Bash(git push*)'] });
   assert.equal(r.ok, true);
   assert.deepEqual(tm.listSessions(), [name]);
+  // its own tmux server: nothing on the shared one
+  const own = tm.socketOf(name);
+  assert.equal(own, `${config.tmuxSocket}--${name}`);
+  assert.ok(fs.existsSync(path.join(tm.tmuxDir(), own)));
+  assert.equal(tm.tmux(['has-session', '-t', `=${name}`]), null, 'not on the shared server');
+  assert.equal(tm.attachCommand(name), `tmux -L ${own} attach -t ${name}`);
   const wait = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = fn(); if (v) return v; await new Promise((ok) => setTimeout(ok, 100)); } return null; };
 
   // a small client cannot shrink the agent window (dialogs would be cut off)
-  tm.tmux(['resize-window', '-t', `=${name}:`, '-x', '80', '-y', '7']);
+  tm.tmux(['resize-window', '-t', `=${name}:`, '-x', '80', '-y', '7'], own);
   tm.keepSize(name);
-  assert.equal(tm.tmux(['display', '-p', '-t', `=${name}:`, '#{window_width}x#{window_height} #{window-size}']).trim(), '200x50 manual');
+  assert.equal(tm.tmux(['display', '-p', '-t', `=${name}:`, '#{window_width}x#{window_height} #{window-size}'], own).trim(), '200x50 manual');
   const dialog = await wait(() => tm.parsePrompt(tm.capture(name)));
   assert.ok(dialog, 'trust dialog visible');
   assert.equal(dialog.options.length, 2);
@@ -157,4 +163,47 @@ test('end to end with a fake Claude Code in tmux: dialog, answer, typed task', {
   assert.equal(stopped.ok, true);
   assert.equal(tm.isRunning(name), false);
   for (const pid of stopped.pids) assert.throws(() => process.kill(pid, 0), 'pane process ended even though it ignores SIGHUP');
+  assert.equal(fs.existsSync(path.join(tm.tmuxDir(), own)), false, 'its server and socket are gone');
+});
+
+test('agents on separate servers: killing one server leaves the others running', { skip: !hasTmux }, async () => {
+  configure({ claudeBin: FAKE, useSystemd: false });
+  const cwd = path.join(root, 'proj2'); fs.mkdirSync(cwd);
+  const [a, b] = [tm.sessionName('shop', 'lead'), tm.sessionName('shop', 'dev')];
+  for (const [n, id] of [[a, 'lead'], [b, 'dev']]) assert.equal((await tm.startSession({ name: n, cwd, agentId: id })).ok, true);
+  assert.deepEqual(tm.listSessions().sort(), [b, a]);
+  tm.tmux(['kill-server'], tm.socketOf(a));                      // what an out of memory kill of one scope does
+  assert.equal(tm.isRunning(a), false);
+  assert.equal(tm.isRunning(b), true);
+  assert.deepEqual(tm.listSessions(), [b]);
+  tm.stopSession(b);
+});
+
+test('sessions started by older versions on the shared server are still found, typed into and stopped', { skip: !hasTmux }, async () => {
+  const cwd = path.join(root, 'proj3'); fs.mkdirSync(cwd);
+  const name = tm.sessionName('old', 'rina-pm');
+  execFileSync('tmux', ['-L', config.tmuxSocket, 'new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, process.execPath, FAKE]);
+  // another Building's per-agent server with the same session name is not ours
+  execFileSync('tmux', ['-L', `other-building--${name}`, 'new-session', '-d', '-s', name, 'sleep 30']);
+  after(() => { try { execFileSync('tmux', ['-L', `other-building--${name}`, 'kill-server'], { stdio: 'ignore' }); } catch { /* gone */ } fs.rmSync(path.join(tm.tmuxDir(), `other-building--${name}`), { force: true }); });
+  assert.deepEqual(tm.listSessions(), [name]);
+  assert.equal(tm.isRunning(name), true);
+  assert.equal(tm.attachCommand(name), `tmux -L ${config.tmuxSocket} attach -t ${name}`);
+  const wait = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = fn(); if (v) return v; await new Promise((ok) => setTimeout(ok, 100)); } return null; };
+  const dialog = await wait(() => tm.parsePrompt(tm.capture(name)));
+  assert.ok(dialog, 'screen read from the shared server');
+  assert.equal(tm.answerDialog(name, dialog, 1).ok, true);
+  assert.ok(await wait(() => tm.isReady(tm.capture(name))));
+  assert.equal((await tm.startSession({ name, cwd, agentId: 'rina-pm' })).already, true, 'not started a second time on its own server');
+  assert.equal(tm.stopSession(name).ok, true);
+  assert.equal(tm.isRunning(name), false);
+  assert.ok(fs.existsSync(path.join(tm.tmuxDir(), `other-building--${name}`)), 'other servers untouched');
+});
+
+test('socket names stay short enough for a unix socket path', () => {
+  const long = tm.sessionName('a-very-long-floor-name-for-a-squad-'.repeat(2), 'and-an-even-longer-agent-display-name-id');
+  const s = tm.socketOf(long);
+  assert.ok(path.join(tm.tmuxDir(), s).length <= 100);
+  assert.equal(tm.socketOf(long), s, 'stable');
+  assert.notEqual(tm.socketOf(long + 'x'), s);
 });

@@ -16,9 +16,13 @@ export function scratch({ seed = true } = {}) {
   if (seed) { seedDefaults(); seedBlueprints(); }
   after(() => {
     fs.rmSync(root, { recursive: true, force: true });
-    // the private tmux server and its socket file (kill-server leaves the file behind)
-    try { execFileSync('tmux', ['-L', config.tmuxSocket, 'kill-server'], { stdio: 'ignore' }); } catch { /* not running */ }
-    fs.rmSync(path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid()}`, config.tmuxSocket), { force: true });
+    // the private tmux servers (shared one and one per agent) and their socket files (kill-server leaves them behind)
+    const dir = path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid()}`);
+    let files = []; try { files = fs.readdirSync(dir); } catch { /* none */ }
+    for (const f of files.filter((x) => x === config.tmuxSocket || x.startsWith(`${config.tmuxSocket}--`))) {
+      try { execFileSync('tmux', ['-L', f, 'kill-server'], { stdio: 'ignore' }); } catch { /* not running */ }
+      fs.rmSync(path.join(dir, f), { force: true });
+    }
   });
   return root;
 }

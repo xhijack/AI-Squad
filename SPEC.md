@@ -104,7 +104,7 @@ When a template gets a new version, the Floor shows **Update available** with a 
 
 ## Running agents (MVP)
 
-- Agents run as Claude Code sessions in tmux (`aisquad-<floor>-<agent>`), each started through `systemd-run --user --scope` where available so they survive the launching terminal/editor.
+- Agents run as Claude Code sessions in tmux (`aisquad-<floor>-<agent>`), each on its own tmux server (`tmux -L aisquad-<floor>-<agent>`) started through `systemd-run --user --scope` where available, so they survive the launching terminal/editor and an out of memory kill of one scope does not take the others (since 0.3.3).
 - Status comes from Claude Code transcripts (`~/.claude/projects/<encoded-path>/`, `subagents/*.meta.json`, `~/.claude/teams/*/config.json`) — reuse the proven parser in the reference implementations.
 - Attention: parse tmux screens for numbered **and unnumbered** option dialogs (e.g. "Do you trust this folder?"). Never type a task into a pane that shows a dialog. Long messages: type with `send-keys -l`, wait, press Enter, then verify the text left the input box.
 - Phase 2 (not MVP): replace tmux with an Agent SDK runner; Claude Code plugin hooks stream events to the server.

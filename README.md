@@ -61,7 +61,7 @@ claude --plugin-dir .            # or load the checkout as a plugin
 /plugin marketplace remove aisquad
 ```
 
-Your Floors and their repositories are not touched. To remove The AI Squad's machine-local data as well (Building registry, Role Template library, PIN, logs), delete `~/.aisquad`. Agents that are still running stay in tmux: stop them on their Desks first, or with `tmux kill-session -t aisquad-<floor>-<agent>`.
+Your Floors and their repositories are not touched. To remove The AI Squad's machine-local data as well (Building registry, Role Template library, PIN, logs), delete `~/.aisquad`. Agents that are still running stay in tmux: stop them on their Desks first, or with `tmux -L aisquad-<floor>-<agent> kill-server`.
 
 ## Use
 
@@ -147,7 +147,7 @@ Projects listed under **Detected** can become a Floor with one click. A director
 
 ### Run agents
 
-On a Desk: **Start** opens `claude --agent <id>` in tmux session `aisquad-<floor>-<agent>`. Type a task and press **Send task**; when the agent is still starting or shows a dialog, the task waits and is typed once Claude Code is ready. Questions and permission prompts (numbered, and unnumbered ones such as "Do you trust this folder?") appear under **Attention** with their options as buttons. You can always look at the real terminal with `tmux attach -t aisquad-<floor>-<agent>`.
+On a Desk: **Start** opens `claude --agent <id>` in tmux session `aisquad-<floor>-<agent>`, on its own tmux server (socket `aisquad-<floor>-<agent>`) in its own systemd scope, so an out of memory kill takes one agent, not all of them. Sessions started by versions before 0.3.3 stay on the default tmux server and are still found there. Type a task and press **Send task**; when the agent is still starting or shows a dialog, the task waits and is typed once Claude Code is ready. Questions and permission prompts (numbered, and unnumbered ones such as "Do you trust this folder?") appear under **Attention** with their options as buttons. You can always look at the real terminal with `tmux -L aisquad-<floor>-<agent> attach -t aisquad-<floor>-<agent>` (the Desk shows the exact command).
 
 Agents started by The AI Squad load this plugin's hooks (`--plugin-dir`), which stream session events (task submitted, tool use, permission prompts, end of turn) to the server. Status and Attention update live, and the Floor shows a **live** badge. With **per agent** commit identity in the Floor's git settings, each agent commits with its own name and email (`GIT_AUTHOR_*` / `GIT_COMMITTER_*`).
 
@@ -256,7 +256,7 @@ scripts/acceptance.sh            # visual acceptance: every agent state, Lobby /
                                  # at 1440x900 and 390x844 into playground/reference/after-*.png
 ```
 
-`AISQUAD_HOME`, `CLAUDE_HOME`, `AISQUAD_TMUX_SOCKET`, `CLAUDE_BIN` and `AISQUAD_NO_SYSTEMD=1` point the server at scratch directories, a private tmux server and a fake Claude Code (`test/fixtures/fake-claude.cjs`), which is how the tests run. `AISQUAD_SCAN_TMUX_SOCKET` and `AISQUAD_PROC` point the independent-agent scan at another tmux server and a fake `/proc`; `AISQUAD_SERVICE=detached` skips the systemd user service.
+`AISQUAD_HOME`, `CLAUDE_HOME`, `AISQUAD_TMUX_SOCKET`, `CLAUDE_BIN` and `AISQUAD_NO_SYSTEMD=1` point the server at scratch directories, a private tmux server (per-agent servers become `<socket>--aisquad-<floor>-<agent>`) and a fake Claude Code (`test/fixtures/fake-claude.cjs`), which is how the tests run. `AISQUAD_SCAN_TMUX_SOCKET` and `AISQUAD_PROC` point the independent-agent scan at another tmux server and a fake `/proc`; `AISQUAD_SERVICE=detached` skips the systemd user service.
 
 ```
 server/   building, floors, roles, compose (overrides), transcripts, tmux, watchdog, squad (live state), api,

@@ -1,6 +1,9 @@
 // Agents run as Claude Code sessions in tmux ("aisquad-<floor>-<agent>"). This module starts and stops
 // them, reads their screens for option dialogs (numbered and unnumbered), answers dialogs and types tasks.
 // Prompt parsing is ported from the squad-3d prototype.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { config, claudeBin } from './config.js';
 
@@ -24,24 +27,60 @@ export function listPanes(socket) {
 }
 export const capturePane = (target, socket, history = 0) => tmux(['capture-pane', '-p', '-J', '-t', target, ...(history ? ['-S', `-${history}`] : [])], socket) || '';
 
-export function listSessions() {
-  const out = tmux(['list-sessions', '-F', '#{session_name}']);
-  return out ? out.split('\n').filter((s) => s.startsWith(SESSION_PREFIX)) : [];
+// ---------- one tmux server per agent ----------
+// Each agent session has its own tmux server (tmux -L <socketOf(name)>) in its own systemd scope:
+// systemd-oomd kills a whole scope, and sessions sharing one server used to die together. Sessions started
+// by older versions live on the shared server (config.tmuxSocket, '' = the default one) and are still found.
+export const tmuxDir = () => path.join(process.env.TMUX_TMPDIR || '/tmp', `tmux-${process.getuid()}`);
+const ownPrefix = () => (config.tmuxSocket ? `${config.tmuxSocket}--` : '');     // test and dev Buildings keep theirs apart
+export function socketOf(name) {
+  const s = ownPrefix() + name;
+  const room = 100 - tmuxDir().length - 1;                                          // unix socket paths are short
+  return s.length <= room ? s : `${s.slice(0, room - 9)}-${crypto.createHash('sha1').update(s).digest('hex').slice(0, 8)}`;
 }
-export const isRunning = (name) => tmux(['has-session', '-t', `=${name}`]) !== null;
+const shared = new Set();                       // sessions found on the shared server (older versions)
+const socketFor = (name) => (shared.has(name) ? config.tmuxSocket : socketOf(name));
+const hasSession = (name, socket) => tmux(['has-session', '-t', `=${name}`], socket) !== null;
+
+export function isRunning(name) {
+  if (hasSession(name, socketOf(name))) { shared.delete(name); return true; }
+  if (hasSession(name, config.tmuxSocket)) { shared.add(name); return true; }
+  shared.delete(name);
+  return false;
+}
+export function listSessions() {
+  const out = new Set();
+  const prefix = ownPrefix() || SESSION_PREFIX;
+  let files = []; try { files = fs.readdirSync(tmuxDir()); } catch { /* no tmux server yet */ }
+  for (const f of files) {
+    if (!f.startsWith(prefix) || f === config.tmuxSocket) continue;
+    for (const s of (tmux(['list-sessions', '-F', '#{session_name}'], f) || '').split('\n')) {
+      if (s.startsWith(SESSION_PREFIX) && socketOf(s) === f) { out.add(s); shared.delete(s); }   // another Building's server is not ours
+    }
+  }
+  for (const s of (tmux(['list-sessions', '-F', '#{session_name}']) || '').split('\n')) {
+    if (s.startsWith(SESSION_PREFIX) && !out.has(s)) { out.add(s); shared.add(s); }
+  }
+  return [...out];
+}
+// the command that opens the agent's terminal
+export function attachCommand(name) {
+  const socket = socketFor(name);
+  return `tmux ${socket ? `-L ${socket} ` : ''}attach -t ${name}`;
+}
 // visible screen only by default (old dialogs in the scrollback must not count); history = extra lines
 // Agent sessions keep a fixed 200x50 window: a small terminal attaching (tmux attach from a phone or
 // an editor panel) must not shrink it, or dialogs are cut off and cannot be read from the screen.
 export const SIZE = { x: 200, y: 50 };
 const sized = new Set();
 export function keepSize(name) {
-  tmux(['set-option', '-t', `=${name}`, 'window-size', 'manual']);
-  tmux(['resize-window', '-t', `=${name}:`, '-x', String(SIZE.x), '-y', String(SIZE.y)]);
+  tmux(['set-option', '-t', `=${name}`, 'window-size', 'manual'], socketFor(name));
+  tmux(['resize-window', '-t', `=${name}:`, '-x', String(SIZE.x), '-y', String(SIZE.y)], socketFor(name));
 }
 // styled: keep the colour/attribute escapes (needed to tell typed input from a dim prompt suggestion)
 export const capture = (name, history = 0, { styled = false } = {}) => {
   if (!sized.has(name) && isRunning(name)) { keepSize(name); sized.add(name); }   // also sessions started before this fix
-  return tmux(['capture-pane', '-p', '-J', ...(styled ? ['-e'] : []), '-t', `=${name}:`, ...(history ? ['-S', `-${history}`] : [])]) || '';
+  return tmux(['capture-pane', '-p', '-J', ...(styled ? ['-e'] : []), '-t', `=${name}:`, ...(history ? ['-S', `-${history}`] : [])], socketFor(name)) || '';
 };
 
 // ---------- screen parsing ----------
@@ -151,14 +190,15 @@ export const isReady = (screen) => inputLine(screen) !== null && !parsePrompt(sc
 // ---------- start / stop ----------
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
-// starts `claude --agent <id>` detached; through systemd-run --user --scope when available so the
-// session survives the terminal or editor that launched the server
+// starts `claude --agent <id>` detached on the agent's own tmux server; through systemd-run --user --scope
+// when available, so the session survives the terminal or editor that launched the server and an out of
+// memory kill of one scope takes only this agent
 // env: extra variables for the agent (hook target, git identity), set with `env` in front of the command
 export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {} }) {
   if (isRunning(name)) return { ok: true, already: true };
   const vars = Object.entries(agentEnv).filter(([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null).map(([k, v]) => `${k}=${v}`);
   const cmd = [...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', ...disallowedTools] : []), ...extraArgs].map(shq).join(' ');
-  const tm = ['tmux', ...tmuxArgs(['new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, cmd])];
+  const tm = ['tmux', ...tmuxArgs(['new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, cmd], socketOf(name))];
   const env = { ...process.env, PATH: `${process.execPath.replace(/\/node$/, '')}:${process.env.PATH || ''}` };
   delete env.TMUX;
   const exec = (file, args) => new Promise((ok, no) => execFile(file, args, { env, timeout: 15000 }, (e) => (e ? no(e) : ok())));
@@ -176,8 +216,10 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
 export function stopSession(name) {
   sized.delete(name);
   if (!isRunning(name)) return { ok: true, already: true };
-  const pids = (tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}']) || '').split('\n').map(Number).filter((n) => n > 1);
-  tmux(['kill-session', '-t', `=${name}`]);
+  const socket = socketFor(name), own = !shared.has(name);
+  const pids = (tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}'], socket) || '').split('\n').map(Number).filter((n) => n > 1);
+  tmux(['kill-session', '-t', `=${name}`], socket);
+  if (own) { tmux(['kill-server'], socket); fs.rmSync(path.join(tmuxDir(), socket), { force: true }); }   // its own server: gone with it
   const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
   for (const pid of pids) if (alive(pid)) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
   const deadline = Date.now() + 3000;
@@ -189,28 +231,29 @@ export function stopSession(name) {
 // ---------- typing ----------
 // Never types into a dialog. Long text: send-keys -l, wait, Enter, then verify the text left the input box.
 export async function typeTask(name, text, { settleMs = 600, verifyMs = 1500 } = {}) {
-  const screen = capture(name);
   if (!isRunning(name)) return { ok: false, error: 'Agent is not running' };
+  const screen = capture(name);
+  const keys = (...k) => tmux(['send-keys', '-t', `=${name}:`, ...k], socketFor(name));
   if (parsePrompt(screen)) return { ok: false, error: 'Agent shows a dialog; answer it first', dialog: true };
   const flat = String(text).replace(/[\r\n]+/g, ' ').trim();
   if (!flat) return { ok: false, error: 'Empty task' };
-  tmux(['send-keys', '-t', `=${name}:`, 'C-u']);
-  for (let i = 0; i < flat.length; i += 1000) tmux(['send-keys', '-t', `=${name}:`, '-l', flat.slice(i, i + 1000)]);
+  keys('C-u');
+  for (let i = 0; i < flat.length; i += 1000) keys('-l', flat.slice(i, i + 1000));
   await sleep(settleMs + Math.min(2000, flat.length / 2));
-  tmux(['send-keys', '-t', `=${name}:`, 'Enter']);
+  keys('Enter');
   const probe = flat.slice(0, 24);
   for (let attempt = 0; attempt < 3; attempt++) {
     await sleep(verifyMs);
     const line = inputLine(capture(name, 0, { styled: true }));
     if (line === null || !line.includes(probe)) return { ok: true };
-    tmux(['send-keys', '-t', `=${name}:`, 'Enter']);       // pasted text sometimes swallows the first Enter
+    keys('Enter');                                          // pasted text sometimes swallows the first Enter
   }
   return { ok: false, error: 'Task text is still in the input box' };
 }
 
 // choose option n of the open dialog (arrow keys + Enter); free-text options get the typed text.
 // opts.target / opts.socket address a pane outside our own sessions (independent agents).
-export function answerDialog(name, dialog, n, text = '', { target = `=${name}:`, socket } = {}) {
+export function answerDialog(name, dialog, n, text = '', { target = `=${name}:`, socket = socketFor(name) } = {}) {
   const opt = dialog.options.find((o) => o.n === n);
   if (!opt) return { ok: false, error: 'Unknown option' };
   if (opt.free && !String(text).trim()) return { ok: false, error: 'Type an answer first' };

@@ -97,7 +97,7 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   const desk = (await call('GET', '/api/floors/acme/agents/budi-dev')).body;
   assert.equal(desk.running, true);
   assert.match(desk.screen, /Build the catalogue page/);
-  assert.equal(desk.attach, 'tmux attach -t aisquad-acme-budi-dev');
+  assert.equal(desk.attach, `tmux -L ${config.tmuxSocket}--aisquad-acme-budi-dev attach -t aisquad-acme-budi-dev`);
   assert.match(desk.work.text, /catalogue/);
   assert.deepEqual([desk.models.configured, desk.models.startedWith, desk.models.restartNeeded], ['sonnet', 'sonnet', false]);
 });
