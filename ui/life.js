@@ -45,13 +45,18 @@ const behindDesk = (st) => { const o = rot(0, -.95 * st.g.scale.x, st.g.rotation
 
 function startWalk(st, points, run) { st.life.path = points.map((p) => ({ x: p.x, z: p.z })); st.life.run = run; }
 
+// the shortest turn from angle a towards b, at most k (0..1) of the way per frame
+export function turnTowards(a, b, k) {
+  let d = ((b - a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+  return a + d * Math.min(1, k);
+}
 function moveAlong(st, dt) {
   const L = st.life, h = st.human;
   let step = (L.run ? RUN : WALK) * dt;
   while (step > 0 && L.path.length) {
     const tg = L.path[0], dx = tg.x - h.position.x, dz = tg.z - h.position.z, d = Math.hypot(dx, dz);
     if (d < 1e-3) { L.path.shift(); continue; }
-    h.rotation.y = Math.atan2(dx, dz);
+    h.rotation.y = turnTowards(h.rotation.y, Math.atan2(dx, dz), dt * 10);   // turn smoothly, no snapping
     const mv = Math.min(step, d);
     h.position.x += dx / d * mv; h.position.z += dz / d * mv;
     step -= mv;

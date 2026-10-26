@@ -9,6 +9,7 @@ import { buildChibi, HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
 import { FW, FD, FH, floorY, desksFor } from './layout.js';
 import { makeScreen, drawScreen } from './screens.js';
 import { loungeSpots, updateLife, deskHome, seatRoot, MEETING_SEATS, meetingSeats } from './life.js';
+import { Quality, contactShadow } from './render.js';
 import { deskProps, propsFor } from './props.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -267,7 +268,7 @@ function buildStation(agent, desk, accent) {
   const human = new THREE.Group();                                              // the agent itself: can leave the desk
   human.userData.agent = agent.id;
   human.userData.human = true;                                                  // clicking the body opens the agent's eyes
-  human.add(rig.root);
+  human.add(rig.root, contactShadow());                                        // a soft shadow on the floor under the character
   human.scale.setScalar(STATION_SCALE);
   const st = { id: agent.id, g, human, rig, screens, ringMat, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6, accent };
   // name chip in the agent's colour above the head, its status under it, zzz when idle (as in squad-3d)
@@ -373,7 +374,8 @@ export class BuildingScene {
     this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 
-    this.scene.add(new THREE.HemisphereLight('#fff8ec', '#b9a68a', 1.15));
+    this.hemi = new THREE.HemisphereLight('#fff8ec', '#b9a68a', 1.15);
+    this.scene.add(this.hemi);
     const sun = new THREE.DirectionalLight('#fff1dc', 2.1);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0004; sun.shadow.normalBias = .02;
@@ -392,13 +394,22 @@ export class BuildingScene {
     box(FW + .1, .1, FD + .1, mat('#cbbfa9'), 0, .35, 0, this.roof, 0);
     this.roofSign = label('<b>The AI Squad</b>', 'rooflabel', this.roof, 0, 1.2, 0);
 
+    // rendering quality: Low (one pass, as before), High (environment light, AO, grading, SMAA), Auto
+    this.quality = new Quality(this.renderer, this.scene, { hemi: this.hemi });
     this.ray = new THREE.Raycaster();
     this.clock = new THREE.Clock();
     this.camAnim = null;
     this.bindPointer();
     this.resize();
     addEventListener('resize', () => this.resize());
-    const loop = () => { this.frame(); requestAnimationFrame(loop); };
+    // the loop slows to a third of the frame rate when nothing moves (no input, no camera move, nobody walking)
+    for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) addEventListener(ev, () => { this.lastInput = performance.now(); }, { passive: true });
+    let tick = 0;
+    const loop = () => {
+      const busy = this.camAnim || this.walking || this.view.eyes || this.view.follow || performance.now() - (this.lastInput || 0) < 4000;
+      if (busy || ++tick % 3 === 0) this.frame();
+      requestAnimationFrame(loop);
+    };
     requestAnimationFrame(loop);
   }
 
@@ -657,6 +668,7 @@ export class BuildingScene {
     const cx = (i.left + (w - i.right)) / 2, cy = (i.top + (h - i.bottom)) / 2;
     this.persp.setViewOffset(w, h, w / 2 - cx, h / 2 - cy, w, h);
     this.persp.updateProjectionMatrix();
+    this.quality?.resize(w, h);
     this.renderer.setSize(w, h);
     this.labels.setSize(w, h);
   }
@@ -791,6 +803,7 @@ export class BuildingScene {
     }
     const dt = Math.min(.1, t - (this.lastT ?? t)); this.lastT = t;
     const v = this.view;
+    let walking = false;
     for (const [fid, o] of this.floors) {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
@@ -801,6 +814,7 @@ export class BuildingScene {
         const meeting = k >= 0 && o.seats[k] ? { ...o.seats[k], label: mt.label } : null;
         const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
+        if (/walk|return/i.test(st.life?.mode || '')) walking = true;
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view
         st.label.visible = !!st.labelsOn && !focus;
@@ -818,10 +832,11 @@ export class BuildingScene {
       const obj = this.objectFor(this.selection.floorId, this.selection);
       if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;
     }
+    this.walking = walking;
     this.updateRacks(t);
     this.handlers.onFrame?.(t);
     if (v.eyes) this.updatePov(dt); else if (v.follow) this.updateFollow(dt); else this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    this.quality.render(this.camera, dt);
     this.labels.render(this.scene, this.camera);
   }
 }

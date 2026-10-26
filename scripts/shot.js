@@ -42,6 +42,7 @@ for (const s of shots) {
   await send('Page.navigate', { url: s.url });
   await sleep(s.wait ?? 6000);
   if (s.eval) { await evaluate(s.eval); await sleep(s.after ?? 2500); }
+  if (s.measure) console.log(`${s.out}: ${JSON.stringify(await evaluate(s.measure))}`);   // a value measured in the page (frame times)
   const { data } = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(s.out, Buffer.from(data, 'base64'));
   console.log(`${s.out} ${s.w}x${s.h}`);

@@ -584,6 +584,10 @@ export function applyTheme() {
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   scene.setTheme(dark, getComputedStyle(document.documentElement).getPropertyValue('--scene').trim());
 }
+// graphics quality: Auto (High, Low when frames are slow), High (soft light, AO, grading), Low (as fast as before)
+const QUALITY_TEXT = { auto: 'Auto', high: 'High', low: 'Low' };
+function showQuality() { $('qualityName').textContent = `${QUALITY_TEXT[scene.quality.chosen]}${scene.quality.chosen === 'auto' ? ` (${scene.quality.active})` : ''}`; }
+showQuality();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 applyTheme();
 $('menu').addEventListener('click', (e) => {
@@ -594,6 +598,9 @@ $('menu').addEventListener('click', (e) => {
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('aisquad.theme', next); } catch { /* private mode */ }
     applyTheme(); toast(`Theme: ${THEMES[next]}`);
+  } else if (b.dataset.menu === 'quality') {
+    const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
+    scene.quality.set(next); showQuality(); toast(`Graphics: ${QUALITY_TEXT[next]}`);
   } else if (b.dataset.menu === 'pin') askPin().then((ok) => ok && refresh());
   else if (b.dataset.menu === 'rename') {
     const name = prompt('Building name', state.building?.name || 'The AI Squad');
