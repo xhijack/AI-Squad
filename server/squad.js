@@ -39,6 +39,9 @@ import * as backupLib from './backup.js';
 import * as jobsLib from './jobs.js';
 import * as auth from './auth.js';
 import { runnerFor } from './runner.js';
+import * as dispatcher from './dispatcher.js';
+import * as quotaLib from './quota.js';
+import * as space from './space.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -463,7 +466,7 @@ export function buildingSnapshot() {
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
     // agents running at once on this machine and what one session needs in RAM (measured)
-    limits: { maxAgents: recovery.buildingMax(b.prefs), running: sessions.length + running.length, sessions: sessions.length, jobs: running.length, session: usageLib.summary() },
+    limits: { maxAgents: recovery.buildingMax(b.prefs), running: sessions.length + running.length, sessions: sessions.length, jobs: running.length, session: usageLib.summary(), queued: dispatcher.load().length },
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
       projectsDir: suggestProjectsDir(b), autopilot: { levels: autopilot.LEVELS, text: autopilot.LEVEL_TEXT, hardStop: autopilot.hardStopList(), defaultLevel: autopilot.DEFAULT_LEVEL } },
@@ -608,17 +611,16 @@ function locate(floorId, agentId) {
   return { entry, cfg, agent, name: tm.sessionName(floorId, agentId) };
 }
 
-// resume: a Claude Code session id to continue (--resume) instead of a fresh session.
-// guard: the owner starts it; warn first (409) when swap is above 80 % or the Floor runs its maximum of agents
+// guard: the owner starts it from the Desk: it goes through the dispatcher, which starts it now or queues it (P0)
+// when the machine, the Space or the plan has no room. Without guard it starts now (internal, or the owner's
+// "start now anyway").
 export async function startAgent(floorId, agentId, task = '', { resume = '', guard = false, via = 'aisquad' } = {}) {
-  const { entry, cfg, agent, name } = locate(floorId, agentId);
-  if (guard && !tm.isRunning(name)) {
-    snapCache.at = 0;
-    const snap = buildingSnapshot();
-    const running = snap.floors.find((f) => f.id === floorId)?.agents.filter((a) => a.running).length || 0;
-    const warnings = recovery.startWarnings({ res: wd.readResources(), running, maxAgents: cfg.floor.recovery.maxAgents, buildingRunning: snap.limits.running, buildingMax: snap.limits.maxAgents });
-    if (warnings.length) throw Object.assign(new HttpError(409, `${warnings.join(' ')} Start anyway?`), { data: { warnings } });
-  }
+  if (guard && !resume) return admit({ floorId, agentId, action: 'start', task, priority: 'P0', via: 'owner' });
+  return launchAgent(floorId, agentId, task, { resume, via });
+}
+// resume: a Claude Code session id to continue (--resume) instead of a fresh session
+async function launchAgent(floorId, agentId, task = '', { resume = '', via = 'aisquad' } = {}) {
+  const { entry, agent, name } = locate(floorId, agentId);
   floors.generate(entry.path);                          // agent file is current before Claude reads it
   const eff = floors.effectiveOf(entry.path, agent);
   // model comes from the agent file; effort is not read from agent files for the main session, so pass it
@@ -648,30 +650,34 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
   return { ok: true, session: name, already: !!r.already, queued: !!task, ...(resume ? { resumed: resume } : {}) };
 }
 
-// continue the agent's last Claude Code session; a resumed lead of a squad gets a short recovery note
+// continue the agent's last Claude Code session; a resumed lead of a squad gets a short recovery note.
+// guard: the owner asks for it (dispatcher, P0)
 export async function resumeAgent(floorId, agentId, { guard = false, via = 'aisquad' } = {}) {
+  if (guard) { locate(floorId, agentId); return admit({ floorId, agentId, action: 'resume', priority: 'P0', via: 'owner' }); }
+  return resumeNow(floorId, agentId, { via });
+}
+async function resumeNow(floorId, agentId, { via = 'aisquad' } = {}) {
   const { entry, cfg, agent } = locate(floorId, agentId);
   const end = endedOf(floorId, agentId);
   const sessionId = tx.agentSessions(entry.path, agentId)[0]?.id || end?.sessionId;
   if (!sessionId) throw bad('This agent has no previous session to resume; start it fresh');
   const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
   const note = squadOf(entry.path, cfg.floor) && lead === agent ? recovery.recoveryMessage({ end, maxAgents: cfg.floor.recovery.maxAgents }) : '';
-  return startAgent(floorId, agentId, note, { resume: sessionId, guard, via });
+  return launchAgent(floorId, agentId, note, { resume: sessionId, via });
 }
 
 // a background job for an agent (headless runner): the same agent file, model, effort, denied tools and linked
 // repositories as on its Desk, a budget cap, no permission prompts (dontAsk, or acceptEdits when allowed).
-// guard: warn first (409) when the machine already runs its maximum of agents
-export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', guard = false, via = 'aisquad', kind = 'task', title = '', resume = '' } = {}) {
-  const { entry, cfg, agent } = locate(floorId, agentId);
+// guard: the owner asks for it: the dispatcher starts it now or queues it (P2, background work)
+export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', guard = false, via = 'aisquad', kind = 'task', title = '', resume = '', priority = 'P2' } = {}) {
+  locate(floorId, agentId);
   if (!String(prompt || '').trim()) throw bad('The job needs a prompt');
+  if (guard) return admit({ floorId, agentId, action: 'job', task: prompt, title, priority, via: 'owner', opts: { budgetUsd, permissionMode, kind, resume } });
+  return launchJob(floorId, agentId, prompt, { budgetUsd, permissionMode, via, kind, title, resume });
+}
+function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '' } = {}) {
+  const { entry, cfg, agent } = locate(floorId, agentId);
   const b = building.loadBuilding();
-  if (guard) {
-    snapCache.at = 0;
-    const snap = buildingSnapshot();
-    const warnings = recovery.startWarnings({ res: wd.readResources(), running: 0, maxAgents: 99, buildingRunning: snap.limits.running, buildingMax: snap.limits.maxAgents });
-    if (warnings.length) throw Object.assign(new HttpError(409, `${warnings.join(' ')} Start anyway?`), { data: { warnings } });
-  }
   const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
     ...floors.commitIdentity(agent, cfg.git), ...auth.backgroundEnv(b.prefs.auth) };
   floors.generate(entry.path);
@@ -690,6 +696,112 @@ export function logJobEnded(job) {
   if (!job.floorId) return;
   logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}) } });
   invalidate();
+}
+
+// ---------- the dispatcher (0.13): one queue for every start, see server/dispatcher.js ----------
+const dispatchPrefs = () => dispatcher.cleanDispatcher(building.loadBuilding().prefs.dispatcher);
+// API-equivalent cost of every Space's sessions in the quota windows (an estimate; see server/quota.js)
+export function costWindows(now = Date.now()) {
+  const sum = (from) => { let n = 0; for (const c of costs.values()) for (const v of Object.values(c.tracker.costBetween(from, now + 1))) n += v; return n; };
+  return { fiveHour: sum(now - quotaLib.WINDOWS.fiveHour), week: sum(now - quotaLib.WINDOWS.week) };
+}
+// rate-limit reports and "usage limit reached" errors of the background jobs of the last week
+function quotaSignals(now) {
+  const out = [];
+  for (const j of jobsLib.listJobs({ limit: 60 }).filter((x) => now - x.createdAt < quotaLib.WINDOWS.week)) {
+    out.push(...quotaLib.parseRateLimits(j.rateLimits));
+    const hit = j.status === 'failed' && quotaLib.limitFromText(`${j.error} ${j.result}`, j.endedAt || now);
+    if (hit) out.push({ window: 'usage', usedPct: 100, resetsAt: hit.until, rejected: true });
+  }
+  return out;
+}
+export function quotaStatus(now = Date.now()) {
+  const st = quotaLib.observe(quotaSignals(now), now);
+  return quotaLib.check({ costs: costWindows(now), limits: dispatchPrefs().quota, signals: st.signals, now });
+}
+function dispatchContext(now = Date.now(), { res = wd.readResources() } = {}) {
+  snapCache.at = 0;
+  const snap = buildingSnapshot();
+  const prefs = dispatchPrefs();
+  const quota = quotaStatus(now);
+  const cap = dispatcher.capacity({ maxAgents: snap.limits.maxAgents, running: snap.limits.running, res, sessionRss: usageLib.estimateSessionRss(), quotaPaused: quota.paused });
+  const byFloor = new Map(snap.floors.map((f) => [f.id, f]));
+  const cfgs = new Map();
+  const cfgOf = (id) => { if (!cfgs.has(id)) { try { cfgs.set(id, floors.readFloor(building.floorEntry(id).path)); } catch { cfgs.set(id, null); } } return cfgs.get(id); };
+  const daytime = dispatcher.isDaytime(prefs, now);
+  return {
+    snap, prefs, quota, capacity: cap, daytime,
+    free: cap.free, reserve: daytime ? prefs.reserveP0 : 0, quotaPaused: quota.paused,
+    inShift: (id) => space.inShift(cfgOf(id)?.floor.shift, now),
+    floorFree: (id) => { const c = cfgOf(id); if (!c) return 0; return Math.max(0, c.floor.recovery.maxAgents - (byFloor.get(id)?.agents.filter((a) => a.running).length || 0)); },
+    busy: (it) => { if (it.action !== 'sprint') return false; const a = byFloor.get(it.floorId)?.agents.find((x) => x.id === it.agentId); return !!a && (a.state === 'working' || a.state === 'waiting'); },
+  };
+}
+// a start needs a slot unless the agent's session already runs (a job always needs one)
+const needsSlot = (it) => it.action === 'job' || !tm.isRunning(tm.sessionName(it.floorId, it.agentId));
+async function execItem(it) {
+  if (it.action === 'start') return launchAgent(it.floorId, it.agentId, it.task, { via: it.via });
+  if (it.action === 'resume') return resumeNow(it.floorId, it.agentId, { via: it.via });
+  if (it.action === 'sprint') { stopAgent(it.floorId, it.agentId); return launchAgent(it.floorId, it.agentId, it.task, { via: it.via }); }
+  const job = launchJob(it.floorId, it.agentId, it.task, { ...it.opts, title: it.title, via: it.via });
+  return { ok: true, job };
+}
+// every start goes through here: now when there is room (and nothing more urgent waits), else into the queue.
+// -> what the start returned, or { ok, waiting: true, dispatch: { id, position, priority, reason } }
+export async function admit(item, { force = false } = {}) {
+  const it = { priority: 'P2', via: 'aisquad', ...item };
+  if (force || !needsSlot(it)) return execItem(it);
+  const ctx = dispatchContext();
+  const probe = { ...it, id: 'probe', createdAt: Date.now(), attempts: 0 };
+  const p = dispatcher.plan([...dispatcher.load(), probe], ctx);
+  if (p.start.some((x) => x.id === 'probe')) return execItem(it);
+  const reason = p.held.find((h) => h.id === 'probe')?.reason || 'waiting for a free slot';
+  const q = dispatcher.enqueue(it);
+  logEvent(it.floorId, { type: 'dispatch.queued', agent: it.agentId, data: { action: it.action, priority: q.priority, reason, via: it.via } });
+  invalidate();
+  return { ok: true, waiting: true, dispatch: { id: q.id, position: q.position, priority: q.priority, reason } };
+}
+// the queue with the reason each item waits, the slots and what limits them, the quota guard
+export function dispatchStatus(now = Date.now()) {
+  const ctx = dispatchContext(now);
+  const items = dispatcher.load();
+  const { held } = dispatcher.plan(items, ctx, now);
+  const why = new Map(held.map((h) => [h.id, h.reason]));
+  return {
+    prefs: ctx.prefs, capacity: ctx.capacity, daytime: ctx.daytime, reserve: ctx.reserve, quota: ctx.quota, sessionRss: usageLib.estimateSessionRss(),
+    queue: dispatcher.order(items, now).map((x) => ({ ...x, task: undefined, effective: dispatcher.PRIORITIES[dispatcher.effectivePriority(x, now)], reason: why.get(x.id) || 'starting', floorName: ctx.snap.floors.find((f) => f.id === x.floorId)?.name || x.floorId,
+      agentName: ctx.snap.floors.find((f) => f.id === x.floorId)?.agents.find((a) => a.id === x.agentId)?.displayName || x.agentId })),
+  };
+}
+export async function startQueued(id) {
+  const it = dispatcher.remove(id);
+  const r = await execItem(it);
+  logEvent(it.floorId, { type: 'dispatch.started', agent: it.agentId, data: { action: it.action, priority: it.priority, waitedMs: Date.now() - it.createdAt, via: 'owner' } });
+  invalidate();
+  return r;
+}
+export function dropQueued(id) { const it = dispatcher.remove(id); logEvent(it.floorId, { type: 'dispatch.removed', agent: it.agentId, data: { action: it.action } }); invalidate(); return { ok: true }; }
+
+// every 15 s: start what fits, then stop agents that sit idle (sooner while work waits in the queue)
+export async function dispatchTick(now = Date.now(), { res } = {}) {
+  const ctx = dispatchContext(now, res ? { res } : {});
+  const r = await dispatcher.tick(ctx, async (it) => {
+    await execItem(it);
+    logEvent(it.floorId, { type: 'dispatch.started', agent: it.agentId, data: { action: it.action, priority: it.priority, waitedMs: now - it.createdAt, via: it.via } });
+  }, now);
+  for (const f of r.failed) logEvent(f.item.floorId, { type: 'dispatch.failed', agent: f.item.agentId, data: { action: f.item.action, error: f.error, dropped: f.dropped } });
+  const d = ctx.prefs, waiting = dispatcher.load().length > 0;
+  const min = waiting && d.idleStopBusyMin ? Math.min(d.idleStopBusyMin, d.idleStopMin || Infinity) : d.idleStopMin;
+  const agents = ctx.snap.floors.filter((f) => !f.independent && !f.missing).flatMap((f) => f.agents.map((a) => ({
+    floorId: f.id, id: a.id, own: a.running && !a.inLead, running: a.running, state: a.state, waitingReply: a.waitingReply, task: a.task, lastTs: a.lastTs, lead: a.lead,
+    teammatesInLead: f.agents.some((x) => x.inLead), attention: ctx.snap.attention.some((x) => x.floorId === f.id && x.agentId === a.id), pending: pending.has(workKey(f.id, a.id)) })));
+  const stopped = [];
+  for (const a of dispatcher.idleToStop(agents, { idleMs: min * 60e3, now })) {
+    try { stopAgent(a.floorId, a.id); stopped.push({ floorId: a.floorId, agentId: a.id }); logEvent(a.floorId, { type: 'dispatch.idle-stopped', agent: a.id, data: { idleMin: Math.round((now - a.lastTs) / 60e3), queue: waiting } }); }
+    catch (e) { console.error('[dispatch]', a.floorId, a.id, e.message); }
+  }
+  if (r.started.length || r.failed.length || stopped.length) invalidate();
+  return { started: r.started, failed: r.failed, stopped };
 }
 
 const criticalWaiting = (floorId) => (snapCache.value?.attention || []).filter((a) => a.floorId === floorId && a.autopilot?.critical).length;
@@ -723,8 +835,8 @@ export async function autopilotTick(now = Date.now(), { res = wd.readResources()
     const stop = autopilot.chainStop({ level: f.autopilot.level, budgetOver: f.budget?.level === 'over', pressure: recovery.memoryPressure(res), criticalWaiting: f.autopilot.critical, openWork: open });
     const st = apMem.idle.get(f.id) || {}; apMem.idle.set(f.id, st);
     const allIdle = !!lead?.running && f.agents.every((a) => a.state !== 'working' && a.state !== 'waiting');
-    if (!stop && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
-      await sendTask(f.id, lead.id, autopilot.idleNudge(open));
+    if (!stop && space.inShift(cfg.floor.shift, now) && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
+      await sendTask(f.id, lead.id, autopilot.idleNudge(open), [], { via: 'autopilot', priority: 'P2' });
       logEvent(f.id, { type: 'autopilot.nudged', agent: lead.id, data: { kind: 'idle', open } });
       done.push({ floorId: f.id, agentId: lead.id, kind: 'idle' });
     }
@@ -759,7 +871,7 @@ async function nudgeReply(f, a, timeout) {
   if (rt.autopilot.nudged.includes(a.replyKey)) return { floorId: f.id, agentId: a.agentId, kind: 'already' };
   rt.autopilot.nudged = [...rt.autopilot.nudged, a.replyKey].slice(-300);
   saveRuntime(rt);
-  await sendTask(f.id, a.agentId, autopilot.replyNudge(timeout));
+  await sendTask(f.id, a.agentId, autopilot.replyNudge(timeout), [], { via: 'autopilot', priority: 'P2' });
   logEvent(f.id, { type: 'autopilot.nudged', agent: a.agentId, data: { kind: 'reply', question: a.text.slice(-300) } });
   return { floorId: f.id, agentId: a.agentId, kind: 'nudged' };
 }
@@ -797,7 +909,7 @@ export async function autoResumeTick(now = Date.now(), { res = wd.readResources(
       if (!ok.ok) continue;
       r.autoResumes[key] = [...(r.autoResumes[key] || []).filter((t) => now - t < recovery.AUTO_RESUME.windowMs), now];
       saveRuntime(r);
-      try { await resumeAgent(f.id, a.id, { via: 'auto-resume' }); done.push({ floorId: f.id, agentId: a.id }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
+      try { const r = await admit({ floorId: f.id, agentId: a.id, action: 'resume', priority: 'P1', via: 'auto-resume' }); done.push({ floorId: f.id, agentId: a.id, ...(r.waiting ? { waiting: r.dispatch.reason } : {}) }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
     }
   }
   return done;
@@ -826,12 +938,13 @@ export function withAttachments(text, list) {
   return files.length ? `${text} [Attachments from the owner, open them with the Read tool: ${files.join(' ; ')}]` : text;
 }
 
-export async function sendTask(floorId, agentId, text, attachments = []) {
+export async function sendTask(floorId, agentId, text, attachments = [], { via = 'owner', priority = 'P0' } = {}) {
   const body = withAttachments(String(text || '').trim(), attachments);
   if (!String(text || '').trim()) throw bad('Task text is required');
   const { name } = locate(floorId, agentId);
   if (!tm.isRunning(name)) {
-    await startAgent(floorId, agentId, body);
+    const r = await admit({ floorId, agentId, action: 'start', task: body, priority, via });
+    if (r.waiting) return { ...r, note: `Queued: ${r.dispatch.reason}. The agent starts with this task when there is room.` };
     return { ok: true, queued: true, note: 'Agent is starting; the task is typed as soon as Claude Code is ready.' };
   }
   const screen = tm.capture(name);
@@ -1118,9 +1231,8 @@ export async function startNextSprint(floorId) {
   if (fl.autopilot?.level !== 'off' && (fl.budget?.level === 'over' || fl.autopilot?.critical)) return null;   // the Autopilot chain stops here
   delete r.nextSprint[floorId];
   saveRuntime(r);
-  stopAgent(floorId, p.lead);
-  await startAgent(floorId, p.lead, `/sprint ${p.sprint}`);
-  return { sprint: p.sprint, lead: p.lead };
+  const r2 = await admit({ floorId, agentId: p.lead, action: 'sprint', task: `/sprint ${p.sprint}`, priority: 'P1', via: 'next-sprint' });
+  return { sprint: p.sprint, lead: p.lead, ...(r2.waiting ? { waiting: r2.dispatch.reason } : {}) };
 }
 
 // ---------- Floor 1: independent agents ----------

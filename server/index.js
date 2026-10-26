@@ -17,7 +17,7 @@ import { meter } from './meter.js';
 import { migrate } from './schema.js';
 import * as backup from './backup.js';
 import * as jobs from './jobs.js';
-import { logJobEnded } from './squad.js';
+import { logJobEnded, dispatchTick } from './squad.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -57,6 +57,10 @@ setInterval(rotateLogs, 3600e3).unref();
 // background jobs (headless runner): an ended job goes to the Squad Log; old jobs are cleared once a day
 setInterval(() => { try { for (const j of jobs.jobsTick()) { logJobEnded(j); console.log(`[job] ${j.id} ${j.status}${j.error ? `: ${j.error}` : ''}`); } } catch (e) { console.error('[job]', e.message); } }, 3000).unref();
 setInterval(() => { try { jobs.pruneJobs(); } catch { /* next day */ } }, 864e5).unref();
+// the dispatcher: starts queued work when there is room, stops agents that sit idle
+setInterval(() => {
+  dispatchTick().then((r) => { for (const x of r.started) console.log(`[dispatch] started ${x.floorId}/${x.agentId} (${x.action})`); for (const x of r.stopped) console.log(`[dispatch] idle stop ${x.floorId}/${x.agentId}`); for (const f of r.failed) console.error(`[dispatch] ${f.item.floorId}/${f.item.agentId}: ${f.error}`); }, (e) => console.error('[dispatch]', e.message));
+}, 15000).unref();
 // nightly backup (Building settings → Backups) and a monthly read-back check of the newest one
 setInterval(() => {
   try { const r = backup.backupTick(loadBuilding().prefs.backup); if (r.backup) console.log(`[backup] ${r.backup.ok ? r.backup.file : `failed: ${r.backup.error}`}`); if (r.verify) console.log(`[backup] check of ${r.verify.file}: ${r.verify.ok ? 'ok' : r.verify.errors.join('; ')}`); }

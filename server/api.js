@@ -10,6 +10,7 @@ import * as building from './building.js';
 import * as floors from './floors.js';
 import * as roles from './roles.js';
 import * as libraries from './libraries.js';
+import * as dispatcher from './dispatcher.js';
 import * as squad from './squad.js';
 import { checkPin } from './pin.js';
 import { setApproval } from './merge.js';
@@ -125,7 +126,7 @@ const routes = [
   ['POST', /^\/api\/squads\/recommend$/, (p, b) => recommend({ prompt: b.prompt, blueprint: b.blueprint, useClaude: b.useClaude !== false }), { pin: true }],
   ['POST', /^\/api\/squads$/, async (p, b) => {
     const r = await createSquad(b);
-    if (b.startLead && r.lead) { try { await squad.startAgent(r.id, r.lead, b.kickoff || blueprints.getBlueprint(r.blueprint.id).kickoff); r.leadStarted = true; } catch (e) { r.leadError = e.message; } }
+    if (b.startLead && r.lead) { try { const s = await squad.startAgent(r.id, r.lead, b.kickoff || blueprints.getBlueprint(r.blueprint.id).kickoff, { guard: true }); r.leadStarted = !s.waiting; if (s.waiting) r.leadQueued = s.dispatch; } catch (e) { r.leadError = e.message; } }
     squad.invalidate();
     return r;
   }, { pin: true }],
@@ -212,7 +213,16 @@ const routes = [
   ['POST', /^\/api\/floors\/([\w-]+)\/docs\/changes$/, ([id], b) => squad.requestDocChanges(id, b.path, b.text), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/resume$/, ([id, a], b) => squad.resumeAgent(id, a, { guard: !b.force }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/stop$/, ([id, a]) => squad.stopAgent(id, a), { pin: true }],
-  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/jobs$/, ([id, a], b) => ({ ok: true, job: squad.startAgentJob(id, a, squad.withAttachments(String(b.prompt || '').trim(), b.attachments), { budgetUsd: b.budgetUsd, permissionMode: b.permissionMode, guard: !b.force }) }), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/jobs$/, async ([id, a], b) => {
+    const r = await squad.startAgentJob(id, a, squad.withAttachments(String(b.prompt || '').trim(), b.attachments), { budgetUsd: b.budgetUsd, permissionMode: b.permissionMode, guard: !b.force });
+    return r.waiting || r.job ? r : { ok: true, job: r };
+  }, { pin: true }],
+  // the dispatcher (0.13): queue, slots, quota guard; its settings are Building settings (recorded in Changes)
+  ['GET', /^\/api\/dispatcher$/, () => squad.dispatchStatus(), { pin: true }],
+  ['PATCH', /^\/api\/dispatcher$/, (p, b) => { building.setPrefs({ dispatcher: dispatcher.cleanDispatcher({ ...building.loadBuilding().prefs.dispatcher, ...b, quota: { ...building.loadBuilding().prefs.dispatcher?.quota, ...b.quota } }) }); squad.invalidate(); return squad.dispatchStatus(); }, { pin: true, history: () => ({ label: 'Dispatcher settings' }) }],
+  ['POST', /^\/api\/dispatcher\/queue\/([\w-]+)\/start$/, ([id]) => squad.startQueued(id), { pin: true }],
+  ['PATCH', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id], b) => { dispatcher.setPriority(id, String(b.priority || '')); squad.invalidate(); return { ok: true }; }, { pin: true }],
+  ['DELETE', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id]) => squad.dropQueued(id), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/task$/, ([id, a], b) => squad.sendTask(id, a, b.text, b.attachments), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/work-done$/, ([id, a]) => { squad.clearWork(id, a); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/attachments$/, async ([id], b, req) => {
