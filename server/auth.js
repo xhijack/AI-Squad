@@ -49,3 +49,11 @@ export function backgroundEnv(auth = {}) {
   if (!k) throw bad('Background runs are set to use an API key, but no key is saved (Menu → Claude sign-in)');
   return { ANTHROPIC_API_KEY: k.key };
 }
+
+// other secrets kept beside the key (0.15: the Telegram bot token): write-only for the browser
+export function readSecret(name) { return (readJson(secretsFile(), {}) || {})[name] || null; }
+export function writeSecret(name, value) {
+  const s = readJson(secretsFile(), {}) || {};
+  if (value == null) delete s[name]; else s[name] = value;
+  writeSecrets(s);
+}
