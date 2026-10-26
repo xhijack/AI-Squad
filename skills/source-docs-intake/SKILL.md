@@ -8,7 +8,7 @@ The squad works only from approved source documents. The Blueprint section in `A
 
 ## Steps
 1. List the source documents and their status: the first lines of each file hold `STATUS: DRAFT` or `STATUS: APPROVED`; a missing file counts as missing.
-2. Ask the owner, in one message, for every document that is missing or DRAFT: "Do you already have a PRD / tech spec / design (files, links, mockups)?" Offer to draft the ones they do not have.
+2. Ask the owner for every document that is missing or DRAFT: "Do you already have a PRD / tech spec / design (files, links, mockups)?" Offer to draft the ones they do not have. Use AskUserQuestion (one question per document, options such as "I will send it" / "Draft it with me"), so the question reaches the owner's Attention list.
 3. When the owner provides material, store it in the documented path (mockups under `docs/design/`), never in chat only.
 4. When something is missing, interview the owner with short, concrete questions, a few at a time:
    - PRD: users, problems, must-have features, acceptance criteria per feature, what is out of scope, priorities.
@@ -16,7 +16,7 @@ The squad works only from approved source documents. The Blueprint section in `A
    - Design: existing brand, screens they imagine, devices, which parts are fixed and which may be improved.
    - Environments: where it runs, domains, which services exist (names only, never secrets).
 5. Draft the document from the answers with the skeleton already in the repo. Mark assumptions with `ASSUMPTION:` so the owner sees them.
-6. Show the owner a short summary and ask for approval. Only after a clear yes, set `STATUS: APPROVED` and the approval date.
+6. Show the owner a short summary (a few lines; the document holds the details) and ask for approval with AskUserQuestion, one question per document ("Approve" / "Needs changes"), and one per `ASSUMPTION:` that needs a decision. Only after a clear yes, set `STATUS: APPROVED` and the approval date.
 7. Record open questions in the questions file and keep the work blocked until every required document is approved.
 
 ## Never

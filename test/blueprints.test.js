@@ -84,7 +84,7 @@ test('Set up Squad: next free Floor from 2, a new folder under the squads folder
   assert.equal(r.lead, 'rina-pm', 'the Blueprint lead role leads');
   assert.ok(fs.existsSync(path.join(r.path, '.git')));
   const f = readFloor(r.path);
-  assert.deepEqual(f.floor.blueprint, { id: 'software-house', version: 1 });
+  assert.deepEqual(f.floor.blueprint, { id: 'software-house', version: 2 });
   assert.equal(f.floor.workflow, 'squad-sprint');
   const second = await createSquad({ blueprint: 'sales-crm', name: 'Leads', team: [{ template: 'lead-researcher', displayName: 'Sam' }] });
   assert.equal(second.number, 3);
@@ -97,7 +97,7 @@ test('the standard is written into AISQUAD.md and every agent file, with the rul
     { template: 'project-manager', displayName: 'Rina - PM', lead: true }, { template: 'fullstack-developer', displayName: 'Budi - Dev' }, { template: 'devops-engineer', displayName: 'Ops' }] });
   const read = (f) => fs.readFileSync(path.join(r.path, f), 'utf8');
   const brief = read('AISQUAD.md');
-  assert.match(brief, /## Squad standard: Software House v1/);
+  assert.match(brief, /## Squad standard: Software House v2/);
   assert.match(brief, /only the lead \(Rina - PM \(`rina-pm`\)\) talks to the owner/);
   assert.match(brief, /\| `docs\/PRD\.md` \| What and why/);
   assert.doesNotMatch(brief, /Rules per role/, 'role rules go to the agents, not the brief');

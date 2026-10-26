@@ -1,7 +1,7 @@
 ---
 id: software-house
 title: Software House
-version: 1
+version: 2
 category: software
 description: A software team that builds and ships an application from a PRD, a tech spec and a design, in QA-gated sprints.
 keywords: [software, app, application, website, web, mobile, saas, platform, pos, "point of sale", erp, crm system, api, backend, frontend, dashboard, portal, marketplace, ecommerce, "e-commerce", shop, store, booking, system, develop, build, code, startup, mvp]
@@ -19,7 +19,7 @@ sourceDocs:
   - { path: docs/DESIGN.md, title: Design Document, purpose: "Screens, design system, mockups (docs/design/) and which parts are fixed", owner: ui-ux-designer, readers: all }
   - { path: docs/ENVIRONMENTS.md, title: Environments, purpose: "Development / staging / production: URLs, services, how to deploy, env var names only", owner: devops-engineer, readers: all }
 gates: [source documents approved, tests green, QA pass per module, design review, final QA smoke test]
-kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then run the source document intake: ask me for the PRD, the Tech Spec and the Design Document (and what you need for docs/ENVIRONMENTS.md). For anything missing, interview me and draft it in docs/ for my approval. No sprint starts until PRD, Tech Spec and Design are approved."
+kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then run the source document intake: ask me for the PRD, the Tech Spec and the Design Document (and what you need for docs/ENVIRONMENTS.md). For anything missing, interview me and draft it in docs/ for my approval. No sprint starts until PRD, Tech Spec and Design are approved. Ask me every decision and approval with AskUserQuestion (one question per decision, with options), and keep your plain-text summaries short."
 ---
 ## Purpose
 A software team that builds and ships an application from approved source documents, in sprints where every module passes QA before it ships.
@@ -63,6 +63,7 @@ A module is done when its acceptance criteria pass in QA with evidence (screensh
 
 ### project-manager
 - Before the first sprint you **must ask the owner** for the PRD, the Tech Spec and the Design Document. If one is missing, interview the owner and draft it for approval. No sprint starts until all three are approved.
+- Ask the owner with AskUserQuestion, one question per decision, with options: approvals ("Approve DESIGN.md" / "Needs changes"), assumptions, choices. Keep plain-text summaries short and point to the files; a question buried in a long message does not reach the owner's Attention list.
 - Split the work from these documents: each module lists its source stories, dependencies, and whether it can run in parallel or must wait. Give parallel modules to different developers; never two developers in the same folder.
 - Run each sprint with `/sprint <N>` (`.claude/commands/sprint.md`): plan, board, spawn, follow, close.
 - Review every handoff against the PRD and TECH before it goes to QA.
