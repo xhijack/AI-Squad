@@ -618,6 +618,14 @@ Tests (`test/nav.test.js`): two ten-minute soaks of the real office life (`updat
 - Tooling: `scripts/i18n-merge.js` folds translation fragments into the table.
 - The conversion was split over four helper agents by file. Their key sets were checked against the code and merged, and six duplicate keys were settled to one wording.
 
+## 0.8.6: leftovers (Phase 3.3 item 6, 26 Oct 2026)
+
+- **Floor 1 showed one VS Code session twice.** The two VS Code processes in `~` were really two sessions (`--resume=fc36…` and `--resume=7bb1…`). Every card showed the folder's newest transcript, so both looked the same.
+  - A process is now known by its session (`--resume`, `-r`, `--session-id`), and the same session seen twice is one agent.
+  - Transcripts are assigned so no two cards share one: their own session's file first, then the newest one nobody shows.
+  - Tests in `test/independents.test.js`.
+- **"Needs you" popover and side card both opened on page load.** On the first look after loading, every waiting item counted as new, and the side panel's card was not laid out yet, so the popover opened too. Now the first look only records what is waiting (the panel and the pill's count show it), and the popover opens only for items that arrive later.
+
 ## How to run
 
 ```
