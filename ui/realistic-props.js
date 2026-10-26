@@ -16,7 +16,7 @@ export function pbrSet(name, opts = {}) {
 }
 const images = new Map();                     // one load per file; sets clone it (same image, own repeat)
 function makeSet(name, { size = 1, color = 0xffffff, ...rest } = {}) {
-  const t = (kind, srgb) => {
+  const tex = (kind, srgb) => {
     const file = `${TEX}${name}_${kind}.jpg`;
     if (!images.has(file)) { const e = { clones: [] }; e.tex = loader.load(file, () => e.clones.forEach((c) => { c.needsUpdate = true; })); images.set(file, e); }
     const e = images.get(file), x = e.tex.clone();
@@ -25,8 +25,8 @@ function makeSet(name, { size = 1, color = 0xffffff, ...rest } = {}) {
     x.wrapS = x.wrapT = THREE.RepeatWrapping; x.repeat.setScalar(1 / size); x.anisotropy = 8;
     return x;
   };
-  const arm = t('arm', false);
-  return new THREE.MeshStandardMaterial({ map: t('diff', true), normalMap: t('nor_gl', false), aoMap: arm, roughnessMap: arm, metalnessMap: arm, color, ...rest });
+  const arm = tex('arm', false);
+  return new THREE.MeshStandardMaterial({ map: tex('diff', true), normalMap: tex('nor_gl', false), aoMap: arm, roughnessMap: arm, metalnessMap: arm, color, ...rest });
 }
 // box UVs in metres (so a repeated texture keeps its real scale on any size)
 function metricUv(geo) {

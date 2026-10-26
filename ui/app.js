@@ -20,6 +20,10 @@ import './design.js';
 import { attentionIndexHtml } from './convo.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
+import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
+
+translateDom();                                       // the static parts of index.html
+$('langName').textContent = LANGS[LANG];
 
 const state = ctx.state;
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
@@ -625,6 +629,7 @@ $('menu').addEventListener('click', (e) => {
     try { localStorage.setItem('aisquad.theme', next); } catch { /* private mode */ }
     applyTheme(); toast(`Theme: ${THEMES[next]}`);
   } else if (b.dataset.menu === 'voice') { ctx.actions['voice-settings']();
+  } else if (b.dataset.menu === 'language') { setLang(LANG === 'en' ? 'id' : 'en');                 // reloads in the other language
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
     scene.quality.set(next); showQuality(); toast(`Graphics: ${QUALITY_TEXT[next]}`);

@@ -42,14 +42,15 @@
 
 <header id="hud" aria-label="Status"></header>
 <div id="menu" class="popover" role="menu" hidden>
-  <button role="menuitem" data-menu="setup-squad">Set up Squad</button>
-  <button role="menuitem" data-menu="new-floor">New Floor</button>
-  <button role="menuitem" data-menu="templates">Role Templates</button>
-  <button role="menuitem" data-menu="rename">Rename Building</button>
-  <button role="menuitem" data-menu="theme">Theme: <span id="themeName">Light</span></button>
-  <button role="menuitem" data-menu="quality">Graphics: <span id="qualityName">Auto</span></button>
-  <button role="menuitem" data-menu="voice">Voice settings</button>
-  <button role="menuitem" data-menu="pin">Enter PIN</button>
+  <button role="menuitem" data-menu="setup-squad" data-i18n>Set up Squad</button>
+  <button role="menuitem" data-menu="new-floor" data-i18n>New Floor</button>
+  <button role="menuitem" data-menu="templates" data-i18n>Role Templates</button>
+  <button role="menuitem" data-menu="rename" data-i18n>Rename Building</button>
+  <button role="menuitem" data-menu="theme"><span data-i18n>Theme</span>: <span id="themeName">Light</span></button>
+  <button role="menuitem" data-menu="quality"><span data-i18n>Graphics</span>: <span id="qualityName">Auto</span></button>
+  <button role="menuitem" data-menu="language"><span data-i18n>Language</span>: <span id="langName">English</span></button>
+  <button role="menuitem" data-menu="voice" data-i18n>Voice settings</button>
+  <button role="menuitem" data-menu="pin" data-i18n>Enter PIN</button>
 </div>
 <div id="floorMenu" class="popover" role="menu" hidden></div>
 <div id="attPop" class="popover attPop" hidden></div>
@@ -59,9 +60,9 @@
   <section class="card sideCard" id="sideMain" hidden></section>
   <section class="card sideCard grow" id="sideTabs" hidden></section>
 </aside>
-<button id="sideShow" class="floatBtn" hidden title="Show the panel" aria-label="Show the panel"><svg><use href="#i-left"/></svg></button>
+<button id="sideShow" class="floatBtn" hidden title="Show the panel" aria-label="Show the panel" data-i18n-title data-i18n-aria><svg><use href="#i-left"/></svg></button>
 <section id="sheet" class="sheet" hidden>
-  <button class="grip" id="grip" aria-label="Resize panel"></button>
+  <button class="grip" id="grip" aria-label="Resize panel" data-i18n-aria></button>
   <div class="tabs" id="sheetTabs" role="tablist"></div>
   <div class="sheetBody" id="sheetBody"></div>
 </section>
@@ -69,20 +70,20 @@
 <nav id="dock" aria-label="Dock"></nav>
 <div id="legendPop" class="popover legend" hidden></div>
 <div id="editBar" hidden></div>
-<div id="followBar" hidden><button class="small ghost" data-follow="-1" aria-label="Previous agent">‹</button><span id="followText"></span><button class="small ghost" data-follow="1" aria-label="Next agent">›</button><button class="small" data-povdesk>Desk</button><button class="small gold" data-povback>Back (Esc)</button></div>
-<div id="povBar" hidden><span id="povText"></span><span class="note hideSm">Drag to look around · scroll to zoom</span><button class="small" data-povdesk>Desk</button><button class="small gold" data-povback>Back (Esc)</button></div>
+<div id="followBar" hidden><button class="small ghost" data-follow="-1" aria-label="Previous agent" data-i18n-aria>‹</button><span id="followText"></span><button class="small ghost" data-follow="1" aria-label="Next agent" data-i18n-aria>›</button><button class="small" data-povdesk data-i18n>Desk</button><button class="small gold" data-povback data-i18n>Back (Esc)</button></div>
+<div id="povBar" hidden><span id="povText"></span><span class="note hideSm" data-i18n>Drag to look around · scroll to zoom</span><button class="small" data-povdesk data-i18n>Desk</button><button class="small gold" data-povback data-i18n>Back (Esc)</button></div>
 
 <dialog id="pinDlg">
   <form method="dialog">
-    <h3>Enter PIN</h3>
-    <p class="note">Changes and agent screens are locked with the local PIN. Find it with <code>cat ~/.aisquad/pin</code> on this machine.</p>
+    <h3 data-i18n>Enter PIN</h3>
+    <p class="note" data-i18n-html>Changes and agent screens are locked with the local PIN. Find it with <code>cat ~/.aisquad/pin</code> on this machine.</p>
     <label for="pinIn">PIN</label><input id="pinIn" inputmode="numeric" autocomplete="off" required>
-    <div class="actions"><button value="cancel" class="ghost" formnovalidate>Cancel</button><button value="ok" class="gold">Unlock</button></div>
+    <div class="actions"><button value="cancel" class="ghost" formnovalidate data-i18n>Cancel</button><button value="ok" class="gold" data-i18n>Unlock</button></div>
   </form>
 </dialog>
 <dialog id="modal"><div id="modalBody"></div></dialog>
 <div id="toast" role="status" aria-live="polite"></div>
-<noscript>The AI Squad needs JavaScript.</noscript>
+<noscript>The AI Squad needs JavaScript. / The AI Squad butuh JavaScript.</noscript>
 <script type="module">
 // ?look=desk-poc opens the Phase 3.2 step 1 desk corner instead of the office (?look=realistic is the office itself)
 if (new URLSearchParams(location.search).get('look') === 'desk-poc') import('./realistic.js'); else import('./app.js');

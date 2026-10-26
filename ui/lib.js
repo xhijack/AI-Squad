@@ -1,25 +1,26 @@
 // Small shared helpers for the UI: DOM, formatting, API calls with the local PIN, toast, modal.
+import { t, tx } from './i18n.js';
 export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const money = (n) => `$${(+n || 0).toFixed(2)}`;
 export const gb = (b) => `${(b / 2 ** 30).toFixed(1)} GB`;
 
 export function ago(ts) {
-  if (!ts) return 'never';
+  if (!ts) return t('never');
   const s = (Date.now() - ts) / 1000;
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} d ago`;
+  if (s < 45) return t('just now');
+  if (s < 3600) return t('{n} min ago', { n: Math.round(s / 60) });
+  if (s < 86400) return t('{n} h ago', { n: Math.round(s / 3600) });
+  return t('{n} d ago', { n: Math.round(s / 86400) });
 }
 export const initials = (name) => String(name || '?').split(/[\s-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 export function avatar(a, cls = '') {
   const ap = a.appearance || {};
   return `<span class="avatar ${cls}" style="--shirt:${esc(ap.shirt || '#3d82d6')};--hair:${esc(ap.hair || '#2b2440')}" aria-hidden="true">${esc(initials(a.displayName))}</span>`;
 }
-export const STATE_TEXT = { working: 'Working', waiting: 'Waiting for you', idle: 'Idle', stopped: 'Stopped' };
+export const STATE_TEXT = { working: t('Working'), waiting: t('Waiting for you'), idle: t('Idle'), stopped: t('Stopped') };
 // teammates on Squad Sprint / Blueprint Floors the lead has not started yet are "not started", not "stopped"
-export const stateText = (a) => (a.standby ? 'Not started' : a.waitingReply ? 'Waiting for your reply' : STATE_TEXT[a.state]);
+export const stateText = (a) => (a.standby ? t('Not started') : a.waitingReply ? t('Waiting for your reply') : STATE_TEXT[a.state]);
 
 // unsent replies in Attention cards, kept across re-renders (item id -> text)
 export const drafts = new Map();
@@ -59,10 +60,11 @@ export function mdLite(src) {
   return out.join('');
 }
 
+// text: already translated (t) or from the server (translated here with tx when it is a known message)
 export function toast(text, ms = 2800) {
-  const t = $('toast');
-  t.textContent = text; t.classList.add('on');
-  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), ms);
+  const el = $('toast');
+  el.textContent = tx(text); el.classList.add('on');
+  clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), ms);
 }
 
 // ---------- PIN + API ----------
@@ -87,7 +89,7 @@ export function askPin() {
 // reads: send the PIN too (servers bound off loopback lock every API call); 401 is reported, not prompted
 export async function getJson(url) {
   const r = await fetch(url, { headers: pin ? { 'x-aisquad-pin': pin } : {} });
-  if (r.status === 401) throw Object.assign(new Error('PIN required'), { status: 401 });
+  if (r.status === 401) throw Object.assign(new Error(t('PIN required')), { status: 401 });
   if (r.status === 404) return { notFound: true };
   return r.json();
 }
@@ -107,22 +109,22 @@ export async function api(method, url, body, { raw = null, headers = {}, quiet40
     else if (body !== undefined) { init.body = JSON.stringify(body); init.headers['content-type'] = 'application/json'; }
     const r = await fetch(url, init);
     if (r.status === 401) {
-      if (quiet401) throw Object.assign(new Error('PIN required'), { status: 401 });
-      if (!(await askPin())) throw Object.assign(new Error('PIN required'), { status: 401 });
+      if (quiet401) throw Object.assign(new Error(t('PIN required')), { status: 401 });
+      if (!(await askPin())) throw Object.assign(new Error(t('PIN required')), { status: 401 });
       continue;
     }
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw Object.assign(new Error(j.error || `Request failed (${r.status})`), { status: r.status });
+    if (!r.ok) throw Object.assign(new Error(tx(j.error) || t('Request failed ({status})', { status: r.status })), { status: r.status });
     return j;
   }
-  throw new Error('Wrong PIN');
+  throw new Error(t('Wrong PIN'));
 }
 
 // answering an Attention item: its context (floorId, agentId, kind) goes along, so typed text reaches the agent
 // even when the item has moved on; "already answered" (409) is not an error for the owner
 export async function answerItem(id, body, where = {}) {
   try { return await api('POST', `/api/attention/${id}/answer`, { ...body, floorId: where.floorId || '', agentId: where.agentId || '', kind: where.kind || '' }); }
-  catch (e) { if (e.status === 409) { toast('Already answered'); return { gone: true }; } throw e; }
+  catch (e) { if (e.status === 409) { toast(t('Already answered')); return { gone: true }; } throw e; }
 }
 // the context of an Attention card (data attributes on .att)
 export const itemContext = (el) => { const c = el?.closest?.('.att, [data-item-floor]'); return c ? { floorId: c.dataset.itemFloor || '', agentId: c.dataset.itemAgent || '', kind: c.dataset.itemKind || '' } : {}; };
