@@ -58,26 +58,45 @@ export function currentModule(floorId, agent) {
   const row = Object.entries(board).find(([task, r]) => agent && r.owner === agent && r.status === 'IN_PROGRESS' && modId(task));
   return row ? modId(row[0]) : null;
 }
-// ctx: { team: [{ id, role: { template } }], sprint, options: { messages, pii } } -> emit(ev)
+// an agent named in a file ("Tester: Sari") or a message to "main" (the lead's session) -> the team's agent id
+export function resolveAgent(team = [], name) {
+  if (!name) return name;
+  if (team.some((a) => a.id === name)) return name;
+  if (name === 'main' || name === 'team-lead') return team.find((a) => a.lead)?.id || name;
+  const n = String(name).toLowerCase();
+  const hit = team.filter((a) => String(a.displayName || '').toLowerCase().split(/\s+-\s+|\s+/)[0] === n || String(a.displayName || '').toLowerCase() === n);
+  return hit.length === 1 ? hit[0].id : name;
+}
+// ctx: { team: [{ id, displayName, lead, role: { template } }], sprint, options: { messages, pii } } -> emit(ev)
 export function emitter(floorId, ctx = {}) {
-  return (ev) => log.append(floorId, {
-    ...ev,
-    role: ev.role ?? (ctx.team || []).find((a) => a.id === ev.agent)?.role?.template ?? null,
-    module: ev.module ?? currentModule(floorId, ev.agent),
-    sprint: ev.sprint ?? ctx.sprint ?? null,
-  }, ctx.options || {});
+  const team = ctx.team || [];
+  return (ev) => {
+    const e = normalize(ev, team);
+    return log.append(floorId, {
+      ...e,
+      role: e.role ?? team.find((a) => a.id === e.agent)?.role?.template ?? null,
+      module: e.module ?? currentModule(floorId, e.agent),
+      sprint: e.sprint ?? ctx.sprint ?? null,
+    }, ctx.options || {});
+  };
+}
+function normalize(ev, team) {
+  const e = { ...ev, agent: resolveAgent(team, ev.agent) };
+  if (e.data?.to && (e.type === 'message.sent' || e.type === 'task.delegated')) e.data = { ...e.data, to: resolveAgent(team, e.data.to) };
+  return e;
 }
 
 // ---------- transcripts ----------
-// ctx: { agent, role, root, subagent, emit(ev) }. Reads new lines of one transcript and emits events.
+// ctx: { agent, role, root, subagent, backfillMs, emit(ev) }. Reads new lines of one transcript and emits events.
 export function readTranscript(floorId, file, ctx, now = Date.now()) {
   const st = statOf(file); if (!st) return 0;
   const S = stateOf(floorId);
   let f = S.files[file];
-  if (!f) f = S.files[file] = { offset: st.mtimeMs < now - BACKFILL_MS ? st.size : 0 };
+  const backfill = ctx.backfillMs ?? BACKFILL_MS;
+  if (!f) f = S.files[file] = { offset: st.mtimeMs < now - backfill ? st.size : 0 };
   f.tools ||= {}; f.asks ||= {};
   if (st.size < f.offset) f.offset = 0;                    // rewritten
-  const emit = (ev) => { if (ev.ts >= now - BACKFILL_MS) ctx.emit({ agent: ctx.agent, role: ctx.role, session: path.basename(file, '.jsonl'), model: f.model || null, ...ev }); };
+  const emit = (ev) => { if (ev.ts >= now - backfill) ctx.emit({ agent: ctx.agent, role: ctx.role, session: path.basename(file, '.jsonl'), model: f.model || null, ...ev }); };
   const flushUsage = () => {
     const u = f.usage; if (!u) return;
     f.usage = null;
@@ -132,7 +151,8 @@ function record(r, f, ctx, emit, flushUsage) {
     }
   } else if (r.type === 'user') {
     flushUsage();                                           // the reply before this record is complete
-    const owner = (t) => !ctx.subagent && !r.isMeta && t && !t.startsWith('<') && !t.startsWith('Caveat:');
+    // teammate messages arrive as user text too; the sender's SendMessage is already the event
+    const owner = (t) => !ctx.subagent && !r.isMeta && t && !t.startsWith('<') && !t.startsWith('Caveat:') && !t.includes('<teammate-message') && !/^Another Claude session sent a message/.test(t);
     if (typeof msg.content === 'string' && owner(msg.content.trim()) && r.uuid) emit({ type: 'task.given', id: `task:${r.uuid}`, ts, data: { by: 'owner', text: clip(msg.content.trim(), 2000) } });
     for (const c of content) {
       if (c.type === 'text' && owner(String(c.text || '').trim()) && r.uuid) emit({ type: 'task.given', id: `task:${r.uuid}`, ts, data: { by: 'owner', text: clip(c.text.trim(), 2000) } });
@@ -338,7 +358,7 @@ export function fromMerge(entry) {
 }
 
 // ---------- agent states: idle with open work, crashes ----------
-// agents: [{ id, state, running }], openWork: { [agentId]: open items of that agent }, teamOpen: open items of the team
+// agents: [{ id, state, running, inLead }], openWork: { [agentId]: open items of that agent }, teamOpen: open items of the team
 // stoppedByUs: Set of agent ids stopped through The AI Squad since the last tick
 export function stateChanges(floorId, agents, { teamOpen = 0, own = {}, stoppedByUs = new Set(), independent = false } = {}, now = Date.now()) {
   const S = stateOf(floorId);
@@ -346,10 +366,11 @@ export function stateChanges(floorId, agents, { teamOpen = 0, own = {}, stoppedB
   const out = [];
   for (const a of agents) {
     const prev = S.agents[a.id];
-    const cur = { state: a.state, running: !!a.running, since: prev && prev.state === a.state ? prev.since : now };
+    const cur = { state: a.state, running: !!a.running, inLead: !!a.inLead, since: prev && prev.state === a.state ? prev.since : now };
     S.agents[a.id] = cur;
     if (!prev) continue;
-    if (prev.running && !a.running && !stoppedByUs.has(a.id)) out.push({ type: independent ? 'agent.stopped' : 'agent.crashed', agent: a.id, data: { lastState: prev.state } });
+    // a teammate inside the lead's session ends with its task: that is a normal stop, not a crash
+    if (prev.running && !a.running && !stoppedByUs.has(a.id)) out.push(independent || prev.inLead ? { type: 'agent.stopped', agent: a.id, data: { via: prev.inLead ? 'teammate finished' : 'process ended' } } : { type: 'agent.crashed', agent: a.id, data: { lastState: prev.state } });
     if (!prev.running && a.running && independent) out.push({ type: 'agent.started', agent: a.id, data: { via: a.via || 'detected' } });
     const busy = (s) => s === 'working' || s === 'waiting';
     if (busy(prev.state) && a.state === 'idle') out.push({ type: 'agent.idle', agent: a.id, data: { openWork: teamOpen > 0, ownOpen: own[a.id] || 0, teamOpen } });

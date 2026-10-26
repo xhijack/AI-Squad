@@ -43,7 +43,7 @@ Every line has these fields, in this order. Unknown values are `null`.
 | Server (start / stop, Watchdog, agent states) | `agent.*`, `watchdog.alert`, `agent.idle`, `agent.busy` |
 | Audit | `audit.done`, `improvement.decided` |
 
-The first scan of a Floor only records a baseline (current board, files, commits of the last 7 days); transcripts are read back 7 days.
+The first scan of a Floor only records a baseline (the current board and files are not logged as new events); transcripts and commits are read back 7 days, on Floor 1 transcripts only 1 day (they are other projects' sessions). Agent names in files (`Tester: Sari`) and messages to `main` are resolved to the team's agent ids. Teammate messages that arrive in the lead's transcript are not logged again; the sender's `message.sent` is the event.
 
 ## Privacy
 
@@ -63,13 +63,13 @@ The first scan of a Floor only records a baseline (current board, files, commits
 {"v":1,"id":"start-ex","ts":"2026-10-26T02:00:00.000Z","floor":"pos","sprint":1,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":"aisquad-pos-budi-dev","model":"haiku","type":"agent.started","summary":"budi-dev started (haiku, medium)","data":{"model":"haiku","effort":"medium","via":"aisquad","withTask":true}}
 ```
 
-**`agent.stopped`**: Stopped through The AI Squad (or, on Floor 1, the Claude Code process went away).
+**`agent.stopped`**: Stopped through The AI Squad (`data.via: aisquad`), a teammate inside the lead's session finished (`teammate finished`), or on Floor 1 the Claude Code process went away (`process ended`).
 
 ```json
 {"v":1,"id":"fce9123beb5c","ts":"2026-10-26T02:01:00.000Z","floor":"pos","sprint":1,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":"aisquad-pos-budi-dev","model":null,"type":"agent.stopped","summary":"budi-dev stopped","data":{"via":"aisquad"}}
 ```
 
-**`agent.crashed`**: The session ended while The AI Squad did not stop it (tmux pane gone, Claude Code exited).
+**`agent.crashed`**: The agent's own session ended while The AI Squad did not stop it (tmux pane gone, Claude Code exited).
 
 ```json
 {"v":1,"id":"cbaec9e5475d","ts":"2026-10-26T02:02:00.000Z","floor":"pos","sprint":1,"module":null,"agent":"quinn-qa","role":"qa-engineer","session":null,"model":null,"type":"agent.crashed","summary":"quinn-qa ended without a stop from The AI Squad","data":{"lastState":"working"}}

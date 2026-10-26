@@ -743,19 +743,21 @@ export function logEvent(floorId, ev) {
   try { collect.emitter(floorId, logCtx(floorId, floorId === ind.FLOOR_ID ? '' : building.floorEntry(floorId).path))(ev); } catch (e) { console.error('[log]', e.message); }
 }
 
+// Floor 1 reads back only the last day (the scan's own window): these are other projects' sessions
 function collectTranscripts(floorId, root, emit, now, agentId = '') {
   const S = collect.stateOf(floorId);
-  const fresh = (file, st) => (S.files[file] ? S.files[file].offset !== st.size || S.files[file].usage : st.mtimeMs >= now - collect.BACKFILL_MS);
+  const backfillMs = floorId === ind.FLOOR_ID ? ind.RECENT_MS : collect.BACKFILL_MS;
+  const fresh = (file, st) => (S.files[file] ? S.files[file].offset !== st.size || S.files[file].usage : st.mtimeMs >= now - backfillMs);
   for (const s of tx.sessionsOf(root)) {
-    if (fresh(s.file, s.st)) collect.readTranscript(floorId, s.file, { agent: agentId || tx.sessionAgent(s.file) || 'owner', root, emit }, now);
-    if (s.st.mtimeMs < now - collect.BACKFILL_MS) continue;
+    if (fresh(s.file, s.st)) collect.readTranscript(floorId, s.file, { agent: agentId || tx.sessionAgent(s.file) || 'owner', root, emit, backfillMs }, now);
+    if (s.st.mtimeMs < now - backfillMs) continue;
     const sd = path.join(tx.projectDir(root), s.id, 'subagents');
     for (const f of fs.existsSync(sd) ? fs.readdirSync(sd) : []) {
       if (!f.endsWith('.jsonl')) continue;
       const file = path.join(sd, f), st = statOf(file);
       if (!st || !fresh(file, st)) continue;
       const meta = readJson(file.replace(/\.jsonl$/, '.meta.json'), {}) || {};
-      collect.readTranscript(floorId, file, { agent: meta.customAgentType || meta.agentType || meta.name || 'subagent', root, subagent: true, emit }, now);
+      collect.readTranscript(floorId, file, { agent: meta.customAgentType || meta.agentType || meta.name || 'subagent', root, subagent: true, emit, backfillMs }, now);
     }
   }
 }
@@ -774,15 +776,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
       if (!fs.existsSync(entry.path)) continue;
       let cfg; try { cfg = floors.readFloor(entry.path); } catch { continue; }
       const base = collect.emitter(entry.id, logCtx(entry.id, entry.path, cfg));
-      const emit = (ev) => {
-        const e = base(ev);
-        if (!e) return e;
-        n++;
-        onEvent?.(entry.id, e);
-        // a sprint that closed just now is audited when the Floor has automatic audits on
-        if (e.type === 'sprint.closed' && cfg.floor.audit.auto && now - Date.parse(e.ts) < 3600e3) pendingAudits.set(entry.id, e.sprint);
-        return e;
-      };
+      const emit = (ev) => { const e = base(ev); if (e) { n++; onEvent?.(entry.id, e); } return e; };
       try {
         collectTranscripts(entry.id, entry.path, emit, now);
         for (const ev of collect.scanDocs(entry.id, entry.path, { blueprint: blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint) }, now)) emit(ev);
@@ -805,6 +799,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
         }
       } catch (e) { console.error('[log]', entry.id, e.message); }
       collect.saveState(entry.id);
+      if (commits && cfg.floor.audit.auto) queueSprintAudit(entry.id, now);
     }
     // Floor 1: independent agents (one agent per folder for transcripts)
     const ctx1 = collect.emitter(ind.FLOOR_ID, {});
@@ -834,10 +829,15 @@ export function floorLog(floorId, q = {}) {
 // ---------- Audit (server/audit.js) ----------
 const auditing = new Map();                    // floorId -> { since, sprint }
 const pendingAudits = new Map();               // floorId -> sprint closed, waiting for an automatic audit
+// read from the log, so a server restart does not lose it: the last sprint closed in the past day without an audit
+function queueSprintAudit(floorId, now) {
+  const closed = squadLog.read(floorId, { type: 'sprint.closed', from: now - 864e5 }).at(-1);
+  if (closed && !auditLib.listAudits(floorId).some((a) => a.range?.sprint === closed.sprint)) pendingAudits.set(floorId, closed.sprint);
+}
 function auditInfo(entry, cfg) {
   const bp = blueprintsLib.floorBlueprint(entry.path, cfg.floor.blueprint);
   return {
-    floorName: cfg.floor.name, workflow: cfg.floor.workflow, blueprint: bp ? `${bp.id} v${bp.version}` : '',
+    floorName: cfg.floor.name, workflow: cfg.floor.workflow, blueprint: bp?.id || '', blueprintVersion: bp?.version || null,
     sourceDocs: (bp?.sourceDocs || []).map((d) => String(d.path)).filter(Boolean),
     team: cfg.team.agents.map((a) => { let eff = null; try { eff = floors.effectiveOf(entry.path, a); } catch { /* broken template */ } return { id: a.id, role: a.role?.template || '', model: eff?.model || '', effort: eff?.effort || '' }; }),
   };
@@ -859,15 +859,17 @@ export function floorAudit(floorId, auditId) {
 }
 
 // runs in the background; returns the promise of the audit (the CLI waits for it, the API does not)
-export function startAudit(floorId, { sprint = null, model = '' } = {}) {
+export function startAudit(floorId, { sprint: sprintNo = null, model = '' } = {}) {
   const entry = building.floorEntry(floorId);
   if (auditing.has(floorId)) throw bad('An audit is already running on this Floor');
   const cfg = floors.readFloor(entry.path);
   const m = floors.AUDIT_MODELS.includes(model) ? model : cfg.floor.audit.model;
-  const n = sprint === '' || sprint == null ? null : Number(sprint);
+  const n = sprintNo === '' || sprintNo == null ? null : Number(sprintNo);
   if (n != null && !Number.isInteger(n)) throw bad('Sprint must be a number');
   auditing.set(floorId, { since: Date.now(), sprint: n });
-  return auditLib.runAudit(floorId, auditInfo(entry, cfg), { sprint: n, model: m }).then((a) => {
+  const closeChecks = cfg.floor.workflow === 'squad-sprint' && sprint.hasPack(entry.path)
+    ? sprint.sprintStatus(entry.path, n ?? sprint.readConfig(entry.path).SPRINT).then((st) => ({ sprint: st.sprint, checks: st.checks }), () => null) : Promise.resolve(null);
+  return closeChecks.then((sprintClose) => auditLib.runAudit(floorId, { ...auditInfo(entry, cfg), sprintClose }, { sprint: n, model: m })).then((a) => {
     logEvent(floorId, { type: 'audit.done', sprint: n, data: { audit: a.id, findings: a.findings.length, cost: a.cost, model: a.model, ...(a.error ? { error: a.error } : {}) } });
     improve.recordOutcomes(floorId, a);                // earlier applied changes get their "after" metrics
     return a;
@@ -900,7 +902,7 @@ export function applyFinding(floorId, auditId, findingId) {
 }
 export function dismissFinding(floorId, auditId, findingId, reason) {
   const d = improve.dismiss(floorRef(floorId), auditId, findingId, reason);
-  logEvent(floorId, { type: 'improvement.decided', data: { decision: 'dismissed', target: d.target ? `${d.target.kind} ${d.target.id}` : 'none', finding: findingId, audit: auditId, reason: d.reason } });
+  logEvent(floorId, { type: 'improvement.decided', data: { decision: 'dismissed', target: d.target ? `${d.target.kind} ${d.target.id}` : `${findingId} (advice)`, finding: findingId, audit: auditId, reason: d.reason } });
   return { ok: true, decision: d };
 }
 // a newer Blueprint version (e.g. lessons applied from an audit) replaces the Floor's snapshot; pack files stay as they are

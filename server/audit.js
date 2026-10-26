@@ -86,6 +86,8 @@ export function metrics(events, info = {}) {
     gatesRefused: { total: refused.length, byGate: refused.reduce((o, e) => inc(o, e.data.gate || 'merge'), {}) },
     gatesPassed: of('gate.passed').length,
     rework: { reopened: sum(modules, (m) => m.reopened) + of('board.changed').filter((e) => e.data.reopened && !/^M\d+$/.test(e.module || '')).length },
+    // Squad Sprint: the checks the server makes before it merges a closed sprint (from git, at audit time)
+    sprintClose: info.sprintClose || null,
   };
 
   // ---- efficiency ----
@@ -181,7 +183,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
   for (const e of events) if (e.type === 'question.asked') inc(talk, `${e.agent} -> owner`);
   const text = [
     `# Squad audit digest`,
-    `Floor: ${info.floorName || info.floorId || '?'} (${info.floorId || '?'})${info.blueprint ? `, Blueprint ${info.blueprint}` : ''}, workflow ${info.workflow || '?'}.`,
+    `Floor: ${info.floorName || info.floorId || '?'} (id \`${info.floorId || '?'}\`)${info.blueprint ? `, Blueprint id \`${info.blueprint}\`${info.blueprintVersion ? ` (version ${info.blueprintVersion})` : ''}` : ''}, workflow ${info.workflow || '?'}.`,
     `Range: ${info.label || ''} ${m.range.from || '?'} to ${m.range.to || '?'}, ${m.range.events} log events.`,
     '', '## Team', table(['agent', 'role', 'configured model', 'effort'], (info.team || []).map((a) => [a.id, a.role, a.model, a.effort])),
     '## Process metrics',
@@ -196,6 +198,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['process.permissions', `${P.permissions.asked} prompts, ${P.permissions.totalWaitMin} min waiting`],
       ['process.gatesRefused', `${P.gatesRefused.total} (${Object.entries(P.gatesRefused.byGate).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}), ${P.gatesPassed} passed`],
       ['process.rework', `${P.rework.reopened} rows reopened`],
+      ...(P.sprintClose ? [['process.sprintClose', `sprint ${P.sprintClose.sprint}: ${Object.entries(P.sprintClose.checks).map(([k, ok]) => `${k} ${ok ? 'yes' : 'NO'}`).join(', ')}; the server merges only when all are yes`]] : []),
     ]),
     '## Efficiency metrics',
     table(['metric', 'value'], [
@@ -262,7 +265,7 @@ export function parseReview(raw) {
     const change = { summary: clip(oneLine(pc.summary || ''), 300), addRules: strList(pc.addRules, 5, 300), removeRules: strList(pc.removeRules, 5, 300), appendPrompt: clip(String(pc.appendPrompt || '').trim(), 1200),
       model: ['opus', 'sonnet', 'haiku'].includes(pc.model) ? pc.model : '', effort: ['low', 'medium', 'high', 'xhigh', 'max'].includes(pc.effort) ? pc.effort : '',
       setting: FLOOR_SETTINGS.includes(pc.setting) ? pc.setting : '', value: clip(String(pc.value ?? ''), 60) };
-    const id = kebab(t.id || '');
+    const id = kebab(t.id || '').replace(kind === 'blueprint' ? /-v\d+$/ : /^$/, '');      // "software-house v1" -> software-house
     const actionable = kind !== 'none' && id && (kind === 'floor-setting' ? !!change.setting : change.addRules.length || change.removeRules.length || change.appendPrompt || change.model || change.effort);
     return { area, severity, title: clip(oneLine(f.title || recommendation, 120), 120), evidence, recommendation, target: actionable ? { kind, id, proposedChange: change } : null };
   }).filter(Boolean).sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity)).slice(0, 20);

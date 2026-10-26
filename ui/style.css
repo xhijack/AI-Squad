@@ -370,7 +370,7 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-sp
 .logFilters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 6px; }
 .logFilters label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; margin: 0; }
 .logFilters select { width: auto; }
-.logCount { text-align: right; }
+.logCount { text-align: right; white-space: nowrap; }
 .logList { list-style: none; margin: 0; padding: 0; }
 .logDay { position: sticky; top: 0; background: var(--panel); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; padding: 10px 2px 4px; z-index: 1; }
 .logRow { border-bottom: 1px solid var(--line); }
@@ -384,6 +384,7 @@ table.perf td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-sp
 .talkList .talk { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .talk .arrow { color: var(--muted); }
 .talk p { flex-basis: 100%; margin: 2px 0 0 72px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.talk p.clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
 @media (max-width: 640px) {
   .logLine { grid-template-columns: 64px 1fr; } .logLine .chip { justify-self: start; } .logCount { flex-basis: 100%; text-align: left; } .logLine .logSum { grid-column: 1 / -1; white-space: normal; } .logLine .note { display: none; }
   .logDetail, .talk p { margin-left: 0; }

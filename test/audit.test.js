@@ -44,7 +44,7 @@ put(37, 'bug.closed', { module: 'M01', data: { bug: 'M01-B01', status: 'VERIFIED
 put(38, 'qa.report', { module: 'M02', agent: 'quinn-qa', data: { module: 'M02', round: 1, status: 'PASS', failed: [] } });
 put(40, 'merge.done', { data: { branch: 'sprint-1', into: 'main', trigger: 'sprint' } });
 put(41, 'sprint.closed', { data: {} });
-const INFO = { floorName: 'POS', workflow: 'squad-sprint', blueprint: 'software-house v1', team: [{ id: 'budi-dev', role: 'fullstack-developer', model: 'opus', effort: 'medium' }], sourceDocs: ['docs/PRD.md', 'docs/TECH.md', 'docs/DESIGN.md'] };
+const INFO = { floorName: 'POS', workflow: 'squad-sprint', blueprint: 'software-house', blueprintVersion: 1, sprintClose: { sprint: '1', checks: { branch: true, release: false, closingCommit: true, cleanTree: true, qaPass: false } }, team: [{ id: 'budi-dev', role: 'fullstack-developer', model: 'opus', effort: 'medium' }], sourceDocs: ['docs/PRD.md', 'docs/TECH.md', 'docs/DESIGN.md'] };
 
 test('metrics on a fixture log', () => {
   const { events } = audit.rangeEvents('pos', { sprint: 1 });
@@ -72,7 +72,8 @@ test('the digest is compact and gives every listed event a ref', () => {
   const { events } = audit.rangeEvents('pos', { sprint: 1 });
   const d = audit.digest(events, audit.metrics(events, INFO), { ...INFO, floorId: 'pos', label: 'sprint 1' });
   assert.ok(d.text.length < 8000, `${d.text.length} chars`);
-  for (const k of ['process.qaFirstRoundPassRate', 'efficiency.cacheHitRate', 'efficiency.repeatedReads', '| budi-dev | fullstack-developer | opus | medium |']) assert.ok(d.text.includes(k), k);
+  assert.match(d.text, /process\.sprintClose \| sprint 1: branch yes, release NO, closingCommit yes, cleanTree yes, qaPass NO/);
+  for (const k of ['process.qaFirstRoundPassRate', 'efficiency.cacheHitRate', 'efficiency.repeatedReads', '| budi-dev | fullstack-developer | opus | medium |', 'Blueprint id `software-house` (version 1)']) assert.ok(d.text.includes(k), k);
   const refs = Object.keys(d.refs);
   assert.ok(refs.length >= 8);
   for (const r of refs) assert.match(d.text, new RegExp(`^${r} `, 'm'));
@@ -86,17 +87,19 @@ test('parseReview keeps findings with evidence and clean targets', () => {
   const raw = `Here you go: ${JSON.stringify({ summary: 'ok', findings: [
     { area: 'efficiency', severity: 'LOW', title: 'a', evidence: ['E1'], recommendation: 'Do x.', target: { kind: 'role-template', id: 'Fullstack Developer', proposedChange: ch({ addRules: ['Rule one'], model: 'gpt' }) } },
     { area: 'process', severity: 'critical', title: 'b', evidence: ['metric:process.sourceDocs'], recommendation: 'Approve docs first.', target: { kind: 'blueprint', id: 'software-house', proposedChange: ch({}) } },
+    { area: 'process', severity: 'low', title: 'e', evidence: ['E5'], recommendation: 'Lessons.', target: { kind: 'blueprint', id: 'software-house v1', proposedChange: ch({ addRules: ['Keep the tree clean.'] }) } },
     { area: 'quality', severity: 'high', title: 'no evidence', evidence: [], recommendation: 'x', target: { kind: 'none', id: '', proposedChange: ch({}) } },
     { area: 'vibes', severity: 'high', title: 'bad area', evidence: ['E2'], recommendation: 'x' },
     { area: 'efficiency', severity: 'medium', title: 'c', evidence: ['E3'], recommendation: 'Cheaper audits.', target: { kind: 'floor-setting', id: 'pos', proposedChange: ch({ setting: 'audit.model', value: 'haiku' }) } },
     { area: 'efficiency', severity: 'medium', title: 'd', evidence: ['E4'], recommendation: 'Bad setting.', target: { kind: 'floor-setting', id: 'pos', proposedChange: ch({ setting: 'git.pushPolicy', value: 'always' }) } },
   ] })} thanks`;
   const r = audit.parseReview(raw);
-  assert.deepEqual(r.findings.map((f) => [f.id, f.severity, f.title, f.target?.kind || null]), [['F1', 'critical', 'b', null], ['F2', 'medium', 'c', 'floor-setting'], ['F3', 'medium', 'd', null], ['F4', 'low', 'a', 'role-template']]);
+  assert.deepEqual(r.findings.map((f) => [f.id, f.severity, f.title, f.target?.kind || null]), [['F1', 'critical', 'b', null], ['F2', 'medium', 'c', 'floor-setting'], ['F3', 'medium', 'd', null], ['F4', 'low', 'a', 'role-template'], ['F5', 'low', 'e', 'blueprint']]);
+  assert.equal(r.findings[4].target.id, 'software-house', 'a version in the id is dropped');
   assert.deepEqual([r.findings[3].target.id, r.findings[3].target.proposedChange.model, r.findings[3].target.proposedChange.addRules], ['fullstack-developer', '', ['Rule one']]);
   assert.throws(() => audit.parseReview('no json here'), /not JSON/);
   assert.throws(() => audit.parseReview({ summary: 'x' }), /no findings/);
-  assert.deepEqual(audit.scores(r.findings), { process: 70, efficiency: 81, quality: 100, overall: 84 });
+  assert.deepEqual(audit.scores(r.findings), { process: 67, efficiency: 81, quality: 100, overall: 83 });
 });
 
 test('runAudit with claude -p: schema, skill, cost; files and history; errors are kept', async () => {

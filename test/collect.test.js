@@ -25,13 +25,14 @@ test('transcripts: task, tools with duration and errors, messages, questions wit
     asst(5, 'm2', [{ type: 'tool_use', id: 't3', name: 'SendMessage', input: { to: 'budi-dev', message: 'Start BUILD M01' } }, { type: 'tool_use', id: 't4', name: 'AskUserQuestion', input: { questions: [{ question: 'Which payment provider?', options: [{ label: 'Midtrans' }, { label: 'Xendit' }] }] } }]),
     result(6, 't3', 'sent'),
     result(65, 't4', 'User answered: Midtrans'),
+    { type: 'user', timestamp: iso(66), uuid: 'tm-1', message: { content: 'Another Claude session sent a message: <teammate-message teammate_id="budi-dev">M01 ready</teammate-message>' } },
   ]));
   const events = [];
   const ctx = { agent: 'rina-pm', root, emit: (e) => events.push(e) };
   collect.readTranscript('tx', file, ctx, T0 + 70e3);
   collect.readTranscript('tx', file, ctx, T0 + 120e3);          // usage of the last reply settles
   const by = (t) => events.filter((e) => e.type === t);
-  assert.equal(by('task.given')[0].data.text, 'Plan sprint 1 for the POS');
+  assert.deepEqual(by('task.given').map((e) => e.data.text), ['Plan sprint 1 for the POS'], 'teammate messages are not owner tasks');
   assert.deepEqual(by('tool.call').map((e) => [e.data.tool, e.data.target, e.data.ms, e.data.ok]), [
     ['Read', 'docs/PRD.md', 2000, true], ['Bash', 'npm test -- DB_PASSWORD=[secret]', 3000, false], ['SendMessage', 'budi-dev', 1000, true], ['AskUserQuestion', '', 60000, true]]);
   assert.match(by('tool.call')[1].data.error, /2 failing/);
@@ -49,6 +50,11 @@ test('transcripts: task, tools with duration and errors, messages, questions wit
   fs.appendFileSync(file, jsonl([{ type: 'user', timestamp: iso(140), uuid: 'task-2', message: { content: 'Thanks' } }]));
   collect.readTranscript('tx', file, ctx, T0 + 150e3);
   assert.equal(events.at(-1).data.text, 'Thanks');
+  // a shorter backfill (Floor 1) skips what is older
+  const short = [];
+  fs.utimesSync(file, new Date(T0 + 140e3), new Date(T0 + 140e3));
+  collect.readTranscript('tx-short', file, { ...ctx, backfillMs: 30e3, emit: (e) => short.push(e) }, T0 + 150e3);
+  assert.deepEqual(short.map((e) => e.data.text), ['Thanks']);
 });
 
 test('a tool call seen by a hook and in the transcript is logged once; permission wait is measured', () => {
@@ -138,10 +144,19 @@ test('agent states: idle with open work, back to work, crash vs stop', () => {
   assert.deepEqual(collect.stateChanges('st', s('stopped', false), { stoppedByUs: new Set(['budi-dev']) }, 62000).map((e) => e.type), []);
   collect.stateChanges('st', s('working'), {}, 63000);
   assert.deepEqual(collect.stateChanges('st', s('stopped', false), {}, 64000).map((e) => e.type), ['agent.crashed']);
+  collect.stateChanges('st', [{ id: 'budi-dev', state: 'working', running: true, inLead: true }], {}, 65000);
+  assert.deepEqual(collect.stateChanges('st', s('stopped', false), {}, 66000).map((e) => [e.type, e.data.via]), [['agent.stopped', 'teammate finished']], 'a teammate that finished did not crash');
 });
 
 test('merge results become merge and gate events', () => {
   const ev = collect.fromMerge({ id: 'm1', ts: 1, finishedAt: 2, branch: 'sprint-1', into: 'main', trigger: 'sprint', result: 'refused', reason: 'Quality gate failed (exit 1)', gate: { command: 'npm test', ok: false, code: 1 } });
   assert.deepEqual(ev.map((e) => [e.type, e.data.gate || e.data.result]), [['gate.failed', 'merge'], ['merge.refused', 'refused']]);
   assert.deepEqual(collect.fromMerge({ id: 'm2', ts: 1, branch: 'b', into: 'main', result: 'merged' }).map((e) => e.type), ['merge.done']);
+});
+
+test('names in files and messages to main resolve to team agent ids', () => {
+  const team = [{ id: 'rina-pm', displayName: 'Rina - Project Manager', lead: true }, { id: 'sari-qa', displayName: 'Sari - QA' }];
+  assert.deepEqual(['Sari', 'sari-qa', 'main', 'Rina - Project Manager', 'Quinn', ''].map((n) => collect.resolveAgent(team, n)), ['sari-qa', 'sari-qa', 'rina-pm', 'rina-pm', 'Quinn', '']);
+  const e = collect.emitter('names', { team: [...team, { id: 'budi-dev', displayName: 'Budi', role: { template: 'fullstack-developer' } }] })({ type: 'message.sent', agent: 'Budi', data: { to: 'main', text: 'ready' } });
+  assert.deepEqual([e.agent, e.role, e.data.to], ['budi-dev', 'fullstack-developer', 'rina-pm']);
 });

@@ -39,7 +39,7 @@ function talkHtml(e) {
   const len = d.textChars || d.answerChars;
   return `<li class="talk${S.focus === e.id ? ' focus' : ''}" data-ev="${esc(e.id)}"><time>${time(e.ts)}</time><b>${esc(from || '?')}</b><span class="arrow">→</span><b>${esc(to || '?')}</b>
     ${e.type.startsWith('question') ? `<span class="chip warn">${e.type === 'question.asked' ? 'question' : `answer · ${Math.round((d.waitMs || 0) / 60000)} min`}</span>` : ''}
-    <p>${text ? esc(text) : `<span class="note">${len ? `${len} characters, text not logged` : 'no text'}</span>`}</p></li>`;
+    <p class="${text && text.length > 400 ? 'clamp' : ''}" ${text && text.length > 400 ? 'title="Click to show all"' : ''}>${text ? esc(text) : `<span class="note">${len ? `${len} characters, text not logged` : 'no text'}</span>`}</p></li>`;
 }
 
 function listHtml(list) {
@@ -76,6 +76,7 @@ function draw() {
   body.querySelectorAll('[data-view]').forEach((b) => b.onclick = () => { S.view = b.dataset.view; S.shown = PAGE; draw(); });
   body.querySelectorAll('[data-f]').forEach((sel) => sel.onchange = () => { S[sel.dataset.f] = sel.value; S.shown = PAGE; S.focus = null; sel.dataset.f === 'range' ? load() : draw(); });
   body.querySelector('[data-more]')?.addEventListener('click', () => { S.shown += PAGE; draw(); });
+  body.querySelectorAll('.talk p.clamp').forEach((p) => p.onclick = () => p.classList.remove('clamp'));
   body.querySelectorAll('.logLine').forEach((b) => b.onclick = () => { const id = b.closest('[data-ev]').dataset.ev; S.open.has(id) ? S.open.delete(id) : S.open.add(id); if (S.focus === id) S.focus = null; draw(); });
   if (S.focus) body.querySelector(`[data-ev="${CSS.escape(S.focus)}"]`)?.scrollIntoView({ block: 'center' });
 }
