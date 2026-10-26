@@ -1,7 +1,7 @@
 ---
 id: software-house
 title: Software House
-version: 2
+version: 3
 category: software
 description: A software team that builds and ships an application from a PRD, a tech spec and a design, in QA-gated sprints.
 keywords: [software, app, application, website, web, mobile, saas, platform, pos, "point of sale", erp, crm system, api, backend, frontend, dashboard, portal, marketplace, ecommerce, "e-commerce", shop, store, booking, system, develop, build, code, startup, mvp]
@@ -13,12 +13,13 @@ roles:
   - { template: qa-engineer, min: 1, default: 1, max: 1, why: "Tests every module against the PRD acceptance criteria and the design, on mobile and desktop, and gates what ships." }
   - { template: ui-ux-designer, min: 0, default: 1, max: 1, why: "Keeps the screens faithful to the design: writes the fidelity map and reviews built screens." }
   - { template: devops-engineer, min: 0, default: 1, max: 1, why: "Owns development, staging and production: environments, deploys, rollbacks and the variable names (never secrets)." }
+  - { template: security-engineer, min: 0, default: 0, max: 1, why: "Optional: reviews each sprint plan (STRIDE) and each release (OWASP Top 10) with evidence, testing only local and staging." }
 sourceDocs:
   - { path: docs/PRD.md, title: PRD, purpose: "What and why: users, features, acceptance criteria, priorities", owner: project-manager, readers: all }
   - { path: docs/TECH.md, title: Tech Spec, purpose: "How: architecture, stack, data model, APIs, conventions", owner: project-manager, readers: all }
   - { path: docs/DESIGN.md, title: Design Document, purpose: "Screens, design system, mockups (docs/design/) and which parts are fixed", owner: ui-ux-designer, readers: all }
   - { path: docs/ENVIRONMENTS.md, title: Environments, purpose: "Development / staging / production: URLs, services, how to deploy, env var names only", owner: devops-engineer, readers: all }
-gates: [source documents approved, tests green, QA pass per module, design review, final QA smoke test]
+gates: [source documents approved, plan review before each sprint, tests green, QA pass per module, design review, final QA smoke test]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then run the source document intake: ask me for the PRD, the Tech Spec and the Design Document (and what you need for docs/ENVIRONMENTS.md). For anything missing, interview me and draft it in docs/ for my approval. No sprint starts until PRD, Tech Spec and Design are approved. Ask me every decision and approval with AskUserQuestion (one question per decision, with options), and keep your plain-text summaries short."
 ---
 ## Purpose
@@ -51,10 +52,11 @@ Every handoff cites the PRD story and the TECH section it implements, lists the 
 
 ## Gates
 1. **Source documents approved:** no sprint starts until PRD, Tech Spec and Design are `STATUS: APPROVED`.
-2. **Tests green:** the quality gate passes before a BUILD task is marked done.
-3. **QA pass:** a module is done only when its QA report says `STATUS: PASS` with no OPEN or FIXED bugs.
-4. **Design review:** built screens are checked against the fidelity map in `docs/DESIGN.md`.
-5. **Final smoke test:** before a sprint closes, QA runs the main flows on mobile and desktop.
+2. **Plan review:** before the team starts a sprint, the plan has an engineering, a design and a security review in `docs/squad/sprint-<N>/PLAN-REVIEW.md` (the `plan-review` skill). Only taste decisions go to the owner.
+3. **Tests green:** the quality gate passes before a BUILD task is marked done.
+4. **QA pass:** a module is done only when its QA report says `STATUS: PASS` with no OPEN or FIXED bugs.
+5. **Design review:** built screens are checked against the fidelity map in `docs/DESIGN.md`.
+6. **Final smoke test:** before a sprint closes, QA runs the main flows on mobile and desktop.
 
 ## Definition of done
 A module is done when its acceptance criteria pass in QA with evidence (screenshots at mobile and desktop width), the tests are green, the design review has no open findings, the handoff is complete, and the lead committed it. A sprint is done when every module is done, `RELEASE.md` is written and the closing commit is in.
@@ -65,7 +67,8 @@ A module is done when its acceptance criteria pass in QA with evidence (screensh
 - Before the first sprint you **must ask the owner** for the PRD, the Tech Spec and the Design Document. If one is missing, interview the owner and draft it for approval. No sprint starts until all three are approved.
 - Ask the owner with AskUserQuestion, one question per decision, with options: approvals ("Approve DESIGN.md" / "Needs changes"), assumptions, choices. Keep plain-text summaries short and point to the files; a question buried in a long message does not reach the owner's Attention list.
 - Split the work from these documents: each module lists its source stories, dependencies, and whether it can run in parallel or must wait. Give parallel modules to different developers; never two developers in the same folder.
-- Run each sprint with `/sprint <N>` (`.claude/commands/sprint.md`): plan, board, spawn, follow, close.
+- Before the PRD, run the premise check with the owner (who exactly is the user, the problem today, what if we do nothing, the smallest version, how we know it worked, what we will not build).
+- Run each sprint with `/sprint <N>` (`.claude/commands/sprint.md`): plan with a scope mode, plan review, board, spawn, follow, close. Changing the scope mode mid-sprint needs the owner.
 - Review every handoff against the PRD and TECH before it goes to QA.
 
 ### fullstack-developer, frappe-developer, sprint-developer
@@ -82,6 +85,11 @@ A module is done when its acceptance criteria pass in QA with evidence (screensh
 - When the owner gave only mockups, write a fidelity map in `docs/DESIGN.md`: what **must match** exactly and what **may be improved**, with reasons.
 - Review built screens against the fidelity map and report findings like QA does.
 - Do not invent screens outside the PRD; propose them to the lead instead.
+
+### security-engineer
+- Review every sprint plan with STRIDE and every release with the OWASP Top 10 (`security-review` skill); findings need evidence.
+- Test only local and staging environments the owner approved; never production or anyone else's systems.
+- Critical and High findings block the release until fixed or the owner accepts the risk.
 
 ### devops-engineer
 - Own `docs/ENVIRONMENTS.md` and `.env.example`; keep development and production setups separate.
