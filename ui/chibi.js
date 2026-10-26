@@ -3,6 +3,7 @@
 // physical materials (soft skin, woven cloth, glossy hair with strands, leather shoes) and hands with a thumb.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { REAL } from './look.js';
 
 const TOON_GRAD = (() => {
@@ -169,7 +170,42 @@ export function buildChibi(look) {
   // coffee cup in the right hand
   R.cup = part(new THREE.CylinderGeometry(.06, .05, .12, REAL ? 40 : 14), paint('#ffffff', 'plain'), R.rArm.el, 0, -.16, .07, .06);
   R.cup.visible = false;
+  compactRig(R);
   return R;
+}
+
+// fewer draw calls: under each joint, the parts (and their outline shells) that never move on their own are
+// merged into one mesh per material, with their transforms baked in. A chibi goes from ~76 meshes to ~30;
+// the mouth and the cup stay separate (they are scaled and shown on their own).
+function compactRig(R) {
+  const keep = new Set([R.mouth, R.cup]);
+  const joints = [];
+  R.root.traverse((o) => { if (!o.isMesh) joints.push(o); });
+  for (const j of joints) {
+    const parts = j.children.filter((c) => c.isMesh && !keep.has(c));
+    if (parts.length < 2) continue;
+    const byMat = new Map();
+    const put = (mesh, matrix) => {
+      const g = mesh.geometry.clone();
+      g.applyMatrix4(matrix);
+      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+      const list = byMat.get(mesh.material) || []; list.push(g); byMat.set(mesh.material, list);
+    };
+    for (const p of parts) {
+      p.updateMatrix();
+      put(p, p.matrix);
+      for (const o of p.children) if (o.isMesh) { o.updateMatrix(); put(o, p.matrix.clone().multiply(o.matrix)); }
+      j.remove(p);
+    }
+    for (const [material, geos] of byMat) {
+      const indexed = geos.every((g) => g.index);
+      const merged = mergeGeometries(indexed ? geos : geos.map((g) => (g.index ? g.toNonIndexed() : g)));
+      geos.forEach((g) => g.dispose());
+      if (!merged) continue;
+      const m = new THREE.Mesh(merged, material);
+      m.castShadow = material !== OUTLINE; j.add(m);
+    }
+  }
 }
 
 // ---------- poses (from squad-3d) ----------

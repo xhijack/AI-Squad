@@ -14,6 +14,7 @@ import { loadKit, kit, kitStamp } from './kit.js';
 import { NavGrid, footprints } from './nav.js';
 import { deskProps, propsFor } from './props.js';
 import { REAL } from './look.js';
+import { mergeStatic } from './merge.js';
 import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realLid, realLaptop, realDeskProps, REAL_DEVICES } from './realistic-office.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -223,6 +224,7 @@ function buildDevice(d) {
   g.userData.device = d.id;
   const built = REAL ? REAL_DEVICES[d.type]?.(g, d, FD, MEETING_SEATS) : KIT_DEVICES[d.type]?.(g, d);
   if (!built) (DEVICE_BUILDERS[d.type] || DEVICE_BUILDERS.plant)(g, d);
+  mergeStatic(g);                                                             // one mesh per material
   g.position.set(d.x, TOP, d.z); g.rotation.y = d.ry || 0;
   return g;
 }
@@ -326,6 +328,7 @@ function buildStation(agent, desk, accent) {
   const color = (agent.appearance && agent.appearance.shirt) || '#3d82d6';
   Object.assign(st.label.element.querySelector('.n').style, { background: color, color: inkOn(color) });
   st.say = label('', 'say', human, 0, 2.75, 0); st.say.center.set(.5, 1); st.say.visible = false;   // lead shout
+  mergeStatic(g);                                                             // desk, chair, props: one mesh per material
   deskHome(st);
   updateStation(st, agent);
   return st;
@@ -430,9 +433,10 @@ export class BuildingScene {
     this.persp = new THREE.PerspectiveCamera(40, 1, .05, 500);
     this.camera = this.ortho;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));       // Quality sets 1.5 on High, 1 on Low
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;                                 // redrawn on demand (frame)
     this.renderer.toneMapping = REAL ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
@@ -474,18 +478,29 @@ export class BuildingScene {
     else loadKit('./assets/kaykit/office.glb', () => { if (this.lastFloors) this.sync(this.lastFloors); });
     this.ray = new THREE.Raycaster();
     this.clock = new THREE.Clock();
+    this.stats = { frames: 0, ms: 0, screens: 0 };   // rendered frames, JS time in frame(), screen textures redrawn (scripts/measure.js)
     this.camAnim = null;
     this.bindPointer();
     this.resize();
     if (DEMO_STATES) window.__scene = this;                                     // screenshots of a look reach the camera
     addEventListener('resize', () => this.resize());
-    // the loop slows to a third of the frame rate when nothing moves (no input, no camera move, nobody walking)
+    // render on demand: every display frame while something moves (camera, input, walking, first person), every
+    // second one while agents type or talk, and none when everyone sits still; the office life (agents getting up,
+    // screens, labels) still ticks twice a second without drawing. Hidden tabs get no frames at all.
     for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) addEventListener(ev, () => { this.lastInput = performance.now(); }, { passive: true });
-    let tick = 0;
-    const loop = () => {
-      const busy = this.camAnim || this.walking || this.view.eyes || this.view.follow || performance.now() - (this.lastInput || 0) < 4000;
-      if (busy || ++tick % 3 === 0) this.frame();
+    this.dirty = true;
+    let tick = 0, lastLogic = 0, lastDraw = 0;
+    const loop = (now) => {
       requestAnimationFrame(loop);
+      if (document.hidden) return;
+      tick++;
+      const moving = this.camAnim || this.walking || this.view.eyes || this.view.follow || now - (this.lastInput || 0) < 1500;
+      const draw = moving || this.dirty || (this.animating && tick % 2 === 0);
+      if (!draw && now - lastLogic < 500) return;
+      if (draw && lastDraw && now - lastDraw < 40 && tick - this.lastDrawTick === 1) this.quality.sample((now - lastDraw) / 1000);   // Auto quality: back-to-back frames only
+      lastLogic = now;
+      if (draw) { lastDraw = now; this.lastDrawTick = tick; }
+      this.frame(draw);
     };
     requestAnimationFrame(loop);
   }
@@ -524,6 +539,10 @@ export class BuildingScene {
 
   // ---------- data sync ----------
   sync(floors) {
+    // a poll that brings the same data changes nothing (and asks for no frame)
+    const key = JSON.stringify([floors, this.draft || null, officeStamp(), kitStamp()]);
+    if (key === this.syncKey) return;
+    this.syncKey = key;
     this.lastFloors = floors;
     const seen = new Set();
     for (const f of floors) {
@@ -547,6 +566,7 @@ export class BuildingScene {
     this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))];
     this.applyVisibility();
     if (!this.placed) { this.placed = true; this.snapTo(this.poseFor(this.view)); }
+    this.dirty = true;
   }
 
   buildFloor(f) {
@@ -554,7 +574,9 @@ export class BuildingScene {
     g.userData.floorId = f.id;
     g.position.y = floorY(f.number);
     const accent = f.accent || '#7c5cd6';
-    buildRoom(g, f, accent);
+    const room = new THREE.Group(); g.add(room);
+    buildRoom(room, f, accent);
+    mergeStatic(room);
     const o = { g, stations: new Map(), devices: new Map(), sig: sigOf(f) };
     for (const d of f.devices || []) { const dg = buildDevice(d); g.add(dg); o.devices.set(d.id, dg); }
     const desks = desksFor(f.agents || [], f.desks, f.layout);
@@ -585,6 +607,8 @@ export class BuildingScene {
 
   // ---------- view & camera ----------
   setView(view) {
+    this.dirty = true;
+    this.quality.setAO(view.mode !== 'lobby');
     const wasEyes = this.view.eyes, wasPersp = this.camera === this.persp;
     this.view = view;
     const persp = !!(view.eyes || view.screen || view.follow);
@@ -747,6 +771,7 @@ export class BuildingScene {
   flyTo(p, ms = 900) { this.camAnim = { start: performance.now(), ms, fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), fromZ: this.camera.zoom, ...p }; }
 
   resize() {
+    this.dirty = true;
     const r = this.container.getBoundingClientRect();
     const w = Math.max(1, r.width), h = Math.max(1, r.height);
     this.size = { w, h };
@@ -766,6 +791,7 @@ export class BuildingScene {
 
   // light (default) or dark page: the scene backdrop follows the theme's --scene colour
   setTheme(dark, color) {
+    this.dirty = true;
     this.dark = dark;
     this.scene.background = new THREE.Color(color || (dark ? '#141a2b' : '#efe9df'));
     if (this.ground) this.ground.material.opacity = dark ? .3 : .1;
@@ -787,13 +813,15 @@ export class BuildingScene {
   setTalk(floorId, agentId, level) { const st = this.floors.get(floorId)?.stations.get(agentId); if (st) st.talkLevel = level; }
   // speech bubble over an agent for ms milliseconds
   say(floorId, agentId, text, ms = 7000) {
+    this.dirty = true;
     const st = this.floors.get(floorId)?.stations.get(agentId);
     if (!st) return;
     st.say.element.textContent = text; st.sayUntil = performance.now() + ms;
   }
   // machine load for the server racks: { cpu, mem: { used, total }, levels }
   setLoad(load) { this.load = load; }
-  updateRacks(t) {
+  // draw: a frame is drawn anyway, so the top LED may flicker; a change in load asks for a frame by itself
+  updateRacks(t, draw = true) {
     if (!this.load || t < (this.rackNext || 0)) return;
     this.rackNext = t + .25;
     const L = this.load, memPct = L.mem?.total ? L.mem.used / L.mem.total * 100 : 0;
@@ -802,8 +830,9 @@ export class BuildingScene {
     for (const r of this.racks || []) {
       if (!r?.visible && r !== this.lobbyRack) continue;
       for (const led of r.userData.leds) {
-        const on = led.row < lit[led.col] && !(led.row === lit[led.col] - 1 && L.cpu > 5 && Math.random() < .3);   // the top LED flickers
-        led.mesh.material.color.set(on ? color[led.col] : '#2a3044');
+        const on = led.row < lit[led.col] && !(draw && led.row === lit[led.col] - 1 && L.cpu > 5 && Math.random() < .3);   // the top LED flickers
+        const c = on ? color[led.col] : '#2a3044';
+        if (led.c !== c && !(draw === false && led.row === lit[led.col] - 1)) { led.mesh.material.color.set(c); led.c = c; this.dirty = true; }
       }
     }
   }
@@ -887,7 +916,10 @@ export class BuildingScene {
   }
 
   // ---------- loop ----------
-  frame() {
+  invalidate() { this.dirty = true; }
+  // draw: false runs the office life (walks, screens, labels) without rendering a frame
+  frame(draw = true) {
+    const f0 = performance.now();
     const t = this.clock.getElapsedTime();
     if (this.camAnim && !this.view.eyes && !this.view.follow) {
       const a = this.camAnim, u = Math.min(1, (performance.now() - a.start) / a.ms), k = 1 - Math.pow(1 - u, 3);
@@ -898,7 +930,7 @@ export class BuildingScene {
     }
     const dt = Math.min(.1, t - (this.lastT ?? t)); this.lastT = t;
     const v = this.view;
-    let walking = false;
+    let walking = false, animating = false;
     for (const [fid, o] of this.floors) {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
@@ -912,6 +944,7 @@ export class BuildingScene {
         const away = updateLife(st, { t, dt, wantsDesk: st.state !== 'idle', spots: near ? o.spots : [], occupied: o.occupied, meeting, nav: o.nav, others, poseDesk: () => { deskHome(st); poseDesk(st, t, near && v.eyes && v.agentId === st.id); } });
         if (away !== (st.away || '')) { st.away = away; updateStation(st, st.data); }
         if (/walk|return/i.test(st.life?.mode || '')) walking = true;
+        if (st.state === 'working' || st.state === 'waiting' || st.talkLevel > .02) animating = true;   // typing, a raised hand, talking
         if (st.talkLevel > .02) st.rig.mouth.scale.y = .6 + st.talkLevel * 2.2;
         const focus = near && (v.screen || v.eyes) && v.agentId === st.id;
         st.rig.head.visible = !focus;                     // over the shoulder / own eyes: the big chibi head would hide the view
@@ -919,9 +952,11 @@ export class BuildingScene {
         st.say.visible = !!st.labelsOn && !focus && (st.sayUntil || 0) > performance.now();
         for (const S of st.screens) {
           if (t < S.next && !(focus && S.part === 'main')) continue;
+          if (st.state === 'stopped' && S.dark && !focus) { S.next = t + 30; continue; }   // a dark screen stays dark: no redraw, no frame
+          S.dark = st.state === 'stopped';
           const every = drawScreen(S, st.data, { t, away, part: S.part, stopped: st.state === 'stopped', live: focus && S.part === 'main' && this.liveText != null ? this.liveText : null,
             shot: o.shot || null, role: propsFor(st.data).screen, board: o.board || null });
-          S.tex.needsUpdate = true;
+          S.tex.needsUpdate = true; this.stats.screens++; this.dirty = true;
           S.next = t + (near ? every : Math.max(every, 6)) + Math.random() * .05;
         }
       }
@@ -930,13 +965,24 @@ export class BuildingScene {
       const obj = this.objectFor(this.selection.floorId, this.selection);
       if (obj) { obj.getWorldPosition(this.ring.position); this.ring.position.y += .05; const k = this.selection.agent ? 1 : .8; this.ring.scale.setScalar(k); } else this.ring.visible = false;
     }
-    this.walking = walking;
+    this.walking = walking; this.animating = animating;
     if (NAV_DEBUG) for (const o of this.floors.values()) if (o.g.visible) drawPaths(o);
-    this.updateRacks(t);
+    this.updateRacks(t, draw);
     this.handlers.onFrame?.(t);
     if (v.eyes) this.updatePov(dt); else if (v.follow) this.updateFollow(dt); else this.controls.update();
-    this.quality.render(this.camera, dt);
+    // the camera moved since the last drawn frame (OrbitControls' own answer stays true on damping residue)
+    const cam = this.camera, cp = this.camSeen ||= { p: new THREE.Vector3(Infinity), t: new THREE.Vector3(), z: 0 };
+    if (cp.p.distanceToSquared(cam.position) > 1e-6 || cp.t.distanceToSquared(this.controls.target) > 1e-6 || Math.abs(cp.z - cam.zoom) > 1e-4) draw = true;
+    if (draw) { cp.p.copy(cam.position); cp.t.copy(this.controls.target); cp.z = cam.zoom; }
     this.labels.render(this.scene, this.camera);
+    if (!draw) return;
+    // the shadow map is redrawn only when something casting moved: walking (every 3rd frame), typing (twice a
+    // second), a rebuilt or changed Floor, a new view
+    this.drawNo = (this.drawNo || 0) + 1;
+    if (this.dirty || (walking && this.drawNo % 3 === 0) || (animating && t - (this.shadowAt || 0) > .5)) { this.renderer.shadowMap.needsUpdate = true; this.shadowAt = t; }
+    this.dirty = false;
+    this.quality.render(this.camera, dt);
+    this.stats.frames++; this.stats.ms += performance.now() - f0;
   }
 }
 

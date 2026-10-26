@@ -1,6 +1,7 @@
 // Rendering quality ("soft 3D", Phase 3): image-based light from a small studio HDRI, ambient occlusion (GTAO),
 // gentle colour grading with a vignette, SMAA, and soft contact shadows under the characters. Quality Low renders
-// like before (one pass); High adds the effects; Auto starts on High and drops to Low when frames are slow.
+// like before (one pass); High adds the effects; Auto starts on High and drops to Low (and stays there) as soon as
+// back-to-back frames are slow. The pixel ratio is capped: 1.5 on High, 1 on Low.
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -71,8 +72,10 @@ export class Quality {
     this.scene.environment = high ? this.env : null;
     if (this.hemi) this.hemi.intensity = high && this.env ? .35 : 1.15;
     this.renderer.toneMappingExposure = high ? this.exposure.high : this.exposure.low;
+    this.renderer.setPixelRatio(Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, high ? 1.5 : 1));
     if (!high) { this.composer?.dispose(); this.composer = null; }
     else this.buildComposer();
+    this.renderer.shadowMap.needsUpdate = true;
   }
   loadEnv() {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -91,6 +94,7 @@ export class Quality {
     this.ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.6, thickness: 1.6, scale: 1.4, samples: 12 });
     this.ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
     this.ao.blendIntensity = 1;
+    this.ao.enabled = this.aoOn !== false;
     c.addPass(this.renderPass); c.addPass(this.ao);
     c.addPass(new OutputPass());                                       // tone mapping and sRGB
     c.addPass(new ShaderPass(GradeShader));
@@ -98,22 +102,23 @@ export class Quality {
     c.setSize(w, h);
     this.composer = c;
   }
+  // ambient occlusion on or off (off in the Lobby, where Floors are small: one scene pass less)
+  setAO(on) { this.aoOn = on; if (this.ao) this.ao.enabled = on; }
   resize(w, h) { this.size = { w, h }; this.composer?.setSize(w, h); }
-  // one frame with the camera in use; keeps Auto honest by timing frames for a few seconds
+  // one frame with the camera in use
   render(camera, dt) {
-    if (!this.composer) { this.renderer.render(this.scene, camera); }
-    else {
-      if (this.renderPass.camera !== camera) { this.renderPass.camera = camera; this.ao.camera = camera; setCameraDefine(this.ao, camera); }
-      this.composer.render(dt);
-    }
-    if (this.chosen === 'auto' && this.active === 'high' && dt > 0) {
-      this.frames.push(dt);
-      if (this.frames.length > 120) {
-        const avg = this.frames.slice(30).reduce((a, b) => a + b, 0) / (this.frames.length - 30);
-        if (avg > 1 / 40) this.apply('low');                           // under 40 fps on High: drop the effects
-        this.frames = [];
-      }
-    }
+    if (!this.composer) { this.renderer.render(this.scene, camera); return; }
+    if (this.renderPass.camera !== camera) { this.renderPass.camera = camera; this.ao.camera = camera; setCameraDefine(this.ao, camera); }
+    this.composer.render(dt);
+  }
+  // Auto: the time between two back-to-back frames (seconds); 30 samples after 10 warm-up frames decide
+  sample(sec) {
+    if (this.chosen !== 'auto' || this.active !== 'high' || !(sec > 0)) return;
+    this.frames.push(sec);
+    if (this.frames.length < 40) return;
+    const avg = this.frames.slice(10).reduce((a, b) => a + b, 0) / (this.frames.length - 10);
+    if (avg > 1 / 40) this.apply('low');                                 // under 40 fps on High: drop the effects for good
+    this.frames = [];
   }
 }
 

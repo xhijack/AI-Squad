@@ -2,16 +2,8 @@
 // (type, push back, stand up, turn, walk, turn, sit down, pull in) on a small synthetic skeleton.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { register } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import './three-hook.js';
 
-// the UI imports 'three' through an import map; map it to the vendored copy here
-const vendor = pathToFileURL(new URL('../ui/vendor/three/', import.meta.url).pathname).href;
-register(`data:text/javascript,${encodeURIComponent(`export async function resolve(s, c, next) {
-  if (s === 'three') return { url: ${JSON.stringify(`${vendor}three.module.js`)}, shortCircuit: true };
-  if (s.startsWith('three/addons/')) return { url: ${JSON.stringify(`${vendor}addons/`)} + s.slice(13), shortCircuit: true };
-  return next(s, c);
-}`)}`);
 const THREE = await import('three');
 const { Person, takeRootMotion, twoBoneIK, angleDiff } = await import('../ui/realistic-person.js');
 

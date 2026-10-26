@@ -7,9 +7,20 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 const TEX = './assets/realistic/textures/';
 const loader = new THREE.TextureLoader();
 // a Poly Haven texture set (diffuse, normal, ambient occlusion / roughness / metalness) repeated every `size` metres
-export function pbrSet(name, { size = 1, color = 0xffffff, ...rest } = {}) {
+// (cached: every chair, desk and wall with the same set, size and colour shares one material and its textures)
+const sets = new Map();
+export function pbrSet(name, opts = {}) {
+  const key = `${name}|${JSON.stringify(opts)}`;
+  if (!sets.has(key)) sets.set(key, makeSet(name, opts));
+  return sets.get(key);
+}
+const images = new Map();                     // one load per file; sets clone it (same image, own repeat)
+function makeSet(name, { size = 1, color = 0xffffff, ...rest } = {}) {
   const t = (kind, srgb) => {
-    const x = loader.load(`${TEX}${name}_${kind}.jpg`);
+    const file = `${TEX}${name}_${kind}.jpg`;
+    if (!images.has(file)) { const e = { clones: [] }; e.tex = loader.load(file, () => e.clones.forEach((c) => { c.needsUpdate = true; })); images.set(file, e); }
+    const e = images.get(file), x = e.tex.clone();
+    if (e.tex.image) x.needsUpdate = true; else e.clones.push(x);       // clones made before the image arrived upload when it does
     x.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     x.wrapS = x.wrapT = THREE.RepeatWrapping; x.repeat.setScalar(1 / size); x.anisotropy = 8;
     return x;

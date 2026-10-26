@@ -56,12 +56,16 @@ ctx.scene = scene;
 window.aisquad = ctx;                     // handy in the console and for scripted UI checks
 
 // ---------- polling ----------
-let timer = null, inflight = false;
+let timer = null, inflight = false, quiet = 0, lastSig = '';
+// slower polls while nothing changes (3 s, then 6 s, then 10 s; the machine meter alone does not count), back to
+// 3 s on any change, click or key
+const pollEvery = (r) => (document.hidden ? 15000 : r.mode === 'desk' ? 2000 : quiet >= 10 ? 10000 : quiet >= 4 ? 6000 : 3000);
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { if (quiet >= 4) { quiet = 0; refresh(); } }, { passive: true });
 async function refresh() {
   clearTimeout(timer);
   if (inflight) { timer = setTimeout(refresh, 400); return; }
   inflight = true;
-  const r = state.route, key = routeKey(r);
+  const r = state.route, key = routeKey(r), p0 = performance.now();
   try {
     const jobs = [getJson('/api/building')];
     if (r.floorId) jobs.push(getJson(`/api/floors/${r.floorId}`));
@@ -76,6 +80,9 @@ async function refresh() {
       timer = setTimeout(refresh, 15000);
       return;
     }
+    const { meter, now, resources, ...rest } = b;
+    const sig = JSON.stringify([rest, f || null]);
+    quiet = sig === lastSig ? quiet + 1 : 0; lastSig = sig;
     state.building = b;
     if (key === routeKey(state.route)) state.floor = f || null;
     if (state.floor?.notFound) { toast('That Floor no longer exists'); location.hash = '#/'; }
@@ -87,8 +94,11 @@ async function refresh() {
   } catch { state.offline = true; }
   inflight = false;
   if (!state.building) return void (timer = setTimeout(refresh, 4000));
+  const r0 = performance.now();
   render();
-  timer = setTimeout(refresh, document.hidden ? 15000 : r.mode === 'desk' ? 2000 : 3000);
+  const st = ctx.stats ||= { polls: 0, fetchMs: 0, renderMs: 0 };       // per poll: network + JSON, then DOM and scene sync
+  st.polls++; st.fetchMs += r0 - p0; st.renderMs += performance.now() - r0;
+  timer = setTimeout(refresh, pollEvery(r));
 }
 ctx.refresh = refresh;
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
