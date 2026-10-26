@@ -339,6 +339,10 @@ Built from `PHASE-2.2-LOG-AUDIT.md` in the order A, B, C, one commit per step, t
 - **Personal data masking is pattern based**; names are not detected (QUESTIONS 20).
 - **Log size**: a busy Floor writes one line per tool call and per reply; the timeline reads up to 20,000 events of the chosen range.
 
+## 0.3.3: owner bug report fixes (26 Oct 2026)
+
+- **0.3.3** (owner bug report, Floor dtamu-app-squad): a lead that ends its turn asking the owner in plain text now shows as **Waiting for your reply** in Attention, with the message and a reply box that sends the answer as its next task; teammates the lead has not started show **not started** (or "waiting for source documents") instead of stopped, and the Floor pill says what the squad waits for ("Waiting for you: 3 source documents"); the Project Manager role (v3), the Software House Blueprint (v2) and the source-docs-intake skill tell the lead to ask decisions with AskUserQuestion; Claude Code's dim prompt suggestions are no longer read as typed input; and every agent runs on its own tmux server in its own systemd scope, so an out of memory kill takes one agent instead of all of them (sessions from older versions are still found on the default server). Screenshots: `playground/reference/reply-card-1440.png`, `reply-card-390.png`, `standby-agents-390.png`. The owner's `aisquad.service` was not restarted; agents already running stay on the shared server until they are restarted.
+
 ## How to run
 
 ```
