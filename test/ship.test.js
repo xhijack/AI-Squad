@@ -44,3 +44,8 @@ test('a designer or a Security Engineer on the team makes their review a merge r
   fs.rmSync(path.join(proj, 'docs/squad/sprint-2/PLAN-REVIEW.md'));
   assert.deepEqual(readiness(proj, { sprint: '2', team }).merge.missing, ['Design review', 'Security review']);
 });
+
+test('a missing final smoke test says so', () => {
+  const r = readiness(path.join(root, 'empty'), { sprint: '1', team: TEAM });
+  assert.equal(r.items.find((i) => i.key === 'smoke').detail, 'docs/squad/qa/FINAL-S1.md missing');
+});

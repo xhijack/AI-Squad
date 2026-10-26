@@ -24,7 +24,7 @@ export function readiness(root, { sprint, team = [] } = {}) {
   const missingQa = mods.filter((m) => !qaPass.includes(m));
   add('qa', 'QA pass for every module', mods.length && !missingQa.length, mods.length ? (missingQa.length ? `no QA PASS yet: ${missingQa.join(', ')}` : `${mods.length} of ${mods.length} modules passed`) : 'no modules on the board', 'merge');
   // the final smoke test of the sprint
-  const final = [path.join(squad, `sprint-${sprint}`, 'qa', `FINAL-S${sprint}.md`), path.join(squad, 'qa', `FINAL-S${sprint}.md`)].map(readText).find((t) => t != null);
+  const final = [path.join(squad, `sprint-${sprint}`, 'qa', `FINAL-S${sprint}.md`), path.join(squad, 'qa', `FINAL-S${sprint}.md`)].map((f) => readText(f)).find((t) => t != null);
   add('smoke', 'Final smoke test', status(final) === 'PASS', final == null ? `docs/squad/qa/FINAL-S${sprint}.md missing` : `STATUS: ${status(final) || '?'}`, 'merge');
   // release notes (docs updated)
   const release = readText(path.join(squad, `sprint-${sprint}`, 'RELEASE.md'));
