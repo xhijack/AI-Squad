@@ -626,6 +626,31 @@ Tests (`test/nav.test.js`): two ten-minute soaks of the real office life (`updat
   - Tests in `test/independents.test.js`.
 - **"Needs you" popover and side card both opened on page load.** On the first look after loading, every waiting item counted as new, and the side panel's card was not laid out yet, so the popover opened too. Now the first look only records what is waiting (the panel and the pill's count show it), and the popover opens only for items that arrive later.
 
+## 0.8.7: voices that explain themselves and speak Indonesian (owner requests, 26 Oct 2026)
+
+Owner bug: "Test voice" only showed "ElevenLabs answered 402". The real cause, found by hand: the account is on the free plan ("paid_plan_required: Free users cannot use library voices via the API"), and the key lacks `voices_read` and `user_read`. Second request: Indonesian lines sounded like an English speaker.
+
+- **ElevenLabs' own answer.** Every failed call reads `detail.code` / `detail.status` and `detail.message`, scrubbed of the key and shortened.
+  - It is shown in Settings → Voice ("Last answer from ElevenLabs", also right after Test voice), in the per-agent dialog, and as the fallback reason ("ElevenLabs 402 paid_plan_required: …").
+  - Known codes get a hint:
+    - `paid_plan_required`: pick a voice from My Voices or Voice Design and paste its id, or upgrade;
+    - `missing_permissions`: names the missing permission (`text_to_speech`, `voices_read`, `user_read`) and where to enable it;
+    - `quota_exceeded`, invalid key, unknown voice.
+  - The last error is kept until a call works or the key changes.
+- **Plan and remaining characters** (`/v1/user/subscription`) when the key has `user_read`. Otherwise the dialog says why they cannot be shown.
+- **A voice id by hand.** The voice picker always has "Or paste a voice id (from My Voices or Voice Design)". When `voices_read` is missing, it shows ElevenLabs' answer and the paste field. With `voices_read`, a language filter appears over the voices (`labels.language`, `verified_languages`).
+- **Language per agent, with a Floor default.** Choices are auto, id, en and 13 more.
+  - Sent as `language_code` only to models that take it (`eleven_flash_v2_5`, `eleven_turbo_v2_5`, `eleven_v3`), never to `eleven_multilingual_v2`. The model picker says which models "take a language setting".
+  - Auto picks Indonesian or English from the words of each line. With the default model (Flash v2.5), a Floor whose lines are mostly Indonesian therefore speaks with `language_code: id`.
+- **Voice settings per agent, with a Floor default**: stability, similarity_boost, style and use_speaker_boost (defaults 0.6, 0.8, 0, on), with Preview, which speaks a sample line in the chosen language before saving. The per-agent dialog can inherit the Floor's settings. The cache key includes the language and the settings.
+- Where: Desk → Profile → Voice (per agent), Floor settings → "Voice (this Floor's default)". The order is agent, then Floor, then auto and the defaults (`squad.agentVoice`).
+- Tests with a mocked endpoint (`test/voice.test.js`):
+  - the 402, 401 missing permission, quota and non-JSON errors, scrubbed;
+  - `language_code` per model, voice settings sent, cache apart by language and settings;
+  - language detection, the plan and its missing permission.
+  - In `test/squad.test.js`: the agent, then Floor, then defaults order and unknown languages dropped.
+- No real ElevenLabs call was made (no key here); one real test call when the owner sets a key and asks for it.
+
 ## How to run
 
 ```
