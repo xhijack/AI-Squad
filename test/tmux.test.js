@@ -109,6 +109,10 @@ test('end to end with a fake Claude Code in tmux: dialog, answer, typed task', {
   assert.deepEqual(tm.listSessions(), [name]);
   const wait = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = fn(); if (v) return v; await new Promise((ok) => setTimeout(ok, 100)); } return null; };
 
+  // a small client cannot shrink the agent window (dialogs would be cut off)
+  tm.tmux(['resize-window', '-t', `=${name}:`, '-x', '80', '-y', '7']);
+  tm.keepSize(name);
+  assert.equal(tm.tmux(['display', '-p', '-t', `=${name}:`, '#{window_width}x#{window_height} #{window-size}']).trim(), '200x50 manual');
   const dialog = await wait(() => tm.parsePrompt(tm.capture(name)));
   assert.ok(dialog, 'trust dialog visible');
   assert.equal(dialog.options.length, 2);

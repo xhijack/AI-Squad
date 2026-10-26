@@ -142,7 +142,7 @@ function floorAttention(entry, floor, lives, cost) {
       out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: l.dialog.question, options: l.dialog.options, answerable: true, ts: l.lastTs || Date.now() });
-    } else if (l.hook?.state === 'waiting' && l.hook.permission) {
+    } else if (l.hook?.state === 'waiting' && l.hook.permission && (l.hook.permission.tool || !(l.status?.ask && l.state === 'waiting'))) {
       const pm = l.hook.permission;
       out.push({ id: attId(entry.id, l.agent.id, 'hook', pm.ts), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: pm.message + (pm.detail ? `\n${pm.detail}` : ''), options: [], answerable: false, live: true, ts: pm.ts });

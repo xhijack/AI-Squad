@@ -30,7 +30,18 @@ export function listSessions() {
 }
 export const isRunning = (name) => tmux(['has-session', '-t', `=${name}`]) !== null;
 // visible screen only by default (old dialogs in the scrollback must not count); history = extra lines
-export const capture = (name, history = 0) => tmux(['capture-pane', '-p', '-J', '-t', `=${name}:`, ...(history ? ['-S', `-${history}`] : [])]) || '';
+// Agent sessions keep a fixed 200x50 window: a small terminal attaching (tmux attach from a phone or
+// an editor panel) must not shrink it, or dialogs are cut off and cannot be read from the screen.
+export const SIZE = { x: 200, y: 50 };
+const sized = new Set();
+export function keepSize(name) {
+  tmux(['set-option', '-t', `=${name}`, 'window-size', 'manual']);
+  tmux(['resize-window', '-t', `=${name}:`, '-x', String(SIZE.x), '-y', String(SIZE.y)]);
+}
+export const capture = (name, history = 0) => {
+  if (!sized.has(name) && isRunning(name)) { keepSize(name); sized.add(name); }   // also sessions started before this fix
+  return tmux(['capture-pane', '-p', '-J', '-t', `=${name}:`, ...(history ? ['-S', `-${history}`] : [])]) || '';
+};
 
 // ---------- screen parsing ----------
 const BOX = /^\s*[│┃|] ?|\s*[│┃|]\s*$/g;             // strip box borders, keep indentation
@@ -134,11 +145,13 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
   } catch {
     if (!isRunning(name)) await exec(tm[0], tm.slice(1));
   }
+  if (isRunning(name)) { keepSize(name); sized.add(name); }
   return { ok: isRunning(name) };
 }
 
 // kill-session only hangs up the panes; Claude Code can outlive that, so make sure the pane processes end
 export function stopSession(name) {
+  sized.delete(name);
   if (!isRunning(name)) return { ok: true, already: true };
   const pids = (tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}']) || '').split('\n').map(Number).filter((n) => n > 1);
   tmux(['kill-session', '-t', `=${name}`]);
