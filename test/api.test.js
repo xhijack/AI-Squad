@@ -82,7 +82,7 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   const item = await wait(async () => (await call('GET', '/api/building')).body.attention.find((a) => a.agentId === 'budi-dev'));
   assert.ok(item, 'trust dialog reaches Attention');
   assert.equal(item.kind, 'permission');
-  assert.match(fs.readFileSync(LOG, 'utf8'), /START --agent budi-dev --disallowedTools Read\(\.\/\.env\) Read\(\.\/\.env\.\*\) Bash\(git push\*\) Bash\(rm -rf \*\) --model sonnet --effort medium/, 'configured model and effort passed explicitly');
+  assert.match(fs.readFileSync(LOG, 'utf8'), /START --agent budi-dev --disallowedTools Read\(\.\/\.env\) Read\(\.\/\.env\.\*\) Bash\(git push\*\) Bash\(rm -rf \*\) .*Write\(\/\/\S+\/CLAUDE\.md\).* --model sonnet --effort medium/, 'configured model and effort passed explicitly; identity guarded');
   assert.equal(item.answerable, true);
   const b = (await call('GET', '/api/building')).body;
   assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'waiting');
