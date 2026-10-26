@@ -39,12 +39,13 @@ export const isDaytime = (d, now = Date.now()) => space.inShift({ enabled: true,
 
 // how many sessions may run now. -> { cap, free, running, limiting, limits: [{ key, cap, text }] }
 export function capacity({ maxAgents = 6, running = 0, res = null, sessionRss = 1.5 * 2 ** 30, quotaPaused = false } = {}) {
-  const limits = [{ key: 'building', cap: maxAgents, text: `Building maximum of ${maxAgents} agents at once` }];
+  const limits = [{ key: 'building', cap: maxAgents, text: `Building maximum of ${maxAgents} agents at once`, vars: { n: maxAgents } }];
   if (res?.mem?.available != null && sessionRss > 0) {
     const more = Math.max(0, Math.floor((res.mem.available - RAM_RESERVE) / sessionRss));
-    limits.push({ key: 'ram', cap: running + more, text: `${(res.mem.available / 2 ** 30).toFixed(1)} GB RAM free, about ${(sessionRss / 2 ** 30).toFixed(1)} GB per session, 2 GB kept free` });
+    const ram = (res.mem.available / 2 ** 30).toFixed(1), per = (sessionRss / 2 ** 30).toFixed(1);
+    limits.push({ key: 'ram', cap: running + more, text: `${ram} GB RAM free, about ${per} GB per session, 2 GB kept free`, vars: { ram, per } });
   }
-  if (res?.cpus && res?.load?.[0] != null && res.load[0] >= res.cpus * 0.9) limits.push({ key: 'cpu', cap: running, text: `CPU load ${res.load[0]} on ${res.cpus} cores` });
+  if (res?.cpus && res?.load?.[0] != null && res.load[0] >= res.cpus * 0.9) limits.push({ key: 'cpu', cap: running, text: `CPU load ${res.load[0]} on ${res.cpus} cores`, vars: { load: res.load[0], cpus: res.cpus } });
   const cap = Math.min(...limits.map((l) => l.cap));
   const limiting = limits.find((l) => l.cap === cap);
   return { cap, free: Math.max(0, cap - running), running, limiting: limiting.key, limits, quotaPaused };

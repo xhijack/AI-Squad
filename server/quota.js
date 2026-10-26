@@ -63,8 +63,12 @@ export function check({ costs = {}, limits = DEFAULTS, signals = loadState().sig
   });
   const live = signals.filter((s) => s.resetsAt > now);
   const hit = live.find((s) => s.rejected || (s.usedPct != null && s.usedPct >= q.pausePct));
-  if (hit) return { paused: true, reason: hit.rejected ? `the ${hit.window} limit was reached` : `the ${hit.window} limit is ${Math.round(hit.usedPct)} % used`, until: hit.resetsAt, windows, signals: live };
+  if (hit) {
+    const vars = { window: hit.window, pct: Math.round(hit.usedPct ?? 100) };
+    const [key, reason] = hit.rejected ? ['the {window} limit was reached', `the ${hit.window} limit was reached`] : ['the {window} limit is {pct} % used', `the ${hit.window} limit is ${vars.pct} % used`];
+    return { paused: true, reason, reasonKey: key, vars, until: hit.resetsAt, windows, signals: live };
+  }
   const over = windows.find((w) => w.pct != null && w.pct >= q.pausePct);
-  if (over) return { paused: true, reason: `$${over.usd} of $${over.limit} used in the last ${over.label} (estimate)`, until: 0, windows, signals: live };
+  if (over) return { paused: true, reason: `$${over.usd} of $${over.limit} used in the last ${over.label} (estimate)`, reasonKey: '${used} of ${limit} used in the last {label} (estimate)', vars: { used: over.usd, limit: over.limit, label: over.label }, until: 0, windows, signals: live };
   return { paused: false, reason: '', until: 0, windows, signals: live };
 }
