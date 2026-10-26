@@ -20,12 +20,12 @@ export function parseMeminfo(text) {
   for (const line of String(text).split('\n')) { const x = line.match(/^(\w+):\s+(\d+)/); if (x) m[x[1]] = +x[2] * 1024; }
   return { total: m.MemTotal || 0, available: m.MemAvailable ?? m.MemFree ?? 0, swapTotal: m.SwapTotal || 0, swapFree: m.SwapFree || 0 };
 }
-// /proc/<pid>/stat -> { comm, ticks (user + system), rss bytes }
+// /proc/<pid>/stat -> { comm, ppid, ticks (user + system), rss bytes }
 export function parseProcStat(text, pageSize = 4096) {
   const t = String(text), r = t.lastIndexOf(')');
   if (r < 0) return null;
   const f = t.slice(r + 2).split(' ');
-  return { comm: t.slice(t.indexOf('(') + 1, r), ticks: +f[11] + +f[12], rss: +f[21] * pageSize };
+  return { comm: t.slice(t.indexOf('(') + 1, r), ppid: +f[1], ticks: +f[11] + +f[12], rss: +f[21] * pageSize };
 }
 
 export function groupOf(comm, cmd = '') {
@@ -58,11 +58,12 @@ export function levels(s, limits = LIMITS) {
 
 export function createMeter({ proc = '/proc', diskPath = os.homedir(), ncpu = os.cpus().length } = {}) {
   const read = (f) => fs.readFileSync(`${proc}/${f}`, 'utf8');
-  const state = { hist: [], last: null };
+  // tree: every process of the last sample (pid -> { ppid, rss, cpu }), for the RAM and CPU of each agent session
+  const state = { hist: [], last: null, tree: new Map() };
   let prevCpu = null, prevTicks = new Map();
 
   function sampleProcs(dTotal) {
-    const now = new Map(), rows = [];
+    const now = new Map(), rows = [], tree = new Map();
     for (const pid of safeReaddir(proc)) {
       if (!/^\d+$/.test(pid)) continue;
       let p; try { p = parseProcStat(read(`${pid}/stat`)); } catch { continue; }
@@ -70,11 +71,13 @@ export function createMeter({ proc = '/proc', diskPath = os.homedir(), ncpu = os
       now.set(pid, p.ticks);
       const prev = prevTicks.get(pid);
       const cpu = prev != null && dTotal > 0 ? (p.ticks - prev) / dTotal * 100 : 0;     // share of the whole machine
+      tree.set(+pid, { ppid: p.ppid, rss: p.rss, cpu });
       if (cpu < .2 && p.rss < 100e6) continue;
       let cmd = ''; try { cmd = read(`${pid}/cmdline`).replace(/\0/g, ' ').slice(0, 300); } catch { /* gone */ }
       rows.push({ pid: +pid, comm: p.comm, cpu, rss: p.rss, group: groupOf(p.comm, cmd) });
     }
     prevTicks = now;
+    state.tree = tree;
     return rows;
   }
 

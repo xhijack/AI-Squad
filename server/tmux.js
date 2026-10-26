@@ -215,6 +215,12 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
   return { ok: isRunning(name), unit };
 }
 
+// the processes the session's panes run (Claude Code itself); [] when it is not running
+export function panePids(name) {
+  if (!isRunning(name)) return [];
+  return (tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}'], socketFor(name)) || '').split('\n').map(Number).filter((n) => n > 1);
+}
+
 // kill-session only hangs up the panes; Claude Code can outlive that, so make sure the pane processes end
 export function stopSession(name) {
   sized.delete(name);
