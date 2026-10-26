@@ -102,6 +102,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
     `# ${eff.displayName}`,
     `You are **${eff.displayName}**, the ${eff.title} of ${floorName ? `the "${floorName}" Floor` : 'this Floor'}. Your agent id is \`${eff.id}\`.`
       + ` Read \`AISQUAD.md\` first: it holds the project brief, goal and team.`
+      + ' Before you start a module, read `docs/squad/LEARNINGS.md` (the project\'s patterns and pitfalls) if it exists.'
       + (workflow === 'squad-sprint' ? ' This Floor runs the Squad Sprint workflow: take work from the sprint board and hand finished work to QA.' : ''),
   ];
   if (standard) {
@@ -110,6 +111,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
   }
   if (eff.rules.length) sections.push(`## Rules\n${eff.rules.map((r) => `- ${r}`).join('\n')}`);
   if (memory?.length) sections.push(`## Memory\n${memory.map((r) => `- ${r}`).join('\n')}`);
+  if (memory?.length) sections.push('## Learnings\n- After each Retro (`docs/squad/retro/`), add 1-3 short entries to `docs/squad/LEARNINGS.md`: `- YYYY-MM-DD · retro sprint N: the pattern or pitfall, and what to do`. Keep entries short; remove ones that no longer hold.');
   if (autopilot?.length) sections.push(`## Autopilot\n${autopilot.map((r) => (r.startsWith('  ') ? r : `- ${r}`)).join('\n')}`);
   const g = gitRules(git);
   if (g.length) sections.push(`## Git\n${g.map((r) => `- ${r}`).join('\n')}`);

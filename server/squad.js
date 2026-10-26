@@ -24,6 +24,8 @@ import * as improve from './improve.js';
 import * as replyLib from './reply.js';
 import * as recovery from './recovery.js';
 import * as autopilot from './autopilot.js';
+import * as retroLib from './retro.js';
+import * as learnings from './learnings.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -1178,6 +1180,26 @@ export function floorAudits(floorId) {
   return { audits: auditLib.historyOf(floorId).reverse(), running: r ? { since: r.since, sprint: r.sprint } : null, settings: cfg.floor.audit, sprints, models: floors.AUDIT_MODELS,
     ledger: improve.ledger({ floor: floorId }).reverse() };
 }
+// the Retro dialog: the latest sprint Retro; "Send to lead" asks the lead to turn it into LEARNINGS.md entries
+export function floorRetro(floorId, sprintNo = null) {
+  building.floorEntry(floorId);
+  const r = auditLib.latestRetro(floorId, sprintNo);
+  return { retro: r };
+}
+export async function sendRetroToLead(floorId, sprintNo = null) {
+  const { entry, cfg } = floorBp2(floorId);
+  const { retro } = floorRetro(floorId, sprintNo);
+  if (!retro) throw notFound('No Retro yet: it is made when a sprint closes (or from an audit of one sprint)');
+  const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  if (!lead) throw bad('This Floor has no lead');
+  learnings.ensure(entry.path);
+  // the Retro goes into the repo, where the lead can read it (the audit folder is outside the project)
+  const rel = `docs/squad/retro/sprint-${retro.sprint}.md`;
+  writeText(path.join(entry.path, rel), retroLib.retroMd(retro, cfg.floor.name));
+  const r = await sendTask(floorId, lead.id, retroLib.learningsTask(retro, rel));
+  return { ...r, lead: lead.id, file: rel };
+}
+const floorBp2 = (floorId) => { const entry = building.floorEntry(floorId); return { entry, cfg: floors.readFloor(entry.path) }; };
 export function floorAudit(floorId, auditId) {
   building.floorEntry(floorId);
   const a = auditLib.getAudit(floorId, auditId);
@@ -1199,6 +1221,13 @@ export function startAudit(floorId, { sprint: sprintNo = null, model = '' } = {}
   return closeChecks.then((sprintClose) => auditLib.runAudit(floorId, { ...auditInfo(entry, cfg), sprintClose }, { sprint: n, model: m })).then((a) => {
     logEvent(floorId, { type: 'audit.done', sprint: n, data: { audit: a.id, findings: a.findings.length, cost: a.cost, model: a.model, ...(a.error ? { error: a.error } : {}) } });
     improve.recordOutcomes(floorId, a);                // earlier applied changes get their "after" metrics
+    if (n != null && !a.error) {                         // a sprint's audit is also its Retro
+      let perf = null; try { perf = cfg.floor.workflow === 'squad-sprint' ? performance(floorId) : null; } catch { /* no board data */ }
+      const r = retroLib.buildRetro(a, perf);
+      auditLib.saveRetro(floorId, a.id, r, retroLib.retroMd(r, cfg.floor.name));
+      logEvent(floorId, { type: 'retro.done', sprint: n, data: { audit: a.id, wentWell: r.wentWell.length, wentBadly: r.wentBadly.length, changes: r.changes.length } });
+      return { ...a, retro: r };
+    }
     return a;
   }).finally(() => auditing.delete(floorId));
 }

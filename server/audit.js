@@ -16,7 +16,7 @@ import * as log from './log.js';
 export const AUDIT_TIMEOUT_MS = 5 * 60e3;
 export const AREAS = ['process', 'efficiency', 'quality'];
 export const SEVERITIES = ['critical', 'high', 'medium', 'low'];
-export const TARGET_KINDS = ['role-template', 'blueprint', 'floor-setting', 'none'];
+export const TARGET_KINDS = ['role-template', 'blueprint', 'floor-setting', 'project', 'none'];
 export const FLOOR_SETTINGS = ['budget.usd', 'sprint.autoNext', 'audit.model', 'log.messages', 'autopilot'];
 const SCORE_COST = { critical: 30, high: 15, medium: 8, low: 3 };
 const LONG_OUTPUT = 4000;                        // output tokens in one reply
@@ -345,8 +345,18 @@ export function getAudit(floorId, id) {
   if (!/^[\w-]+$/.test(String(id))) return null;
   return readJson(path.join(auditDir(floorId), `${id}.json`), null);
 }
+// the Retro of a sprint audit: inside the audit and as <id>-retro.md next to it
+export function saveRetro(floorId, id, retro, md) {
+  const a = getAudit(floorId, id);
+  if (!a) return null;
+  a.retro = retro;
+  writeJson(path.join(auditDir(floorId), `${id}.json`), a);
+  writeText(path.join(auditDir(floorId), `${id}-retro.md`), md);
+  return a;
+}
+export const latestRetro = (floorId, sprint = null) => listAudits(floorId).filter((a) => a.retro && (sprint == null || String(a.retro.sprint) === String(sprint))).at(-1)?.retro || null;
 // the compact history for trends
-export const historyOf = (floorId) => listAudits(floorId).map((a) => ({ id: a.id, createdAt: a.createdAt, label: a.range?.label, scores: a.scores, findings: a.findings?.length || 0, cost: a.cost, model: a.model, error: a.error || null,
+export const historyOf = (floorId) => listAudits(floorId).map((a) => ({ id: a.id, createdAt: a.createdAt, label: a.range?.label, retro: !!a.retro, scores: a.scores, findings: a.findings?.length || 0, cost: a.cost, model: a.model, error: a.error || null,
   trend: trendOf(a.metrics) }));
 export const trendOf = (m) => (m ? { costPerSP: m.efficiency.costPerSP, passRate: m.process.qaFirstRoundPassRate, cacheHitRate: m.efficiency.cacheHitRate, cost: m.efficiency.totals.cost, doneSP: m.efficiency.doneSP } : {});
 

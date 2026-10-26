@@ -25,7 +25,7 @@ export const TYPES = {
   'tool.call': 'tools',
   'usage.turn': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
-  'audit.done': 'audit', 'improvement.decided': 'audit',
+  'audit.done': 'audit', 'improvement.decided': 'audit', 'retro.done': 'audit',
   'autopilot.decided': 'autopilot', 'autopilot.nudged': 'autopilot', 'autopilot.blocked': 'autopilot', 'autopilot.changed': 'autopilot',
 };
 export const CATEGORIES = [...new Set(Object.values(TYPES))];
@@ -52,6 +52,7 @@ function summarize(e) {
     case 'report.delivered': return `${who} finished and reported to the owner${d.asks ? ' (asks for a reply)' : ''}${t(d.text)}`;
     case 'debug.attempt': return `${who}: fix attempt ${d.attempt} on ${d.issue}`;
     case 'debug.escalated': return `${who} escalated ${d.issue} to the lead after ${d.attempts} attempts`;
+    case 'retro.done': return `retro for sprint ${e.sprint}: ${d.wentWell} went well, ${d.wentBadly} did not, ${d.changes} changes`;
     case 'agent.model': return `${who} runs ${d.observed}, configured ${d.configured}`;
     case 'task.given': return `${d.by || 'owner'} gave ${who} a task${t(d.text)}`;
     case 'task.delegated': return `${who} delegated to ${d.to}${t(d.text)}`;
