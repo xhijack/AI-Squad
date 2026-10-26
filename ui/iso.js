@@ -11,6 +11,7 @@ import { loungeSpots, meetingSeats, WANDER_AFTER } from './life.js';
 import { NavGrid, footprints, Walker } from './nav.js';
 import { lookFor, agentStatus, floorLabelHtml, STATION_SCALE } from './scene.js';
 import { t as tt } from './i18n.js';
+import { Office } from './office.js';
 
 const SLAB = .36;
 const STATE_RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
@@ -36,6 +37,8 @@ export class IsoScene {
     this.bubbles = new Map();                     // floor/agent -> { text, until }
     this.stats = { frames: 0, ms: 0 };
     this.quality = { chosen: 'auto', active: 'low', set() {}, sample() {}, setAO() {} };   // the Graphics menu has nothing to do here
+    this.company = {};                            // the queue, approvals and this machine, for the Office view
+    this.office = new Office(this);
     this.loadAtlas();
     this.bindPointer();
     this.onResize = () => this.resize();
@@ -88,9 +91,12 @@ export class IsoScene {
       this.floors.set(f.id, o);
     }
     for (const [id, o] of this.floors) if (!seen.has(id)) { o.labelEl.remove(); for (const r of o.agents.values()) r.el.remove(); this.floors.delete(id); }
+    this.office.update(floors);
     if (!this.placed) { this.placed = true; this.fit(true); }
     this.dirty = true;
   }
+  setCompany(c) { this.company = c || {}; this.dirty = true; }
+  officeOn() { return this.view.mode === 'lobby' && this.view.overview === 'office'; }
 
   buildFloor(f, old) {
     if (old) { old.labelEl.remove(); for (const r of old.agents.values()) r.el.remove(); }
@@ -168,6 +174,7 @@ export class IsoScene {
       }
     }
     for (const [k, b] of this.bubbles) if (b.until < performance.now()) { this.bubbles.delete(k); this.dirty = true; }
+    if (this.officeOn()) this.animating = this.office.busy();
   }
   go(o, r, spot, others) {
     r.spot = spot; r.mode = 'walk';
@@ -182,7 +189,7 @@ export class IsoScene {
   }
 
   // ---------- view ----------
-  shown(o) { return this.view.mode === 'lobby' || this.view.floorId === o.id; }
+  shown(o) { return (this.view.mode === 'lobby' && !this.officeOn()) || this.view.floorId === o.id; }
   setView(view) { this.view = view; this.fit(false); this.dirty = true; }
   setInsets(insets) { this.insets = { left: 0, right: 0, top: 0, bottom: 0, ...insets }; this.fit(true); this.dirty = true; }
   freeRect() {
@@ -195,7 +202,8 @@ export class IsoScene {
     const pts = [];
     const add = (o) => { const y0 = this.view.mode === 'lobby' ? floorY(o.data.number) : 0; for (const [x, z] of [[-FW / 2, -FD / 2], [FW / 2, -FD / 2], [FW / 2, FD / 2], [-FW / 2, FD / 2]]) { pts.push(this.proj(x, y0 - SLAB, z), this.proj(x, y0 + FH, z)); } };
     let focus = null;
-    if (this.view.mode === 'lobby') for (const o of this.floors.values()) add(o);
+    if (this.officeOn()) pts.push(...this.office.points());
+    else if (this.view.mode === 'lobby') for (const o of this.floors.values()) add(o);
     else { const o = this.floors.get(this.view.floorId); if (o) add(o); focus = o && this.view.agentId ? o.agents.get(this.view.agentId) : null; }
     if (!pts.length) return;
     const r = this.freeRect(), atlasPx = this.atlas?.meta.px || 24;
@@ -224,6 +232,7 @@ export class IsoScene {
   dispose() {
     this.disposed = true;
     removeEventListener('resize', this.onResize);
+    this.office.dispose();
     this.canvas.remove(); this.layer.remove();
     this.cache.clear();
   }
@@ -245,6 +254,7 @@ export class IsoScene {
     g.fillStyle = this.bg; g.fillRect(0, 0, this.canvas.width, this.canvas.height);
     const list = [...this.floors.values()].filter((o) => this.shown(o)).sort((a, b) => a.data.number - b.data.number);
     const labelsOn = this.view.mode !== 'lobby';
+    if (this.officeOn()) this.office.draw(); else this.office.hide();
     for (const o of list) this.drawFloor(o, this.view.mode === 'lobby' ? floorY(o.data.number) : 0, labelsOn);
     for (const o of this.floors.values()) if (!this.shown(o)) { o.labelEl.hidden = true; for (const r of o.agents.values()) r.el.hidden = true; }
     this.stats.frames++; this.stats.ms += performance.now() - t0;
@@ -311,14 +321,10 @@ export class IsoScene {
 
   // the chibi in its own colours: the atlas has a colour-key mask and a white shading pass per pose and heading
   character(r, base, labelsOn) {
-    const a = r.a, style = a.appearance?.style || 'bob';
+    const a = r.a;
     const t = performance.now() / 1000 + r.phase;
     const pose = poseOf(a, r.mode, t, !!r.spot?.seat);
-    const dir = dirOf(r.mode === 'desk' ? r.seat.ry : r.ry);
-    const look = lookFor(a.appearance || {});
-    const ck = `${style}|${pose}|${dir}|${look.skin}|${look.hair}|${look.shirt}|${look.pants}|${look.shoe}|${look.hat}|${look.eye}`;
-    let img = this.cache.get(ck);
-    if (img === undefined && this.atlas) { img = this.paint(`ch:${style}:${pose}:${dir}`, look); this.cache.set(ck, img); if (this.cache.size > 600) this.cache.delete(this.cache.keys().next().value); }
+    const img = this.chibiImage(a, pose, dirOf(r.mode === 'desk' ? r.seat.ry : r.ry));
     const k = this.cam.zoom, p = this.screen(r.w.x, 0, r.w.z, base);
     if (img) this.g.drawImage(img.canvas, Math.round(p.x - img.ax * k), Math.round(p.y - img.ay * k), Math.round(img.canvas.width * k), Math.round(img.canvas.height * k));
     r.box = img ? { x: p.x - img.ax * k, y: p.y - img.ay * k, w: img.canvas.width * k, h: img.canvas.height * k } : null;
@@ -330,6 +336,21 @@ export class IsoScene {
       const b = this.bubbles.get(`${r.floorId}/${r.id}`), say = r.el.querySelector('.say');
       if (b) { if (say.textContent !== b.text) say.textContent = b.text; say.hidden = false; } else say.hidden = true;
     }
+  }
+  // an agent in its own colours, in a pose and heading (cached; the Office view uses it too)
+  chibiImage(a, pose, dir) {
+    const style = a.appearance?.style || 'bob', look = lookFor(a.appearance || {});
+    const ck = `${style}|${pose}|${dir}|${look.skin}|${look.hair}|${look.shirt}|${look.pants}|${look.shoe}|${look.hat}|${look.eye}`;
+    let img = this.cache.get(ck);
+    if (img === undefined && this.atlas) { img = this.paint(`ch:${style}:${pose}:${dir}`, look); this.cache.set(ck, img); if (this.cache.size > 600) this.cache.delete(this.cache.keys().next().value); }
+    return img || null;
+  }
+  // a screen point back to the floor plane (y = 0)
+  unproject(sx, sy) {
+    const k = (this.atlas?.meta.px || 24) * this.cam.zoom, r = this.freeRect();
+    const px = (sx - r.x - r.w / 2) / k + this.cam.x, py = (sy - r.y - r.h / 2) / k + this.cam.y;
+    const a = px / RX, b = py / RZ;
+    return { x: (a + b) / 2, z: (b - a) / 2 };
   }
   paint(prefix, look) {
     const m = this.atlas.meta.sprites[`${prefix}:m`], s = this.atlas.meta.sprites[`${prefix}:s`];
@@ -364,6 +385,7 @@ export class IsoScene {
   }
   pick(e) {
     const rect = this.canvas.getBoundingClientRect(), x = e.clientX - rect.left, y = e.clientY - rect.top;
+    if (this.officeOn()) return this.office.pick(x, y);
     if (this.view.mode === 'lobby') {
       // the Floor whose slab is under the pointer (the top one wins)
       const list = [...this.floors.values()].sort((a, b) => b.data.number - a.data.number);
