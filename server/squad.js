@@ -146,10 +146,14 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const working = busy || (hookFresh ? h.state === 'working' : recent);
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
-    // the turn ended with a plain-text message asking the owner for something: waiting for the owner's reply
-    // (on squad Floors only the lead talks to the owner: a teammate's message counts only when it asks the owner explicitly)
-    let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead, teammate: !!squad && !!lead && a !== lead }) : null;
+    // the turn of an agent the owner talks to directly (its own session: the lead, or started from its Desk) ended:
+    // a message that asks the owner is "Waiting for your reply", any other report is "Finished" (one card, not two).
+    // Lead-spawned teammates (inLead) report to the lead and get neither.
+    const live = { running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy };
+    let reply = state === 'idle' && own ? replyLib.replyWait(live, { gate: !!squad?.gate?.blocking && !squad.gate.passed, isLead: a === lead }) : null;
+    let finished = state === 'idle' && own && !reply ? replyLib.finishedReport(live) : null;
     if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
+    if (finished && dismissed.has(replyKey(entry.id, a.id, finished.ts))) finished = null;
     if (reply) state = 'waiting';
     // teammates the lead has not spawned yet are not "stopped": they wait for the sprint (or the source documents)
     const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking && !squad.gate.passed ? 'docs' : 'sprint') : null;
@@ -161,7 +165,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, standby, withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
+      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
   // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
   const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
@@ -194,7 +198,7 @@ function agentView(root, l, cost) {
     id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead,
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
-    standby: l.standby || null, waitingReply: !!l.reply,
+    standby: l.standby || null, waitingReply: !!l.reply, finished: l.finished ? l.finished.ts : null,
     // stopped agents: how they ended (crash: Resume is the main action), the session Resume continues, the last state
     crash: l.ended?.kind === 'crashed' ? { cause: l.ended.cause, at: l.ended.at, text: recovery.crashText(l.ended), withLead: l.ended.withLead || null } : null,
     resume: !l.running && l.resumeId ? { sessionId: l.resumeId } : null, stopNote: l.stopNote || null, exited: l.ended?.kind === 'exited',
@@ -226,6 +230,9 @@ function floorAttention(entry, floor, lives, cost) {
     } else if (l.reply) {
       out.push({ id: attId(entry.id, l.agent.id, 'reply', l.reply.ts), kind: 'reply', replyKey: replyKey(entry.id, l.agent.id, l.reply.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: l.reply.text, options: [], answerable: true, ts: l.reply.ts });
+    } else if (l.finished) {
+      out.push({ id: attId(entry.id, l.agent.id, 'finished', l.finished.ts), kind: 'finished', replyKey: replyKey(entry.id, l.agent.id, l.finished.ts), floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+        agentId: l.agent.id, agentName: l.agent.displayName, text: l.finished.text, options: [], answerable: true, calm: true, ts: l.finished.ts });
     } else if (!l.running && l.ended?.kind === 'crashed' && !l.ended.withLead && !l.ended.dismissed) {
       // teammates that went down with their lead are covered by the lead's item
       out.push({ id: attId(entry.id, l.agent.id, 'crash', l.ended.detectedAt), kind: 'crash', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
@@ -704,8 +711,9 @@ export async function answerAttention(id, option, text = '', { force = false } =
   const item = attentionItems().find((x) => x.id === id);
   if (!item) throw notFound('This item is gone (maybe already answered)');
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
-  if (item.kind === 'reply') {
+  if (item.kind === 'reply' || item.kind === 'finished') {
     if (!Number(option) && !String(text).trim()) { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
+    if (item.canReply === false) throw bad('This agent runs on its own: reply in its own terminal');
     return sendTask(item.floorId, item.agentId, text);   // the reply goes to the agent as its next task
   }
   if (item.kind === 'decided') {
@@ -893,12 +901,20 @@ function independentState(b) {
   let today = 0;
   const agents = lives.map((l) => { const c = costFor(`ind:${l.a.root}`, l.a.root).today; today += c; return independentView(l, c); });
   const attention = [];
+  const dismissedNow = new Set(loadRuntime().dismissedReplies);
   for (const l of lives) {
     const base = { floorId: ind.FLOOR_ID, floorNumber: building.INDEPENDENT_FLOOR, floorName: INDEPENDENT_NAME, agentId: l.a.id, agentName: ind.displayNameOf(l.a), independent: true };
     if (l.dialog) attention.push({ ...base, id: attId('ind', l.a.key, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
       text: l.dialog.question, options: l.dialog.options, answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
     else if (l.state === 'waiting' && l.st?.ask) attention.push({ ...base, id: attId('ind', l.a.key, l.st.ask.id), kind: 'question', text: l.st.ask.questions.map((q) => q.question).join('\n\n'),
       options: (l.st.ask.questions[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.st.ask.ts });
+    else if (l.state === 'idle' && l.st) {
+      // a finished turn of an agent running on its own: shown, but answered in its own terminal (we never type into it)
+      const r = replyLib.turnReport({ running: true, inLead: false, status: l.st, work: null, pending: false, dialog: l.dialog, busy: false });
+      const key = replyKey(ind.FLOOR_ID, l.a.id, r?.ts);
+      if (r && Date.now() - r.ts < replyLib.FINISHED_MAX_AGE_MS && !dismissedNow.has(key)) attention.push({ ...base, id: attId('ind', l.a.key, 'finished', r.ts), kind: 'finished', replyKey: key, text: r.text,
+        asks: replyLib.asksOwner(l.st.reply.text), canReply: false, options: [], answerable: true, calm: true, ts: r.ts });
+    }
   }
   const count = (st) => agents.filter((a) => a.state === st).length;
   const reg = ind.loadRegistry();
@@ -1085,6 +1101,7 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
           for (const [id, w] of Object.entries(workOf(entry.id))) if (!w.doneAt) { teamOpen++; own[id] = (own[id] || 0) + 1; }
           for (const ev of collect.stateChanges(entry.id, f.agents, { teamOpen, own, stoppedByUs: stoppedByUs.get(entry.id) }, now)) emit(ev);
           stoppedByUs.delete(entry.id);
+          for (const ev of reportEvents(entry.id, snap.attention)) emit(ev);
           const S = collect.stateOf(entry.id);
           S.models ||= {};
           for (const a of f.agents) {
@@ -1108,10 +1125,24 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
     }
     const f1 = snap.floors.find((x) => x.id === ind.FLOOR_ID);
     if (f1) for (const ev of collect.stateChanges(ind.FLOOR_ID, f1.agents, { independent: true }, now)) emit1(ev);
+    for (const ev of reportEvents(ind.FLOOR_ID, snap.attention)) emit1(ev);
     collect.saveState(ind.FLOOR_ID);
     runPendingAudits();
   } finally { logging = false; }
   return n;
+}
+
+// report.delivered: once per ended turn that reached the owner as a "Finished" or "Waiting for your reply" card
+function reportEvents(floorId, attention) {
+  const S = collect.stateOf(floorId);
+  S.reports ||= {};
+  const out = [];
+  for (const a of attention) {
+    if (a.floorId !== floorId || (a.kind !== 'finished' && a.kind !== 'reply') || S.reports[a.agentId] === a.ts) continue;
+    S.reports[a.agentId] = a.ts;
+    out.push({ type: 'report.delivered', agent: a.agentId, data: { card: a.kind, asks: a.kind === 'reply' || !!a.asks, chars: a.text.length, text: a.text } });
+  }
+  return out;
 }
 
 // GET /api/floors/:id/log

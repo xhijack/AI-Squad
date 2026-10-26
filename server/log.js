@@ -21,7 +21,7 @@ export const TYPES = {
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
-  'permission.asked': 'communication', 'permission.answered': 'communication',
+  'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
   'usage.turn': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
@@ -49,6 +49,7 @@ function summarize(e) {
     case 'autopilot.nudged': return d.kind === 'idle' ? `autopilot nudged ${who}: squad idle with ${d.open} open tasks` : `autopilot nudged ${who} to decide an unanswered ask`;
     case 'autopilot.blocked': return `critical item waits for the owner (${(d.reasons || []).join(', ')})${t(d.question, 60)}`;
     case 'autopilot.changed': return `the owner changed an autopilot decision from "${d.from}" to "${d.to}"`;
+    case 'report.delivered': return `${who} finished and reported to the owner${d.asks ? ' (asks for a reply)' : ''}${t(d.text)}`;
     case 'agent.model': return `${who} runs ${d.observed}, configured ${d.configured}`;
     case 'task.given': return `${d.by || 'owner'} gave ${who} a task${t(d.text)}`;
     case 'task.delegated': return `${who} delegated to ${d.to}${t(d.text)}`;
