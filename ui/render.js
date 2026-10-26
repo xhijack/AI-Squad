@@ -81,6 +81,7 @@ export class Quality {
   loadEnv() {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     new RGBELoader().load(this.hdri, (hdr) => {
+      if (this.disposed) { hdr.dispose(); pmrem.dispose(); return; }        // the scene was switched away meanwhile
       this.env = pmrem.fromEquirectangular(hdr).texture;
       hdr.dispose(); pmrem.dispose();
       if (this.active === 'high') { this.scene.environment = this.env; if (this.hemi) this.hemi.intensity = .35; }

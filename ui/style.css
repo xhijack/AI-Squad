@@ -702,3 +702,11 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .peopleRoot form.row input { flex: 1; min-width: 180px; width: auto; }
 .chatRoot .seg { flex-wrap: nowrap; }
 .chatRoot .seg button { flex: none; white-space: nowrap; }
+
+/* Iso Pixel renderer (0.16) */
+.isoCanvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; cursor: grab; }
+.isoCanvas:active { cursor: grabbing; }
+.isoLabels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.isoLabels > * { position: absolute; transform: translate(-50%, -100%); }
+.isoLabels .flabel { transform: translate(0, -50%); pointer-events: auto; }
+.isoLabels .nlabel .say { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); width: max-content; }

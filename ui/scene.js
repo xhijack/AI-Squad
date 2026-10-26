@@ -222,7 +222,7 @@ const KIT_DEVICES = {
   },
 };
 
-function buildDevice(d) {
+export function buildDevice(d) {
   const g = new THREE.Group();
   g.userData.device = d.id;
   const built = REAL ? REAL_DEVICES[d.type]?.(g, d, FD, MEETING_SEATS) : KIT_DEVICES[d.type]?.(g, d);
@@ -391,13 +391,17 @@ function taskProps(st, task) {
   T.fill.material.color.set(task.stall ? '#d97706' : '#16a34a');
 }
 
+// the line under an agent's name (shared with the Iso Pixel renderer, 0.16)
+export function agentStatus(a) {
+  const taskStatus = a.task && a.state === 'working' ? tt('{label} · {n} min', { label: a.task.label, n: Math.max(1, Math.round((Date.now() - a.task.startedAt) / 60000)) }) : '';
+  return a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
+}
 function updateStation(st, a) {
   st.state = a.state; st.data = a;
   const el = st.label.element;
   const name = String(a.displayName || '').split(' - ')[0];
   taskProps(st, a.task && a.state === 'working' ? a.task : null);
-  const taskStatus = a.task && a.state === 'working' ? tt('{label} · {n} min', { label: a.task.label, n: Math.max(1, Math.round((Date.now() - a.task.startedAt) / 60000)) }) : '';
-  const status = st.away || (a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || ''));
+  const status = st.away || agentStatus(a);
   const cls = `nlabel ${a.state || 'stopped'}${a.standby ? ' standby' : ''}${st.away ? ' away' : ''}`;
   if (el.className !== cls) el.className = cls;
   const n = el.querySelector('.n'), s = el.querySelector('.a');
@@ -540,14 +544,17 @@ export class BuildingScene {
     this.bindPointer();
     this.resize();
     if (DEMO_STATES) window.__scene = this;                                     // screenshots of a look reach the camera
-    addEventListener('resize', () => this.resize());
+    this.onResize = () => this.resize();
+    addEventListener('resize', this.onResize);
     // render on demand: every display frame while something moves (camera, input, walking, first person), every
     // second one while agents type or talk, and none when everyone sits still; the office life (agents getting up,
     // screens, labels) still ticks twice a second without drawing. Hidden tabs get no frames at all.
-    for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) addEventListener(ev, () => { this.lastInput = performance.now(); }, { passive: true });
+    this.onInput = () => { this.lastInput = performance.now(); };
+    for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) addEventListener(ev, this.onInput, { passive: true });
     this.dirty = true;
     let tick = 0, lastLogic = 0, lastDraw = 0;
     const loop = (now) => {
+      if (this.disposed) return;
       requestAnimationFrame(loop);
       if (document.hidden) return;
       tick++;
@@ -560,6 +567,20 @@ export class BuildingScene {
       this.frame(draw);
     };
     requestAnimationFrame(loop);
+  }
+
+  // switching to another renderer (0.16): stop drawing and give the GPU memory and the WebGL context back
+  dispose() {
+    this.disposed = true;
+    this.quality.disposed = true;
+    removeEventListener('resize', this.onResize);
+    for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) removeEventListener(ev, this.onInput);
+    for (const o of this.floors.values()) dispose(o.g);
+    this.floors.clear();
+    this.scene.traverse((x) => { if (x.geometry && !x.userData.kit) x.geometry.dispose(); if (x.material && !x.userData.kit) [].concat(x.material).forEach((m) => m.dispose?.()); });
+    this.controls.dispose();
+    this.renderer.dispose(); this.renderer.forceContextLoss();
+    this.renderer.domElement.remove(); this.labels.domElement.remove();
   }
 
   // shadows cover the area in view: one Floor (sharp), or the whole building in the Lobby
@@ -1056,7 +1077,7 @@ export class BuildingScene {
   }
 }
 
-function floorLabelHtml(f) {
+export function floorLabelHtml(f) {
   if (f.missing) return `<b>${f.number}</b> ${esc(f.name)} <span class="q">${tt('missing')}</span>`;
   const c = f.counts || {};
   const parts = [];

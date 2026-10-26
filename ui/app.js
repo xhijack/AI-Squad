@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
-import { BuildingScene } from './scene.js';
+import { createSceneHost } from './renderer.js';
 import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
@@ -55,7 +55,7 @@ addEventListener('hashchange', () => {
 });
 
 // ---------- scene ----------
-const scene = new BuildingScene($('scene'), {
+const scene = createSceneHost($('scene'), {
   onPickFloor: (id) => { if (state.route.mode === 'lobby' && !ctx.editing) location.hash = `#/floor/${id}`; },
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
@@ -387,7 +387,9 @@ function render() {
 
   // 3D
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
+  scene.route(route, !!ctx.editing);                                  // three.js or Iso Pixel (ui/renderer.js)
   scene.sync(floorsForScene);
+  showRenderer();
   const viewKey = routeKey(route) + (state.desk ? '' : '-');
   if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route }); }
 
@@ -654,6 +656,10 @@ export function applyTheme() {
 const QUALITY_TEXT = { auto: tt('Auto'), high: tt('High'), low: tt('Low') };
 function showQuality() { $('qualityName').textContent = `${QUALITY_TEXT[scene.quality.chosen]}${scene.quality.chosen === 'auto' ? ` (${({ high: tt('high'), low: tt('low') })[scene.quality.active] || scene.quality.active})` : ''}`; }
 showQuality();
+// view: 3D (three.js), Iso Pixel (light, Canvas 2D) or Auto (Iso on phones, small devices and big squads)
+const RENDERER_TEXT = { auto: tt('Auto'), three: tt('3D'), iso: tt('Iso Pixel') };
+function showRenderer() { $('rendererName').textContent = `${RENDERER_TEXT[scene.chosen]}${scene.chosen === 'auto' ? ` (${RENDERER_TEXT[scene.kind]})` : ''}`; }
+showRenderer();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 applyTheme();
 $('menu').addEventListener('click', (e) => {
@@ -669,6 +675,9 @@ $('menu').addEventListener('click', (e) => {
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
     scene.quality.set(next); showQuality(); toast(tt('Graphics: {name}', { name: QUALITY_TEXT[next] }));
+  } else if (b.dataset.menu === 'renderer') {
+    const order = ['auto', 'three', 'iso'], next = scene.choose(order[(order.indexOf(scene.chosen) + 1) % order.length]);
+    scene._viewKey = null; applyTheme(); render(); showRenderer(); toast(tt('Scene view: {name}', { name: RENDERER_TEXT[next] }));
   } else if (b.dataset.menu === 'pin') askPin().then((ok) => ok && refresh());
   else if (b.dataset.menu === 'rename') {
     const name = prompt(tt('Building name'), state.building?.name || 'The AI Squad');
