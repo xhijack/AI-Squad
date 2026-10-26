@@ -14,12 +14,16 @@ import { flushPending, watchdogTick, mergeTick, logTick, autoResumeTick, autopil
 import { maintain as maintainLogs, DEFAULT_RETENTION_DAYS } from './log.js';
 import { loadBuilding } from './building.js';
 import { meter } from './meter.js';
+import { migrate } from './schema.js';
+import * as backup from './backup.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const PORT = Number(opt('--port', process.env.AISQUAD_PORT || 8097));
 const HOST = opt('--host', '127.0.0.1');
 
+// the data in ~/.aisquad follows this release's version; an older home gets a safety backup first (no secrets)
+try { migrate({ before: (v) => backup.createBackup({ label: `pre-migrate-v${v}`, logs: false }), log: console.log }); } catch (e) { console.error('[schema]', e.message); }
 seedDefaults();
 seedBlueprints();
 configure({ serverUrl: `http://${isLoopback(HOST) ? HOST.replace(/^::1$/, '[::1]') : '127.0.0.1'}:${PORT}` });   // where agent hooks post events
@@ -48,3 +52,8 @@ setInterval(() => { autoResumeTick().then((done) => { for (const r of done) cons
 const rotateLogs = () => { try { maintainLogs({ retentionDays: Number(loadBuilding().prefs.logRetentionDays) || DEFAULT_RETENTION_DAYS }); } catch (e) { console.error('[log]', e.message); } };
 setTimeout(rotateLogs, 10000).unref();
 setInterval(rotateLogs, 3600e3).unref();
+// nightly backup (Building settings → Backups) and a monthly read-back check of the newest one
+setInterval(() => {
+  try { const r = backup.backupTick(loadBuilding().prefs.backup); if (r.backup) console.log(`[backup] ${r.backup.ok ? r.backup.file : `failed: ${r.backup.error}`}`); if (r.verify) console.log(`[backup] check of ${r.verify.file}: ${r.verify.ok ? 'ok' : r.verify.errors.join('; ')}`); }
+  catch (e) { console.error('[backup]', e.message); }
+}, 60000).unref();
