@@ -2,7 +2,7 @@
 // as a speech bubble (readable markdown that scrolls between a fixed header and action bar), the actions for the
 // item (options, Reply, OK / Dismiss, Open desk), and "n of m" with previous / next. While it is open the office
 // camera eases to the agent and a short bubble appears over its head. Esc closes.
-import { esc, api, toast, ago, mdLite, drafts } from './lib.js';
+import { esc, api, toast, ago, mdLite, drafts, answerItem } from './lib.js';
 import { ctx } from './ctx.js';
 import { preview, bubbleText, actionsFor, step, ofText } from './convo-model.js';
 import { playLine, stopVoice } from './voice.js';
@@ -73,14 +73,14 @@ function render() {
 }
 
 async function act(fn, done = 'Sent') {
-  try { await fn(); toast(done); } catch (e) { toast(e.message); return; }
+  try { const r = await fn(); if (!r?.gone) toast(done); } catch (e) { toast(e.message); return; }   // gone: the helper already said "Already answered"
   C.list.splice(C.i, 1);
   await ctx.refresh();
   if (!C.list.length) return dialogEl().close();
   C.i = Math.min(C.i, C.list.length - 1);
   render();
 }
-const answer = (item, body) => api('POST', `/api/attention/${item.id}/answer`, body);
+const answer = (item, body) => answerItem(item.id, body, item);
 
 function wire(d, item, a) {
   d.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => d.close(); });
@@ -90,7 +90,7 @@ function wire(d, item, a) {
   d.querySelector('[data-desk]')?.addEventListener('click', () => d.close());
   d.querySelector('[data-dismiss]')?.addEventListener('click', () => act(() => answer(item, { option: 0 }), a.dismiss === 'OK' ? 'OK' : 'Dismissed'));
   d.querySelectorAll('[data-n]').forEach((b) => { b.onclick = () => act(async () => {
-    if (a.act === 'crash-answer') return ctx.actions['crash-answer']({ dataset: { id: item.id, n: b.dataset.n } });
+    if (a.act === 'crash-answer') return ctx.actions['crash-answer']({ dataset: { id: item.id, n: b.dataset.n }, closest: () => null });
     return answer(item, { option: +b.dataset.n });
   }, 'Answer sent'); });
   const free = d.querySelector('[data-free]');
@@ -99,7 +99,7 @@ function wire(d, item, a) {
   if (reply) {
     const ta = reply.elements.text;
     ta.oninput = () => drafts.set(item.id, ta.value);
-    const send = () => { if (!ta.value.trim()) { ta.focus(); return; } act(async () => { await answer(item, { option: 1, text: ta.value }); drafts.delete(item.id); }, 'Reply sent'); };
+    const send = () => { if (!ta.value.trim()) { ta.focus(); return; } drafts.set(item.id, ta.value); act(async () => { const r = await answer(item, { option: 1, text: ta.value }); drafts.delete(item.id); if (r.delivered === 'as-message') toast('Sent to the agent as a message'); }, 'Reply sent'); };
     reply.onsubmit = (e) => { e.preventDefault(); send(); };
     d.querySelector('[data-send]').onclick = send;
     ta.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); };

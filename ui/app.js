@@ -1,6 +1,6 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -488,7 +488,7 @@ const actions = Object.assign(ctx.actions, {
   async start(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`)) toast('Starting agent…'); },
   // continue the agent's last Claude Code session (after a crash this is the main action)
   async resume(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/resume`)) toast('Resuming the last session…'); },
-  async 'crash-answer'(el) { el.disabled = true; if (await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n })) toast(+el.dataset.n === 1 ? 'Resuming the last session…' : 'Starting a fresh session…'); else el.disabled = false; },
+  async 'crash-answer'(el) { el.disabled = true; if (await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n, ...itemContext(el) })) toast(+el.dataset.n === 1 ? 'Resuming the last session…' : 'Starting a fresh session…'); else el.disabled = false; },
   async restart(el) {
     if (!confirm('Restart this agent? Its Claude Code session is closed and a fresh one starts with the configured model and effort.')) return;
     await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {});
@@ -509,8 +509,8 @@ const actions = Object.assign(ctx.actions, {
     for (const a of state.floor.agents.filter((x) => x.running)) await api('POST', `/api/floors/${state.route.floorId}/agents/${a.id}/stop`, {});
     toast('Team stopped');
   },
-  async answer(el) { el.disabled = true; await api('POST', `/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n }); toast('Answer sent'); },
-  async dismiss(el) { await api('POST', `/api/attention/${el.dataset.id}/answer`, { option: 0 }); toast('Dismissed'); },
+  async answer(el) { el.disabled = true; const r = await answerItem(el.dataset.id, { option: +el.dataset.n }, itemContext(el)); if (!r.gone) toast('Answer sent'); },
+  async dismiss(el) { const r = await answerItem(el.dataset.id, { option: 0 }, itemContext(el)); if (!r.gone) toast('Dismissed'); },
   // the Floor pill: source documents open their dialog, a reply or answer opens Attention
   'waiting-for'(el) {
     const f = state.building.floors.find((x) => x.id === state.route.floorId);
@@ -577,14 +577,19 @@ document.addEventListener('submit', async (e) => {
   if (!r) return;
   e.preventDefault();
   const btn = r.querySelector('button:not([type=button])'); btn.disabled = true;   // Send reply (reply card) or Reply (Finished card)
-  try { await api('POST', `/api/attention/${r.dataset.id}/answer`, { option: 1, text: r.elements.text.value }); drafts.delete(r.dataset.id); r.elements.text.blur(); toast('Reply sent'); } catch (err) { btn.disabled = false; toast(err.message); }
+  // the typed text stays (textarea and draft) until the server confirms; a moved-on item still gets it as a message
+  try {
+    const res = await answerItem(r.dataset.id, { option: 1, text: r.elements.text.value }, itemContext(r));
+    drafts.delete(r.dataset.id); r.elements.text.value = ''; r.elements.text.blur();
+    toast(res.delivered === 'as-message' ? 'Sent to the agent as a message' : 'Reply sent');
+  } catch (err) { btn.disabled = false; drafts.set(r.dataset.id, r.elements.text.value); toast(err.message); }
   refresh();
 });
 document.addEventListener('submit', async (e) => {
   const f = e.target.closest('form[data-act="answer-free"]');
   if (!f) return;
   e.preventDefault();
-  try { await api('POST', `/api/attention/${f.dataset.id}/answer`, { option: +f.dataset.n, text: f.elements.text.value }); toast('Answer sent'); } catch (err) { toast(err.message); }
+  try { const r = await answerItem(f.dataset.id, { option: +f.dataset.n, text: f.elements.text.value }, itemContext(f)); toast(r.delivered === 'as-message' ? 'Sent to the agent as a message' : 'Answer sent'); } catch (err) { toast(err.message); }
   refresh();
 });
 // theme: light (default) → dark → auto (follows the system), remembered per browser

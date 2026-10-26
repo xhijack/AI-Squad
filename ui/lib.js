@@ -118,6 +118,15 @@ export async function api(method, url, body, { raw = null, headers = {}, quiet40
   throw new Error('Wrong PIN');
 }
 
+// answering an Attention item: its context (floorId, agentId, kind) goes along, so typed text reaches the agent
+// even when the item has moved on; "already answered" (409) is not an error for the owner
+export async function answerItem(id, body, where = {}) {
+  try { return await api('POST', `/api/attention/${id}/answer`, { ...body, floorId: where.floorId || '', agentId: where.agentId || '', kind: where.kind || '' }); }
+  catch (e) { if (e.status === 409) { toast('Already answered'); return { gone: true }; } throw e; }
+}
+// the context of an Attention card (data attributes on .att)
+export const itemContext = (el) => { const c = el?.closest?.('.att, [data-item-floor]'); return c ? { floorId: c.dataset.itemFloor || '', agentId: c.dataset.itemAgent || '', kind: c.dataset.itemKind || '' } : {}; };
+
 // ---------- modal ----------
 export function openModal(html, { onClose } = {}) {
   const d = $('modal');
