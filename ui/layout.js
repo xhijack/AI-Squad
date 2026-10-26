@@ -5,6 +5,8 @@
 // (x -8..8, z -6.5..6.5); since 0.8.4 the office is drawn wider, 22 x 16 m, so there is room between desks, around
 // the lounge and the meeting table (furniture keeps its size). toRoom spreads saved positions out when a Floor
 // is drawn, toBase turns them back when Edit Mode saves; the server and older versions keep the same files.
+import { t } from './i18n.js';
+
 export const BASE_W = 16, BASE_D = 13;
 export const FW = 22, FD = 16, FH = 3.4, SLAB = .4, GAP = 3.2;
 const SX = FW / BASE_W, SZ = FD / BASE_D;
@@ -14,7 +16,7 @@ export const toBase = (p) => ({ ...p, x: +(p.x / SX).toFixed(3), z: +(p.z / SZ).
 export const layoutToRoom = (l) => ({ ...l, desks: (l.desks || []).map(toRoom), devices: (l.devices || []).map(toRoom) });
 // the Lobby stacks the Floors with air between them (a cutaway dollhouse) so every office stays visible
 export const floorY = (n) => n * (FH + SLAB + GAP);
-export const LAYOUT_NAMES = { rows: 'Rows', pods: 'Pods', circle: 'Circle', 'open-space': 'Open Space' };
+export const LAYOUT_NAMES = { rows: t('Rows'), pods: t('Pods'), circle: t('Circle'), 'open-space': t('Open Space') };
 
 // desks live in the work zone: the back two thirds of the room, clear of the pantry on the left wall (base coordinates)
 const WORK = { x0: -5.8, x1: 7, z0: -4.6, z1: 1.6 };

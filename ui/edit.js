@@ -5,6 +5,7 @@ import { checkLayout, problemsOf } from './nav.js';
 import { desksFor, presetSpots, loungeFor, FW, FD, LAYOUT_NAMES, toRoom, toBase, layoutToRoom } from './layout.js';
 import { DEVICE_LABELS } from './scene.js';
 import { ctx } from './ctx.js';
+import { t } from './i18n.js';
 
 const STYLES = ['bob', 'spiky', 'pony', 'buns', 'farmer'];
 let draft = null, selected = null, drag = null, base = null;
@@ -55,13 +56,13 @@ function drawBar() {
   bar.hidden = false;
   const sel = selected ? (selected.agent ? draft.desks.find((d) => d.agent === selected.agent) : draft.devices.find((d) => d.id === selected.device)) : null;
   const agentName = selected?.agent ? ctx.state.floor.agents.find((a) => a.id === selected.agent)?.displayName : '';
-  bar.innerHTML = `<span class="lbl">Edit Mode</span>
-    <select id="eLayout" style="width:auto" aria-label="Layout preset" title="Layout preset">${Object.entries(LAYOUT_NAMES).map(([k, v]) => `<option value="${k}" ${k === draft.layout ? 'selected' : ''}>${v}</option>`).join('')}</select>
-    <select id="eDevType" style="width:auto" aria-label="Device type">${Object.entries(DEVICE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select><button id="eAddDev" title="Add device">+ Add</button>
-    ${sel ? `<span class="chip">${esc(selected.agent ? `Desk: ${agentName}` : DEVICE_LABELS[sel.type])}</span>
-      <button id="eRotL" title="Rotate left (Q)" aria-label="Rotate left">⟲</button><button id="eRotR" title="Rotate right (E)" aria-label="Rotate right">⟳</button>
-      ${selected.agent ? `<button id="eDeskDev">${sel.device === 'dual-monitor' ? 'Laptop' : 'Dual monitor'}</button>` : '<button id="eDel" class="danger">Remove</button>'}` : '<span class="note hideSm">Drag desks and devices; click one to rotate it.</span>'}
-    <button id="eCancel" class="ghost">Cancel</button><button id="eSave" class="gold">Save</button>`;
+  bar.innerHTML = `<span class="lbl">${t('Edit Mode')}</span>
+    <select id="eLayout" style="width:auto" aria-label="${t('Layout preset')}" title="${t('Layout preset')}">${Object.entries(LAYOUT_NAMES).map(([k, v]) => `<option value="${k}" ${k === draft.layout ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <select id="eDevType" style="width:auto" aria-label="${t('Device type')}">${Object.entries(DEVICE_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select><button id="eAddDev" title="${t('Add device')}">${t('+ Add')}</button>
+    ${sel ? `<span class="chip">${esc(selected.agent ? t('Desk: {name}', { name: agentName }) : DEVICE_LABELS[sel.type])}</span>
+      <button id="eRotL" title="${t('Rotate left (Q)')}" aria-label="${t('Rotate left')}">⟲</button><button id="eRotR" title="${t('Rotate right (E)')}" aria-label="${t('Rotate right')}">⟳</button>
+      ${selected.agent ? `<button id="eDeskDev">${sel.device === 'dual-monitor' ? t('Laptop') : t('Dual monitor')}</button>` : `<button id="eDel" class="danger">${t('Remove')}</button>`}` : `<span class="note hideSm">${t('Drag desks and devices; click one to rotate it.')}</span>`}
+    <button id="eCancel" class="ghost">${t('Cancel')}</button><button id="eSave" class="gold">${t('Save')}</button>`;
   $('eLayout').onchange = (e) => {
     const v = e.target.value;
     draft.layout = v;
@@ -88,14 +89,14 @@ function drawBar() {
     const id = selected.agent || selected.device, before = problemsOf(check(), id).length, prev = sel.ry || 0;
     sel.ry = round((prev + k * Math.PI / 4) % (Math.PI * 2));
     const bad = problemsOf(check(), id);
-    if (bad.length > before) { sel.ry = prev; toast(`Cannot turn it here: it ${bad[0].reason}.`, 3500); return; }
+    if (bad.length > before) { sel.ry = prev; toast(t('Cannot turn it here: it {reason}.', { reason: bad[0].reason }), 3500); return; }
     const g = ctx.scene.objectFor(draft.id, selected); if (g) g.rotation.y = sel.ry;
   };
   $('eRotL') && ($('eRotL').onclick = () => rotate(1));
   $('eRotR') && ($('eRotR').onclick = () => rotate(-1));
   $('eDeskDev') && ($('eDeskDev').onclick = () => { sel.device = sel.device === 'dual-monitor' ? 'laptop' : 'dual-monitor'; rebuild(); drawBar(); });
   $('eDel') && ($('eDel').onclick = () => { draft.devices = draft.devices.filter((d) => d.id !== selected.device); selected = null; rebuild(); select(); });
-  $('eCancel').onclick = () => { if (!dirty() || confirm('Discard your layout changes?')) exit(); };
+  $('eCancel').onclick = () => { if (!dirty() || confirm(t('Discard your layout changes?'))) exit(); };
   $('eSave').onclick = save;
 }
 
@@ -107,13 +108,13 @@ function drawPanel() {
   const rows = f.agents.map((a) => {
     const ap = { ...a.appearance, ...(draft.appearance[a.id] || {}) };
     return `<div class="card" data-look="${esc(a.id)}"><div class="agent">${avatar({ ...a, appearance: ap })}<div class="meta"><div class="name ellipsis">${esc(a.displayName)}</div></div></div>
-      <div class="row wrap" style="margin-top:8px"><select data-k="style" style="width:auto" aria-label="Hair style">${STYLES.map((s) => `<option ${ap.style === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
-        <input type="color" data-k="shirt" value="${esc(ap.shirt || '#3d82d6')}" title="Shirt" aria-label="Shirt colour"><input type="color" data-k="hair" value="${esc(ap.hair || '#2b2440')}" title="Hair" aria-label="Hair colour">
-        <input type="color" data-k="skin" value="${esc(ap.skin || '#f6d2b0')}" title="Skin" aria-label="Skin colour"><label class="inline" style="margin:0"><input type="checkbox" data-k="glasses" ${ap.glasses ? 'checked' : ''}> Glasses</label></div></div>`;
+      <div class="row wrap" style="margin-top:8px"><select data-k="style" style="width:auto" aria-label="${t('Hair style')}">${STYLES.map((s) => `<option ${ap.style === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <input type="color" data-k="shirt" value="${esc(ap.shirt || '#3d82d6')}" title="${t('Shirt')}" aria-label="${t('Shirt colour')}"><input type="color" data-k="hair" value="${esc(ap.hair || '#2b2440')}" title="${t('Hair')}" aria-label="${t('Hair colour')}">
+        <input type="color" data-k="skin" value="${esc(ap.skin || '#f6d2b0')}" title="${t('Skin')}" aria-label="${t('Skin colour')}"><label class="inline" style="margin:0"><input type="checkbox" data-k="glasses" ${ap.glasses ? 'checked' : ''}> ${t('Glasses')}</label></div></div>`;
   }).join('');
-  ctx.layoutPanels([{ id: 'edit', title: 'Edit Mode', card: 'main', html: `
-    <p class="note" style="margin-top:0">Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks and the lounge. Idle agents walk to the sofa, beanbags, pantry, ping-pong table and whiteboard.</p>
-    <div class="sectionHead" style="margin-top:14px"><h3 class="grow">Appearance</h3></div>${rows || '<div class="empty">No agents on this Floor.</div>'}` }]);
+  ctx.layoutPanels([{ id: 'edit', title: t('Edit Mode'), card: 'main', html: `
+    <p class="note" style="margin-top:0">${t('Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks and the lounge. Idle agents walk to the sofa, beanbags, pantry, ping-pong table and whiteboard.')}</p>
+    <div class="sectionHead" style="margin-top:14px"><h3 class="grow">${t('Appearance')}</h3></div>${rows || `<div class="empty">${t('No agents on this Floor.')}</div>`}` }]);
   const panel = ctx.panelBody();
   panel.querySelectorAll('[data-look]').forEach((card) => card.addEventListener('input', (e) => {
     const k = e.target.dataset.k; if (!k) return;
@@ -158,7 +159,7 @@ function onUp(e) {
     const why = problemsOf(check(), drag.id)[0];
     Object.assign(drag.item, drag.from);
     const g = ctx.scene.objectFor(draft.id, selected), back = toRoom(drag.from); if (g) { g.position.x = back.x; g.position.z = back.z; }
-    toast(why ? `Not here: it ${why.reason}. Leave room to walk around it.` : 'Not here: leave room to walk around it.', 4000);
+    toast(why ? t('Not here: it {reason}. Leave room to walk around it.', { reason: why.reason }) : t('Not here: leave room to walk around it.'), 4000);
   }
   ctx.scene.warnSelection(false);
   drag = null;
@@ -186,7 +187,7 @@ async function save() {
   try {
     await api('PATCH', `/api/floors/${draft.id}`, { layout: draft.layout, desks: draft.desks, devices: draft.devices });
     for (const [id, look] of Object.entries(draft.appearance)) await api('PATCH', `/api/floors/${draft.id}/agents/${id}`, { appearance: look });
-    toast('Layout saved to floor.json');
+    toast(t('Layout saved to floor.json'));
     exit();
     await ctx.refresh();
   } catch (e) { toast(e.message); btn.disabled = false; }

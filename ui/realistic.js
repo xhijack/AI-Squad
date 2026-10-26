@@ -11,6 +11,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Quality, ContactShadows } from './render.js';
 import { pbrSet, officeChair, monitor, laptop, keyboard, mouse, mug, oakDesk } from './realistic-props.js';
 import { loadPerson, Person } from './realistic-person.js';
+import { t } from './i18n.js';
 
 const A = './assets/realistic/';
 const ISO = new THREE.Vector3(1, .95, 1).normalize();             // the office's isometric angle (scene.js)
@@ -44,11 +45,11 @@ function room(scene) {
 async function build() {
   document.body.classList.add('pocBody');
   document.body.innerHTML = `<canvas id="poc"></canvas>
-    <div class="pocBar"><b>Realistic look</b><span class="note">proof of concept, not the office yet</span>
+    <div class="pocBar"><b>${t('Realistic look')}</b><span class="note">${t('proof of concept, not the office yet')}</span>
       <button data-view="wide">Wide</button><button data-view="close">Close</button>
-      <select id="pocQ" aria-label="Quality"><option value="high">High</option><option value="low">Low</option></select>
-      <a href="./">Back to the office</a></div>
-    <div class="pocCredit">Furniture and textures: Poly Haven (CC0). Person and motion: Microsoft Rocketbox (MIT). See ASSETS.md.</div>`;
+      <select id="pocQ" aria-label="${t('Quality')}"><option value="high">${t('High')}</option><option value="low">${t('Low')}</option></select>
+      <a href="./">${t('Back to the office')}</a></div>
+    <div class="pocCredit">${t('Furniture and textures: Poly Haven (CC0). Person and motion: Microsoft Rocketbox (MIT). See ASSETS.md.')}</div>`;
   const canvas = document.getElementById('poc');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -162,4 +163,4 @@ async function build() {
   });
 }
 
-build().catch((e) => { document.body.insertAdjacentHTML('beforeend', `<p class="pocErr">The realistic scene could not load: ${String(e.message || e).replace(/</g, '&lt;')}</p>`); console.error(e); });
+build().catch((e) => { document.body.insertAdjacentHTML('beforeend', `<p class="pocErr">${t('The realistic scene could not load: {error}', { error: String(e.message || e).replace(/</g, '&lt;') })}</p>`); console.error(e); });

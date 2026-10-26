@@ -4,6 +4,7 @@
 // No DOM or three.js here: the same code runs in the browser and in the unit tests. Coordinates are the room's
 // (layout.js toRoom), not the saved ones.
 import { FW, FD, toRoom } from './layout.js';
+import { t } from './i18n.js';
 
 export const ROOM = { x0: -FW / 2, x1: FW / 2, z0: -FD / 2, z1: FD / 2 };
 export const CELL = .2;
@@ -286,15 +287,15 @@ export function checkLayout(layout, { entrance = toRoom({ x: 0, z: 5.6 }), sizes
   for (let i = 0; i < rects.length; i++) for (let k = i + 1; k < rects.length; k++) {
     const a = rects[i], b = rects[k];
     if (a.id === b.id) continue;
-    if (overlap(a, b)) problems.push({ id: b.id.replace(/^desk:/, ''), with: a.id.replace(/^desk:/, ''), reason: `overlaps ${a.id.replace(/^desk:/, '')}` });
+    if (overlap(a, b)) problems.push({ id: b.id.replace(/^desk:/, ''), with: a.id.replace(/^desk:/, ''), reason: t('overlaps {id}', { id: a.id.replace(/^desk:/, '') }) });
   }
   const outside = rects.filter((r) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].some(([sx, sz]) => { const c = rot(sx * r.hw, sz * r.hd, r.ry); const x = r.cx + c.x, z = r.cz + c.z; return x < ROOM.x0 || x > ROOM.x1 || z < ROOM.z0 || z > ROOM.z1; }));
-  for (const r of outside) problems.push({ id: r.id.replace(/^desk:/, ''), reason: 'stands outside the room' });
+  for (const r of outside) problems.push({ id: r.id.replace(/^desk:/, ''), reason: t('stands outside the room') });
   {
     const grid = new NavGrid(rects);
     for (const d of layout.desks || []) {
       const at = approachPoint(grid, { x: d.x, z: d.z }, (d.ry || 0) + Math.PI, deskMargin(d.agent), { min: .95 * STATION_SCALE });   // where the agent stands up
-      if (!at || !grid.path(entrance, at)) problems.push({ id: d.agent, reason: 'cannot be reached: every way to this desk is blocked' });
+      if (!at || !grid.path(entrance, at)) problems.push({ id: d.agent, reason: t('cannot be reached: every way to this desk is blocked') });
     }
   }
   return { ok: !problems.length, problems };

@@ -21,7 +21,7 @@ test('every t(\'…\') in the UI code has a key', () => {
   const missing = [];
   for (const f of fs.readdirSync(ui).filter((x) => x.endsWith('.js') && x !== 'i18n.js')) {   // i18n.js: only examples in comments
     const src = fs.readFileSync(path.join(ui, f), 'utf8');
-    for (const m of src.matchAll(/\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) {
+    for (const m of src.matchAll(/\b(?:t|tt)\(\s*(['"])((?:\\.|(?!\1).)*)\1/g)) {
       const key = m[2].replace(/\\(['"\\])/g, '$1');
       if (!(key in en)) missing.push(`${f}: ${key}`);
     }

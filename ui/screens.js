@@ -3,6 +3,7 @@
 // screen in the over-the-shoulder view. Drawing ideas ported from the squad-3d prototype.
 import * as THREE from 'three';
 import { lines, diffLines, mergeStatus } from './screen-model.js';
+import { t as tt } from './i18n.js';
 
 export const SCR_W = 800, SCR_H = 490;
 const MONO = 'ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace';
@@ -82,16 +83,16 @@ function drawIdle(ctx, a, away) {
   ctx.font = `200 120px ${SANS}`;
   ctx.fillText(new Date().toTimeString().slice(0, 5), SCR_W / 2, SCR_H / 2 + 20);
   ctx.font = `600 26px ${SANS}`; ctx.fillStyle = '#94a3b8';
-  ctx.fillText(`${String(a.displayName).split(' - ')[0]} · ${away || 'waiting for a task'}`, SCR_W / 2, SCR_H / 2 + 80);
+  ctx.fillText(`${String(a.displayName).split(' - ')[0]} · ${away || tt('waiting for a task')}`, SCR_W / 2, SCR_H / 2 + 80);
   ctx.textAlign = 'left';
 }
 
 function drawWaiting(ctx, a) {
   ctx.fillStyle = '#3a1520'; ctx.fillRect(0, 0, SCR_W, SCR_H);
   ctx.fillStyle = '#ef5d6b'; ctx.fillRect(0, 0, SCR_W, 10);
-  ctx.fillStyle = '#fecdd3'; ctx.font = `700 34px ${SANS}`; ctx.fillText('Waiting for you', 40, 80);
+  ctx.fillStyle = '#fecdd3'; ctx.font = `700 34px ${SANS}`; ctx.fillText(tt('Waiting for you'), 40, 80);
   ctx.font = `20px ${SANS}`; ctx.fillStyle = '#fde4e8';
-  const words = String(a.activity || 'A question or permission prompt is open.').split(/\s+/);
+  const words = String(a.activity || tt('A question or permission prompt is open.')).split(/\s+/);
   let line = '', y = 130;
   for (const w of words) { if (ctx.measureText(`${line} ${w}`).width > SCR_W - 80) { ctx.fillText(line, 40, y); y += 30; line = w; } else line = line ? `${line} ${w}` : w; }
   ctx.fillText(line, 40, y);
@@ -113,7 +114,8 @@ function drawLive(ctx, text) {
 }
 
 // lead screen: the sprint board (counts + first tasks per column), or the team's states on Free Team Floors
-const BOARD_COLS = [['TODO', 'To do', '#94a3b8'], ['IN_PROGRESS', 'Building', '#6aa5ff'], ['REVIEW', 'QA', '#b388ff'], ['DONE', 'Done', '#4fc38a']];
+const BOARD_COLS = [['TODO', tt('To do'), '#94a3b8'], ['IN_PROGRESS', 'Building', '#6aa5ff'], ['REVIEW', 'QA', '#b388ff'], ['DONE', tt('Done'), '#4fc38a']];
+const STATE_WORD = { working: tt('working'), waiting: tt('waiting'), idle: tt('idle'), stopped: tt('stopped') };
 const STATE_COLOR = { working: '#4fc38a', waiting: '#ef5d6b', idle: '#f2b544', stopped: '#4b5068' };
 function drawDiff(ctx, peek, t) {
   ctx.fillStyle = '#1e1f2b'; ctx.fillRect(0, 0, SCR_W, SCR_H);
@@ -139,7 +141,7 @@ function drawBoard(ctx, info) {
   ctx.fillStyle = '#141826'; ctx.fillRect(0, 0, SCR_W, SCR_H);
   const tasks = info?.board?.tasks;
   if (tasks?.length) {
-    titleBar(ctx, `▦ Sprint ${info.board.sprint || ''} board`, '#fdba74');
+    titleBar(ctx, `▦ ${tt('Sprint {n} board', { n: info.board.sprint || '' })}`, '#fdba74');
     const w = (SCR_W - 50) / 4;
     BOARD_COLS.forEach(([key, name, color], i) => {
       const x = 10 + i * (w + 10), items = tasks.filter((t) => (key === 'TODO' ? t.column === 'TODO' || t.column === 'BLOCKED' : t.column === key));
@@ -154,27 +156,27 @@ function drawBoard(ctx, info) {
     });
     return;
   }
-  titleBar(ctx, '▦ Team board', '#fdba74');
+  titleBar(ctx, `▦ ${tt('Team board')}`, '#fdba74');
   ctx.font = `20px ${SANS}`;
   (info?.agents || []).slice(0, 9).forEach((a, i) => {
     const y = 80 + i * 44;
     ctx.fillStyle = STATE_COLOR[a.state] || '#94a3b8'; ctx.beginPath(); ctx.arc(34, y - 7, 8, 0, 7); ctx.fill();
     ctx.fillStyle = '#e2e8f0'; ctx.fillText(String(a.name).slice(0, 30), 56, y);
-    ctx.fillStyle = '#94a3b8'; ctx.fillText(String(a.activity || a.state).slice(0, 34), 400, y);
+    ctx.fillStyle = '#94a3b8'; ctx.fillText(String(a.activity || STATE_WORD[a.state] || a.state).slice(0, 34), 400, y);
   });
 }
 
 // QA screen while tests run: a test runner with pass / fail counts read from the output
 function drawTests(ctx, peek) {
   ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, SCR_W, SCR_H);
-  titleBar(ctx, '✓ test runner', '#b388ff');
+  titleBar(ctx, `✓ ${tt('test runner')}`, '#b388ff');
   const out = String(peek.output || '');
   const num = (re) => { const m = out.match(re); return m ? +m[1] : null; };
   const pass = num(/#\s*pass\s+(\d+)/i) ?? num(/(\d+)\s+pass(?:ed|ing)?/i), fail = num(/#\s*fail\s+(\d+)/i) ?? num(/(\d+)\s+fail(?:ed|ing|ures?)?/i);
   ctx.font = `16px ${MONO}`; ctx.fillStyle = '#e2e8f0'; ctx.fillText(`❯ ${lines(peek.command, 1)[0] || ''}`, 16, 64);
   ctx.font = `700 44px ${SANS}`;
-  ctx.fillStyle = '#4fc38a'; ctx.fillText(pass == null ? (peek.output ? '…' : 'running') : `${pass} passed`, 16, 130);
-  if (fail) { ctx.fillStyle = '#ef5d6b'; ctx.fillText(`${fail} failed`, 380, 130); }
+  ctx.fillStyle = '#4fc38a'; ctx.fillText(pass == null ? (peek.output ? '…' : tt('running')) : tt('{n} passed', { n: pass }), 16, 130);
+  if (fail) { ctx.fillStyle = '#ef5d6b'; ctx.fillText(tt('{n} failed', { n: fail }), 380, 130); }
   ctx.font = `15px ${MONO}`;
   lines(out, 60).filter((l) => /✔|✓|✖|✗|ok |not ok|pass|fail/i.test(l)).slice(-15).forEach((l, i) => {
     ctx.fillStyle = /✖|✗|not ok|fail/i.test(l) ? '#fca5a5' : '#86efac'; ctx.fillText(l, 16, 176 + i * 20);

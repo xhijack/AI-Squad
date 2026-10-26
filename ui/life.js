@@ -2,6 +2,7 @@
 // and run back to their desk when work or a question arrives. Ported and simplified from squad-3d.
 import { HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';
 import { Walker, approachPoint, segmentClear, deskMargin, seatMargin } from './nav.js';
+import { t as tt, tx } from './i18n.js';
 
 export const WANDER_AFTER = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo') ? 2 : 20;   // seconds idle before getting up (?demo: 2)
 const WALK = 1.3, RUN = 3.6;               // m/s
@@ -35,7 +36,7 @@ export function meetingSeats(devices = []) {
   if (!d) return [];
   return MEETING_SEATS.map((s, k) => { const o = rot(s.x, s.z, d.ry || 0); return { x: d.x + o.x, z: d.z + o.z, face: s.face + (d.ry || 0), device: d.id, part: `seat${k}` }; });
 }
-const LABEL = { sofa: 'on the sofa', coffee: 'getting coffee', whiteboard: 'at the whiteboard', read: 'reading', beanbag: 'on a beanbag', pingpong: 'playing ping-pong' };
+const LABEL = { sofa: tt('on the sofa'), coffee: tt('getting coffee'), whiteboard: tt('at the whiteboard'), read: tt('reading'), beanbag: tt('on a beanbag'), pingpong: tt('playing ping-pong') };
 
 // station st: { g (desk group, floor coords), human (group in floor coords), rig, life, phase }
 export function deskHome(st) {
@@ -202,11 +203,11 @@ export function updateLife(st, { t, dt, wantsDesk, spots, occupied, poseDesk, me
     if (L.mode === 'meetWalk') {
       poseWalk(st, t, false);
       if (moveAlong(st, dt)) { L.mode = 'meet'; st.human.rotation.y = meeting.face; }
-      return `walking to the ${meeting.label.toLowerCase()}`;
+      return tt('walking to the {meeting}', { meeting: tx(meeting.label).toLowerCase() });
     }
     st.human.position.set(meeting.x, st.human.position.y, meeting.z); st.human.rotation.y = meeting.face;
     poseMeeting(st, t);
-    return `in the ${meeting.label.toLowerCase()}`;
+    return tt('in the {meeting}', { meeting: tx(meeting.label).toLowerCase() });
   }
   if (L.mode === 'meetWalk' || L.mode === 'meet') {                         // the meeting is over: back to the desk
     if (L.mode === 'meet' && L.approach) st.human.position.set(L.approach.x, st.human.position.y, L.approach.z);   // up from the chair, behind it
@@ -245,7 +246,7 @@ export function updateLife(st, { t, dt, wantsDesk, spots, occupied, poseDesk, me
       L.mode = 'act';
       st.human.rotation.y = L.spot.face;
     }
-    return L.mode === 'return' ? 'hurrying back' : `walking: ${L.spot.label}`;
+    return L.mode === 'return' ? tt('hurrying back') : tt('walking: {where}', { where: L.spot.label });
   }
   poseActivity(st, L.spot, t);
   return L.spot.label;

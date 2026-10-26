@@ -2,9 +2,11 @@
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, segValue } from './lib.js';
 import { memberHtml, readMember, gitHtml, readGit } from './forms.js';
 import { ctx } from './ctx.js';
+import { t as tt } from './i18n.js';
 
 const STEPS = ['Project', 'Directory', 'Git', 'Team', 'Workflow', 'Layout'];
-const LAYOUTS = [['rows', 'Rows', 'Desks in rows facing the windows'], ['pods', 'Pods', 'Groups of four facing each other'], ['circle', 'Circle', 'Everyone faces the middle'], ['open-space', 'Open Space', 'Loose, hand-placed look']];
+const STEP_TEXT = { Project: tt('Project'), Directory: tt('Directory'), Git: 'Git', Team: tt('Team'), Workflow: tt('Workflow'), Layout: tt('Layout') };
+const LAYOUTS = [['rows', tt('Rows'), tt('Desks in rows facing the windows')], ['pods', tt('Pods'), tt('Groups of four facing each other')], ['circle', tt('Circle'), tt('Everyone faces the middle')], ['open-space', tt('Open Space'), tt('Loose, hand-placed look')]];
 const kebab = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 let w = null, templates = [];
@@ -26,44 +28,44 @@ function suggestPath() {
 
 function stepHtml() {
   switch (STEPS[w.step]) {
-    case 'Project': return `<label for="wName">Project name</label><input id="wName" data-w="name" value="${esc(w.name)}" maxlength="60" placeholder="Acme Coffee Shop" required>
-      <label for="wGoal">Goal</label><textarea id="wGoal" data-w="goal" rows="5" placeholder="What should this team achieve? Written to AISQUAD.md, which every agent reads first.">${esc(w.goal)}</textarea>`;
-    case 'Directory': return `<label>Where does the code live?</label>
-      ${segHtml('dirMode', [['existing', 'Existing directory'], ['new', 'New project (git init)'], ['clone', 'Clone a repository']], w.dirMode)}
-      ${w.dirMode === 'clone' ? `<label for="wUrl">Repository URL</label><input id="wUrl" data-w="url" value="${esc(w.url)}" placeholder="git@github.com:org/repo.git">` : ''}
-      <label for="wPath">${w.dirMode === 'existing' ? 'Directory (absolute path)' : 'Target directory (absolute path, must not exist yet or be empty)'}</label>
+    case 'Project': return `<label for="wName">${tt('Project name')}</label><input id="wName" data-w="name" value="${esc(w.name)}" maxlength="60" placeholder="${esc(tt('Acme Coffee Shop'))}" required>
+      <label for="wGoal">${tt('Goal')}</label><textarea id="wGoal" data-w="goal" rows="5" placeholder="${esc(tt('What should this team achieve? Written to AISQUAD.md, which every agent reads first.'))}">${esc(w.goal)}</textarea>`;
+    case 'Directory': return `<label>${tt('Where does the code live?')}</label>
+      ${segHtml('dirMode', [['existing', tt('Existing directory')], ['new', tt('New project (git init)')], ['clone', tt('Clone a repository')]], w.dirMode)}
+      ${w.dirMode === 'clone' ? `<label for="wUrl">${tt('Repository URL')}</label><input id="wUrl" data-w="url" value="${esc(w.url)}" placeholder="git@github.com:org/repo.git">` : ''}
+      <label for="wPath">${w.dirMode === 'existing' ? tt('Directory (absolute path)') : tt('Target directory (absolute path, must not exist yet or be empty)')}</label>
       <input id="wPath" data-w="path" value="${esc(w.path)}" placeholder="/home/you/projects/acme" spellcheck="false">
-      <p class="note">Floor files go to <code>.claude/aisquad/</code> in this directory; generated agents to <code>.claude/agents/</code>. No secrets or absolute paths are written to the repo.</p>`;
+      <p class="note">${tt('Floor files go to <code>.claude/aisquad/</code> in this directory; generated agents to <code>.claude/agents/</code>. No secrets or absolute paths are written to the repo.')}</p>`;
     case 'Git': return gitHtml(w.git);
-    case 'Team': return `<p class="note" style="margin-top:12px">Agents are created from Role Templates. Overrides change one agent only: model and effort replace, skills add or remove, rules and prompt append, permissions can only get stricter.</p>
-      <div id="wTeam">${w.team.map((m, i) => memberHtml(m, templates, { idx: i })).join('') || '<div class="empty">No agents yet. You can also add them later.</div>'}</div>
-      <div class="row wrap" style="margin-top:10px"><select id="wAddTpl" style="width:auto">${templates.map((t) => `<option value="${esc(t.role)}">${esc(t.title)}</option>`).join('')}</select><button type="button" id="wAdd">+ Add agent</button><button type="button" id="wSprintTeam" class="ghost">+ Squad Sprint team</button></div>`;
-    case 'Workflow': return `<label>Workflow</label><div class="choice" data-choice="workflow">
-        <button type="button" data-v="free-team" aria-pressed="${w.workflow === 'free-team'}"><b>Free Team</b><small>You give tasks to agents directly. Default.</small></button>
-        <button type="button" data-v="squad-sprint" aria-pressed="${w.workflow === 'squad-sprint'}"><b>Squad Sprint</b><small>Lead plans a sprint board, QA gates every task.</small></button></div>
-      <label class="inline"><input type="checkbox" data-w="autoNext" ${w.autoNext ? 'checked' : ''}> Squad Sprint: start the next sprint automatically once a closed sprint is merged</label>
-      <p class="note">Squad Sprint adds <code>.claude/squad/config.sh</code>, gate hooks, a <code>/sprint</code> command and the <code>docs/squad</code> board to the project. Use the Sprint Lead, Sprint Developer and Sprint QA templates.</p>
-      <div class="grid2"><div><label for="wBudget">Budget (USD, 0 = none)</label><input id="wBudget" type="number" min="0" step="1" data-w="budgetUsd" value="${w.budget.usd || 0}"></div>
-        <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], w.budget.period)}</div></div>
-      <p class="note">The Watchdog warns at 80 % of the budget and raises Attention at 100 % (estimated from transcript usage).</p>`;
-    case 'Layout': return `<label>Layout preset</label><div class="choice" data-choice="layout">${LAYOUTS.map(([v, t, d]) => `<button type="button" data-v="${v}" aria-pressed="${w.layout === v}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
-      <label for="wNum">Floor number</label><input id="wNum" type="number" min="2" max="99" data-w="number" value="${w.number}" style="max-width:120px">
-      <div class="card" style="margin-top:14px"><b>Summary</b><dl class="kv" style="margin-top:6px">
-        <dt>Project</dt><dd>${esc(w.name)}</dd><dt>Directory</dt><dd>${esc(w.path)} <span class="note">(${w.dirMode === 'new' ? 'new, git init' : w.dirMode === 'clone' ? `clone ${esc(w.url)}` : 'existing'})</span></dd>
-        <dt>Team</dt><dd>${w.team.length ? w.team.map((m) => esc(m.displayName || '(unnamed)')).join(', ') : 'none yet'}</dd>
-        <dt>Workflow</dt><dd>${w.workflow === 'squad-sprint' ? 'Squad Sprint' : 'Free Team'}</dd>
-        <dt>Merge</dt><dd>${w.git.mergePolicy === 'manual' ? 'manual' : 'automatic after quality gate'}${w.git.qualityGate ? ` (<code>${esc(w.git.qualityGate)}</code>)` : ''}</dd></dl></div>`;
+    case 'Team': return `<p class="note" style="margin-top:12px">${tt('Agents are created from Role Templates. Overrides change one agent only: model and effort replace, skills add or remove, rules and prompt append, permissions can only get stricter.')}</p>
+      <div id="wTeam">${w.team.map((m, i) => memberHtml(m, templates, { idx: i })).join('') || `<div class="empty">${tt('No agents yet. You can also add them later.')}</div>`}</div>
+      <div class="row wrap" style="margin-top:10px"><select id="wAddTpl" style="width:auto">${templates.map((t) => `<option value="${esc(t.role)}">${esc(t.title)}</option>`).join('')}</select><button type="button" id="wAdd">${tt('+ Add agent')}</button><button type="button" id="wSprintTeam" class="ghost">${tt('+ Squad Sprint team')}</button></div>`;
+    case 'Workflow': return `<label>${tt('Workflow')}</label><div class="choice" data-choice="workflow">
+        <button type="button" data-v="free-team" aria-pressed="${w.workflow === 'free-team'}"><b>Free Team</b><small>${tt('You give tasks to agents directly. Default.')}</small></button>
+        <button type="button" data-v="squad-sprint" aria-pressed="${w.workflow === 'squad-sprint'}"><b>Squad Sprint</b><small>${tt('Lead plans a sprint board, QA gates every task.')}</small></button></div>
+      <label class="inline"><input type="checkbox" data-w="autoNext" ${w.autoNext ? 'checked' : ''}> ${tt('Squad Sprint: start the next sprint automatically once a closed sprint is merged')}</label>
+      <p class="note">${tt('Squad Sprint adds <code>.claude/squad/config.sh</code>, gate hooks, a <code>/sprint</code> command and the <code>docs/squad</code> board to the project. Use the Sprint Lead, Sprint Developer and Sprint QA templates.')}</p>
+      <div class="grid2"><div><label for="wBudget">${tt('Budget (USD, 0 = none)')}</label><input id="wBudget" type="number" min="0" step="1" data-w="budgetUsd" value="${w.budget.usd || 0}"></div>
+        <div><label>${tt('Budget period')}</label>${segHtml('budgetPeriod', [['month', tt('Per month')], ['day', tt('Per day')]], w.budget.period)}</div></div>
+      <p class="note">${tt('The Watchdog warns at 80 % of the budget and raises Attention at 100 % (estimated from transcript usage).')}</p>`;
+    case 'Layout': return `<label>${tt('Layout preset')}</label><div class="choice" data-choice="layout">${LAYOUTS.map(([v, t, d]) => `<button type="button" data-v="${v}" aria-pressed="${w.layout === v}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
+      <label for="wNum">${tt('Floor number')}</label><input id="wNum" type="number" min="2" max="99" data-w="number" value="${w.number}" style="max-width:120px">
+      <div class="card" style="margin-top:14px"><b>${tt('Summary')}</b><dl class="kv" style="margin-top:6px">
+        <dt>${tt('Project')}</dt><dd>${esc(w.name)}</dd><dt>${tt('Directory')}</dt><dd>${esc(w.path)} <span class="note">(${w.dirMode === 'new' ? tt('new, git init') : w.dirMode === 'clone' ? tt('clone {url}', { url: esc(w.url) }) : tt('existing')})</span></dd>
+        <dt>${tt('Team')}</dt><dd>${w.team.length ? w.team.map((m) => esc(m.displayName || tt('(unnamed)'))).join(', ') : tt('none yet')}</dd>
+        <dt>${tt('Workflow')}</dt><dd>${w.workflow === 'squad-sprint' ? 'Squad Sprint' : 'Free Team'}</dd>
+        <dt>${tt('Merge')}</dt><dd>${w.git.mergePolicy === 'manual' ? tt('manual') : tt('automatic after quality gate')}${w.git.qualityGate ? ` (<code>${esc(w.git.qualityGate)}</code>)` : ''}</dd></dl></div>`;
     default: return '';
   }
 }
 
 function draw(error = '') {
   const last = w.step === STEPS.length - 1;
-  const body = openModal(`<div class="mHead"><h3 class="grow">New Floor</h3><button class="ghost iconBtn" data-close aria-label="Close">×</button></div>
-    <div class="steps">${STEPS.map((s, i) => `<span class="${i === w.step ? 'on' : i < w.step ? 'done' : ''}">${i + 1}. ${s}</span>`).join('')}</div>
+  const body = openModal(`<div class="mHead"><h3 class="grow">${tt('New Floor')}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
+    <div class="steps">${STEPS.map((s, i) => `<span class="${i === w.step ? 'on' : i < w.step ? 'done' : ''}">${i + 1}. ${STEP_TEXT[s]}</span>`).join('')}</div>
     <form class="mBody" id="wForm" novalidate>${stepHtml()}</form>
     <div class="mFoot"><div class="err grow" id="wErr">${esc(error)}</div>
-      ${w.step ? '<button class="ghost" data-back>Back</button>' : ''}<button class="gold" data-next>${last ? 'Create Floor' : 'Next'}</button></div>`);
+      ${w.step ? `<button class="ghost" data-back>${tt('Back')}</button>` : ''}<button class="gold" data-next>${last ? tt('Create Floor') : tt('Next')}</button></div>`);
   bindSegs(body, (name, v) => { if (name === 'dirMode') { collect(); w.dirMode = v; if (v === 'existing') { w.path = ''; w.pathTouched = false; } suggestPath(); draw(); } });
   body.querySelectorAll('[data-choice]').forEach((c) => c.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-v]'); if (!b) return;
@@ -115,16 +117,16 @@ function collect() {
 
 function validate() {
   const step = STEPS[w.step];
-  if (step === 'Project' && !w.name) return 'Give the project a name.';
+  if (step === 'Project' && !w.name) return tt('Give the project a name.');
   if (step === 'Directory') {
-    if (!w.path.startsWith('/')) return 'The directory must be an absolute path (starting with /).';
-    if (w.dirMode === 'clone' && !/^(https?:\/\/|ssh:\/\/|git@|file:\/\/|\/)/.test(w.url)) return 'Enter a repository URL (https://, ssh://, git@ or a local path).';
+    if (!w.path.startsWith('/')) return tt('The directory must be an absolute path (starting with /).');
+    if (w.dirMode === 'clone' && !/^(https?:\/\/|ssh:\/\/|git@|file:\/\/|\/)/.test(w.url)) return tt('Enter a repository URL (https://, ssh://, git@ or a local path).');
   }
   if (step === 'Team') {
-    if (w.team.some((m) => !m.displayName)) return 'Every agent needs a display name.';
-    if (w.team.filter((m) => m.lead).length > 1) return 'Only one agent can be the lead.';
+    if (w.team.some((m) => !m.displayName)) return tt('Every agent needs a display name.');
+    if (w.team.filter((m) => m.lead).length > 1) return tt('Only one agent can be the lead.');
   }
-  if (step === 'Layout' && !(w.number >= 2 && w.number <= 99)) return 'Floor number must be 2 to 99 (Floor 1 is for independent agents).';
+  if (step === 'Layout' && !(w.number >= 2 && w.number <= 99)) return tt('Floor number must be 2 to 99 (Floor 1 is for independent agents).');
   return '';
 }
 
@@ -134,18 +136,18 @@ async function next() {
   if (err) { document.getElementById('wErr').textContent = err; return; }
   if (w.step < STEPS.length - 1) { w.step++; draw(); return; }
   const btn = document.querySelector('[data-next]');
-  btn.disabled = true; btn.textContent = w.dirMode === 'clone' ? 'Cloning…' : 'Creating…';
+  btn.disabled = true; btn.textContent = w.dirMode === 'clone' ? tt('Cloning…') : tt('Creating…');
   try {
     const r = await api('POST', '/api/floors', {
       name: w.name, goal: w.goal, number: w.number, directory: { mode: w.dirMode, path: w.path, url: w.url }, git: w.git,
       team: w.team, workflow: w.workflow, layout: w.layout, budget: w.budget, sprint: { autoNext: !!w.autoNext },
     });
     closeModal();
-    toast(`Floor ${r.number} created`);
+    toast(tt('Floor {n} created', { n: r.number }));
     location.hash = `#/floor/${r.id}`;
     ctx.refresh();
   } catch (e) {
-    btn.disabled = false; btn.textContent = 'Create Floor';
+    btn.disabled = false; btn.textContent = tt('Create Floor');
     document.getElementById('wErr').textContent = e.message;
   }
 }

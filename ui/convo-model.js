@@ -1,5 +1,6 @@
 // The conversation view's model, without DOM access (unit tested): a one-line preview for the Attention index, the
 // short bubble over the agent's head, and which actions an item gets in the action bar.
+import { t } from './i18n.js';
 
 const clean = (l) => l.replace(/^[#>*\-\s|☐☑✓]+/, '').replace(/[*_`|]/g, '').trim();
 // the question when there is one (dialogs start with a short header such as "☐ Runner"), else the first line
@@ -8,16 +9,17 @@ const short = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
 
 // "Finished: Server inventory done" / "Question: Which runner?"; at most n characters
 export function preview(item, n = 90) {
-  const lead = { finished: 'Finished', reply: 'Asks you', question: 'Question', permission: 'Permission', crash: 'Stopped', decided: 'Decided', scope: 'Scope change' }[item.kind] || '';
-  return short(`${lead ? `${lead}: ` : ''}${firstLine(item.text)}`, n);
+  const text = firstLine(item.text);
+  const lead = { finished: t('Finished: {text}', { text }), reply: t('Asks you: {text}', { text }), question: t('Question: {text}', { text }), permission: t('Permission: {text}', { text }), crash: t('Stopped: {text}', { text }), decided: t('Decided: {text}', { text }), scope: t('Scope change: {text}', { text }) }[item.kind];
+  return short(lead || text, n);
 }
 
 // the speech bubble over the agent's head in the office while the item is open
 export function bubbleText(item) {
-  if (item.kind === 'finished') return short(`Finished: ${firstLine(item.text)}`, 60);
-  if (item.kind === 'question' || item.kind === 'reply') return 'Question for you';
-  if (item.kind === 'permission') return 'May I?';
-  return short(firstLine(item.text), 60) || 'Look at this';
+  if (item.kind === 'finished') return short(t('Finished: {text}', { text: firstLine(item.text) }), 60);
+  if (item.kind === 'question' || item.kind === 'reply') return t('Question for you');
+  if (item.kind === 'permission') return t('May I?');
+  return short(firstLine(item.text), 60) || t('Look at this');
 }
 
 const isRecommended = (item, o) => /\(recommended\)/i.test(o.label) || item.autopilot?.recommended === o.n;
@@ -34,4 +36,4 @@ export function actionsFor(item) {
 
 // previous / next through the open items: wraps around
 export const step = (i, n, d) => (n ? (i + d + n) % n : 0);
-export const ofText = (i, n) => `${i + 1} of ${n}`;
+export const ofText = (i, n) => t('{i} of {n}', { i: i + 1, n });

@@ -17,6 +17,7 @@ import { laptopModel } from './realistic-props.js';
 import { REAL } from './look.js';
 import { mergeStatic } from './merge.js';
 import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realDeskProps, REAL_DEVICES } from './realistic-office.js';
+import { t as tt, tx } from './i18n.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -193,8 +194,8 @@ const DEVICE_BUILDERS = {
     }
   },
 };
-export const DEVICE_LABELS = { plant: 'Plant', whiteboard: 'Whiteboard', printer: 'Printer', coffee: 'Coffee machine', pantry: 'Pantry counter', bookshelf: 'Bookshelf',
-  sofa: 'Sofa', rug: 'Lounge rug', tv: 'TV', beanbag: 'Beanbag', pingpong: 'Ping-pong table', 'server-rack': 'Server rack', 'meeting-table': 'Meeting table', lamp: 'Floor lamp' };
+export const DEVICE_LABELS = { plant: tt('Plant'), whiteboard: tt('Whiteboard'), printer: tt('Printer'), coffee: tt('Coffee machine'), pantry: tt('Pantry counter'), bookshelf: tt('Bookshelf'),
+  sofa: tt('Sofa'), rug: tt('Lounge rug'), tv: tt('TV'), beanbag: tt('Beanbag'), pingpong: tt('Ping-pong table'), 'server-rack': tt('Server rack'), 'meeting-table': tt('Meeting table'), lamp: tt('Floor lamp') };
 
 // KayKit versions of the devices (ui/kit.js); a device without one, or before the models load, is procedural
 const add = (g, o) => { if (o) g.add(o); return o; };
@@ -244,7 +245,7 @@ function buildRoom(g, f, accent) {
   // brand wall: a dark panel with the Floor name and its tagline
   box(5.6, FH - .4, .05, mat('#2f4858'), BRAND_X, TOP + FH / 2 + .1, -FD / 2 + .03, g, 0);
   box(3.2, .06, .02, basic(accent), BRAND_X, TOP + 1.25, -FD / 2 + .07, g, 0);
-  const lines = [{ text: f.name || 'Floor', size: 220, weight: 800, color: '#ffe7b0', glow: '#ffb347', y: .4 }];
+  const lines = [{ text: f.name || tt('Floor'), size: 220, weight: 800, color: '#ffe7b0', glow: '#ffb347', y: .4 }];
   if (f.tagline) lines.push({ text: f.tagline, size: 96, weight: 600, color: '#cbd5e1', y: .78 });
   const sign = textPlane(lines, 5.2, 2.2);
   sign.position.set(BRAND_X, TOP + 2.25, -FD / 2 + .08); g.add(sign);
@@ -345,14 +346,14 @@ function inkOn(hex) {
   const n = parseInt(String(hex).slice(1), 16), [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255].map((v) => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
   return .2126 * r + .7152 * g + .0722 * b > .4 ? '#1f2937' : '#ffffff';
 }
-const STATUS_TEXT = { working: 'working', waiting: 'needs you', idle: 'idle', stopped: 'stopped' };
+const STATUS_TEXT = { working: tt('working'), waiting: tt('needs you'), idle: tt('idle'), stopped: tt('stopped') };
 const shortActivity = (s) => { s = String(s || '').replace(/^(terminal|thinking): /, ''); return s.length > 30 ? `${s.slice(0, 29)}…` : s; };
 
 function updateStation(st, a) {
   st.state = a.state; st.data = a;
   const el = st.label.element;
   const name = String(a.displayName || '').split(' - ')[0];
-  const status = st.away || (a.standby ? 'not started' : a.crash && !a.crash.withLead ? 'stopped unexpectedly' : a.waitingReply ? 'waiting for your reply' : a.state === 'working' && a.activity ? shortActivity(a.activity) : STATUS_TEXT[a.state] || a.state || '');
+  const status = st.away || (a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
   const cls = `nlabel ${a.state || 'stopped'}${a.standby ? ' standby' : ''}${st.away ? ' away' : ''}`;
   if (el.className !== cls) el.className = cls;
   const n = el.querySelector('.n'), s = el.querySelector('.a');
@@ -611,8 +612,8 @@ export class BuildingScene {
     if (NAV_DEBUG) g.add(navOverlay(o.nav));
     o.seats = meetingSeats(devices);
     o.occupied = new Map();
-    if (f.missing) label('Directory not found', 'alabel warnlabel', g, 0, 1.4, 0);
-    else if (!(f.agents || []).length) o.empty = label(f.independent ? 'No independent agents right now.' : 'No agents yet. Add one from the dock.', 'alabel', g, 0, 1.3, 0);
+    if (f.missing) label(tt('Directory not found'), 'alabel warnlabel', g, 0, 1.4, 0);
+    else if (!(f.agents || []).length) o.empty = label(f.independent ? tt('No independent agents right now.') : tt('No agents yet. Add one from the dock.'), 'alabel', g, 0, 1.3, 0);
     o.label = label('', 'flabel', g, FW / 2 + .6, 1.2, FD / 2 - 1);
     o.label.center.set(0, .5);
     o.label.element.style.setProperty('--c', accent);
@@ -1004,11 +1005,11 @@ export class BuildingScene {
 }
 
 function floorLabelHtml(f) {
-  if (f.missing) return `<b>${f.number}</b> ${esc(f.name)} <span class="q">missing</span>`;
+  if (f.missing) return `<b>${f.number}</b> ${esc(f.name)} <span class="q">${tt('missing')}</span>`;
   const c = f.counts || {};
   const parts = [];
-  if (c.working) parts.push(`<span class="w">● ${c.working} working</span>`);
+  if (c.working) parts.push(`<span class="w">● ${tt('{n} working', { n: c.working })}</span>`);
   if (f.attention) parts.push(`<span class="q">! ${f.attention}</span>`);
-  if (!parts.length) parts.push(`<span class="m">${(f.agents || []).some((a) => a.running) ? 'idle' : 'quiet'}</span>`);
+  if (!parts.length) parts.push(`<span class="m">${(f.agents || []).some((a) => a.running) ? tt('idle') : tt('quiet')}</span>`);
   return `<i class="lamp ${f.lamp || ''}"></i><b>${f.number}</b> ${esc(f.name)} ${parts.join(' ')}`;
 }
