@@ -14,4 +14,6 @@ New sprint: **$ARGUMENTS**.
 3. Switch to branch `sprint-$ARGUMENTS`, created from the latest main.
 4. Start a clean board: the previous sprint's handoff/, qa/ and bugs/ files belong in `docs/squad/sprint-<previous>/`;
    write a new `docs/squad/PLAN.md` and `docs/squad/TASKS.md`.
-5. Run your role as lead (Phase 0 to Phase 5) for this sprint. Module numbers continue from the previous sprint.
+5. Plan with the `sprint-planning` skill: a **Scope mode** line at the top of PLAN.md, then modules and tasks.
+6. Before spawning anyone, run the `plan-review` skill and write `docs/squad/sprint-$ARGUMENTS/PLAN-REVIEW.md`; fix the plan where the reviews ask for it.
+7. Run your role as lead (Phase 0 to Phase 5) for this sprint. Module numbers continue from the previous sprint.

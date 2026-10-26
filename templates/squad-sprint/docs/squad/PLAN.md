@@ -1,5 +1,7 @@
 # Plan: Sprint 1
 
+Scope mode: Hold — <one-line reason; Expand, Selective expand, Hold or Reduce>
+
 - **Dates:**
 - **Sprint goal:**
 - **Stories:** DEV / DEV + MOCK / NON-DEV
