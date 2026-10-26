@@ -3,7 +3,8 @@
 // the machine (and the Claude plan) can carry. Every start path goes through it: the Desk, Autopilot, auto-resume,
 // the lead's next sprint, background jobs. What it decides:
 //   slots    min(Building maximum, what free RAM allows (keeping 2 GB free, measured RAM per session),
-//            no new session while the CPU load is above 90 %, nothing automated while the quota guard pauses)
+//            while the CPU load is above 90 % automated work waits (the owner's own start does not), nothing automated
+//            while the quota guard pauses)
 //   order    P0 the owner's own work, P1 a waiting squad (resume, next sprint), P2 normal work, P3 background;
 //            every 30 minutes waiting moves an item up one level (never to P0)
 //   reserve  in the daytime one slot stays free for the owner (P0)
@@ -45,10 +46,13 @@ export function capacity({ maxAgents = 6, running = 0, res = null, sessionRss = 
     const ram = (res.mem.available / 2 ** 30).toFixed(1), per = (sessionRss / 2 ** 30).toFixed(1);
     limits.push({ key: 'ram', cap: running + more, text: `${ram} GB RAM free, about ${per} GB per session, 2 GB kept free`, vars: { ram, per } });
   }
-  if (res?.cpus && res?.load?.[0] != null && res.load[0] >= res.cpus * 0.9) limits.push({ key: 'cpu', cap: running, text: `CPU load ${res.load[0]} on ${res.cpus} cores`, vars: { load: res.load[0], cpus: res.cpus } });
   const cap = Math.min(...limits.map((l) => l.cap));
   const limiting = limits.find((l) => l.cap === cap);
-  return { cap, free: Math.max(0, cap - running), running, limiting: limiting.key, limits, quotaPaused };
+  // a busy CPU slows sessions down but does not kill them: it holds automated work only
+  const cpuBusy = !!(res?.cpus && res?.load?.[0] != null && res.load[0] >= res.cpus * 0.9);
+  if (cpuBusy) limits.push({ key: 'cpu', cap: running, soft: true, text: `CPU load ${res.load[0]} on ${res.cpus} cores`, vars: { load: res.load[0], cpus: res.cpus } });
+  const free = Math.max(0, cap - running);
+  return { cap, free, running, limiting: cpuBusy && free > 0 ? 'cpu' : limiting.key, limits, quotaPaused, cpuBusy };
 }
 
 // priority after waiting: one level up per 30 minutes, never above P1 for automated work
@@ -101,7 +105,7 @@ export function setPriority(id, priority) {
 // which items start now and why the others wait. ctx: { free, reserve, quotaPaused, inShift(floorId),
 // floorFree(floorId) (slots left under the Space's own maximum), busy(item) }. Automated work is everything the
 // owner did not start (via != 'owner'): it waits outside the Space's shift.
-export function plan(items, { free = 0, reserve = 0, quotaPaused = false, inShift = () => true, floorFree = () => Infinity, busy = () => false } = {}, now = Date.now()) {
+export function plan(items, { free = 0, reserve = 0, quotaPaused = false, cpuBusy = false, inShift = () => true, floorFree = () => Infinity, busy = () => false } = {}, now = Date.now()) {
   const start = [], held = [];
   const chosen = new Set(), perFloor = new Map();
   for (const it of order(items, now)) {
@@ -113,6 +117,7 @@ export function plan(items, { free = 0, reserve = 0, quotaPaused = false, inShif
     else if (chosen.has(key) || busy(it)) reason = 'the agent is busy';
     else if ((perFloor.get(it.floorId) || 0) >= floorFree(it.floorId)) reason = 'the Space runs its maximum of agents at once';
     else if (start.length >= free - (p > 0 ? reserve : 0)) reason = p > 0 && start.length < free ? 'the last free slot is kept for the owner' : 'waiting for a free slot';
+    else if (p > 0 && cpuBusy) reason = 'the CPU is busy';
     if (reason) { held.push({ id: it.id, reason, priority: PRIORITIES[p] }); continue; }
     chosen.add(key);
     perFloor.set(it.floorId, (perFloor.get(it.floorId) || 0) + 1);

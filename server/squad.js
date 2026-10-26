@@ -728,7 +728,9 @@ export function quotaStatus(now = Date.now()) {
   const st = quotaLib.observe(quotaSignals(now), now);
   return quotaLib.check({ costs: costWindows(now), limits: dispatchPrefs().quota, signals: st.signals, now });
 }
-function dispatchContext(now = Date.now(), { res = wd.readResources() } = {}) {
+let readRes = () => wd.readResources();
+export const setResourceReader = (fn) => { readRes = fn || (() => wd.readResources()); };     // tests: a fixed machine
+function dispatchContext(now = Date.now(), { res = readRes() } = {}) {
   snapCache.at = 0;
   const snap = buildingSnapshot();
   const prefs = dispatchPrefs();
@@ -740,7 +742,7 @@ function dispatchContext(now = Date.now(), { res = wd.readResources() } = {}) {
   const daytime = dispatcher.isDaytime(prefs, now);
   return {
     snap, prefs, quota, capacity: cap, daytime,
-    free: cap.free, reserve: daytime ? prefs.reserveP0 : 0, quotaPaused: quota.paused,
+    free: cap.free, reserve: daytime ? prefs.reserveP0 : 0, quotaPaused: quota.paused, cpuBusy: cap.cpuBusy,
     inShift: (id) => space.inShift(cfgOf(id)?.floor.shift, now),
     floorFree: (id) => { const c = cfgOf(id); if (!c) return 0; return Math.max(0, c.floor.recovery.maxAgents - (byFloor.get(id)?.agents.filter((a) => a.running).length || 0)); },
     busy: (it) => { if (it.action !== 'sprint') return false; const a = byFloor.get(it.floorId)?.agents.find((x) => x.id === it.agentId); return !!a && (a.state === 'working' || a.state === 'waiting'); },

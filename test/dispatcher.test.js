@@ -29,7 +29,9 @@ test('capacity: the Building maximum, free RAM (2 GB kept), CPU load; the smalle
   const tight = dispatcher.capacity({ maxAgents: 6, running: 3, res: { mem: { available: 1.5 * GB } }, sessionRss: GB });
   assert.equal(tight.free, 0, 'below the 2 GB reserve nothing new starts');
   const cpu = dispatcher.capacity({ maxAgents: 6, running: 1, res: { cpus: 2, load: [1.9, 1, 1], mem: { available: 6 * GB } }, sessionRss: GB });
-  assert.equal(cpu.free, 0); assert.equal(cpu.limiting, 'cpu');
+  assert.equal(cpu.free, 4); assert.equal(cpu.cpuBusy, true); assert.equal(cpu.limiting, 'cpu');
+  const p = dispatcher.plan([item({ id: 'mine', priority: 'P0', via: 'owner' }), item({ id: 'auto', priority: 'P2' })], { free: 4, cpuBusy: true }, T0);
+  assert.deepEqual([p.start.map((x) => x.id), p.held[0].reason], [['mine'], 'the CPU is busy'], 'a busy CPU holds automated work, not the owner');
 });
 
 test('priority ages one level per 30 minutes waiting, automated work never reaches P0', () => {
@@ -116,6 +118,7 @@ test('end to end: a background job waits for the machine\'s slot, the owner can 
   const fid = building.loadBuilding().floors[0].id;
   const [mira, dodi] = floors.readFloor(proj).team.agents.map((a) => a.id);
   building.setPrefs({ maxAgents: 1, dispatcher: { reserveP0: 0, idleStopMin: 0 } });
+  squad.setResourceReader(() => ({ mem: { available: 6 * GB }, cpus: 4, load: [.2, .2, .2] }));   // not this machine's load
   process.env.FAKE_CLAUDE_MODE = 'slow';
   const first = await squad.startAgentJob(fid, mira, 'write the launch post', { guard: true });
   assert.ok(first.job, 'the first job starts at once');
