@@ -19,7 +19,7 @@ export const TYPES = {
   'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.resumed': 'lifecycle', 'agent.model': 'lifecycle',
   'task.given': 'work', 'board.changed': 'work', 'handoff.written': 'work', 'qa.report': 'work', 'bug.opened': 'work', 'bug.closed': 'work',
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
-  'doc.status': 'work', 'doc.approved': 'work', 'commit': 'work',
+  'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
@@ -50,6 +50,8 @@ function summarize(e) {
     case 'autopilot.blocked': return `critical item waits for the owner (${(d.reasons || []).join(', ')})${t(d.question, 60)}`;
     case 'autopilot.changed': return `the owner changed an autopilot decision from "${d.from}" to "${d.to}"`;
     case 'report.delivered': return `${who} finished and reported to the owner${d.asks ? ' (asks for a reply)' : ''}${t(d.text)}`;
+    case 'debug.attempt': return `${who}: fix attempt ${d.attempt} on ${d.issue}`;
+    case 'debug.escalated': return `${who} escalated ${d.issue} to the lead after ${d.attempts} attempts`;
     case 'agent.model': return `${who} runs ${d.observed}, configured ${d.configured}`;
     case 'task.given': return `${d.by || 'owner'} gave ${who} a task${t(d.text)}`;
     case 'task.delegated': return `${who} delegated to ${d.to}${t(d.text)}`;

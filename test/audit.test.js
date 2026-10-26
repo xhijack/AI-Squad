@@ -142,3 +142,17 @@ test('Autopilot section: decisions, the owner\'s changes, critical decisions and
   assert.ok(Object.values(d.refs).some((id) => events.find((e) => e.id === id)?.data.critical), 'the critical decision is cited');
   assert.ok(audit.FLOOR_SETTINGS.includes('autopilot'));
 });
+
+test('debug loops: three or more failed attempts without an escalation are flagged', () => {
+  put(60, 'debug.attempt', { sprint: 3, agent: 'budi-dev', data: { issue: 'login-500', attempt: 1 } });
+  put(61, 'debug.attempt', { sprint: 3, agent: 'budi-dev', data: { issue: 'login-500', attempt: 2 } });
+  put(62, 'debug.attempt', { sprint: 3, agent: 'budi-dev', data: { issue: 'login-500', attempt: 3 } });
+  put(63, 'debug.attempt', { sprint: 3, agent: 'sari-dev', data: { issue: 'cart-total', attempt: 1 } });
+  put(64, 'debug.attempt', { sprint: 3, agent: 'sari-dev', data: { issue: 'pay-timeout', attempt: 3 } });
+  put(65, 'debug.escalated', { sprint: 3, agent: 'sari-dev', data: { issue: 'pay-timeout', attempts: 3 } });
+  const { events } = audit.rangeEvents('pos', { sprint: 3 });
+  const m = audit.metrics(events, INFO);
+  assert.deepEqual([m.debug.issues, m.debug.attempts, m.debug.escalated], [3, 7, 1]);
+  assert.deepEqual(m.debug.loops, [{ issue: 'login-500', agent: 'budi-dev', attempts: 3, escalated: false }]);
+  assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.debug \| 3 problems investigated, 7 fix attempts, 1 escalated; LOOPS .*login-500 by budi-dev \(3\)/);
+});

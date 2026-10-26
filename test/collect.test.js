@@ -123,6 +123,16 @@ test('docs/squad: board, handoffs, QA rounds, bugs, plan, questions, source docu
   assert.equal(t('gate.failed').data.reason, 'M01-B01 is still OPEN');
   assert.ok(ev.every((e) => e.sprint === 1));
   assert.deepEqual(scan(100), [], 'nothing changed');
+  // investigate records: each new attempt, then the escalation
+  const DBG = '# Login 500 after refresh\nOwner: budi-dev\nModule: M01\nSTATUS: INVESTIGATING\n\n## Symptom\n500\n';
+  w('docs/squad/debug/login-500.md', `${DBG}\n## Attempt 1\nTried: x\n\n## Attempt 2\nTried: y\n`);
+  ev = scan(110);
+  assert.deepEqual(ev.map((e) => [e.type, e.data.attempt, e.agent, e.module]), [['debug.attempt', 1, 'budi-dev', 'M01'], ['debug.attempt', 2, 'budi-dev', 'M01']]);
+  w('docs/squad/debug/login-500.md', `${DBG.replace('INVESTIGATING', 'ESCALATED')}\n## Attempt 1\n\n## Attempt 2\n\n## Attempt 3\n\n## Escalation\nstuck`);
+  ev = scan(120);
+  assert.deepEqual(ev.map((e) => e.type), ['debug.attempt', 'debug.escalated']);
+  assert.equal(ev[1].data.attempts, 3);
+  assert.deepEqual(scan(130), []);
 });
 
 test('git commits are credited to agents by their commit identity; the closing commit closes the sprint', async () => {

@@ -13,6 +13,7 @@ You review one squad's work for The AI Squad. You get a **digest**: metric table
    - Modules built in parallel as planned; questions to the owner and how long they waited; refused gates; rework (rows reopened).
 2. **Efficiency** (were tokens and money well spent?)
    - Cost and tokens per story point, per module and per agent; cache hit rate; share of cost by model; turns per module.
+   - Debug loops (`process.debug`): a problem with three or more failed fix attempts and no escalation, or more than three, is a `high` finding; propose a rule for that role.
    - Waste: the same file read many times by one agent, failed tool calls and retries, very long outputs, idle time while work was open, time blocked on the owner, an expensive model on simple work (for example opus on docs-only modules).
 3. **Quality** (did what shipped meet the bar?): QA failures, bug severity, gates that caught problems late.
 4. **Autopilot** (when the digest has an Autopilot section): decisions taken without the owner, the share the owner changed later (a high rate means the lead decides too much on its own: propose a lead rule or a lower level), critical items decided without the owner (must be 0: always a `critical` finding), and the waiting it saved. A finding may propose a lead rule (`role-template`), a squad rule (`blueprint`), the `autopilot` setting, or, as advice (`none`), a change to the hard-stop list.

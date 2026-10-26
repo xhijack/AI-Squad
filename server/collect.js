@@ -25,7 +25,7 @@ export function stateOf(floorId) {
   let s = states.get(floorId);
   if (!s) {
     s = readJson(stateFile(floorId), null) || {};
-    s.files ||= {}; s.board ||= null; s.handoffs ||= null; s.qa ||= null; s.bugs ||= null; s.docs ||= null; s.commits ||= null; s.planned ||= {}; s.gates ||= 0; s.questions ||= null;
+    s.files ||= {}; s.board ||= null; s.handoffs ||= null; s.qa ||= null; s.bugs ||= null; s.docs ||= null; s.commits ||= null; s.planned ||= {}; s.gates ||= 0; s.questions ||= null; s.debug ||= null;
     states.set(floorId, s);
   }
   return s;
@@ -290,6 +290,19 @@ export function scanDocs(floorId, root, { blueprint = null } = {}, now = Date.no
       out.push({ type: 'sprint.planned', id: `plan:${sprint}`, sprint, data: { modules: mods.length, sp, list: mods.map((l) => { const c = l.split('|').map((x) => x.trim()); return { module: modId(c[1]), sp: parseFloat(c[3]) || 0, owner: c[4] || '' }; }) } });
     }
   }
+  // investigate records (docs/squad/debug/*.md): each new "## Attempt N" is a fix attempt, STATUS: ESCALATED an escalation
+  const ddir = pack ? path.join(squad, 'debug') : path.join(root, 'docs', 'debug');
+  const debug = {};
+  for (const f of mdIn(ddir)) {
+    const t = readText(path.join(ddir, f), '');
+    const d = { attempts: (t.match(/^##\s+Attempt\s+\d+/gmi) || []).length, status: word(field(t, 'STATUS')).toUpperCase() };
+    debug[f] = d;
+    const prev = (S.debug || {})[f] || { attempts: 0, status: '' };
+    const issue = f.slice(0, -3), owner = word(field(t, 'Owner')) || null, module = modId(field(t, 'Module')) || modId(f);
+    for (let n = prev.attempts + 1; n <= d.attempts; n++) out.push({ type: 'debug.attempt', id: `debug:${f}:${n}`, module, agent: owner, data: { issue, attempt: n, file: path.relative(root, path.join(ddir, f)) } });
+    if (d.status === 'ESCALATED' && prev.status !== 'ESCALATED') out.push({ type: 'debug.escalated', id: `debug:${f}:escalated`, module, agent: owner, data: { issue, attempts: d.attempts, file: path.relative(root, path.join(ddir, f)) } });
+  }
+  S.debug = debug;
   // questions to the owner in the questions file: numbered items, answered once an "Answer:" line is in the item
   const qfile = pack ? path.join(squad, 'QUESTIONS.md') : path.join(root, 'docs', 'QUESTIONS.md');
   const questions = {};
