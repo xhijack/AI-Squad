@@ -82,7 +82,7 @@ function gitRules(git) {
 // they are also listed here so the agent knows its limits.
 // standard: the Floor's Blueprint ({ title, version, text, roleRules, lead }), written into every agent prompt
 // skillName(name): the name the skill is known by in Claude Code (aisquad:<name> for our plugin's copy)
-export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n } = {}) {
+export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null } = {}) {
   const fm = {
     name: eff.id,
     description: `${eff.displayName} (${eff.title}) on ${floorName || 'this Floor'}. ${eff.description || ''}`.trim(),
@@ -109,6 +109,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
     sections.push(`## Squad standard: ${standard.title} v${standard.version}\nThis squad follows the ${standard.title} Blueprint. ${lead}\n\n${standard.text}${standard.roleRules ? `\n\n### Your rules in this squad\n${standard.roleRules}` : ''}`);
   }
   if (eff.rules.length) sections.push(`## Rules\n${eff.rules.map((r) => `- ${r}`).join('\n')}`);
+  if (memory?.length) sections.push(`## Memory\n${memory.map((r) => `- ${r}`).join('\n')}`);
   const g = gitRules(git);
   if (g.length) sections.push(`## Git\n${g.map((r) => `- ${r}`).join('\n')}`);
   if (usable.length) sections.push(`## Skills\nUse these skills through the Skill tool when relevant: ${usable.map((s) => `\`${s}\``).join(', ')}.`);

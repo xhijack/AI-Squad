@@ -168,3 +168,14 @@ test('an untouched pre-2.1 default device set becomes the new office; arranged s
   assert.deepEqual(floors.cleanFloor({ devices: moved }).devices.map((d) => d.id), moved.map((d) => d.id), 'the owner moved the sofa: keep their room');
   assert.equal(floors.cleanFloor({ tagline: 'Ship it\nfast' }).tagline, 'Ship it fast');
 });
+
+test('recovery settings: defaults, update, and the lead is told the maximum of concurrent agents', () => {
+  assert.deepEqual(floors.readFloor(proj).floor.recovery, { autoResume: false, maxAgents: 4 }, 'older floor.json files get the defaults');
+  assert.match(read('.claude/agents/rina-project-manager.md'), /## Memory\n- At most 4 agents may run on this Floor/);
+  assert.doesNotMatch(read('.claude/agents/ramdani-frappe-developer.md'), /## Memory/, 'only the lead');
+  floors.updateFloorConfig(proj, { recovery: { autoResume: true, maxAgents: 3 } });
+  assert.deepEqual(floors.readFloor(proj).floor.recovery, { autoResume: true, maxAgents: 3 });
+  assert.match(read('.claude/agents/rina-project-manager.md'), /At most 3 agents.*more than 2 teammates/);
+  floors.updateFloorConfig(proj, { layout: 'rows' });
+  assert.equal(floors.readFloor(proj).floor.recovery.maxAgents, 3, 'kept when other settings change');
+});

@@ -13,6 +13,7 @@ import { setApproval } from './merge.js';
 import * as sprint from './sprint.js';
 import * as blueprints from './blueprints.js';
 import * as skills from './skills.js';
+import * as recovery from './recovery.js';
 
 const run = promisify(execFile);
 
@@ -85,6 +86,8 @@ export function cleanFloor(f = {}, prev = {}) {
     // Squad Log: message text and personal data masking (secrets are always removed); Audit: after a sprint closes, model
     log: (({ messages, maskPersonalData }) => ({ messages: messages !== false, maskPersonalData: maskPersonalData !== false }))({ ...prev.log, ...f.log }),
     audit: auditSettings({ ...prev.audit, ...f.audit }, WORKFLOWS.includes(pick('workflow')) ? pick('workflow') : 'free-team'),
+    // after a crash: resume automatically (off by default); how many agents may run at once (the lead is told)
+    recovery: recovery.cleanRecovery({ ...prev.recovery, ...f.recovery }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
@@ -156,13 +159,15 @@ export function generate(root) {
   const bp = blueprints.floorBlueprint(root, floor.blueprint);
   const leadAgent = team.agents.find((a) => a.lead);
   const lead = leadAgent ? { id: leadAgent.id, displayName: leadAgent.displayName } : null;
+  const runsSquad = leadAgent || team.agents.find((a) => sprint.roleKind(a) === 'lead');
   fs.mkdirSync(agentsDir(root), { recursive: true });
   for (const a of team.agents) {
     const eff = effectiveOf(root, a);
     if (!a.role.detached) { used.add(lockName(a.role.template, a.role.version)); lockTemplate(root, templateOf(root, a)); }
     wanted.add(a.id + '.md');
     const standard = bp ? { title: bp.title, version: bp.version, text: blueprints.standardText(bp, lead), roleRules: blueprints.roleRules(bp, a.role.template), lead } : null;
-    writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard, skillName: (n) => skills.agentSkillName(root, n) }));
+    writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard, skillName: (n) => skills.agentSkillName(root, n),
+      memory: a === runsSquad ? recovery.memoryRules(floor.recovery.maxAgents) : null }));
   }
   // remove generated files of agents that left the team (hand-written agent files are never touched)
   for (const f of safeReaddir(agentsDir(root))) {
