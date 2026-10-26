@@ -57,6 +57,11 @@ export const SQUAD_DENY = [...SECRET_DENY, 'Bash(git push*)', 'Bash(git reset --
 
 // .claude/settings.json: agent teams on, permission rules, TaskCompleted / TeammateIdle gate hooks (merged, idempotent)
 export function mergeSettings(root, { qualityGate = '' } = {}) {
+  // hook scripts added in later versions (edit-lock.cjs since 0.5.4) reach older packs before settings point at them
+  for (const f of fs.readdirSync(path.join(PACK, '.claude', 'hooks'))) {
+    const dest = path.join(root, '.claude', 'hooks', f);
+    if (!fs.existsSync(dest) && fs.existsSync(path.join(root, '.claude', 'squad'))) { writeText(dest, fs.readFileSync(path.join(PACK, '.claude', 'hooks', f), 'utf8')); if (f.endsWith('.cjs')) fs.chmodSync(dest, 0o755); }
+  }
   const p = path.join(root, '.claude', 'settings.json');
   const cur = fs.existsSync(p) ? readJson(p, null) : {};
   if (!cur) return false;                                   // unreadable settings: leave them alone
@@ -80,6 +85,8 @@ export function mergeSettings(root, { qualityGate = '' } = {}) {
   if (cur.hooks.PreToolUse) cur.hooks.PreToolUse = cur.hooks.PreToolUse.filter((g) => !JSON.stringify(g).includes('board-gate.cjs'));
   if (cur.hooks.PreToolUse && !cur.hooks.PreToolUse.length) delete cur.hooks.PreToolUse;
   add('PostToolUse', 'board-gate', 900, 'Squad Sprint: checking the board...', 'Edit|Write|MultiEdit|Bash');
+  // edit locks: developers stay in their module folders; destructive commands need a confirmation
+  add('PreToolUse', 'edit-lock', 30, '', 'Edit|Write|MultiEdit|NotebookEdit|Bash');
   writeJson(p, cur);
   return true;
 }

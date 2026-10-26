@@ -46,7 +46,7 @@ test('choosing Squad Sprint scaffolds the pack, team ids and hooks', async () =>
   assert.equal(settings.hooks.TeammateIdle.length, 1);
   assert.deepEqual([settings.hooks.TaskCompleted[0].hooks[0].command, settings.hooks.TaskCompleted[0].hooks[0].args], ['node', ['${CLAUDE_PROJECT_DIR}/.claude/hooks/task-completed.cjs']]);
   assert.equal(settings.hooks.PostToolUse.find((g) => JSON.stringify(g).includes('board-gate.cjs')).matcher, 'Edit|Write|MultiEdit|Bash');
-  assert.equal(settings.hooks.PreToolUse, undefined);
+  assert.deepEqual(settings.hooks.PreToolUse.map((g) => [g.matcher, g.hooks[0].args[0]]), [['Edit|Write|MultiEdit|NotebookEdit|Bash', '${CLAUDE_PROJECT_DIR}/.claude/hooks/edit-lock.cjs']], 'only the edit locks run before a tool');
 });
 
 test('older bash gate entries are replaced by the Node hooks', () => {
@@ -237,4 +237,32 @@ test('a sprint has started: a sprint folder, a sprint past 1, or tasks on a boar
   write(dir, 'docs/squad/sprint-3/PLAN.md', 'plan');
   assert.equal(sprint.sprintStarted(dir), true, 'a sprint folder');
   assert.equal(sprint.sprintStarted(path.join(root, 'nothing-here')), false);
+});
+
+test('edit locks: developers stay in their module folders; destructive commands ask first', () => {
+  write(proj, 'docs/squad/PLAN.md', '# Plan: Sprint 2\n\n| Module | Stories | SP | Owner | Owned folders | Depends on | Status |\n|---|---|---|---|---|---|---|\n| M04 RSVP | S4 | 3 | dev-one | `src/rsvp/`, tests/rsvp | — | TODO |\n| M05 Cart | S5 | 5 | dev-two | src/cart | — | TODO |\n');
+  const lock = (input, env = {}) => spawnSync(process.execPath, [path.join(proj, '.claude/hooks/edit-lock.cjs')], { input: JSON.stringify(input), env: { ...process.env, CLAUDE_PROJECT_DIR: proj, AISQUAD_AGENT: '', ...env }, encoding: 'utf8' });
+  const decision = (r) => (r.stdout ? JSON.parse(r.stdout).hookSpecificOutput : null);
+  const edit = (agent, file) => decision(lock({ tool_name: 'Edit', agent_type: agent, tool_input: { file_path: path.join(proj, file), old_string: 'a', new_string: 'b' } }));
+  assert.equal(edit('dev-one', 'src/rsvp/total.js'), null, 'its own folder');
+  assert.equal(edit('dev-one', 'tests/rsvp/total.test.js'), null);
+  assert.equal(edit('dev-one', 'docs/squad/handoff/M04.md'), null, 'the squad docs');
+  const d = edit('dev-one', 'package.json');
+  assert.equal(d.permissionDecision, 'deny'); assert.match(d.permissionDecisionReason, /package\.json is outside your module folders \(src\/rsvp, tests\/rsvp\)\. Shared files belong to the lead/);
+  assert.equal(edit('dev-one', 'src/cart/index.js').permissionDecision, 'deny', 'another developer\'s module');
+  assert.equal(edit('lina-sprint-lead', 'package.json'), null, 'the lead may');
+  assert.equal(edit('quinn-qa', 'tests/e2e/cart.spec.js'), null, 'no modules: not limited');
+  assert.equal(decision(lock({ tool_name: 'Write', tool_input: { file_path: path.join(proj, 'package.json'), content: '{}' } })), null, 'unknown agent: let through');
+  assert.equal(decision(lock({ tool_name: 'Write', tool_input: { file_path: path.join(proj, 'package.json'), content: '{}' } }, { AISQUAD_AGENT: 'shop/dev-two' })).permissionDecision, 'deny', 'a Desk session of a developer');
+  const bash = (command) => decision(lock({ tool_name: 'Bash', tool_input: { command } }));
+  for (const c of ['rm -rf build', 'git reset --hard HEAD~1', 'git push --force origin main', 'git clean -fdx', 'psql -c "DROP TABLE orders"', 'docker system prune -af', 'git checkout -- .']) assert.equal(bash(c)?.permissionDecision, 'ask', c);
+  for (const c of ['rm build/cache.json', 'git push origin sprint-2', 'npm test', 'git checkout -b sprint-2']) assert.equal(bash(c), null, c);
+  const gates = fs.readFileSync(path.join(proj, '.git', 'aisquad-gates.jsonl'), 'utf8');
+  assert.match(gates, /"gate":"edit-lock","subject":"dev-one: package\.json"/); assert.match(gates, /"gate":"destructive"/);
+});
+
+test('older packs get new hook scripts before the settings point at them', () => {
+  fs.rmSync(path.join(proj, '.claude/hooks/edit-lock.cjs'));
+  sprint.mergeSettings(proj, {});
+  assert.ok(fs.existsSync(path.join(proj, '.claude/hooks/edit-lock.cjs')));
 });
