@@ -13,6 +13,7 @@ import './cost.js';
 import './log.js';
 import './audit.js';
 import './improve.js';
+import './docs.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
@@ -243,6 +244,7 @@ function hudHtml(b, route, f) {
   let warn = '';
   if (!f.independent && !f.missing) {
     if (f.budget?.level === 'over') warn = `<span class="hpill warn">${icon('alert')}Budget reached</span>`;
+    else if (f.agents.some((a) => a.crash && !a.crash.withLead)) { const c = f.agents.find((a) => a.crash && !a.crash.withLead); warn = `<a class="hpill wait" href="#/floor/${f.id}/desk/${c.id}" title="${esc(c.crash.text)}">${icon('alert')}<span class="ellipsis">${esc(String(c.displayName).split(' - ')[0])} stopped unexpectedly</span></a>`; }
     else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<button class="hpill warn" data-act="start-all" title="Start every agent of this Floor">${icon('alert')}Squad not running</button>`;
     else if (f.waitingFor) warn = `<button class="hpill wait" data-act="waiting-for" title="${esc(f.waitingFor.docs ? `Not approved yet: ${f.waitingFor.docs.join(', ')}` : 'Open what the squad waits for')}">${icon('alert')}<span class="ellipsis">${esc(f.waitingFor.text)}</span></button>`;
     else if (f.budget?.level === 'warn') warn = `<span class="hpill warn">${icon('alert')}Budget ${Math.round(f.budget.pct)} %</span>`;
@@ -256,6 +258,7 @@ function floorMenuHtml(f) {
   const any = (fn) => f.agents.some(fn);
   return [['floor-settings', 'Floor settings'], ['edit-mode', 'Edit layout and looks'], ['add-agent', 'Add agent'],
     ...(any((a) => !a.running) ? [['start-all', 'Start all agents']] : []), ...(any((a) => a.running) ? [['stop-all', 'Stop all agents']] : []),
+    ...(state.floor?.id === f.id && state.floor.blueprint ? [['source-docs', 'Source documents']] : []),
     ...(state.floor?.id === f.id && state.floor.board ? [['board', 'Board']] : []), ...(f.workflow === 'squad-sprint' ? [['performance', 'Performance']] : []), ['cost', 'Cost'], ['log', 'Squad Log'], ['audit', 'Audit']]
     .map(([act, text]) => `<button role="menuitem" data-act="${act}">${text}</button>`).join('');
 }
@@ -428,6 +431,15 @@ $('sideShow').onclick = () => { state.sideHidden = false; try { localStorage.rem
 try { state.sideHidden = localStorage.getItem('aisquad.sideHidden') === '1'; } catch { /* private mode */ }
 addEventListener('resize', () => { for (const id of ['hud', 'dock', 'sideTop', 'sideMain', 'sideTabs', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 
+// starts that the Watchdog may question first (swap above 80 %, the Floor at its maximum of agents): ask, then force
+async function guarded(url, body = {}, force = false) {
+  try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }); } catch (e) {
+    if (e.status !== 409) throw e;
+    if (!confirm(`Watchdog: ${e.message}`)) return null;
+    return api('POST', url, { ...body, force: true });
+  }
+}
+
 // ---------- actions (event delegation on data-act / data-href / data-tab) ----------
 const shouts = {};
 const actions = Object.assign(ctx.actions, {
@@ -439,7 +451,10 @@ const actions = Object.assign(ctx.actions, {
     body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
   voice() { const on = !voiceOn(); setVoice(on); if (on) speak('Voice is on, boss.'); render(); },
-  async start(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`, {}); toast('Starting agent…'); },
+  async start(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`)) toast('Starting agent…'); },
+  // continue the agent's last Claude Code session (after a crash this is the main action)
+  async resume(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/resume`)) toast('Resuming the last session…'); },
+  async 'crash-answer'(el) { el.disabled = true; if (await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n })) toast(+el.dataset.n === 1 ? 'Resuming the last session…' : 'Starting a fresh session…'); else el.disabled = false; },
   async restart(el) {
     if (!confirm('Restart this agent? Its Claude Code session is closed and a fresh one starts with the configured model and effort.')) return;
     await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {});
@@ -447,7 +462,14 @@ const actions = Object.assign(ctx.actions, {
     toast('Agent restarted');
   },
   async stop(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {}); toast('Agent stopped'); },
-  async 'start-all'() { for (const a of state.floor.agents.filter((x) => !x.running)) await api('POST', `/api/floors/${state.route.floorId}/agents/${a.id}/start`, {}); toast('Starting the team…'); },
+  async 'start-all'() {
+    let force = false;
+    for (const a of state.floor.agents.filter((x) => !x.running && !x.standby)) {
+      const r = await guarded(`/api/floors/${state.route.floorId}/agents/${a.id}/${a.crash && a.resume ? 'resume' : 'start'}`, {}, force);
+      if (!r) return; force = true;                     // one warning for the whole team
+    }
+    toast('Starting the team…');
+  },
   async 'stop-all'() {
     if (!confirm('Stop every running agent on this Floor?')) return;
     for (const a of state.floor.agents.filter((x) => x.running)) await api('POST', `/api/floors/${state.route.floorId}/agents/${a.id}/stop`, {});
@@ -455,14 +477,15 @@ const actions = Object.assign(ctx.actions, {
   },
   async answer(el) { el.disabled = true; await api('POST', `/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n }); toast('Answer sent'); },
   async dismiss(el) { await api('POST', `/api/attention/${el.dataset.id}/answer`, { option: 0 }); toast('Dismissed'); },
-  // the Floor pill: source documents open the Standard tab, a reply or answer opens Attention
+  // the Floor pill: source documents open their dialog, a reply or answer opens Attention
   'waiting-for'(el) {
     const f = state.building.floors.find((x) => x.id === state.route.floorId);
-    const sec = f?.waitingFor?.kind === 'docs' ? 'standard' : 'f-attention';
+    if (f?.waitingFor?.kind === 'docs') { actions['source-docs'](); return; }
+    const sec = 'f-attention';
     if (!lastSections?.some((x) => x.id === sec)) { openPopover('attPop', el); return; }
     if (!$('sheet').hidden) state.tab.sheet = sec; else state.tab.tabs = sec;
     layoutPanels(lastSections);
-    requestAnimationFrame(() => document.querySelector(sec === 'standard' ? '#side .docRow, #sheet .docRow' : '#side .att, #sheet .att')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    requestAnimationFrame(() => document.querySelector('#side .att, #sheet .att')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
   },
   async 'work-done'(el) { await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/work-done`, {}); },
   async 'remove-floor'(el) {

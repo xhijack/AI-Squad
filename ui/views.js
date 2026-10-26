@@ -3,7 +3,7 @@
 // panel (desktop) or as tabs of the bottom sheet (phone).
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 
-const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge' };
+const KIND_TEXT = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', stall: 'Stalled', budget: 'Budget', resource: 'Resources', merge: 'Merge', crash: 'Stopped unexpectedly' };
 
 // ---------- Attention ----------
 export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
@@ -15,6 +15,10 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       const who = esc(String(a.agentName || 'the agent').split(' - ')[0]);
       body = `<form class="replyForm" data-act="reply" data-id="${a.id}"><textarea name="text" rows="3" data-draft="${a.id}" placeholder="Reply to ${who}…" aria-label="Your reply to ${who}" required>${esc(drafts.get(a.id) || '')}</textarea>
         <div class="row"><span class="note grow">Sent to ${who} as the next task.</span><button type="button" class="small ghost" data-act="dismiss" data-id="${a.id}" title="Hide this until the agent asks again">Dismiss</button><button class="small gold">Send reply</button></div></form>`;
+    } else if (a.kind === 'crash') {
+      // Resume continues the agent's last session (the default after a crash); Start fresh loses its context
+      body = `<div class="row wrap">${a.options.map((o) => `<button class="small ${o.n === 1 ? 'gold' : 'ghost'}" data-act="crash-answer" data-id="${a.id}" data-n="${o.n}">${o.n === 1 ? 'Resume' : 'Start fresh'}</button>`).join('')}
+        <button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button></div>${a.resumable ? '<div class="note" style="margin-top:6px">Resume continues the last session with its context. Start fresh begins a new session.</div>' : ''}`;
     } else if (a.answerable && a.options?.length) {
       body = `<div class="opts">${a.options.map((o) => o.free
         ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${esc(o.label)}" aria-label="Your answer" required><button class="gold">Send</button></form>`
@@ -68,12 +72,13 @@ const ROLE_SHORT = (a) => [a.lead ? 'Lead' : '', a.title, a.model].filter(Boolea
 const STATE_SHORT = { working: 'working', waiting: 'needs you', idle: 'idle', stopped: 'stopped' };
 // one row per agent: colour dot, name, role, one status chip, what it is doing
 export function agentRow(floorId, a, selected) {
-  const act = a.standby ? a.activity : a.state === 'stopped' ? (a.independent ? a.activity || 'not running' : `stopped${a.lastTs ? ` · last seen ${ago(a.lastTs)}` : ''}`)
+  const act = a.standby ? a.activity : a.crash && !a.crash.withLead ? a.crash.text : a.stopNote ? `${a.stopNote}${a.lastTs ? ` · ${ago(a.lastTs)}` : ''}`
+    : a.state === 'stopped' ? (a.independent ? a.activity || 'not running' : `stopped${a.lastTs ? ` · last seen ${ago(a.lastTs)}` : ''}`)
     : a.state === 'idle' ? `idle${a.lastTs ? ` ${ago(a.lastTs).replace(' ago', '')}` : ''}` : a.activity || STATE_TEXT[a.state];
   return `<div class="arow${selected ? ' sel' : ''}" data-href="#/floor/${floorId}/desk/${a.id}" role="button" tabindex="0">
     <i class="adot" style="--c:${esc(a.appearance?.shirt || '#3d82d6')}"></i>
     <span class="grow"><span class="nm"><b>${esc(String(a.displayName).split(' - ')[0])}</b> <span class="role">${esc(ROLE_SHORT(a))}</span></span><span class="act">${esc(act)}</span></span>
-    ${a.standby ? '<span class="st standby">not started</span>' : `<span class="st ${a.state}">${STATE_SHORT[a.state]}</span>`}</div>`;
+    ${a.standby ? '<span class="st standby">not started</span>' : a.crash && !a.crash.withLead ? '<span class="st crashed">crashed</span>' : `<span class="st ${a.state}">${STATE_SHORT[a.state]}</span>`}</div>`;
 }
 
 function feedHtml(feed) {
@@ -113,7 +118,8 @@ function standardHtml(bp) {
   return `<div class="row" style="margin-bottom:8px"><b class="grow">${esc(bp.title)} v${bp.version}</b>${pending ? `<span class="st idle">${pending} not approved</span>` : '<span class="st working">all approved</span>'}</div>
     ${bp.latest > bp.version ? `<div class="row" style="margin-bottom:8px"><span class="chip info grow">Blueprint v${bp.latest} available</span><button class="small" data-act="blueprint-update">Update</button></div>` : ''}
     <p class="note" style="margin-top:0">Roles, channels, gates and the definition of done are in <code>AISQUAD.md</code> and in every agent's prompt.${pending ? ' The lead collects the source documents from you first.' : ''}</p>
-    ${bp.sourceDocs.map((d) => `<div class="docRow"><span class="grow"><code>${esc(d.path)}</code><span class="note">${esc(d.purpose)}</span></span><span class="chip ${DOC_STATE[d.status][0]}">${DOC_STATE[d.status][1]}</span></div>`).join('')}`;
+    ${bp.sourceDocs.map((d) => `<div class="docRow"><span class="grow"><code>${esc(d.path)}</code><span class="note">${esc(d.purpose)}</span></span><span class="chip ${DOC_STATE[d.status][0]}">${DOC_STATE[d.status][1]}</span></div>`).join('')}
+    <div class="row" style="margin-top:8px"><span class="spacer"></span><button class="small ${pending ? 'gold' : ''}" data-act="source-docs">${pending ? 'Review and approve' : 'Open source documents'}</button></div>`;
 }
 
 const agentsHead = (f, extra = '') => `<div class="cardHead"><h3>Agents</h3><span class="meta">${f.agents.filter((a) => a.state === 'working' || a.state === 'waiting').length}/${f.agents.length} active</span>${extra}</div>`;
@@ -148,6 +154,7 @@ export function floorSections(f, deskAgentId = null) {
 // ---------- Desk ----------
 // the status line under the agent's name: state, then what it is doing (a standby text says it all)
 const deskState = (d) => (d.standby ? d.activity.replace(/^./, (c) => c.toUpperCase())
+  : d.crash && !d.crash.withLead ? d.crash.text : d.stopNote ? d.stopNote.replace(/^./, (c) => c.toUpperCase())
   : `${stateText(d)}${d.activity && d.state !== 'stopped' && !d.waitingReply ? ` · ${d.activity}` : ''}`);
 const SKILL_STATE = { project: ['ok', 'in project'], user: ['ok', 'in user skills'], bundled: ['info', 'from plugin'], missing: ['warn', 'not installed'] };
 function skillsHtml(d) {
@@ -181,6 +188,13 @@ function independentDeskSections(floor, d, routeScreen) {
   ];
 }
 
+// stopped: Resume is the main action after a crash; otherwise Start, with Resume of the last session beside it
+function startButtons(d) {
+  if (d.running) return `<button class="ghost" data-act="stop" data-agent="${d.id}">Stop</button>`;
+  if (d.crash && !d.crash.withLead && d.resume) return `<button class="gold" data-act="resume" data-agent="${d.id}" title="Continue the last session">Resume</button><button class="ghost small" data-act="start" data-agent="${d.id}" title="A new session without the earlier context">Start fresh</button>`;
+  return `<button class="ok" data-act="start" data-agent="${d.id}">Start</button>${d.resume ? `<button class="ghost small" data-act="resume" data-agent="${d.id}" title="Continue the last session (${esc(d.resume.sessionId.slice(0, 8))})">Resume last session</button>` : ''}`;
+}
+
 export function deskSections(floor, d, opts = {}) {
   return deskSectionsInner(floor, d, opts).map((x) => ({ ...x, back: `#/floor/${floor.id}` }));
 }
@@ -201,17 +215,22 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:18px">${esc(d.displayName)}</h2>
       <div class="note">${esc(e.title || '')} · model ${esc(mr.configured || '?')}${mr.observed ? ` · last reply from <span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span>` : ''}</div>
       <div class="note"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">${d.running ? `<button class="ghost" data-act="stop" data-agent="${d.id}">Stop</button>` : `<button class="ok" data-act="start" data-agent="${d.id}">Start</button>`}
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">${startButtons(d)}
       <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? 'Leave screen' : 'Look at screen'}</a></div></div>`;
+  const crashed = d.crash && !d.crash.withLead;
+  const crash = crashed ? `<div class="att crash" style="margin-top:10px"><div class="where">Stopped unexpectedly</div><div class="q">${esc(d.crash.text)}</div>
+      <div class="note">${d.resume ? `Resume continues session <code>${esc(d.resume.sessionId.slice(0, 8))}</code> with its context${d.lead || d.kindOf === 'lead' ? '; the lead is told its teammates died and re-spawns only what is still needed' : ''}. Start fresh begins a new session.` : 'No previous session was found; start it fresh.'}</div>
+${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small" data-act="start" data-agent="${d.id}">Start fresh</button></div>`}</div>`
+    : d.crash?.withLead ? `<div class="att stall" style="margin-top:10px"><div class="where">Stopped with the lead</div><div class="q">${esc(d.stopNote || d.crash.text)}</div><div class="note">This teammate ran inside the lead's session. Resume the lead; it re-spawns the teammates whose work is still open.</div></div>` : '';
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">Update available</div><div class="q">${esc(e.title)} template v${d.agent.role.version} → v${ts.latestVersion}</div>
       <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">View diff</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">Update</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">Keep current</button></div></div>` : '';
-  const overview = `${head}${modelWarn}${update}
+  const overview = `${head}${crash}${modelWarn}${update}
     ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
     <div class="section"><div class="sectionHead"><h3 class="grow">Send task</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">Queued: ${esc(d.pending.slice(0, 120))}</div>` : ''}
       ${d.work ? `<div class="note" style="margin-top:6px">Current work (${d.work.doneAt ? `done ${ago(d.work.doneAt)}` : `since ${ago(d.work.assignedAt)}`}): ${esc(d.work.text.slice(0, 160))} <button class="small ghost" data-act="work-done" data-agent="${d.id}">Clear</button></div>` : ''}</div>
     <div class="section note">Terminal: <code>${esc(d.attach)}</code> <button class="small ghost" data-act="copy" data-text="${esc(d.attach)}">Copy</button></div>`;
-  const screen = d.running ? `<pre class="screen" data-scroll="screen">${esc(d.screen) || ' '}</pre>` : '<div class="empty">The agent is stopped. Start it to see its live screen.</div>';
+  const screen = d.running ? `<pre class="screen" data-scroll="screen">${esc(d.screen) || ' '}</pre>` : `<div class="empty">The agent is stopped. ${d.resume ? 'Resume or start it' : 'Start it'} to see its live screen.</div>`;
   const events = d.events.length ? `<ul class="feed events">${d.events.map((ev) => `<li><span class="k ${ev.kind}"></span><div class="grow"><div><b>${esc(ev.title)}</b>${ev.tool ? ` <span class="note">${esc(ev.tool)}</span>` : ''}</div><div class="d ${ev.kind === 'think' || ev.kind === 'task' ? '' : 'mono'}">${esc(ev.detail)}</div><div class="t">${ago(ev.ts)}</div></div></li>`).join('')}</ul>` : '<div class="empty">No transcript yet.</div>';
   const pills = (list, cls = '') => list.map((s) => `<span class="pill ${cls}">${esc(s)}</span>`).join('');
   const profile = `<dl class="kv">

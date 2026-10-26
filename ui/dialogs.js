@@ -65,6 +65,10 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="autoNext" ${c.sprint?.autoNext ? 'checked' : ''}> Squad Sprint: start the next sprint automatically (fresh lead session) once a closed sprint is merged</label>
     <div class="grid2"><div><label>Budget (USD, 0 = none)</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
       <div><label>Budget period</label>${segHtml('budgetPeriod', [['month', 'Per month'], ['day', 'Per day']], c.budget.period)}</div></div>
+    <h3 style="margin-top:18px">Recovery and memory</h3>
+    <label class="inline"><input type="checkbox" name="autoResume" ${c.recovery?.autoResume ? 'checked' : ''}> Auto-resume after a crash (at most 2 times per hour per agent, not while memory is still under pressure)</label>
+    <div class="grid2"><div><label>Max concurrent agents</label><input name="maxAgents" type="number" min="1" max="20" value="${c.recovery?.maxAgents || 4}"></div>
+      <p class="note">The lead is told this limit. Starting more, or starting while swap is above 80 %, asks you first.</p></div>
     <h3 style="margin-top:18px">Squad Log and Audit</h3>
     <label class="inline"><input type="checkbox" name="logMessages" ${c.log?.messages !== false ? 'checked' : ''}> Log message text (tasks, messages between agents, questions and answers). Off: metadata only.</label>
     <label class="inline"><input type="checkbox" name="logMask" ${c.log?.maskPersonalData !== false ? 'checked' : ''}> Mask personal data (e-mail, phone, national id and bank account numbers). Secrets are always removed.</label>
@@ -86,7 +90,7 @@ async function floorSettings() {
       await api('PATCH', `/api/floors/${f.id}`, { name: v('name'), number: Number(v('number')), accent: v('accent'), tagline: v('tagline'), goal: v('goal'), workflow: segValue(form, 'workflow'),
         budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked },
         log: { messages: form.elements.logMessages.checked, maskPersonalData: form.elements.logMask.checked },
-        audit: { auto: form.elements.auditAuto.checked, model: segValue(form, 'auditModel') }, git: readGit(form) });
+        audit: { auto: form.elements.auditAuto.checked, model: segValue(form, 'auditModel') }, recovery: { autoResume: form.elements.autoResume.checked, maxAgents: Number(v('maxAgents')) || 4 }, git: readGit(form) });
       closeModal(); toast('Floor saved'); ctx.refresh();
     } catch (e) { fail(e); }
   };
