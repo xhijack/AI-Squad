@@ -468,6 +468,16 @@ Brief: `PHASE-3.1-VOICE.md`. Not an MCP server: the AI Squad server calls the El
 - Tests: `test/voice.test.js` (mocked ElevenLabs: key storage and status, spoken text, the key only in a header, redaction, cache and usage, budget, no key, API errors, voices, quiet hours) and api (write-only key over HTTP, PIN, audio response, muted Floor, voice id in team.json). No real ElevenLabs call was made: the owner has not set a key here, and the brief allows one only when the owner asks. Screenshot (a dummy key in the playground only): `playground/reference/voice-settings-1440.png`, `voice-settings-390.png`.
 - Not built (the brief's "later"): push-to-talk with speech-to-text.
 
+## 0.7.1: replies are never lost (26 Oct 2026)
+
+- **0.7.1** (owner bug: replying in a Finished, Waiting for your reply or question card often failed with a red 404 "This item is gone", and the typed reply was lost). The answer endpoint looked the item up by id in the current Attention list, and these items vanish or change as soon as the agent works again. Now:
+  - Every answer carries `floorId`, `agentId` and `kind`.
+  - When the item is gone but there is text, it goes to that agent with `sendTask` (for a question: "Owner's answer to your earlier question: …") and comes back as `delivered: 'as-message'`.
+  - When only an option was clicked and the item or dialog is gone, the answer is **409 Already answered**, and the UI removes the card with a quiet toast. The same holds for dialogs of independent agents, Autopilot decisions and scope changes. A dismiss of something gone is OK.
+  - The typed text stays in the textarea and the draft until the server confirms.
+  - Reply and Finished cards get one id per turn (agent, session file and end of turn), the same whether the turn reads as a reply or as Finished.
+- Tests: finished (text delivered as a message, the question prefix, 409 for an option, a dismiss, an unknown agent refused, a stable id when the card changes kind) and api (the same over HTTP).
+
 ## How to run
 
 ```
