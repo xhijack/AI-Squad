@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Asset converter</title>
+<script type="importmap">
+{ "imports": {
+  "three": "/ui/vendor/three/three.module.js",
+  "three/addons/": "/ui/vendor/three/addons/",
+  "jsm/": "/scripts/vendor/three-jsm/"
+} }
+</script>
+<script type="module">
+import * as conv from './rocketbox.js';
+window.conv = conv;
+window.ready = true;
+</script>

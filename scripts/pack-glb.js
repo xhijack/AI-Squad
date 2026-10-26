@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Packs several glTF files (with their .bin and textures) into one GLB: one root node per model, named after the
-// file, textures embedded once. Node built-ins only (a dev tool, not part of the server).
+// file, textures embedded once (PNG or JPEG; every texture slot). Node built-ins only (a dev tool, not part of the server).
 //   node scripts/pack-glb.js out.glb a.gltf b.gltf ...
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import path from 'node:path';
 const [outFile, ...inputs] = process.argv.slice(2);
 if (!outFile || !inputs.length) { console.error('usage: pack-glb.js out.glb a.gltf [b.gltf ...]'); process.exit(1); }
 const pad4 = (n) => (n + 3) & ~3;
-const out = { asset: { version: '2.0', generator: 'The AI Squad pack-glb (from KayKit glTF files)' }, scene: 0, scenes: [{ name: 'Scene', nodes: [] }],
+const out = { asset: { version: '2.0', generator: 'The AI Squad pack-glb' }, scene: 0, scenes: [{ name: 'Scene', nodes: [] }],
   nodes: [], meshes: [], accessors: [], bufferViews: [], materials: [], textures: [], images: [], samplers: [], buffers: [{ byteLength: 0 }] };
 const chunks = [];
 let length = 0;
@@ -29,7 +29,7 @@ for (const file of inputs) {
     if (!imageIndex.has(src)) {
       const off = addBytes(fs.readFileSync(src));
       out.bufferViews.push({ buffer: 0, byteOffset: off, byteLength: fs.statSync(src).size });
-      out.images.push({ name: path.basename(src, '.png'), mimeType: 'image/png', bufferView: out.bufferViews.length - 1 });
+      out.images.push({ name: path.basename(src).replace(/\.\w+$/, ''), mimeType: /\.jpe?g$/i.test(src) ? 'image/jpeg' : 'image/png', bufferView: out.bufferViews.length - 1 });
       imageIndex.set(src, out.images.length - 1);
     }
     return imageIndex.get(src);
@@ -37,7 +37,7 @@ for (const file of inputs) {
   for (const t of g.textures || []) out.textures.push({ ...t, source: imgMap[t.source], ...(t.sampler != null ? { sampler: t.sampler + smp0 } : {}) });
   for (const m of g.materials || []) {
     const c = JSON.parse(JSON.stringify(m));
-    if (c.pbrMetallicRoughness?.baseColorTexture) c.pbrMetallicRoughness.baseColorTexture.index += tex0;
+    for (const t of [c.pbrMetallicRoughness?.baseColorTexture, c.pbrMetallicRoughness?.metallicRoughnessTexture, c.normalTexture, c.occlusionTexture, c.emissiveTexture]) if (t) t.index += tex0;
     out.materials.push(c);
   }
   for (const m of g.meshes) out.meshes.push({ ...m, primitives: m.primitives.map((p) => ({ ...p, attributes: Object.fromEntries(Object.entries(p.attributes).map(([k, v]) => [k, v + acc0])),
