@@ -111,6 +111,7 @@ const routes = [
   ['GET', /^\/api\/floors\/([\w-]+)\/merges$/, ([id]) => squad.floorMerges(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/performance$/, ([id]) => squad.performance(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/audits$/, ([id]) => squad.floorAudits(id), { pin: true }],
+  ['GET', /^\/api\/floors\/([\w-]+)\/ship$/, ([id]) => squad.floorShip(id)],
   ['GET', /^\/api\/floors\/([\w-]+)\/standup$/, ([id]) => squad.floorStandup(id), { pin: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/retro$/, ([id], b, req) => squad.floorRetro(id, new URL(req.url, 'http://x').searchParams.get('sprint')), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/retro\/send$/, ([id], b) => squad.sendRetroToLead(id, b.sprint ?? null), { pin: true }],

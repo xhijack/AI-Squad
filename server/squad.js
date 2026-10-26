@@ -27,6 +27,7 @@ import * as autopilot from './autopilot.js';
 import * as retroLib from './retro.js';
 import * as learnings from './learnings.js';
 import * as rituals from './rituals.js';
+import * as ship from './ship.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
@@ -861,6 +862,13 @@ async function sprintTick(f, entry, git, team, floor) {
   if (!st.closed) return null;
   const tried = merge.mergeLog(f.id, 500).find((e) => e.branch === st.branch && e.tip === st.tip);
   if (tried) return null;
+  // ship readiness: QA per module, the final smoke test, release notes, and the design / security reviews the team has
+  const ready = ship.readiness(entry.path, { sprint: st.sprint, team: team.agents });
+  if (!ready.merge.ready) {
+    const key = `${st.branch}@${st.tip}`, S = collect.stateOf(f.id);
+    if (S.shipBlocked !== key) { S.shipBlocked = key; collect.saveState(f.id); logEvent(f.id, { type: 'ship.blocked', sprint: Number(st.sprint) || null, data: { branch: st.branch, missing: ready.merge.missing } }); }
+    return null;
+  }
   const result = await runMerge(f.id, entry.path, git, st.branch, { trigger: 'sprint' });
   if (result.result === 'merged' && floor.sprint.autoNext) {
     const lead = team.agents.find((a) => a.lead) || team.agents.find((a) => sprint.roleKind(a) === 'lead');
@@ -1156,6 +1164,14 @@ export async function logTick(now = Date.now(), { onEvent = null } = {}) {
     runPendingAudits();
   } finally { logging = false; }
   return n;
+}
+
+// GET /api/floors/:id/ship: what ran and what is missing before the sprint merges or deploys
+export function floorShip(floorId) {
+  const entry = building.floorEntry(floorId);
+  const cfg = floors.readFloor(entry.path);
+  const n = sprint.hasPack(entry.path) ? sprint.readConfig(entry.path).SPRINT : null;
+  return { ...ship.readiness(entry.path, { sprint: n, team: cfg.team.agents }), mergePolicy: cfg.git.mergePolicy, approved: !!merge.approval(floorId) };
 }
 
 // ---------- rituals (server/rituals.js) ----------
