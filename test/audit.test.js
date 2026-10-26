@@ -168,3 +168,13 @@ test('plan reviews: reviewed before the first BUILD, design scores, scope modes 
   assert.deepEqual(m.planReviews, { sprints: 1, reviewed: 1, beforeBuild: 1, designScores: [8], changesAsked: 1, scope: [{ sprint: 4, mode: 'Hold' }], scopeChanges: 1 });
   assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.planReviews \| 1 of 1 planned sprints reviewed \(1 before the first BUILD\), design 8\/10, 1 asked for changes; scope sprint 4 Hold; 1 mid-sprint scope changes/);
 });
+
+test('ship readiness: a sprint that waited is in the digest', () => {
+  put(90, 'ship.blocked', { sprint: 5, data: { branch: 'sprint-5', missing: ['QA pass for every module'] } });
+  put(91, 'gate.failed', { sprint: 5, data: { gate: 'edit-lock', subject: 'budi-dev: package.json', reason: 'outside the owned folders' } });
+  const { events } = audit.rangeEvents('pos', { sprint: 5 });
+  const m = audit.metrics(events, INFO);
+  assert.deepEqual(m.process.shipBlocked, [{ branch: 'sprint-5', missing: ['QA pass for every module'] }]);
+  assert.deepEqual(m.process.gatesRefused.byGate, { 'edit-lock': 1 });
+  assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.shipBlocked \| sprint-5 waited for: QA pass for every module/);
+});

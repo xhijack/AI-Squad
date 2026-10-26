@@ -85,6 +85,7 @@ export function metrics(events, info = {}) {
     permissions: { asked: of('permission.asked').length, totalWaitMin: r2(sum(permWaits, (x) => x) / 60e3, 1) },
     gatesRefused: { total: refused.length, byGate: refused.reduce((o, e) => inc(o, e.data.gate || 'merge'), {}) },
     gatesPassed: of('gate.passed').length,
+    shipBlocked: of('ship.blocked').map((e) => ({ branch: e.data.branch, missing: e.data.missing })),
     rework: { reopened: sum(modules, (m) => m.reopened) + of('board.changed').filter((e) => e.data.reopened && !/^M\d+$/.test(e.module || '')).length },
     // Squad Sprint: the checks the server makes before it merges a closed sprint (from git, at audit time)
     sprintClose: info.sprintClose || null,
@@ -194,6 +195,7 @@ const relevant = (e, m) => {
     case 'autopilot.decided': return e.data.critical ? 5 : 2;
     case 'debug.escalated': return 4;
     case 'scope.changed': return 5;
+    case 'ship.blocked': return 4;
     case 'plan.reviewed': return 3;
     case 'sprint.scope': return 2;
     case 'debug.attempt': return (e.data.attempt || 0) >= 3 ? 4 : 1;
@@ -234,6 +236,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['process.permissions', `${P.permissions.asked} prompts, ${P.permissions.totalWaitMin} min waiting`],
       ['process.gatesRefused', `${P.gatesRefused.total} (${Object.entries(P.gatesRefused.byGate).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}), ${P.gatesPassed} passed`],
       ['process.rework', `${P.rework.reopened} rows reopened`],
+      ...(P.shipBlocked?.length ? [['process.shipBlocked', P.shipBlocked.map((b) => `${b.branch} waited for: ${b.missing.join(', ')}`).join('; ')]] : []),
       ...(m.planReviews?.sprints || m.planReviews?.reviewed ? [['process.planReviews', `${m.planReviews.reviewed} of ${m.planReviews.sprints} planned sprints reviewed (${m.planReviews.beforeBuild} before the first BUILD)${m.planReviews.designScores.length ? `, design ${m.planReviews.designScores.join(', ')}/10` : ''}, ${m.planReviews.changesAsked} asked for changes; scope ${m.planReviews.scope.map((x) => `sprint ${x.sprint} ${x.mode}`).join(', ') || 'not stated'}${m.planReviews.scopeChanges ? `; ${m.planReviews.scopeChanges} mid-sprint scope changes` : ''}`]] : []),
       ...(m.debug?.issues ? [['process.debug', `${m.debug.issues} problems investigated, ${m.debug.attempts} fix attempts, ${m.debug.escalated} escalated${m.debug.loops.length ? `; LOOPS (3+ failed attempts without escalation, or more than 3): ${m.debug.loops.map((d) => `${d.issue} by ${d.agent || '?'} (${d.attempts})`).join(', ')}` : ''}`]] : []),
       ...(P.sprintClose ? [['process.sprintClose', `sprint ${P.sprintClose.sprint}: ${Object.entries(P.sprintClose.checks).map(([k, ok]) => `${k} ${ok ? 'yes' : 'NO'}`).join(', ')}; the server merges only when all are yes`]] : []),
