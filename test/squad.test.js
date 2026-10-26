@@ -95,3 +95,26 @@ test('code window around the latest edit; never outside the repo or from .env', 
   assert.equal(squad.codeWindow(proj, { type: 'code', path: '../../etc/passwd', text: 'root' }).firstLine, undefined);
 });
 
+test('Squad Sprint teammates the lead has not started are not "stopped"; the Floor says what it waits for', async () => {
+  const { createSquad } = await import('../server/setup.js');
+  const building = await import('../server/building.js');
+  building.setPrefs({ squadsDir: path.join(root, 'squads') });
+  const r = await createSquad({ blueprint: 'software-house', name: 'Kiosk', team: [
+    { template: 'project-manager', displayName: 'Rina - PM' }, { template: 'fullstack-developer', displayName: 'Budi - Dev' }] });
+  const kiosk = () => fresh().floors.find((f) => f.id === r.id);
+  let f = kiosk();
+  const [pm, dev] = ['rina-pm', 'budi-dev'].map((id) => f.agents.find((a) => a.id === id));
+  assert.deepEqual([pm.state, pm.standby], ['stopped', null], 'the lead is really stopped');
+  assert.deepEqual([dev.state, dev.standby, dev.activity], ['stopped', 'docs', 'waiting for source documents']);
+  assert.equal(f.counts.standby, 1);
+  assert.deepEqual(f.waitingFor, { kind: 'docs', text: 'Waiting for you: 4 source documents', docs: ['docs/PRD.md', 'docs/TECH.md', 'docs/DESIGN.md', 'docs/ENVIRONMENTS.md'] });
+  for (const d of ['PRD', 'TECH', 'DESIGN', 'ENVIRONMENTS']) {
+    const file = path.join(r.path, 'docs', `${d}.md`);
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('STATUS: DRAFT', 'STATUS: APPROVED'));
+  }
+  f = kiosk();
+  assert.deepEqual([f.agents.find((a) => a.id === 'budi-dev').standby, f.agents.find((a) => a.id === 'budi-dev').activity], ['sprint', 'not started: the lead starts them when the sprint begins']);
+  assert.equal(f.waitingFor, null);
+  // a Free Team Floor without a Blueprint keeps plain "stopped"
+  assert.equal(fresh().floors.find((x) => x.id === 'acme').agents.find((a) => a.id === 'budi-dev').standby, null);
+});

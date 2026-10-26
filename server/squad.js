@@ -114,6 +114,8 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     let reply = state === 'idle' && own ? replyLib.replyWait({ running: own, inLead, status: st, work: w, pending: pending.has(workKey(entry.id, a.id)), dialog, busy }, { gate: !!squad?.gate?.blocking, isLead: a === lead }) : null;
     if (reply && dismissed.has(replyKey(entry.id, a.id, reply.ts))) reply = null;
     if (reply) state = 'waiting';
+    // teammates the lead has not spawned yet are not "stopped": they wait for the sprint (or the source documents)
+    const standby = squad && lead && a !== lead && !running ? (squad.gate?.blocking ? 'docs' : 'sprint') : null;
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
     if (dialog && st?.ask?.questions?.length) {
@@ -122,7 +124,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply };
+      hook: hookFresh ? h : null, activity, inLead, reply, standby };
   });
 }
 const replyKey = (floorId, agentId, ts) => `${floorId}/${agentId}@${ts}`;
@@ -132,6 +134,7 @@ function squadOf(root, floor) {
   if (floor.workflow !== 'squad-sprint' && !bp) return null;
   return { gate: bp ? blueprintsLib.docsGate(root, bp) : { blocking: false, pending: [] } };
 }
+export const STANDBY_TEXT = { sprint: 'not started: the lead starts them when the sprint begins', docs: 'waiting for source documents' };
 
 function agentView(root, l, cost) {
   let eff = null, error = null;
@@ -139,8 +142,8 @@ function agentView(root, l, cost) {
   return {
     id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead,
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
-    state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
-    waitingReply: !!l.reply,
+    state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
+    standby: l.standby || null, waitingReply: !!l.reply,
     work: l.work, costToday: +(cost.byAgentToday[l.agent.id] || 0).toFixed(2), templateStatus: floors.templateStatus(root, l.agent), error,
     models: modelReport(eff, l.running, l.started, l.status),
     peek: l.status?.peek ? codeWindow(root, (({ id, ...rest }) => rest)(l.status.peek)) : null, kindOf: sprint.roleKind(l.agent),
@@ -205,12 +208,22 @@ function summary(fs_) {
   const count = (s) => agents.filter((a) => a.state === s).length;
   const lamp = fs_.attention.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
   return {
+    waitingFor: waitingFor(fs_),
     id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, tagline: cfg.floor.tagline, accent: cfg.floor.accent, layout: cfg.floor.layout,
     workflow: cfg.floor.workflow, desks: cfg.floor.desks, devices: cfg.floor.devices, agents, lamp,
-    counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped') },
+    counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped'), standby: agents.filter((a) => a.standby).length },
     cost: { today: round2(cost.today), month: round2(cost.month) }, budget: { ...cfg.floor.budget, ...fs_.budget, used: round2(fs_.budget.used) },
     attention: fs_.attention.length, updates: agents.filter((a) => a.templateStatus.updateAvailable).length,
   };
+}
+
+// what the squad waits for, for the Floor's status pill: the source documents gate, else the owner's reply
+export function waitingFor(fs_) {
+  const pending = fs_.squad?.gate?.blocking ? fs_.squad.gate.pending.length : 0;
+  if (pending) return { kind: 'docs', text: `Waiting for you: ${pending} source document${pending === 1 ? '' : 's'}`, docs: fs_.squad.gate.pending.map((d) => d.path) };
+  const asks = fs_.attention.filter((a) => a.kind === 'reply' || a.kind === 'question' || a.kind === 'permission');
+  if (asks.length) return { kind: 'reply', text: asks.some((a) => a.kind === 'reply') ? 'Waiting for your reply' : 'Waiting for your answer' };
+  return null;
 }
 
 // ---------- public API ----------
