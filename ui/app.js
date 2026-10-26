@@ -15,6 +15,7 @@ import './audit.js';
 import './improve.js';
 import './docs.js';
 import './retro.js';
+import { attentionIndexHtml } from './convo.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 
 const state = ctx.state;
@@ -319,7 +320,7 @@ function render() {
   patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
   announceAttention(needsYou(b.attention), route);
-  if (!$('attPop').hidden) patch($('attPop'), `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${needsYou(b.attention).length}</span></div>${attentionHtml(b.attention)}`);
+  if (!$('attPop').hidden) patch($('attPop'), attPopHtml(b.attention));
   if (!$('floorMenu').hidden && f) patch($('floorMenu'), floorMenuHtml(f));
   if (state.offline) toast('Server not reachable, retrying…');
 
@@ -399,6 +400,9 @@ function announceAttention(list, route) {
   });
 }
 
+// the Needs you popover: an index with a one-line preview per item; a click opens the conversation view
+const attPopHtml = (list) => `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${needsYou(list).length}</span></div>${attentionIndexHtml([...needsYou(list), ...list.filter((a) => a.muted)])}`;
+
 // ---------- popovers (menu, Floor menu, attention, legend) ----------
 const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop'];
 function closePopovers() {
@@ -412,7 +416,7 @@ function openPopover(id, anchor) {
   const el = $(id), r = anchor.getBoundingClientRect();
   if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
   if (id === 'attPop' && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch { /* unsupported */ } }
-  if (id === 'attPop') { el._html = null; patch(el, `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${needsYou(state.building.attention).length}</span></div>${attentionHtml(state.building.attention)}`); }
+  if (id === 'attPop') { el._html = null; patch(el, attPopHtml(state.building.attention)); }
   if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');
@@ -520,6 +524,8 @@ document.addEventListener('click', async (e) => {
   const tab = e.target.closest('[data-tab]');
   if (tab) { const [group, id] = tab.dataset.tab.split(':'); state.tab[group] = id; layoutPanels(lastSections); return; }
   const act = e.target.closest('[data-act]');
+  // a message opens large on click, but links in it still work and selecting text does not open it
+  if (act?.dataset.act === 'convo' && act.tagName !== 'BUTTON' && (e.target.closest('a[href]') || String(getSelection?.() || '').trim())) return;
   if (act && act.tagName !== 'FORM') {
     const fn = actions[act.dataset.act];
     if (!fn) return;

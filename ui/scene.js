@@ -210,8 +210,8 @@ function buildRoom(g, f, accent) {
 }
 
 // ---------- agents at desks ----------
-const LOOK_BASE = { eye: '#2f3a4a', pants: '#334155', shoe: '#1f2937', hat: '#f08a24', skin: '#f6d2b0', hair: '#2b2440', shirt: '#3d82d6', style: 'bob' };
-const lookFor = (a = {}) => { const l = { ...LOOK_BASE, ...a }; return { ...l, sleeve: l.shirt, overall: l.style === 'farmer' ? '#3b6fb6' : undefined }; };
+export const LOOK_BASE = { eye: '#2f3a4a', pants: '#334155', shoe: '#1f2937', hat: '#f08a24', skin: '#f6d2b0', hair: '#2b2440', shirt: '#3d82d6', style: 'bob' };
+export const lookFor = (a = {}) => { const l = { ...LOOK_BASE, ...a }; return { ...l, sleeve: l.shirt, overall: l.style === 'farmer' ? '#3b6fb6' : undefined }; };
 // desks and agents are a bit larger than life in the room, so agents stay big and readable (like squad-3d)
 export const STATION_SCALE = 1.3;
 const STATE_RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
@@ -638,6 +638,15 @@ export class BuildingScene {
   // live tmux screen for the over-the-shoulder view (null = draw from transcript data)
   setLiveText(text) { this.liveText = text; }
   setShot(floorId, shot) { const o = this.floors.get(floorId); if (o) o.shot = shot; }
+  // the conversation view: ease to the agent's desk while its message is open (only on the Floor in view), back after
+  focusAgent(floorId, agentId) {
+    const v = this.view;
+    if (v.mode === 'lobby' || v.floorId !== floorId || v.eyes || v.screen || !this.floors.get(floorId)?.stations.get(agentId)) return false;
+    this.convoFocus = true;
+    this.flyTo(this.poseFor({ ...v, mode: 'desk', agentId }), 700);
+    return true;
+  }
+  unfocus() { if (!this.convoFocus) return; this.convoFocus = false; if (!this.view.eyes) this.flyTo(this.poseFor(this.view), 600); }
   // speech bubble over an agent for ms milliseconds
   say(floorId, agentId, text, ms = 7000) {
     const st = this.floors.get(floorId)?.stations.get(agentId);

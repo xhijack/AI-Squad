@@ -45,8 +45,9 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">Open Floor</a>`);
     if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">Dismiss</button>`);
     body = apNote(a) + body;
-    const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" aria-label="Message from ${esc(a.agentName || 'the agent')}">${mdLite(a.text)}</div>` : `<div class="q">${esc(a.text)}</div>`;
-    return `<div class="att ${a.kind} ${a.level || ''}${a.muted ? ' muted' : ''}"><div class="where">${where} · ${ago(a.ts)}</div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
+    // a click on the message opens it large (the conversation view)
+    const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="Open large" aria-label="Message from ${esc(a.agentName || 'the agent')}, open large">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="Open large">${esc(a.text)}</div>`;
+    return `<div class="att ${a.kind} ${a.level || ''}${a.muted ? ' muted' : ''}"><div class="where"><span class="grow">${where} · ${ago(a.ts)}</span><button type="button" class="openBig" data-act="convo" data-id="${a.id}" aria-label="Open large" title="Open large">⤢</button></div>${text}${body}${links.length ? `<div class="row" style="margin-top:8px">${links.join(' ')}</div>` : ''}</div>`;
   }).join('');
 }
 

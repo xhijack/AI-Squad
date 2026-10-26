@@ -1,0 +1,136 @@
+// The conversation view: an Attention item as a large dialog. The agent's own chibi as a live portrait, its message
+// as a speech bubble (readable markdown that scrolls between a fixed header and action bar), the actions for the
+// item (options, Reply, OK / Dismiss, Open desk), and "n of m" with previous / next. While it is open the office
+// camera eases to the agent and a short bubble appears over its head. Esc closes.
+import { esc, api, toast, ago, mdLite, drafts } from './lib.js';
+import { ctx } from './ctx.js';
+import { preview, bubbleText, actionsFor, step, ofText } from './convo-model.js';
+
+let C = null;            // { list, i, portrait, dlg }
+const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const KIND = { finished: 'Finished', reply: 'Waiting for your reply', question: 'Question', permission: 'Permission', crash: 'Stopped unexpectedly', decided: 'Decided by autopilot', scope: 'Scope change', stall: 'Stalled', merge: 'Merge', budget: 'Budget', resource: 'Resources' };
+
+function agentOf(item) {
+  const f = ctx.state.building?.floors.find((x) => x.id === item.floorId);
+  return f?.agents?.find((a) => a.id === item.agentId) || { id: item.agentId || 'squad', displayName: item.agentName || item.floorName || 'The AI Squad', appearance: {} };
+}
+
+function dialogEl() {
+  let d = document.getElementById('convo');
+  if (d) return d;
+  d = document.createElement('dialog');
+  d.id = 'convo'; d.setAttribute('aria-labelledby', 'convoName');
+  document.body.appendChild(d);
+  d.addEventListener('close', cleanup);
+  d.addEventListener('click', (e) => { if (e.target === d) d.close(); });          // a click on the backdrop
+  d.addEventListener('keydown', (e) => {
+    if (/^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); go(1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+  });
+  return d;
+}
+
+function actionsHtml(item, a) {
+  const desk = item.floorId && item.agentId ? `<a class="btn ghost" href="#/floor/${esc(item.floorId)}/desk/${esc(item.agentId)}" data-desk>Open desk</a>` : '';
+  const dismiss = a.dismiss ? `<button type="button" class="ghost" data-dismiss>${esc(a.dismiss)}</button>` : '';
+  if (a.mode === 'options') {
+    const free = a.options.find((o) => o.free);
+    return `<div class="convoOpts">${a.options.filter((o) => !o.free).map((o) => `<button type="button" class="big ${o.recommended ? 'gold' : ''}" data-n="${o.n}">${o.recommended ? '<small>Recommended</small>' : ''}${esc(o.label)}</button>`).join('')}</div>
+      ${free ? `<form class="convoForm" data-free="${free.n}"><textarea name="text" rows="2" placeholder="${esc(free.label)}" aria-label="Your own answer" required></textarea><button class="gold">Send</button></form>` : ''}
+      <div class="convoBar">${desk}<span class="spacer"></span>${dismiss}</div>`;
+  }
+  if (a.mode === 'reply') {
+    const who = esc(String(item.agentName || 'the agent').split(' - ')[0]);
+    return `${a.canReply ? `<form class="convoForm" data-reply><textarea name="text" rows="3" placeholder="Reply to ${who}…" aria-label="Your reply to ${who}" required>${esc(drafts.get(item.id) || '')}</textarea></form>` : '<p class="note">This agent runs on its own: reply in its own terminal.</p>'}
+      <div class="convoBar">${desk}<span class="spacer"></span>${dismiss}${a.canReply ? '<button type="button" class="gold" data-send>Reply</button>' : ''}</div>`;
+  }
+  return `<div class="convoBar">${desk}<span class="spacer"></span>${dismiss}<button type="button" class="ghost" data-close>Close</button></div>`;
+}
+
+function render() {
+  const d = dialogEl(), item = C.list[C.i], ag = agentOf(item), a = actionsFor(item);
+  C.portrait?.dispose(); C.portrait = null;
+  const markdown = item.kind === 'finished' || item.kind === 'reply';
+  d.className = `convo ${esc(item.kind)}`;
+  d.innerHTML = `<div class="convoHead">
+      <canvas class="convoPortrait" width="200" height="240" role="img" aria-label="${esc(ag.displayName)}"></canvas>
+      <div class="convoWho"><div class="where">${esc(KIND[item.kind] || item.kind)}</div><h3 id="convoName">${esc(ag.displayName)}</h3>
+        <div class="note">${esc([ag.title, item.floorNumber ? `Floor ${item.floorNumber} · ${item.floorName}` : item.floorName].filter(Boolean).join(' · '))}</div><div class="note">${ago(item.ts)}</div></div>
+      <div class="convoNav">${C.list.length > 1 ? `<button type="button" class="iconBtn ghost" data-prev aria-label="Previous item">‹</button><span class="note">${ofText(C.i, C.list.length)}</span><button type="button" class="iconBtn ghost" data-next aria-label="Next item">›</button>` : ''}
+        <button type="button" class="iconBtn ghost" data-close aria-label="Close">×</button></div></div>
+    <div class="convoBody" tabindex="0"><div class="bubble ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">Decided automatically: <b>${esc(item.chosen)}</b>. Pick another option to change it.</p>` : ''}</div></div>
+    <div class="convoActions">${actionsHtml(item, a)}</div>`;
+  if (!d.open) d.showModal();
+  wire(d, item, a);
+  // the portrait (one small WebGL canvas) and the office: camera to the agent, a short bubble over its head
+  import('./portrait.js').then(({ createPortrait }) => {
+    if (!C || C.list[C.i] !== item) return;
+    try { C.portrait = createPortrait(d.querySelector('.convoPortrait'), ag, { reducedMotion: reduced() }); C.portrait.talk(Math.min(4000, 800 + item.text.length * 6)); } catch { /* no WebGL: the text is what matters */ }
+  });
+  if (item.agentId) { ctx.scene?.focusAgent(item.floorId, item.agentId); ctx.scene?.say(item.floorId, item.agentId, bubbleText(item), 8000); }
+  (d.querySelector('.convoActions textarea') || d.querySelector('.convoActions button.gold') || d.querySelector('.convoBody')).focus({ preventScroll: true });
+}
+
+async function act(fn, done = 'Sent') {
+  try { await fn(); toast(done); } catch (e) { toast(e.message); return; }
+  C.list.splice(C.i, 1);
+  await ctx.refresh();
+  if (!C.list.length) return dialogEl().close();
+  C.i = Math.min(C.i, C.list.length - 1);
+  render();
+}
+const answer = (item, body) => api('POST', `/api/attention/${item.id}/answer`, body);
+
+function wire(d, item, a) {
+  d.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => d.close(); });
+  d.querySelector('[data-prev]')?.addEventListener('click', () => go(-1));
+  d.querySelector('[data-next]')?.addEventListener('click', () => go(1));
+  d.querySelector('[data-desk]')?.addEventListener('click', () => d.close());
+  d.querySelector('[data-dismiss]')?.addEventListener('click', () => act(() => answer(item, { option: 0 }), a.dismiss === 'OK' ? 'OK' : 'Dismissed'));
+  d.querySelectorAll('[data-n]').forEach((b) => { b.onclick = () => act(async () => {
+    if (a.act === 'crash-answer') return ctx.actions['crash-answer']({ dataset: { id: item.id, n: b.dataset.n } });
+    return answer(item, { option: +b.dataset.n });
+  }, 'Answer sent'); });
+  const free = d.querySelector('[data-free]');
+  if (free) free.onsubmit = (e) => { e.preventDefault(); act(() => answer(item, { option: +free.dataset.free, text: free.elements.text.value }), 'Answer sent'); };
+  const reply = d.querySelector('[data-reply]');
+  if (reply) {
+    const ta = reply.elements.text;
+    ta.oninput = () => drafts.set(item.id, ta.value);
+    const send = () => { if (!ta.value.trim()) { ta.focus(); return; } act(async () => { await answer(item, { option: 1, text: ta.value }); drafts.delete(item.id); }, 'Reply sent'); };
+    reply.onsubmit = (e) => { e.preventDefault(); send(); };
+    d.querySelector('[data-send]').onclick = send;
+    ta.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); };
+  }
+}
+
+function go(dir) { if (!C || C.list.length < 2) return; C.i = step(C.i, C.list.length, dir); render(); }
+
+function cleanup() {
+  C?.portrait?.dispose();
+  ctx.scene?.unfocus();
+  C = null;
+}
+
+// list: the open items to step through (the order shown); id: the one to open
+export function openConversation(list, id) {
+  const items = (list || []).filter((x) => x && x.id);
+  const i = Math.max(0, items.findIndex((x) => x.id === id));
+  if (!items.length) return;
+  C = { list: items, i, portrait: null };
+  render();
+}
+
+// the compact index (Needs you popover): one row per item, a one-line preview; a click opens the conversation
+export function attentionIndexHtml(items) {
+  if (!items.length) return '<div class="empty">All clear. Nothing is waiting for you.</div>';
+  return `<ul class="attIndex">${items.map((a) => `<li><button type="button" class="attRow ${esc(a.kind)}${a.muted ? ' muted' : ''}" data-act="convo" data-id="${esc(a.id)}">
+    <span class="grow"><b>${esc(String(a.agentName || a.floorName || 'The AI Squad').split(' - ')[0])}</b>${a.floorNumber ? ` <span class="note">Floor ${a.floorNumber}</span>` : ''}<span class="pv">${esc(preview(a))}</span></span>
+    <span class="note">${ago(a.ts)}</span></button></li>`).join('')}</ul>`;
+}
+
+ctx.actions.convo = (el) => {
+  const all = ctx.state.building?.attention || [];
+  const list = [...all.filter((a) => !a.muted), ...all.filter((a) => a.muted)];
+  openConversation(list, el.dataset.id);
+};

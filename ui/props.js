@@ -38,7 +38,7 @@ function keyboard(g, x, y, z, w, d) {
   k.position.set(x, y, z); g.add(k);
 }
 
-const TOYS = {
+export const TOYS = {
   trophy(t) {
     const gold = M('#f2b705');
     mesh(cylg(.04, .055, .025), M('#4b2e1a'), 0, .012, 0, t); mesh(cylg(.012, .012, .05), gold, 0, .05, 0, t);

@@ -26,7 +26,10 @@ export const drafts = new Map();
 
 // a small, safe subset of markdown for agent messages: paragraphs, headings, bold, italics, code, lists, tables
 export function mdLite(src) {
-  const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[\s(])[*_]([^*_\s][^*_]*)[*_](?=[\s.,;:)!?]|$)/g, '$1<i>$2</i>');
+  // links: [text](https://…) and bare https:// URLs open in a new tab (only http and https)
+  const link = (s) => s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, t, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${t}</a>`)
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+[^\s<).,;:!?])/g, (m, pre, u) => `${pre}<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+  const inline = (s) => link(esc(s)).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[\s(])[*_]([^*_\s][^*_]*)[*_](?=[\s.,;:)!?]|$)/g, '$1<i>$2</i>');
   const out = [];
   let para = [], list = null, table = null, code = null;
   const flush = () => {

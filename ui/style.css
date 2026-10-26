@@ -529,3 +529,62 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .retroTrend b { text-align: right; }
 .retroTrend .sbar { display: block; height: 8px; background: var(--chip); border-radius: 6px; overflow: hidden; }
 .retroTrend .sbar i { display: block; height: 100%; background: var(--info); }
+
+/* ---------- the conversation view: an Attention item, large ---------- */
+#convo { width: min(900px, calc(100vw - 32px)); max-height: 85vh; padding: 0; border: 0; border-radius: 18px; background: var(--card); color: var(--text); box-shadow: 0 24px 60px rgba(0, 0, 0, .28); overflow: hidden; }
+#convo[open] { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: auto 1fr auto; }
+#convo::backdrop { background: rgba(15, 19, 32, .45); }
+.convoHead { display: contents; }
+.convoPortrait { grid-row: 1 / 4; grid-column: 1; width: 220px; height: 100%; min-height: 260px; background: radial-gradient(ellipse at 50% 70%, var(--accent-soft), var(--sunk) 70%); border-right: 1px solid var(--line); }
+.convoWho { grid-column: 2; grid-row: 1; padding: 18px 120px 10px 22px; border-bottom: 1px solid var(--line); }
+.convoWho h3 { margin: 2px 0; font-size: 20px; }
+.convoWho .where { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+.convo.question .convoWho .where, .convo.reply .convoWho .where, .convo.permission .convoWho .where { color: var(--bad); }
+.convo.finished .convoWho .where { color: var(--info); }
+.convoNav { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 4px; }
+.convoBody { grid-column: 2; grid-row: 2; overflow: auto; overscroll-behavior: contain; padding: 18px 22px; min-height: 120px; }
+.convoBody:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
+/* the message as a speech bubble from the portrait */
+.bubble { position: relative; max-width: 72ch; background: var(--sunk); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; font-size: 16px; line-height: 1.6; word-break: break-word; }
+.bubble::before { content: ''; position: absolute; left: -9px; top: 22px; width: 16px; height: 16px; background: var(--sunk); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+.bubble p { margin: 0 0 .8em; } .bubble p:last-child { margin-bottom: 0; }
+.bubble h5 { font-size: 17px; margin: 1.1em 0 .4em; } .bubble h5:first-child { margin-top: 0; }
+.bubble ul, .bubble ol { margin: 0 0 .8em; padding-left: 1.4em; } .bubble li + li { margin-top: .25em; }
+.bubble code { font-family: var(--mono); font-size: .9em; background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; }
+.bubble pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.5; background: #1f2433; color: #e8ecf6; border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 0 0 .8em; }
+.bubble a { color: var(--info); text-decoration: underline; }
+.bubble .mdTable { overflow-x: auto; margin: 0 0 .9em; border: 1px solid var(--line); border-radius: 10px; }
+.bubble table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.45; }
+.bubble th, .bubble td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.bubble th { background: var(--card); font-weight: 700; }
+.bubble tr:nth-child(even) td { background: var(--card); }
+.convoActions { grid-column: 2; grid-row: 3; border-top: 1px solid var(--line); padding: 14px 22px 16px; background: var(--card); display: flex; flex-direction: column; gap: 10px; }
+.convoOpts { display: flex; flex-wrap: wrap; gap: 8px; }
+.convoOpts .big { min-height: 48px; padding: 8px 18px; font-size: 15px; font-weight: 600; display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+.convoOpts .big small { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .8; }
+.convoForm { display: flex; gap: 8px; align-items: flex-end; }
+.convoForm textarea { flex: 1; font-size: 15px; line-height: 1.5; }
+.convoBar { display: flex; align-items: center; gap: 8px; }
+.convoBar .btn { text-decoration: none; }
+/* the Needs you popover: an index of items, one line each */
+.attIndex { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.attRow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); border-left: 4px solid var(--bad); background: var(--card); color: var(--text); }
+.attRow.finished { border-left-color: var(--info); } .attRow.muted, .attRow.decided { border-left-color: var(--line2); opacity: .85; }
+.attRow .pv { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34ch; }
+.attRow:hover { background: var(--hover); }
+.att .where { display: flex; align-items: center; gap: 6px; }
+.att .openBig { border: 0; background: transparent; color: var(--muted); font-size: 15px; padding: 0 4px; min-height: 0; cursor: pointer; }
+.att .openBig:hover { color: var(--text); }
+.att [data-act="convo"].q, .att .replyMsg[data-act="convo"] { cursor: pointer; }
+@media (max-width: 760px) {
+  #convo { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  #convo[open] { grid-template-columns: 96px 1fr; grid-template-rows: auto 1fr auto; }
+  .convoPortrait { grid-row: 1; grid-column: 1; width: 96px; min-height: 0; height: 112px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .convoWho { padding: 12px 14px 8px; padding-right: 96px; }
+  .convoBody, .convoActions { grid-column: 1 / 3; padding-left: 14px; padding-right: 14px; }
+  .bubble { padding: 14px 16px; } .bubble::before { display: none; }
+  .convoOpts .big { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { #convo { animation: none; } }
+.convoBar a.btn { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; min-height: 36px; font-weight: 600; color: var(--text); }
+.convoBar a.btn:hover { background: var(--sunk); border-color: var(--line2); }
