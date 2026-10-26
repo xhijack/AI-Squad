@@ -54,7 +54,7 @@ test('create a Floor through the wizard API and read it back', async () => {
   const d = (await call('GET', '/api/floors/acme')).body;
   assert.equal(d.team.length, 2);
   assert.match(d.brief, /Coffee shop/);
-  assert.equal((await call('GET', '/api/roles')).body.templates.length, 19);
+  assert.equal((await call('GET', '/api/roles')).body.templates.length, 20);
   assert.equal((await call('GET', '/api/floors/nope')).status, 404);
 });
 
@@ -207,19 +207,19 @@ test('edit floor layout and number, template update flow over HTTP', async () =>
   assert.equal(d.number, 3);
   assert.equal(d.floor.layout, 'circle');
   const t = (await call('GET', '/api/roles/project-manager')).body.template;
-  assert.equal((await call('PUT', '/api/roles/project-manager', { ...t, prompt: t.prompt + '\nAlways write a weekly report.' })).body.template.version, 4);
+  assert.equal((await call('PUT', '/api/roles/project-manager', { ...t, prompt: t.prompt + '\nAlways write a weekly report.' })).body.template.version, 5);
   const b = (await call('GET', '/api/building')).body;
   assert.equal(b.floors.find((f) => f.id === 'acme').updates, 1);
   const diff = (await call('GET', '/api/floors/acme/agents/rina-pm/diff')).body;
   assert.ok(diff.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
-  assert.equal((await call('POST', '/api/floors/acme/agents/rina-pm/template', { action: 'update' })).body.agent.role.version, 4);
+  assert.equal((await call('POST', '/api/floors/acme/agents/rina-pm/template', { action: 'update' })).body.agent.role.version, 5);
 });
 
 test('diff between two template versions', async () => {
-  const r = await call('GET', '/api/roles/project-manager/diff?from=3&to=4');
+  const r = await call('GET', '/api/roles/project-manager/diff?from=4&to=5');
   assert.equal(r.status, 200);
   assert.ok(r.body.diff.some((l) => l.op === '+' && l.text.includes('weekly report')));
-  assert.equal((await call('GET', '/api/roles/project-manager/diff?from=3&to=9')).status, 404);
+  assert.equal((await call('GET', '/api/roles/project-manager/diff?from=4&to=9')).status, 404);
   assert.ok((await call('GET', '/api/building')).body.options.projectsDir.endsWith('playground'));
 });
 

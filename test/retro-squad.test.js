@@ -52,3 +52,19 @@ test('Send to lead: the Retro goes into the repo and the lead is asked for LEARN
   assert.match(squad.deskDetail('pos', 'rina-lead').pending, /Retro for sprint 1 is ready \(docs\/squad\/retro\/sprint-1\.md\).*LEARNINGS\.md/);
   squad.stopAgent('pos', 'rina-lead');
 });
+
+test('a mid-sprint scope change waits for the owner; "back" sends the lead a task', async () => {
+  const collect = await import('../server/collect.js');
+  const S = collect.stateOf('pos');
+  S.scope = { sprint: 2, mode: 'Expand', changed: { from: 'Hold', to: 'Expand', reason: 'more reports', ts: Date.now(), acked: false } };
+  squad.invalidate();
+  const item = squad.buildingSnapshot().attention.find((a) => a.kind === 'scope');
+  assert.equal(item.autopilot.critical, true, 'it stops the Autopilot chain');
+  assert.deepEqual(item.options.map((o) => o.label), ['Accept Expand', 'Back to Hold']);
+  assert.equal(squad.buildingSnapshot().floors.find((f) => f.id === 'pos').autopilot.critical, 1);
+  await squad.answerAttention(item.id, 2);
+  assert.match(squad.deskDetail('pos', 'rina-lead').pending, /go back to scope mode Hold/);
+  squad.invalidate();
+  assert.equal(squad.buildingSnapshot().attention.some((a) => a.kind === 'scope'), false);
+  squad.stopAgent('pos', 'rina-lead');
+});

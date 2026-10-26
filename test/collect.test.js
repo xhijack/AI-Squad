@@ -133,6 +133,26 @@ test('docs/squad: board, handoffs, QA rounds, bugs, plan, questions, source docu
   assert.deepEqual(ev.map((e) => e.type), ['debug.attempt', 'debug.escalated']);
   assert.equal(ev[1].data.attempts, 3);
   assert.deepEqual(scan(130), []);
+  // scope mode: stated once per sprint; a different mode in the same sprint is a change; the plan review once
+  w('docs/squad/PLAN.md', '# Plan: Sprint 1\n\nScope mode: Hold — first sprint, keep it small\n\n| Module | Stories | SP | Owner |\n|---|---|---|---|\n| M01 Login | S1 | 3 | budi-dev |\n');
+  ev = scan(140);
+  assert.deepEqual(ev.map((e) => [e.type, e.data.mode, e.data.reason]), [['sprint.scope', 'Hold', 'first sprint, keep it small']]);
+  w('docs/squad/PLAN.md', '# Plan: Sprint 1\n\nScope mode: Expand — the owner wants the cart too\n');
+  w('docs/squad/sprint-1/PLAN-REVIEW.md', '# Plan review: sprint 1\n\n## Engineering review\nVERDICT: CHANGES\n- split M01\n\n## Design review\nDESIGN SCORE: 7.5/10\n\n## Security review\nVERDICT: OK\n');
+  ev = scan(150);
+  assert.deepEqual(ev.map((e) => e.type), ['scope.changed', 'plan.reviewed']);
+  assert.deepEqual(ev[0].data, { from: 'Hold', to: 'Expand', reason: 'the owner wants the cart too' });
+  assert.deepEqual(ev[1].data, { engineering: 'CHANGES', security: 'OK', designScore: 7.5 });
+  assert.equal(collect.stateOf('docs').scope.changed.to, 'Expand');
+  assert.deepEqual(scan(160), []);
+});
+
+test('scope mode lines: the four modes, markdown bold, placeholders are not reasons', () => {
+  assert.deepEqual(collect.scopeMode('# Plan\n\n**Scope mode:** Selective expand - one extra report'), { mode: 'Selective expand', reason: 'one extra report' });
+  assert.deepEqual(collect.scopeMode('Scope mode: Hold — <one-line reason; Expand, Selective expand, Hold or Reduce>'), { mode: 'Hold', reason: '' });
+  assert.deepEqual(collect.scopeMode('scope mode: reduce'), { mode: 'Reduce', reason: '' });
+  assert.equal(collect.scopeMode('Scope: everything'), null);
+  assert.deepEqual(collect.planReview('nothing'), { engineering: '', security: '', designScore: null });
 });
 
 test('git commits are credited to agents by their commit identity; the closing commit closes the sprint', async () => {

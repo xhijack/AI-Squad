@@ -35,7 +35,7 @@ test('New Floor wizard: new directory, git init, all files generated, registered
   assert.equal(json('.claude/aisquad/floor.json').layout, 'pods');
   assert.equal(json('.claude/aisquad/git.json').mergePolicy, 'auto');
   assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/frappe-developer@3.md')));
-  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/project-manager@3.md')));
+  assert.ok(fs.existsSync(path.join(proj, '.claude/aisquad/roles.lock/project-manager@4.md')));
   const agentFile = parseFrontmatter(read('.claude/agents/ramdani-frappe-developer.md'));
   assert.equal(agentFile.data.model, 'opus');
   assert.match(agentFile.data.skills, /playwright/);

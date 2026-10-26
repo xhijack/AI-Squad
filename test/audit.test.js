@@ -156,3 +156,15 @@ test('debug loops: three or more failed attempts without an escalation are flagg
   assert.deepEqual(m.debug.loops, [{ issue: 'login-500', agent: 'budi-dev', attempts: 3, escalated: false }]);
   assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.debug \| 3 problems investigated, 7 fix attempts, 1 escalated; LOOPS .*login-500 by budi-dev \(3\)/);
 });
+
+test('plan reviews: reviewed before the first BUILD, design scores, scope modes and mid-sprint changes', () => {
+  put(70, 'sprint.planned', { sprint: 4, data: { modules: 1, sp: 3, list: [] } });
+  put(71, 'sprint.scope', { sprint: 4, data: { mode: 'Hold', reason: '' } });
+  put(72, 'plan.reviewed', { sprint: 4, data: { engineering: 'CHANGES', security: 'OK', designScore: 8 } });
+  put(73, 'board.changed', { sprint: 4, data: { task: 'BUILD M09 Cart', to: 'IN_PROGRESS' } });
+  put(80, 'scope.changed', { sprint: 4, data: { from: 'Hold', to: 'Expand' } });
+  const { events } = audit.rangeEvents('pos', { sprint: 4 });
+  const m = audit.metrics(events, INFO);
+  assert.deepEqual(m.planReviews, { sprints: 1, reviewed: 1, beforeBuild: 1, designScores: [8], changesAsked: 1, scope: [{ sprint: 4, mode: 'Hold' }], scopeChanges: 1 });
+  assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.planReviews \| 1 of 1 planned sprints reviewed \(1 before the first BUILD\), design 8\/10, 1 asked for changes; scope sprint 4 Hold; 1 mid-sprint scope changes/);
+});
