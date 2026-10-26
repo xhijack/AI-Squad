@@ -531,7 +531,7 @@ export class BuildingScene {
     h.updateWorldMatrix(true, false);
     h.getWorldPosition(head); head.y += 1.5;
     const fwd = new THREE.Vector3(Math.sin(h.rotation.y), 0, Math.cos(h.rotation.y));
-    const want = head.clone().addScaledVector(fwd, -3.6).add(new THREE.Vector3(0, 1.9, 0)).addScaledVector(new THREE.Vector3(fwd.z, 0, -fwd.x), 1.2);
+    const want = head.clone().addScaledVector(fwd, -3.2).add(new THREE.Vector3(0, 2.4, 0)).addScaledVector(new THREE.Vector3(fwd.z, 0, -fwd.x), 1.9);
     const k = this.followReady ? Math.min(1, dt * 2.5) : 1;                // eases after the agent, no jumps
     this.persp.position.lerp(want, k);
     this.followTarget = this.followReady ? this.followTarget.lerp(head, Math.min(1, dt * 4)) : head.clone();
