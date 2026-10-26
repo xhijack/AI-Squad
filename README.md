@@ -226,6 +226,18 @@ API: `GET/POST /api/floors/:id/agents/:agent/chat` (`context`: `space` | `genera
 
 API: `GET/PATCH /api/notify`, `PUT/DELETE /api/notify/telegram/token`, `POST /api/notify/pair|test|digest`, `DELETE /api/notify/chats/:id`, `GET/PATCH /api/insights`, `POST /api/insights/run`, `POST /api/insights/:id/accept|dismiss`.
 
+### Views: 3D or Iso Pixel (0.16)
+
+**Menu → Scene view** switches the renderer, remembered per browser:
+
+- **3D** (three.js): everything, including first person, live screens, follow and Edit Mode.
+- **Iso Pixel** (Canvas 2D, no WebGL): the same Building, Floors, desks and agents from the same isometric angle, as pixel sprites. Clicking an agent opens its Desk; states, the Attention bubble, walking to the lounge and the meeting table are there; first person, live screens and shadows are not. A Floor with five agents measured 9.8 MB of JS heap and 0.7 ms per frame, against 51 MB and ~1 s per frame for 3D in headless Chrome (software rendering).
+- **Auto** (default): Iso Pixel on phones, on devices with 4 GB of memory or less and with more than 12 agents; 3D otherwise.
+
+The first person, screen and follow views and Edit Mode always switch to 3D. The renderer not in use is disposed (its memory and WebGL context are given back). Both read the same renderer-neutral Scene Model (`ui/scene-model.js`: projection, desk and chair depth, poses by state, the palette swap).
+
+The sprites come from the 3D models: `node scripts/make-iso-sprites.js` renders `ui/dev/sprites.html` in headless Chrome and writes `ui/assets/iso/atlas.png` + `atlas.json` (devices, desks and chairs at 8 headings; every chibi style and pose twice, as a colour-key mask and a white shading pass, so each agent is painted in its own colours). Run it again when a model changes. The realistic look (`?look=realistic`) is frozen: no new features are built for it.
+
 ### Role Templates and overrides
 
 Templates live in `~/.aisquad/roles/<role>.md` (frontmatter + `## Rules` + `## Prompt`). Extra read-only libraries, such as a team repository of templates, are listed in `~/.aisquad/libraries.json` as a directory (`"path"`) or a git repository (`"url"`).
