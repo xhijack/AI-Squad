@@ -452,6 +452,11 @@ Brief: `PHASE-3-VISUAL.md`. The owner put Phase 3 before the rest of Phase 2.5. 
 - The first soak runs found two real problems, both fixed: characters deadlocked when a goal was next to someone standing there, and they could not pass each other at exactly two radii (no sliding). A third run showed a character clipping a desk corner after sliding, which led to the per-step footprint check.
 - Screenshots: `playground/reference/p3-nav-1440.png` (overlay and routes), `p3-walk-1440.png`, `p3-eyes-1440.png`, `p3-floor1-1440.png`, `p3-desk-390.png`, `p3-lobby-390.png`.
 
+### 0.6.3: design variants and second opinions (Phase 2.5 part 5, finished after Phase 3)
+- **Design variants** (`server/design.js`): groups of two or more HTML variants per screen in `docs/design/variants/<screen>/` (README question, titles). `GET /api/floors/:id/designs`, variant files served only from that folder with the PIN and a `sandbox; default-src 'none'` CSP; the dialog shows them in `srcdoc` frames with `sandbox=""`, no scripts. `POST …/pick` writes `CHOSEN` and a dated taste note under `## Taste notes` in DESIGN.md (other lines untouched), logs `design.picked`, and tells a running designer. An unpicked group waits in Attention as **Pick a design** (not critical, and Autopilot never picks). New `design-variants` skill; ui-ux-designer v3.
+- **Second opinion**: new **Second Opinion Reviewer** role (v1, opus by default, no Edit) with the `second-opinion` skill. The reviewer reviews modules marked `Risk: high` on a different model than the author's and writes `docs/squad/review/Mxx-second-opinion.md` with VERDICT AGREE or DISAGREE; disagreements go to the lead. `sprint-planning` adds the Risk field. It is an optional role in **Software House v4**. The log records `review.second` once per verdict. The Audit's `process.secondOpinions` lists the disagreements, and `process.designPicks` counts the picks.
+- Tests: design (groups, served files, traversal refused, taste notes), api (list, sandbox header, PIN, pick, Attention), collect (second opinions), audit, templates. Screenshots (swap 79.7 %): `playground/reference/design-variants-1440.png`, `design-variants-390.png`.
+
 ## How to run
 
 ```
