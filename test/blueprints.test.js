@@ -153,3 +153,9 @@ test('approving a source document touches only its STATUS and approval lines', (
   assert.throws(() => bp.sourceDocPath('/r', blue, '../x'), /Not a source document/);
   assert.equal(bp.sourceDocPath('/r', blue, 'docs/PRD.md'), '/r/docs/PRD.md');
 });
+
+test('a Blueprint can list owner-only topics for Autopilot', () => {
+  const b = bp.parseBlueprint('---\nid: shop\nownerOnly: [launch date, "brand colours"]\n---\nbody');
+  assert.deepEqual(b.ownerOnly, ['launch date', 'brand colours']);
+  assert.deepEqual(bp.parseBlueprint('---\nid: x\n---\n').ownerOnly, []);
+});

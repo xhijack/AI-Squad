@@ -29,6 +29,8 @@ export function parseBlueprint(text, fallbackId = '') {
     roles, lead: roles.find((r) => r.lead)?.template || '',
     sourceDocs: Array.isArray(data.sourceDocs) ? data.sourceDocs : [], channels: Array.isArray(data.channels) ? data.channels : [],
     gates: list(data.gates), kickoff: String(data.kickoff || ''), body: String(body || '').trim(),
+    // Autopilot (balanced): topics only the owner decides, besides the hard-stop list
+    ownerOnly: list(data.ownerOnly).map(String).filter(Boolean),
   };
 }
 
