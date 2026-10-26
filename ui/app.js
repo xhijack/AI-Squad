@@ -304,6 +304,7 @@ function render() {
   if (route.eyes) patch($('povText'), desk ? `<i class="dot ${desk.state}"></i> Through the eyes of <b>${esc(desk.displayName)}</b> · ${esc(desk.activity && desk.state !== 'stopped' ? desk.activity : STATE_TEXT[desk.state] || '')}` : 'First person view');
   patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
+  announceAttention(b.attention, route);
   if (!$('attPop').hidden) patch($('attPop'), `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${b.attention.length}</span></div>${attentionHtml(b.attention)}`);
   if (!$('floorMenu').hidden && f) patch($('floorMenu'), floorMenuHtml(f));
   if (state.offline) toast('Server not reachable, retrying…');
@@ -351,6 +352,39 @@ ctx.updateInsets = () => { insetKey = ''; updateInsets(); };
 ctx.isPhone = isPhone;
 ctx.panelBody = () => (isPhone() ? $('sheetBody') : $('sideMain'));
 
+// ---------- new Attention: open it by itself, badge the tab, notify when the tab is in the background ----------
+let seenAtt = null;
+try { seenAtt = new Set(JSON.parse(sessionStorage.getItem('aisquad.seenAtt') || '[]')); } catch { seenAtt = new Set(); }
+function announceAttention(list, route) {
+  document.title = list.length ? `(${list.length}) The AI Squad` : 'The AI Squad';
+  const fresh = list.filter((a) => !seenAtt.has(a.id));
+  if (!fresh.length) return;
+  fresh.forEach((a) => seenAtt.add(a.id));
+  try { sessionStorage.setItem('aisquad.seenAtt', JSON.stringify([...seenAtt].slice(-200))); } catch { /* private mode */ }
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    const a = fresh[0];
+    try { new Notification(`${a.agentName || 'An agent'} needs you`, { body: String(a.text || '').slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
+  }
+  // do not interrupt: typing, an open dialog, another popover, or the screen / first person view
+  const busy = route.screen || route.eyes || $('modal').open || POPS.some((id) => id !== 'attPop' && !$(id).hidden)
+    || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+  if (busy || !$('attPop').hidden) return;
+  // the panel lists the Lobby's Attention, or this Floor's; anything else opens the popover
+  const sec = lastSections?.find((x) => x.id === 'attention' || x.id === 'f-attention');
+  const inPanel = sec && (route.mode === 'lobby' || fresh.some((a) => a.floorId === route.floorId));
+  if (inPanel && !$('sheet').hidden) { state.tab.sheet = sec.id; layoutPanels(lastSections); }   // phone: switch the sheet to it
+  requestAnimationFrame(() => {
+    // the side panel (or phone sheet) already shows it: bring that card into view and make it pulse
+    const card = inPanel && [...document.querySelectorAll('#side .att, #sheet .att')].find((el) => el.offsetParent);
+    if (card) {
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      card.classList.remove('pulse'); void card.offsetWidth; card.classList.add('pulse');
+      return;
+    }
+    const pill = document.querySelector('#hud [data-pop="attPop"]'); if (pill) openPopover('attPop', pill);
+  });
+}
+
 // ---------- popovers (menu, Floor menu, attention, legend) ----------
 const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop'];
 function closePopovers() {
@@ -363,6 +397,7 @@ function openPopover(id, anchor) {
   if (was) return;
   const el = $(id), r = anchor.getBoundingClientRect();
   if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
+  if (id === 'attPop' && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch { /* unsupported */ } }
   if (id === 'attPop') { el._html = null; patch(el, `<div class="cardHead"><h3>Needs you</h3><span class="count bad">${state.building.attention.length}</span></div>${attentionHtml(state.building.attention)}`); }
   if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
