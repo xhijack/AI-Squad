@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Performance dialog (Squad Sprint Floors): per agent and per sprint from the docs/squad files, plus the
 // cost projection for the remaining backlog. Opened from the dock.
 import { esc, money, api, openModal } from './lib.js';

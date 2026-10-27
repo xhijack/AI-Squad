@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // New Floor wizard: Project → Directory → Git → Team → Workflow → Layout & create.
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, segValue } from './lib.js';
 import { memberHtml, readMember, gitHtml, readGit } from './forms.js';

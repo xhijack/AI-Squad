@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Edit Mode: drag desks and devices, rotate, add or remove devices, layout presets and appearance.
 // Everything is a draft previewed in 3D until "Save", which writes floor.json (and team.json for looks).
 import { $, esc, api, toast, avatar } from './lib.js';
@@ -17,6 +18,7 @@ function enter() {
   const f = ctx.state.floor;
   if (!f || f.missing) return;
   ctx.editing = true;
+  ctx.scene.use?.('three');                         // Edit Mode works on the 3D scene (ui/renderer.js)
   draft = {
     id: f.id, layout: f.floor.layout,
     desks: desksFor(f.agents, f.floor.desks, f.floor.layout).map((d) => ({ ...d })),

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Floor and agent dialogs: add / edit agent (overrides), Floor settings, template update / keep / detach.
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, segValue, diffHtml } from './lib.js';
 import { memberHtml, readMember, gitHtml, readGit } from './forms.js';

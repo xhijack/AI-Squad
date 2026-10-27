@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Log: an append-only, structured record of how a squad worked, written for an AI to read later.
 // ~/.aisquad/logs/<floor-id>/<YYYY-MM-DD>.jsonl, one event per line (schema: docs/LOG-SCHEMA.md). Machine-local,
 // never in the repo. Day files older than 7 days are gzipped, files older than logRetentionDays are deleted.
@@ -19,10 +20,13 @@ export const TYPES = {
   'agent.started': 'lifecycle', 'agent.stopped': 'lifecycle', 'agent.crashed': 'lifecycle', 'agent.resumed': 'lifecycle', 'agent.model': 'lifecycle',
   'task.given': 'work', 'board.changed': 'work', 'handoff.written': 'work', 'qa.report': 'work', 'bug.opened': 'work', 'bug.closed': 'work',
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
-  'task.started': 'work', 'task.ended': 'work',
+  'task.started': 'work', 'task.ended': 'work', 'job.started': 'work', 'job.ended': 'work',
+  'dispatch.queued': 'work', 'dispatch.started': 'work', 'dispatch.failed': 'work', 'dispatch.removed': 'work', 'dispatch.idle-stopped': 'lifecycle', 'node.lost': 'lifecycle',
+  'handoff.sent': 'communication', 'handoff.received': 'communication', 'handoff.held': 'communication', 'handoff.rejected': 'communication', 'handoff.invalid': 'communication',
+  'erpnext.lead': 'work', 'erpnext.won': 'work', 'erpnext.approval': 'work', 'erpnext.approved': 'work', 'erpnext.sent-back': 'work', 'erpnext.alert': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
-  'permission.asked': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
+  'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
   'usage.turn': 'usage', 'voice.spoken': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
@@ -87,6 +91,27 @@ function summarize(e) {
     case 'tool.call': return `${who} ${d.tool}${d.target ? ` ${oneLine(d.target, 60)}` : ''}${d.ok ? '' : ' FAILED'}${d.ms != null ? ` (${secs(d.ms)})` : ''}`;
     case 'usage.turn': return `${who} turn: ${d.input + d.cacheRead + d.cacheWrite} in, ${d.output} out, $${(+d.cost || 0).toFixed(4)}`;
     case 'task.started': return `${who} started ${d.label || d.kind}`;
+    case 'job.started': return `${who} started a background job${t(d.title)}`;
+    case 'node.lost': return `${who}'s job was lost with the machine ${d.node} and queued again`;
+    case 'handoff.sent': return `${who} handed ${d.kind} "${oneLine(d.title || '', 60)}" to ${d.to}${d.replyTo ? ` (re ${d.replyTo})` : ''}`;
+    case 'handoff.received': return `${d.kind} "${oneLine(d.title || '', 60)}" arrived from ${d.from}${e.agent ? ` for ${e.agent}` : ''}`;
+    case 'handoff.held': return `${who}'s handoff to ${d.to} waits for the owner (it leaves an Owner-only Space)`;
+    case 'handoff.rejected': return `the owner did not deliver ${who}'s handoff ${d.handoff}${t(d.reason)}`;
+    case 'handoff.invalid': return `${who}'s package ${d.file} was not sent: ${oneLine(d.reason || '', 80)}`;
+    case 'erpnext.lead': return `new Lead ${d.lead} from ERPNext handed to the team`;
+    case 'erpnext.won': return `Quotation ${d.quotation} became an order: handed over as a project`;
+    case 'erpnext.approval': return `${who} asked the owner to approve the prices of ${d.quotation}`;
+    case 'erpnext.approved': return `the owner approved ${d.quotation}; it is submitted in ERPNext`;
+    case 'erpnext.sent-back': return `the owner sent ${d.quotation} back to ${who}`;
+    case 'erpnext.alert': return `Quotation ${d.quotation} was submitted by ${d.user} without the owner's approval`;
+    case 'dispatch.queued': return `${who} queued (${d.action}, ${d.priority}): ${d.reason}`;
+    case 'dispatch.started': return `${who} started from the queue (${d.action}) after ${Math.round((d.waitedMs || 0) / 60e3)} min`;
+    case 'dispatch.failed': return `${who} could not start from the queue: ${oneLine(d.error || '', 80)}${d.dropped ? ' (removed)' : ''}`;
+    case 'dispatch.removed': return `${who} removed from the queue`;
+    case 'dispatch.idle-stopped': return `${who} stopped after ${d.idleMin} min idle to free its slot`;
+    case 'chat.message': return `${d.from || 'Owner'} → ${who} (chat${d.context === 'general' ? ', general' : ''}): ${oneLine(d.text || '', 80)}`;
+    case 'chat.reply': return `${who} answered in the chat${d.status && d.status !== 'done' ? ` (${d.status})` : ''}`;
+    case 'job.ended': return `${who}'s background job ${d.status}${d.node ? ` on ${d.node}` : ''}${d.cost != null ? ` ($${(+d.cost).toFixed(2)})` : ''}${d.error ? `: ${oneLine(d.error, 80)}` : ''}`;
     case 'task.ended': return `${who} ${d.label || d.kind} ${d.status === 'completed' ? 'finished' : d.status} after ${secs(d.ms)}${d.summary ? `: ${d.summary}` : ''}`;
     case 'agent.idle': return `${who} idle${d.openWork ? ' with open work' : ''}`;
     case 'agent.busy': return `${who} working again after ${secs(d.idleMs)}`;

@@ -1,0 +1,73 @@
+[
+ {
+  "url": "http://127.0.0.1:8097/#/",
+  "out": "playground/reference/after-iso-lobby-1440.png",
+  "w": 1440,
+  "h": 900,
+  "pin": "123456",
+  "wait": 8000,
+  "storage": {
+   "aisquad.renderer": "iso"
+  }
+ },
+ {
+  "url": "http://127.0.0.1:8097/#/floor/sopwer-hr",
+  "out": "playground/reference/after-iso-floor-1440.png",
+  "w": 1440,
+  "h": 900,
+  "wait": 8000,
+  "storage": {
+   "aisquad.renderer": "iso"
+  }
+ },
+ {
+  "url": "http://127.0.0.1:8097/#/floor/acme-coffee-shop/desk/budi-fullstack-developer",
+  "out": "playground/reference/after-iso-desk-1440.png",
+  "w": 1440,
+  "h": 900,
+  "wait": 7000,
+  "storage": {
+   "aisquad.renderer": "iso"
+  }
+ },
+ {
+  "url": "http://127.0.0.1:8097/#/floor/sopwer-hr",
+  "out": "playground/reference/after-iso-floor-390.png",
+  "w": 390,
+  "h": 844,
+  "storage": {
+   "aisquad.renderer": "iso"
+  },
+  "wait": 7000
+ },
+ {
+  "url": "http://127.0.0.1:8097/#/",
+  "out": "playground/reference/after-office-1440.png",
+  "w": 1440,
+  "h": 900,
+  "storage": {
+   "aisquad.overview": "office"
+  },
+  "wait": 7000
+ },
+ {
+  "url": "http://127.0.0.1:8097/#/",
+  "out": "playground/reference/after-list-390.png",
+  "w": 390,
+  "h": 844,
+  "storage": {
+   "aisquad.overview": "list"
+  },
+  "wait": 6000
+ },
+ {
+  "url": "http://127.0.0.1:8097/#/",
+  "out": "playground/reference/after-building-iso-1440.png",
+  "w": 1440,
+  "h": 900,
+  "storage": {
+   "aisquad.overview": "building"
+  },
+  "wait": 6000
+ }
+]

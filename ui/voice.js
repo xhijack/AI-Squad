@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Voices in the browser: asks the server for a spoken line (ElevenLabs through the server; the browser never sees
 // the key), plays it, and moves the character's mouth with the audio (Web Audio analyser). Falls back to the
 // browser's own speech when the server says so (no key, budget used up), or stays silent (muted, quiet hours).

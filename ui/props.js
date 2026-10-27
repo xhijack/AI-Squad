@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Desk props: a keyboard with keys, a mouse, a mug in the agent's colour and up to two toys per role
 // (lead: trophy + cactus, developers: rubik / rubber duck / robot, QA: ladybug + magnifier). Ported from squad-3d.
 // Props come from the role template appearance (`props`, `screen`); without them the role kind decides.

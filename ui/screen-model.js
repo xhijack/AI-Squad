@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // What the desk monitors show, without canvas or three.js (unit tested): text lines, a developer's edit as a diff,
 // and the QA / merge status strip on the lead's and QA's screens.
 export const lines = (s, max) => String(s || '').replace(/\t/g, '  ').split('\n').slice(0, max).map((l) => (l.length > 70 ? `${l.slice(0, 69)}…` : l));

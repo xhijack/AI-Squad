@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Design variants: when the owner gives only a mockup or a vague wish, the designer writes 3-4 variants of a screen
 // as static HTML in docs/design/variants/<screen>/; the owner sees them side by side, picks one, and the choice is
 // written as a taste note in docs/DESIGN.md so later rounds follow it. Only files in that folder are ever served.

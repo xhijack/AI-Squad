@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Runs a converter function in headless Chrome (three.js loaders and exporters work there unchanged) with the
 // repository served on a random local port; the result (a GLB the page posts back, or JSON) is written to a file.
 //   node scripts/convert-assets.js <function> <out-file> ['<json args>']   (functions: scripts/convert/rocketbox.js)

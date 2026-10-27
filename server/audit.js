@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Audit: turns a time range of the Squad Log (a sprint, a day, or since the last audit) into a compact digest
 // (metrics computed here plus the most relevant events), asks Claude Code (`claude -p` with the bundled squad-audit
 // skill, structured JSON output) to judge process and efficiency, and stores the result in
@@ -5,6 +6,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import * as auth from './auth.js';
+import { loadBuilding } from './building.js';
 import { execFile } from 'node:child_process';
 import { config, claudeBin, ROOT } from './config.js';
 import { safeReaddir, readJson, writeJson, writeText, readText, clip, oneLine, kebab } from './util.js';
@@ -358,7 +361,7 @@ export function runReview(digestText, { model = 'sonnet', timeoutMs = AUDIT_TIME
     '--append-system-prompt', skillText(), '--json-schema', JSON.stringify(REVIEW_SCHEMA), prompt];
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
-    execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 16e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}` } }, (err, stdout) => {
+    execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 16e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}`, ...auth.backgroundEnv(loadBuilding().prefs.auth) } }, (err, stdout) => {
       if (err && !stdout) return reject(new Error(err.killed ? 'The audit timed out' : `Claude Code failed: ${oneLine(err.message, 200)}`));
       let j; try { j = JSON.parse(stdout); } catch { return reject(new Error('Claude Code gave no readable answer')); }
       if (j.is_error) return reject(new Error(`Claude Code: ${oneLine(j.result || j.subtype || 'error', 200)}`));

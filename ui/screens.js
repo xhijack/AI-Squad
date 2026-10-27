@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Live desk screens drawn on canvases (CanvasTexture): the code an agent is writing, its terminal,
 // the latest QA screenshot, a question waiting for the owner, a clock when idle, or the live tmux
 // screen in the over-the-shoulder view. Drawing ideas ported from the squad-3d prototype.

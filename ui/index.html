@@ -42,14 +42,19 @@
 
 <header id="hud" aria-label="Status"></header>
 <div id="menu" class="popover" role="menu" hidden>
-  <button role="menuitem" data-menu="setup-squad" data-i18n>Set up Squad</button>
-  <button role="menuitem" data-menu="new-floor" data-i18n>New Floor</button>
+  <button role="menuitem" data-menu="setup-squad" data-owner data-i18n>Set up Squad</button>
+  <button role="menuitem" data-menu="new-floor" data-owner data-i18n>New Floor</button>
+  <button role="menuitem" data-menu="admin" data-i18n>Admin</button>
+  <button role="menuitem" data-menu="people" data-owner data-i18n>People</button>
   <button role="menuitem" data-menu="templates" data-i18n>Role Templates</button>
-  <button role="menuitem" data-menu="rename" data-i18n>Rename Building</button>
+  <button role="menuitem" data-menu="rename" data-owner data-i18n>Rename Building</button>
   <button role="menuitem" data-menu="theme"><span data-i18n>Theme</span>: <span id="themeName">Light</span></button>
+  <button role="menuitem" data-menu="renderer"><span data-i18n>Scene view</span>: <span id="rendererName">Auto</span></button>
   <button role="menuitem" data-menu="quality"><span data-i18n>Graphics</span>: <span id="qualityName">Auto</span></button>
   <button role="menuitem" data-menu="language"><span data-i18n>Language</span>: <span id="langName">English</span></button>
   <button role="menuitem" data-menu="voice" data-i18n>Voice settings</button>
+  <button role="menuitem" data-menu="signin" data-owner data-i18n>Claude sign-in</button>
+  <button role="menuitem" data-menu="health" data-owner data-i18n>Backups and health</button>
   <button role="menuitem" data-menu="pin" data-i18n>Enter PIN</button>
 </div>
 <div id="floorMenu" class="popover" role="menu" hidden></div>

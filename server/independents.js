@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Independent agents (Floor 1): Claude Code agents that already run on this machine on their own. The scan
 // finds live claude processes, tmux panes running claude and projects with recent transcripts; each one not
 // started by The AI Squad gets a desk on Floor 1. Nothing is written into their repos: the registry

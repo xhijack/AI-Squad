@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Minimal YAML subset for Markdown frontmatter: scalars, flow collections ([a, b], { k: v }),
 // block maps and "- item" lists by indentation. Enough for Role Templates and agent files.
 

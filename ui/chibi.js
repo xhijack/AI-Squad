@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Toon chibi characters (from the squad-3d / sopwer-squad prototypes). buildChibi(look) returns a joint rig to pose.
 // In the realistic look (?look=realistic) the same chibi is built smooth and polished: no outlines, more segments,
 // physical materials (soft skin, woven cloth, glossy hair with strands, leather shoes) and hands with a thumb.

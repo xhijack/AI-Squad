@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Improvement loop: an audit finding with a target becomes a proposed change (a diff against the Role Template,
 // the Blueprint or the Floor setting). Apply saves it as a new template version (existing versioning with .history,
 // so Floors see "Update available"); Dismiss records why. Every decision, and the metrics before and after (on the

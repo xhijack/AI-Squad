@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // KayKit models (CC0, see ASSETS.md) for the office: one GLB, loaded once, cloned per use. Each model is fitted
 // to a target size (width, height, depth in metres) with its base on the floor and its centre at the origin.
 // Until the file has loaded, or when it cannot be loaded, the procedural builders in scene.js draw the room.

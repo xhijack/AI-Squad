@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Floor geometry and desk layout presets (Rows, Pods, Circle, Open Space). Units are metres. The isometric camera
 // looks from +x +z, so the back wall and the left wall are the two walls you see; the front half holds the lounge
 // (right) and the ping-pong table (left).

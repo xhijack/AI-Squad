@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
 // Panel content for the three places: Lobby, Floor, Desk. Each view returns sections
 // { id, title, card: top | main | tabs, html, head?, count? }; app.js lays them out as floating cards in the right
 // panel (desktop) or as tabs of the bottom sheet (phone).
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
 
-const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design') };
+const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext' };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
 const SYSTEM_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'crash', 'scope']);
 
@@ -71,9 +72,10 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       body = `<div class="row wrap">${a.options.map((o) => `<button class="small ${o.n === 1 ? 'gold' : 'ghost'}" data-act="crash-answer" data-id="${a.id}" data-n="${o.n}">${o.n === 1 ? tt('Resume') : tt('Start fresh')}</button>`).join('')}
         <button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button></div>${a.resumable ? `<div class="note" style="margin-top:6px">${tt('Resume continues the last session with its context. Start fresh begins a new session.')}</div>` : ''}`;
     } else if (a.answerable && a.options?.length) {
+      const lab = (o) => esc(['price', 'handoff'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
       body = `<div class="opts">${a.options.map((o) => o.free
-        ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${esc(o.label)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
-        : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${esc(o.label)}</button>`).join('')}</div>`;
+        ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${lab(o)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
+        : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${lab(o)}</button>`).join('')}</div>`;
     } else if (a.kind === 'permission' && a.live) {
       body = `<div class="note">${a.agentId ? tt("Reported live by Claude Code. Answer it on the Desk (Screen tab) or in the agent's terminal.") : tt('Reported live by Claude Code.')}</div>`;
     } else if (a.kind === 'question') {
@@ -82,7 +84,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     const links = [];
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">${tt('Open desk')}</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">${tt('Open Floor')}</a>`);
-    if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button>`);
+    if (a.kind === 'stall' || a.kind === 'merge' || a.kind === 'erpnext' || (a.kind === 'handoff' && a.mode === 'question')) links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${a.kind === 'erpnext' ? tt('OK') : tt('Dismiss')}</button>`);
     body = apNote(a) + body;
     // a click on the message opens it large (the conversation view)
     const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="${tt('Open large')}" aria-label="${tt('Message from {name}, open large', { name: esc(a.agentName || tt('the agent')) })}">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="${tt('Open large')}">${esc(a.kind === 'taskdone' && a.task ? taskDoneText(a.task) : SYSTEM_KINDS.has(a.kind) ? tx(a.text) : a.text)}</div>`;
@@ -92,6 +94,8 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
 
 // what Autopilot does with an item: critical ones wait for the owner; others are answered or nudged after the timeout
 function apNote(a) {
+  // a hard stop the server decided (a price, a package leaving an Owner-only Space, 0.19): only the Owner
+  if (a.hardStop?.length) return `<div class="apNote crit">${tt('Hard stop ({reasons}): only you decide this.', { reasons: esc(a.hardStop.map((r) => tx(r)).join(', ')) })}</div>`;
   const ap = a.autopilot;
   if (!ap) return '';
   if (ap.critical) return `<div class="apNote crit">${ap.reasons?.length && ap.reasons[0] !== 'unclear' ? tt('Critical ({reasons}): Autopilot leaves this to you.', { reasons: esc(ap.reasons.map((r) => tx(r.replace(/-/g, ' '))).join(', ')) }) : tt('Critical: Autopilot leaves this to you.')}</div>`;
@@ -278,10 +282,21 @@ function independentDeskSections(floor, d, routeScreen) {
 }
 
 // stopped: Resume is the main action after a crash; otherwise Start, with Resume of the last session beside it
-function startButtons(d) {
+function startButtons(d) { return startButtonsOnly(d) + `<button class="ghost" data-act="chat" data-agent="${d.id}" title="${tt('Talk to this agent directly')}">${tt('Chat')}</button>`; }
+function startButtonsOnly(d) {
   if (d.running) return `<button class="ghost" data-act="stop" data-agent="${d.id}">${tt('Stop')}</button>`;
   if (d.crash && !d.crash.withLead && d.resume) return `<button class="gold" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session')}">${tt('Resume')}</button><button class="ghost small" data-act="start" data-agent="${d.id}" title="${tt('A new session without the earlier context')}">${tt('Start fresh')}</button>`;
   return `<button class="ok" data-act="start" data-agent="${d.id}">${tt('Start')}</button>${d.resume ? `<button class="ghost small" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session ({id})', { id: esc(d.resume.sessionId.slice(0, 8)) })}">${tt('Resume last session')}</button>` : ''}`;
+}
+
+// background jobs (headless runner, 0.11): status, title, cost; Stop while it runs, Open for what it did
+const JOB_TEXT = { running: tt('Running'), done: tt('Done'), failed: tt('Failed'), stopped: tt('Stopped') };
+function jobsHtml(d) {
+  if (!d.jobs?.length) return '';
+  return `<div class="section"><div class="sectionHead"><h3 class="grow">${tt('Background jobs')}</h3></div><ul class="list jobs">${d.jobs.map((j) => `<li class="job ${esc(j.status)}">
+    <div class="row"><span class="badge">${esc(JOB_TEXT[j.status] || j.status)}</span><span class="grow ellipsis" title="${esc(j.title)}">${esc(j.title)}</span><span class="note">${money(j.cost)} · ${ago(j.startedAt)}</span>
+    ${j.status === 'running' ? `<button class="small ghost" data-act="job-stop" data-job="${esc(j.id)}">${tt('Stop')}</button>` : ''}<button class="small ghost" data-act="job-open" data-job="${esc(j.id)}">${tt('Open')}</button></div>
+    ${j.status === 'running' && j.activity ? `<div class="note ellipsis">${esc(j.activity)}</div>` : ''}${j.error ? `<div class="note warnText">${esc(tx(j.error))}</div>` : ''}</li>`).join('')}</ul></div>`;
 }
 
 export function deskSections(floor, d, opts = {}) {
@@ -319,6 +334,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
     <div class="section"><div class="sectionHead"><h3 class="grow">${tt('Send task')}</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">${tt('Queued: {text}', { text: esc(d.pending.slice(0, 120)) })}</div>` : ''}
       ${d.work ? `<div class="note" style="margin-top:6px">${d.work.doneAt ? tt('Current work (done {ago}):', { ago: ago(d.work.doneAt) }) : tt('Current work (since {ago}):', { ago: ago(d.work.assignedAt) })} ${esc(d.work.text.slice(0, 160))} <button class="small ghost" data-act="work-done" data-agent="${d.id}">${tt('Clear')}</button></div>` : ''}</div>
+    ${jobsHtml(d)}
     <div class="section note">${tt('Terminal:')} <code>${esc(d.attach)}</code> <button class="small ghost" data-act="copy" data-text="${esc(d.attach)}">${tt('Copy')}</button></div>`;
   const screen = d.running ? `<pre class="screen" data-scroll="screen">${esc(d.screen) || ' '}</pre>` : `<div class="empty">${d.resume ? tt('The agent is stopped. Resume or start it to see its live screen.') : tt('The agent is stopped. Start it to see its live screen.')}</div>`;
   const events = d.events.length ? `<ul class="feed events">${d.events.map((ev) => `<li><span class="k ${ev.kind}"></span><div class="grow"><div><b>${esc(tx(ev.title))}</b>${ev.tool ? ` <span class="note">${esc(ev.tool)}</span>` : ''}</div><div class="d ${ev.kind === 'think' || ev.kind === 'task' ? '' : 'mono'}">${esc(ev.detail)}</div><div class="t">${ago(ev.ts)}</div></div></li>`).join('')}</ul>` : `<div class="empty">${tt('No transcript yet.')}</div>`;
@@ -335,6 +351,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
       <dt>${tt('Rules')}</dt><dd>${(e.rules || []).length ? `<ul style="margin:0;padding-left:18px">${e.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : `<span class="note">${tt('none')}</span>`}${o.rules?.length ? `<div class="note">${tt('{n} added by override', { n: o.rules.length })}</div>` : ''}</dd>
       ${d.repos?.length ? `<dt>${tt('Repositories')}</dt><dd>${d.repos.map((r) => `<span class="pill" title="${esc(r.abs)}">${esc(r.id)} · ${r.access === 'write' ? tt('write') : tt('read only')}</span>`).join(' ')}</dd>` : ''}
       <dt>${tt('Cost today')}</dt><dd>${money(d.costToday)}</dd>
+      ${d.usage ? `<dt>${tt('RAM and CPU')}</dt><dd>${Math.round(d.usage.rss / 2 ** 20)} MB · ${d.usage.cpu} % <span class="note">${tt('{n} processes', { n: d.usage.procs })}</span></dd>` : ''}
       <dt>${tt('Voice')}</dt><dd>${d.agent.voice ? tt('chosen voice') : tt("the role's default voice")} <button class="small ghost" data-act="choose-voice" data-agent="${d.id}" data-name="${esc(d.displayName)}" data-voice="${esc(d.agent.voice || '')}" data-lang="${esc(d.agent.voiceLang || '')}" data-vs="${d.agent.voiceSettings ? esc(JSON.stringify(d.agent.voiceSettings)) : ''}">${tt('Change')}</button></dd>
     </dl>
     ${o.prompt ? `<details><summary>${tt('Prompt override')}</summary><div class="note" style="white-space:pre-wrap">${esc(o.prompt)}</div></details>` : ''}

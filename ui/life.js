@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Office life: idle agents get up, walk to a lounge spot (sofa, coffee machine, whiteboard, bookshelf)
 // and run back to their desk when work or a question arrives. Ported and simplified from squad-3d.
 import { HIP_H, resetPose, blink, sitLegs, arms } from './chibi.js';

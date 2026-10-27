@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Sprint pack (decision D4, optional): scaffolds the lead / developer / QA setup into a Floor
 // (config, gate hooks, /sprint command, docs/squad board), reads the board, and decides when a sprint
 // is closed so the server can merge it and optionally start the next sprint.

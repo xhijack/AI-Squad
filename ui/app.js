@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
-import { BuildingScene } from './scene.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext } from './lib.js';
+import { createSceneHost } from './renderer.js';
+import { OVERVIEWS, defaultOverview } from './scene-model.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -17,6 +19,11 @@ import './docs.js';
 import './retro.js';
 import './ship.js';
 import './design.js';
+import './health.js';
+import './signin.js';
+import './admin.js';
+import './people.js';
+import './chat.js';
 import { attentionIndexHtml } from './convo.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
@@ -49,14 +56,19 @@ addEventListener('hashchange', () => {
 });
 
 // ---------- scene ----------
-const scene = new BuildingScene($('scene'), {
+const scene = createSceneHost($('scene'), {
   onPickFloor: (id) => { if (state.route.mode === 'lobby' && !ctx.editing) location.hash = `#/floor/${id}`; },
-  onPickAgent: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
+  onPickAgent: (floorId, agentId) => { if (!ctx.editing && (state.route.floorId === floorId || state.route.mode === 'lobby')) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
+  onPickQueue: () => ctx.actions.admin?.({ dataset: { tab: 'dispatcher' } }),                          // Office / List: the Lobby
+  onPickOwner: () => document.querySelector('[data-pop="attPop"]')?.click(),                            // Office / List: approvals
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
   onPickRack: () => { if (!ctx.editing) ctx.actions.meter(); },
   onPickEyes: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/eyes`; },
 });
 ctx.scene = scene;
+// the Lobby's overview: Building (stacked Floors), Office (one floor plan) or List; phones start with the List
+const OVERVIEW_KEY = 'aisquad.overview';
+ctx.overview = (() => { try { const v = localStorage.getItem(OVERVIEW_KEY); return OVERVIEWS.includes(v) ? v : defaultOverview({ phone: isPhone() }); } catch { return defaultOverview({ phone: isPhone() }); } })();
 window.aisquad = ctx;                     // handy in the console and for scripted UI checks
 
 // ---------- polling ----------
@@ -119,7 +131,11 @@ function getTaskForm() {
   f.className = 'taskBox';
   f.innerHTML = `<textarea name="text" placeholder="${tt('Describe the task. The agent gets it as a message in its Claude Code session.')}" aria-label="${tt('Task')}" required></textarea>
     <div class="files" data-files></div>
-    <div class="row" style="margin-top:8px"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="chip" style="cursor:pointer">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>`;
+    <div class="row" style="margin-top:8px"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="chip" style="cursor:pointer">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>
+    <details class="bgOpts"><summary>${tt('Run in the background')}</summary>
+      <label class="inline"><input type="checkbox" name="bg"> ${tt('As a background job: no terminal, ends by itself, every step in the Squad Log')}</label>
+      <div class="row"><label class="inline" style="margin:0">${tt('Budget (USD)')} <input name="budget" type="number" min="0.1" max="50" step="0.5" value="2" style="width:80px"></label>
+      <label class="inline" style="margin:0"><input type="checkbox" name="edits"> ${tt('May edit files')}</label></div></details>`;
   f.querySelector('[data-file]').addEventListener('change', async (e) => {
     for (const file of e.target.files) {
       try {
@@ -135,8 +151,15 @@ function getTaskForm() {
     if (!text) return;
     const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
     try {
+      if (f.elements.bg.checked) {
+        const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' });
+        if (!r) { btn.disabled = false; return; }
+        toast(r.waiting ? queuedText(r) : tt('Background job started'), r.waiting ? 6000 : 2800);
+        f.elements.text.value = ''; taskFiles = []; drawFiles(); btn.disabled = false; refresh();
+        return;
+      }
       const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) });
-      toast(r.queued ? r.note : tt('Task sent'));
+      toast(r.waiting ? queuedText(r) : r.queued ? tx(r.note) : tt('Task sent'), r.waiting ? 6000 : 2800);
       f.elements.text.value = ''; taskFiles = []; drawFiles();
       refresh();
     } catch (err) { toast(err.message); }
@@ -310,6 +333,7 @@ function dockHtml(b, route, f) {
   const w = WORST(b.meter), voice = voiceOn(), floor = route.mode !== 'lobby' && f && !f.missing;
   const out = [];
   if (!floor) out.push(btn('setup-squad', 'spark', tt('Set up Squad'), '', tt('Set up Squad')), '<span class="dsep"></span>');
+  if (!floor) out.push(`<span class="ovSeg" role="group" aria-label="${tt('Overview')}">${[['building', tt('Building')], ['office', tt('Office')], ['list', tt('List')]].map(([v, l]) => `<button class="dk ov" data-act="overview" data-v="${v}" aria-pressed="${ctx.overview === v}">${l}</button>`).join('')}</span>`, '<span class="dsep"></span>');
   if (floor && state.floor?.board) out.push(btn('board', 'board', tt('Board')));
   if (floor && f.workflow === 'squad-sprint') out.push(btn('performance', 'chart', tt('Performance and cost projection')));
   if (floor) out.push(btn('log', 'log', tt('Squad Log: timeline and conversation')));
@@ -370,9 +394,12 @@ function render() {
 
   // 3D
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
+  scene.route(route, !!ctx.editing, ctx.overview);                     // three.js, Iso Pixel or the List (ui/renderer.js)
   scene.sync(floorsForScene);
-  const viewKey = routeKey(route) + (state.desk ? '' : '-');
-  if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route }); }
+  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits });
+  showRenderer();
+  const viewKey = routeKey(route) + (state.desk ? '' : '-') + ctx.overview;
+  if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route, overview: ctx.overview }); }
 
   // monitors: live tmux text in the over-the-shoulder view, latest QA screenshot on QA screens
   scene.setLiveText(route.screen && state.desk?.running ? state.desk.screen : null);
@@ -487,6 +514,8 @@ try { state.sideHidden = localStorage.getItem('aisquad.sideHidden') === '1'; } c
 addEventListener('resize', () => { for (const id of ['hud', 'dock', 'sideTop', 'sideMain', 'sideTabs', 'sheetTabs', 'sheetBody']) $(id)._html = null; render(); });
 
 // starts that the Watchdog may question first (swap above 80 %, the Floor at its maximum of agents): ask, then force
+// the dispatcher queued it (0.13): why it waits; it starts by itself when there is room
+const queuedText = (r) => tt('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) });
 async function guarded(url, body = {}, force = false) {
   try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }); } catch (e) {
     if (e.status !== 409) throw e;
@@ -505,11 +534,12 @@ const actions = Object.assign(ctx.actions, {
     body.closest('dialog').classList.add('xwide');
     body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
+  overview(el) { ctx.overview = el.dataset.v; try { localStorage.setItem(OVERVIEW_KEY, ctx.overview); } catch { /* private mode */ } render(); showRenderer(); },
   voice() { const on = !voiceOn(); setVoice(on); if (on) speak(tt('Voice is on, boss.')); render(); },
-  async start(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`)) toast(tt('Starting agent…')); },
+  async start(el) { const r = await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/start`); if (r) toast(r.waiting ? queuedText(r) : tt('Starting agent…'), r.waiting ? 6000 : 2800); },
   // continue the agent's last Claude Code session (after a crash this is the main action)
-  async resume(el) { if (await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/resume`)) toast(tt('Resuming the last session…')); },
-  async 'crash-answer'(el) { el.disabled = true; if (await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n, ...itemContext(el) })) toast(+el.dataset.n === 1 ? tt('Resuming the last session…') : tt('Starting a fresh session…')); else el.disabled = false; },
+  async resume(el) { const r = await guarded(`/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/resume`); if (r) toast(r.waiting ? queuedText(r) : tt('Resuming the last session…'), r.waiting ? 6000 : 2800); },
+  async 'crash-answer'(el) { el.disabled = true; const r = await guarded(`/api/attention/${el.dataset.id}/answer`, { option: +el.dataset.n, ...itemContext(el) }); if (r) toast(r.waiting ? queuedText(r) : +el.dataset.n === 1 ? tt('Resuming the last session…') : tt('Starting a fresh session…')); else el.disabled = false; },
   async restart(el) {
     if (!confirm(tt('Restart this agent? Its Claude Code session is closed and a fresh one starts with the configured model and effort.'))) return;
     await api('POST', `/api/floors/${state.route.floorId}/agents/${el.dataset.agent}/stop`, {});
@@ -563,6 +593,16 @@ const actions = Object.assign(ctx.actions, {
     const r = await api('POST', `/api/floors/${state.route.floorId}/skills/install`, { names });
     const n = r.results.filter((x) => x.installed).length;
     toast(n ? (n === 1 ? tt('Installed {n} skill into .claude/skills', { n }) : tt('Installed {n} skills into .claude/skills', { n })) : tt('Already installed'));
+  },
+  async 'job-stop'(el) { await api('POST', `/api/jobs/${el.dataset.job}/stop`, {}); toast(tt('Job stopped')); },
+  async 'job-open'(el) {
+    const j = await api('GET', `/api/jobs/${el.dataset.job}`);
+    const body = openModal(`<div class="mHead"><h3 class="grow">${esc(j.title)}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
+      <div class="mBody"><p class="note">${tt('{status} · {cost} · {turns} turns · started {ago}', { status: esc(j.status), cost: money(j.cost), turns: j.turns || 0, ago: ago(j.startedAt) })}${j.sessionId ? ` · <code>${esc(j.sessionId.slice(0, 8))}</code>` : ''}</p>
+      ${j.error ? `<div class="att budget warn"><div class="q">${esc(tx(j.error))}</div></div>` : ''}
+      ${j.text ? `<div class="md">${mdLite(j.text)}</div>` : ''}
+      ${j.events?.length ? `<details><summary>${tt('Steps ({n})', { n: j.events.length })}</summary><ul class="feed events">${j.events.map((e) => `<li><span class="k ${e.kind === 'tool' ? 'tool' : 'text'}"></span><div class="grow d ${e.kind === 'tool' ? 'mono' : ''}">${esc(e.detail)}</div></li>`).join('')}</ul></details>` : ''}</div>`);
+    body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
   },
   async copy(el) { try { await navigator.clipboard.writeText(el.dataset.text); toast(tt('Copied')); } catch { toast(el.dataset.text, 6000); } },
 });
@@ -625,6 +665,10 @@ export function applyTheme() {
 const QUALITY_TEXT = { auto: tt('Auto'), high: tt('High'), low: tt('Low') };
 function showQuality() { $('qualityName').textContent = `${QUALITY_TEXT[scene.quality.chosen]}${scene.quality.chosen === 'auto' ? ` (${({ high: tt('high'), low: tt('low') })[scene.quality.active] || scene.quality.active})` : ''}`; }
 showQuality();
+// view: 3D (three.js), Iso Pixel (light, Canvas 2D) or Auto (Iso on phones, small devices and big squads)
+const RENDERER_TEXT = { auto: tt('Auto'), three: tt('3D'), iso: tt('Iso Pixel') };
+function showRenderer() { $('rendererName').textContent = `${RENDERER_TEXT[scene.chosen]}${scene.chosen === 'auto' ? ` (${RENDERER_TEXT[scene.kind]})` : ''}`; }
+showRenderer();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 applyTheme();
 $('menu').addEventListener('click', (e) => {
@@ -640,6 +684,9 @@ $('menu').addEventListener('click', (e) => {
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
     scene.quality.set(next); showQuality(); toast(tt('Graphics: {name}', { name: QUALITY_TEXT[next] }));
+  } else if (b.dataset.menu === 'renderer') {
+    const order = ['auto', 'three', 'iso'], next = scene.choose(order[(order.indexOf(scene.chosen) + 1) % order.length]);
+    scene._viewKey = null; applyTheme(); render(); showRenderer(); toast(tt('Scene view: {name}', { name: RENDERER_TEXT[next] }));
   } else if (b.dataset.menu === 'pin') askPin().then((ok) => ok && refresh());
   else if (b.dataset.menu === 'rename') {
     const name = prompt(tt('Building name'), state.building?.name || 'The AI Squad');

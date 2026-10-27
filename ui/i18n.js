@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // UI language: English (default) or Bahasa Indonesia, chosen per browser (Menu → Language, Floor settings).
 // All UI copy goes through t('English text', { vars }): the English text is the key; ui/i18n/en.json lists every
 // key and ui/i18n/id.json translates each ("kamu", no emoji). Placeholders are {name}. Text that comes from the

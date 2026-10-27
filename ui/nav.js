@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Navigation (Phase 3, "nothing passes through anything"): an occupancy grid of the Floor built from the real
 // footprints of desks, chairs, devices and walls (rotated, inflated by the character radius), A* paths on it with
 // string pulling, character avoidance (keep apart, wait, re-route), and layout checks for Edit Mode.

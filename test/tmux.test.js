@@ -208,3 +208,20 @@ test('socket names stay short enough for a unix socket path', () => {
   assert.equal(tm.socketOf(long), s, 'stable');
   assert.notEqual(tm.socketOf(long + 'x'), s);
 });
+
+test('secret variables (ERPNext keys) reach the session through a file that is gone at once, not the command line', { skip: !hasTmux }, async () => {
+  const cwd = path.join(root, 'secret'); fs.mkdirSync(cwd);
+  const bin = path.join(root, 'print-env.sh');
+  fs.writeFileSync(bin, `#!/bin/sh\nprintf '%s|%s' "$AISQUAD_ERP_KEY" "$AISQUAD_AGENT" > ${JSON.stringify(path.join(cwd, 'env.txt'))}\nsleep 30\n`, { mode: 0o755 });
+  configure({ claudeBin: bin, useSystemd: false });
+  const name = tm.sessionName('acme', 'sales-env');
+  after(() => tm.stopSession(name));
+  const r = await tm.startSession({ name, cwd, agentId: 'sales-env', env: { AISQUAD_AGENT: 'acme/sales-env' }, secretEnv: { AISQUAD_ERP_KEY: "k'ey-123" } });
+  assert.equal(r.ok, true);
+  const end = Date.now() + 5000;
+  while (Date.now() < end && !fs.existsSync(path.join(cwd, 'env.txt'))) await new Promise((ok) => setTimeout(ok, 100));
+  assert.equal(fs.readFileSync(path.join(cwd, 'env.txt'), 'utf8'), "k'ey-123|acme/sales-env");
+  assert.ok(!fs.existsSync(path.join(config.home, 'run', `${name}.env`)), 'the file is removed');
+  const cmd = tm.tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_start_command}'], tm.socketOf(name)) || '';
+  assert.ok(cmd.includes('sales-env') && !cmd.includes('k\'ey-123') && !cmd.includes('ey-123'), 'not in the command line');
+});

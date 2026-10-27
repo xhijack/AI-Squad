@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Cost dialog from the dock: today and this month per Floor (Lobby) or per agent (Floor), with the budget.
 // Estimates from transcript usage, like everywhere else.
 import { esc, money, openModal } from './lib.js';

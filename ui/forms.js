@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Form pieces shared by the wizard and dialogs: team member + overrides editor, git settings.
 import { esc, segHtml } from './lib.js';
 import { t as tt } from './i18n.js';

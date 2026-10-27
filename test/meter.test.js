@@ -15,7 +15,7 @@ const meminfo = (availGb) => `MemTotal: ${16 * GB / 1024} kB\nMemFree: 100 kB\nM
 test('parses /proc/stat, meminfo and process stat lines', () => {
   assert.deepEqual(m.parseCpu('cpu  100 0 50 800 50 0 0 0 0 0\ncpu0 1 2 3'), { idle: 850, total: 1000 });
   assert.deepEqual(m.parseMeminfo(meminfo(8)), { total: 16 * GB, available: 8 * GB, swapTotal: 4 * GB, swapFree: 3 * GB });
-  assert.deepEqual(m.parseProcStat(stat(42, 'my (odd) name', 30, 1000)), { comm: 'my (odd) name', ticks: 30, rss: 4096000 });
+  assert.deepEqual(m.parseProcStat(stat(42, 'my (odd) name', 30, 1000)), { comm: 'my (odd) name', ppid: 1, ticks: 30, rss: 4096000 });
 });
 
 test('groups processes by name without exposing command lines', () => {

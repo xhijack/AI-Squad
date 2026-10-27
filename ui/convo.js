@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // The conversation view: an Attention item as a large dialog. The agent's own chibi as a live portrait, its message
 // as a speech bubble (readable markdown that scrolls between a fixed header and action bar), the actions for the
 // item (options, Reply, OK / Dismiss, Open desk), and "n of m" with previous / next. While it is open the office
@@ -10,7 +11,7 @@ import { t } from './i18n.js';
 
 let C = null;            // { list, i, portrait, dlg }
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources') };
+const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources'), price: t('Price approval'), handoff: t('Handoff'), erpnext: 'ERPNext' };
 
 function agentOf(item) {
   const f = ctx.state.building?.floors.find((x) => x.id === item.floorId);
@@ -60,7 +61,7 @@ function render() {
         <div class="note">${esc([ag.title, item.floorNumber ? t('Floor {n} · {name}', { n: item.floorNumber, name: item.floorName }) : item.floorName].filter(Boolean).join(' · '))}</div><div class="note">${ago(item.ts)}</div></div>
       <div class="convoNav">${C.list.length > 1 ? `<button type="button" class="iconBtn ghost" data-prev aria-label="${t('Previous item')}">‹</button><span class="note">${ofText(C.i, C.list.length)}</span><button type="button" class="iconBtn ghost" data-next aria-label="${t('Next item')}">›</button>` : ''}
         ${item.agentId && item.text ? `<button type="button" class="small ghost" data-listen title="${t('Read the whole message aloud')}">▶ ${t('Listen')}</button>` : ''}<button type="button" class="iconBtn ghost" data-close aria-label="${t('Close')}">×</button></div></div>
-    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">${t('Decided automatically: <b>{choice}</b>. Pick another option to change it.', { choice: esc(item.chosen) })}</p>` : ''}</div></div>
+    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">${t('Decided automatically: <b>{choice}</b>. Pick another option to change it.', { choice: esc(item.chosen) })}</p>` : ''}${item.hardStop?.length ? `<p class="note warnText">${t('Hard stop ({reasons}): only you decide this.', { reasons: esc(item.hardStop.join(', ')) })}</p>` : ''}</div></div>
     <div class="convoActions">${actionsHtml(item, a)}</div>`;
   if (!d.open) d.showModal();
   wire(d, item, a);

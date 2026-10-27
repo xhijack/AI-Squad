@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Blueprints: versioned templates for a whole squad (roles and counts, the lead, and the communication
 // standard). Stored like Role Templates: shipped in templates/blueprints/<id>/ (blueprint.md + pack/ files),
 // seeded into ~/.aisquad/blueprints/<id>/ where the owner may edit them.

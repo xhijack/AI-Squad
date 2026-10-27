@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Extra Role Template libraries (read-only), listed in ~/.aisquad/libraries.json:
 //   { "libraries": [ { "name": "team", "url": "git@github.com:org/roles.git", "ref": "main", "subdir": "roles" },
 //                    { "name": "local-copy", "path": "/abs/dir" } ] }

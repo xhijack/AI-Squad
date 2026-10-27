@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
 // The conversation view's model, without DOM access (unit tested): a one-line preview for the Attention index, the
 // short bubble over the agent's head, and which actions an item gets in the action bar.
-import { t } from './i18n.js';
+import { t, tx } from './i18n.js';
 
 const clean = (l) => l.replace(/^[#>*\-\s|☐☑✓]+/, '').replace(/[*_`|]/g, '').trim();
 // the question when there is one (dialogs start with a short header such as "☐ Runner"), else the first line
@@ -10,7 +11,7 @@ const short = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
 // "Finished: Server inventory done" / "Question: Which runner?"; at most n characters
 export function preview(item, n = 90) {
   const text = firstLine(item.text);
-  const lead = { finished: t('Finished: {text}', { text }), reply: t('Asks you: {text}', { text }), question: t('Question: {text}', { text }), permission: t('Permission: {text}', { text }), crash: t('Stopped: {text}', { text }), decided: t('Decided: {text}', { text }), scope: t('Scope change: {text}', { text }) }[item.kind];
+  const lead = { finished: t('Finished: {text}', { text }), reply: t('Asks you: {text}', { text }), question: t('Question: {text}', { text }), permission: t('Permission: {text}', { text }), crash: t('Stopped: {text}', { text }), decided: t('Decided: {text}', { text }), scope: t('Scope change: {text}', { text }), price: t('Price approval: {text}', { text: text.replace(/^Price approval:\s*/, '') }), handoff: t('Handoff: {text}', { text }) }[item.kind];
   return short(lead || text, n);
 }
 
@@ -26,7 +27,8 @@ const isRecommended = (item, o) => /\(recommended\)/i.test(o.label) || item.auto
 // -> { mode: 'options' | 'reply' | 'view', options, canReply, dismiss, act }
 // act: the action the existing Attention handlers use for an option (answer, crash-answer)
 export function actionsFor(item) {
-  const options = (item.options || []).map((o) => ({ ...o, recommended: !o.free && isRecommended(item, o), label: String(o.label).replace(/\s*\(recommended\)\s*/i, ' ').trim() }));
+  const own = ['price', 'handoff'].includes(item.kind);                     // the server wrote these labels: translated
+  const options = (item.options || []).map((o) => ({ ...o, recommended: !o.free && isRecommended(item, o), label: own ? tx(o.label) : String(o.label).replace(/\s*\(recommended\)\s*/i, ' ').trim() }));
   if (item.kind === 'reply' || item.kind === 'finished') return { mode: 'reply', options: [], canReply: item.canReply !== false, dismiss: item.kind === 'finished' ? 'OK' : 'Dismiss' };
   if (item.kind === 'crash') return { mode: 'options', options, canReply: false, dismiss: 'Dismiss', act: 'crash-answer' };
   if (item.kind === 'decided') return { mode: 'options', options, canReply: false, dismiss: 'OK', act: 'answer' };

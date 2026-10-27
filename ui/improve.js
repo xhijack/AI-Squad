@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Improvement loop in the Audit dialog: a finding with a target shows its proposed change as a diff; Apply saves a new
 // Role Template or Blueprint version (Floors then see "Update available") or changes the Floor setting; Dismiss asks
 // why. The ledger lists every decision with the metrics before and after (from the next audit).

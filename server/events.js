@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Live events from the Claude Code plugin hooks (hooks/event.js). They make status, activity and
 // permission prompts live instead of depending on transcript timing and TUI parsing alone.
 import path from 'node:path';

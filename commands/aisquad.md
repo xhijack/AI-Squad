@@ -1,6 +1,6 @@
 ---
 description: Open The AI Squad (your Claude Code teams as a 3D building), create a Floor, show the status, audit a Floor, or stop the server
-argument-hint: "[new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export]"
+argument-hint: "[new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export | backup | verify FILE | restore FILE | doctor]"
 allowed-tools: Bash(node:*)
 ---
 
@@ -17,5 +17,9 @@ Tell the user the result in a few short lines:
 - `uninstall`: confirm the service was removed; `~/.aisquad` and the Floors stay.
 - `audit [floor] [--sprint N]`: give the scores, the key numbers and the findings (most severe first) from the output, the audit's own cost, and the path of the report. Proposed changes are applied or dismissed by the owner in the Floor's Audit dialog; do not edit Role Templates or Blueprints yourself.
 - `audit export`: give the path of the bundle and say it is anonymised and never uploaded; the owner decides whether to send it to Sopwer.
+- `backup`: give the file, its size, whether it is encrypted, and every warning (uncommitted work, Floors without a remote). Suggest keeping it off this machine.
+- `verify FILE`: say whether the backup reads back.
+- `restore FILE`: show where each Floor goes. A dry run changes nothing; a real restore needs the server stopped (`/aisquad stop`) and, over a folder in use, `--force`. Repeat the warnings and the doctor's FAIL lines with their fixes.
+- `doctor`: list the checks that are not ok with their fixes; say "everything needed is there" when all pass.
 
 If the output shows an error, explain it and suggest checking `~/.aisquad/server.log`. Do not start agents or change any Floor yourself; the user does that in the browser.

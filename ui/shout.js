@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Lead shout (from squad-3d): when every agent of the Floor in view has been idle for 20 s, the lead shows a
 // speech bubble and, if the owner turned voice on, says it with speechSynthesis. Repeats every 2 to 3 minutes,
 // at most 6 times per idle period.

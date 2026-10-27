@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Redaction for the Squad Log: secrets are always removed, personal data is masked by default.
 // Every rule lives here so it can be tested on its own (test/redact.test.js has a false-positive list).
 

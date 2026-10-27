@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Fewer draw calls for things that never move: the meshes under a group (a desk station, a device, the room) are
 // merged into one mesh per material, with their transforms baked in. Meshes that change on their own stay as they
 // are: screens, instanced meshes, anything with userData.keep (or under a parent with it), and what keep(o) names.
