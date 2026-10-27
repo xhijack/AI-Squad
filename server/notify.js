@@ -188,6 +188,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const quiet = inQuiet(s.quiet, now);
   for (const item of items) {
     if (st.sent[item.id]) continue;
+    if (item.notice && now < (item.notifyAt || 0)) continue;                                // a stall notice: only once it has lasted 15 min
     const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal'].includes(item.kind);
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
     if (quiet && item.kind !== 'resource') continue;                                         // after the quiet hours

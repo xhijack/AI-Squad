@@ -62,7 +62,7 @@ import { config, ROOT, paths } from './config.js';
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
 // ended: how the last session of each agent ended (crashes, exits); autoResumes: times of automatic resumes;
 // autopilot: decisions taken automatically (shown until the owner says OK), lead decisions seen, nudges sent, blocks logged
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], dismissedStalls: r.dismissedStalls || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
   autopilot: { decided: [], leadSeen: {}, nudged: [], blocked: [], ...(r.autopilot || {}) } }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
@@ -177,7 +177,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
     const hookWaiting = hookFresh && h.state === 'waiting';
     // a long command (e2e, docker build) writes nothing while it runs: the agent is working all the same
-    const task = running ? liveTask(entry.id, a.id, st, own ? screen : '', now) : null;
+    const { task, services } = running ? liveTasks(entry.id, a.id, st, own ? screen : '', now) : { task: null, services: [] };
     const working = busy || !!task || (hookFresh ? h.state === 'working' : recent);
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
@@ -202,7 +202,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
+      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, services, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
   // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
   const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
@@ -224,7 +224,7 @@ function taskHistory(floorId, now) {
   const c = typicalCache.get(floorId);
   if (c && now - c.at < 5 * 60e3) return c.history;
   let history = [];
-  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }
+  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).filter((e) => !e.data?.service).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }   // services run until stopped: no "usual
   typicalCache.set(floorId, { at: now, history });
   return history;
 }
@@ -236,11 +236,22 @@ function readTail(file, bytes = 16 * 1024) {
     return { text: buf.toString('utf8'), mtime: st.mtimeMs };
   } catch { return null; }
 }
-export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
-  const t = st?.tasks?.running?.at(-1);
-  if (!t) return null;
+// -> { task, services }: services are background shells that serve or watch (1.0.2); they never make the agent
+// "working" and never stall by themselves
+export function liveTasks(floorId, agentId, st, screen = '', now = Date.now()) {
+  const tails = new Map();
+  const tailOf = (t) => { if (!t.file) return null; if (!tails.has(t.id)) tails.set(t.id, readTail(t.file)); return tails.get(t.id); };
+  const { task: t, services } = tasksLib.splitRunning(st?.tasks?.running || [], (x) => tailOf(x)?.text || '');
+  const svc = services.map((s) => ({ id: s.id, label: s.label, command: redact(s.command), startedAt: s.startedAt, lastOutputAt: tailOf(s)?.mtime || s.startedAt,
+    lines: tasksLib.tailLines(tailOf(s)?.text || '', 3).map((l) => redact(l).slice(0, 200)) }));
+  const task = t ? liveTask(floorId, agentId, t, screen, now, tailOf(t)) : null;
+  // a foreground wait while a service runs: only the service's silence makes it a stall
+  if (task && !task.background && svc.length) task.stall = tasksLib.serviceWaitStall({ waitStartedAt: task.startedAt, serviceOutputAt: Math.max(...svc.map((s) => s.lastOutputAt)), now });
+  return { task, services: svc };
+}
+function liveTask(floorId, agentId, t, screen, now, tail) {
   let text = '', lastOutputAt = 0;
-  if (t.file) { const r = readTail(t.file); if (r) { text = r.text; lastOutputAt = r.mtime; } }
+  if (t.file) { if (tail) { text = tail.text; lastOutputAt = tail.mtime; } }
   else if (screen) {
     text = screen;
     const key = `${floorId}/${agentId}/${t.id}`, hash = crypto.createHash('sha1').update(tasksLib.tailLines(screen, 12).join('\n')).digest('hex');
@@ -257,8 +268,11 @@ export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
 // commands that ended in the last half hour and ran at least TASK_CARD_MS: the owner gets a calm card
 const TASK_CARD_MS = 2 * 60e3, TASK_RECENT_MS = 30 * 60e3;
 export function endedTasks(st, now = Date.now()) {
-  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS)
-    .map((t) => ({ id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '', ...tasksLib.resultOf(t.kind, t.output || (t.file ? readTail(t.file)?.text || '' : ''), t.status) }));
+  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS).map((t) => {
+    const out = t.output || (t.file ? readTail(t.file)?.text || '' : '');
+    return { id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '',
+      ...(t.background && (t.kind === 'service' || tasksLib.looksLikeService(out)) ? { service: true } : {}), ...tasksLib.resultOf(t.kind, out, t.status) };
+  });
 }
 // "e2e Playwright finished in 7m 32s: 40 passed, 2 failed"
 export const taskDoneText = (tk) => `${tk.label} ${tk.status === 'completed' ? (tk.ok === false ? 'failed' : 'finished') : tk.status} in ${tasksLib.duration(tk.ms)}${tk.summary && !['done', tk.status].includes(tk.summary) ? `: ${tk.summary}` : ''}`;
@@ -269,11 +283,12 @@ function taskEvents(floorId, lives, now = Date.now()) {
   S.tasks ||= { started: {}, ended: {} };
   const out = [];
   for (const l of lives) {
-    const tk = l.task;
-    if (tk && tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background } }); }
+    for (const tk of [...(l.task ? [l.task] : []), ...(l.services || []).map((s) => ({ ...s, kind: 'service', background: true, service: true, elapsedMs: now - s.startedAt }))]) {
+      if (tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background, ...(tk.service ? { service: true } : {}) } }); }
+    }
     for (const e of l.tasksEnded || []) if (S.tasks.started[e.id] && !S.tasks.ended[e.id]) {
       S.tasks.ended[e.id] = now;
-      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
+      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.service ? { service: true } : {}), ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
       typicalCache.delete(floorId);
     }
   }
@@ -301,6 +316,7 @@ function agentView(root, l, cost) {
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     task: l.task || null,                                // a long-running command: label, start, last lines, progress, stall
+    services: l.services || [],                          // background shells that serve or watch: "Running in the background", Stop
     standby: l.standby || null, waitingReply: !!l.reply, finished: l.finished ? l.finished.ts : null,
     // stopped agents: how they ended (crash: Resume is the main action), the session Resume continues, the last state
     crash: l.ended?.kind === 'crashed' ? { cause: l.ended.cause, at: l.ended.at, text: recovery.crashText(l.ended), withLead: l.ended.withLead || null } : null,
@@ -319,6 +335,7 @@ function floorAttention(entry, floor, lives, cost) {
   for (const l of lives) {
     // a long command ended (2 min or more): a calm card with its duration and result, OK or Open log
     for (const tk of l.tasksEnded || []) {
+      if (tk.service) continue;                          // a dev server that was stopped is no news
       const key = replyKey(entry.id, l.agent.id, `task:${tk.id}`);
       if (dismissedNow.has(key)) continue;
       out.push({ id: attId(entry.id, l.agent.id, 'task', tk.id), kind: 'taskdone', replyKey: key, floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
@@ -352,8 +369,12 @@ function floorAttention(entry, floor, lives, cost) {
     }
   }
   const work = workOf(entry.id);
+  const dismissedStalls = new Set(loadRuntime().dismissedStalls);
   for (const s of wd.stallAlerts(lives.map((l) => ({ id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead, state: l.state, lastTs: l.lastTs, task: l.task })), work)) {
-    out.push({ id: attId('stall', entry.id, s.agent || ''), kind: 'stall', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
+    const stallKey = `${entry.id}/${s.key}`;
+    if (dismissedStalls.has(stallKey)) continue;
+    // a system notice, not an ask: muted under Notices, notified only once it has lasted NOTICE_NOTIFY_MS
+    out.push({ id: attId('stall', entry.id, s.agent || '', s.key), kind: 'stall', stallKey, notice: true, muted: true, notifyAt: s.since + wd.NOTICE_NOTIFY_MS, floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
   }
   for (const m of merge.mergeProblems(entry.id, loadRuntime().dismissedMerges)) {
     const what = m.result === 'merged' ? `Merged ${m.branch} but the push failed: ${m.push.error}` : `Merge of ${m.branch} ${m.result}: ${m.reason}`;
@@ -596,6 +617,21 @@ const readTextSafe = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch {
 
 function readBriefSafe(root) { try { return fs.readFileSync(path.join(root, 'AISQUAD.md'), 'utf8').slice(0, 20000); } catch { return ''; } }
 
+// Stop a background service of an agent (1.0.2): its shell and the processes under it, found under the agent's
+// tmux session by its command line; Claude Code then sees the shell end
+export function stopService(floorId, agentId, serviceId) {
+  const { entry, agent, name } = locate(floorId, agentId);
+  const l = liveAgents(entry, { agents: [agent] }, new Set(tm.listSessions()), {})[0];
+  const raw = (l.status?.tasks?.running || []).find((t) => t.id === serviceId);
+  if (!raw || !(l.services || []).some((s) => s.id === serviceId)) throw notFound('That service is no longer running');
+  let ps = '';
+  try { ps = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8', timeout: 5000 }); } catch { /* no ps */ }
+  const pids = tasksLib.serviceProcesses(tasksLib.parsePs(ps), tm.panePids(name), raw.command.replace(/…$/, ''));
+  if (!pids.length) throw new HttpError(409, 'Could not find its process; ask the agent to stop it');
+  for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
+  invalidate();
+  return { ok: true, stopped: pids.length };
+}
 export function deskDetail(floorId, agentId) {
   if (floorId === ind.FLOOR_ID) return independentDesk(agentId);
   const entry = building.floorEntry(floorId);
@@ -1411,7 +1447,8 @@ export async function answerAttention(id, option, text = '', { force = false, fl
     invalidate();
     return { ok: true };
   }
-  if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
+  // Dismiss sticks: the stall's key (its task, or the agent's last activity / assignment) stays dismissed; the work stays
+  if (item.kind === 'stall') { const r = loadRuntime(); r.dismissedStalls = [...r.dismissedStalls.filter((k) => k !== item.stallKey), item.stallKey].slice(-300); saveRuntime(r); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
   if (item.questions && Array.isArray(answers)) return answerAsk(item, answers);
   if (item.independent) {

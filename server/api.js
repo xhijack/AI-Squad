@@ -288,6 +288,8 @@ const routes = [
   // a reply denied tools in the background (1.0.1): allow narrow rules and run it again, or run it on the Desk
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat\/allow$/, ([id, a], b) => squad.chatAllowRetry(id, a, { context: b.context || 'space', msgId: String(b.msgId || ''), rules: Array.isArray(b.rules) ? b.rules : null }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat\/desk$/, ([id, a], b) => squad.chatOnDesk(id, a, { context: b.context || 'space', msgId: String(b.msgId || '') }), { pin: true }],
+  // a background service of an agent (1.0.2): stop it
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/services\/([\w-]+)\/stop$/, ([id, a, sid]) => squad.stopService(id, a, sid), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/task$/, ([id, a], b) => squad.sendTask(id, a, b.text, b.attachments), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/work-done$/, ([id, a]) => { squad.clearWork(id, a); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/attachments$/, async ([id], b, req) => {
