@@ -94,6 +94,15 @@ slot; `queue` is true when work was waiting. Resume continues the session.
 
 ### Work (`work`)
 
+**`erpnext.lead`**, **`erpnext.won`**, **`erpnext.approval`**, **`erpnext.approved`**, **`erpnext.sent-back`**, **`erpnext.alert`**
+(0.19): the ERPNext watcher handed a new Lead to the team, a Quotation became an order (a project handoff), an agent
+asked for a price approval, the Owner approved it (submitted with the owner key) or sent it back, a Quotation was
+submitted by an agent's user without approval. `quotation`, `lead`, `handoff`, `by`, `user`; never amounts.
+
+```json
+{"v":1,"id":"5b1e7a90c2d4","ts":"2026-10-27T03:40:00.000Z","floor":"sales","sprint":null,"module":null,"agent":"rina-sales","role":"sales-manager","session":null,"model":null,"type":"erpnext.approved","summary":"the owner approved SAL-QTN-2026-00012; it is submitted in ERPNext","data":{"quotation":"SAL-QTN-2026-00012","handoff":"h-20261027-473369","by":"Ramdani"}}
+```
+
 **`task.given`**: A prompt the owner typed or sent to the agent (from the transcript; `id` is the transcript record uuid).
 
 ```json
@@ -204,6 +213,15 @@ Desk) or the part of The AI Squad that started it.
 not start (`error`; `dropped` after three attempts). **`dispatch.removed`**: the owner removed it from the queue.
 
 ### Communication (`communication`)
+
+**`handoff.sent`**, **`handoff.received`**, **`handoff.held`**, **`handoff.rejected`**, **`handoff.invalid`** (0.19): a package
+between Spaces was sent (in the sender's log), arrived (in the receiver's log), waits for the Owner because it leaves an
+Owner-only Space, was not delivered by the Owner, or could not be sent (`reason`). `handoff` is its id, `kind` task,
+lead, opportunity, quotation, project, clarify, answer or done; `replyTo` the package it answers.
+
+```json
+{"v":1,"id":"9d2f41c7e8a0","ts":"2026-10-27T03:12:00.000Z","floor":"mkt","sprint":null,"module":null,"agent":"mira-mkt","role":"marketing-strategist","session":null,"model":null,"type":"handoff.sent","summary":"mira-mkt handed task \"Build the webinar landing page\" to Website Revamp","data":{"handoff":"h-20261027-ff0ed4","kind":"task","to":"Website Revamp","title":"Build the webinar landing page"}}
+```
 
 **`message.sent`**: SendMessage from `agent` to `data.to` (agent-to-agent communication).
 
