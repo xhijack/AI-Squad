@@ -857,6 +857,17 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `trust.test.js` (the ladder, a canary measured and rolled back, capacity advice, a promoted lesson), the quickstart on a clean home.
 - Not yet: trust level 2 (auto-apply everywhere with auto-rollback), suggestions for shift hours and Claude Code version pins, the real-world 30 % cost target and the three ERPNext opportunities (on the Sopwer machine).
 
+## Phase 5, Sprint 13: targets and the cockpit, 1.1.0 (27 Oct 2026)
+
+- **Targets per Space** (`server/kpi.js`): definitions in `.claude/aisquad/kpi.json` (history-tracked, 30 per Space), measurements in `~/.aisquad/kpi/<space>.json` (0600); name, unit, goal, direction, period (day, week, month, total; the value counts from the period's start), source (manual, ERPNext count or sum with filters, CSV last row or sum, webhook with a per-Space token) and interval; status met / behind / unset / unknown with a percentage; `kpi.measured` in the Squad Log.
+- **For the agents**: `docs/squad/KPI.md` regenerated on every change and measurement, and a context line in the agent file (plan against what is behind, never invent a value).
+- **Measuring**: an hourly tick measures ERPNext and CSV targets on their interval; *Measure now*; values from the previous period are shown as stale.
+- **Cockpit**: `GET /api/kpis` across Spaces (Owner-only Spaces hidden for others), `building.targets` counts, the List overview tile, the Owner's room chip in the Office, the Telegram morning digest (counts and the targets behind), Admin → Targets (add, set goals, enter values, measure, remove, sparkline, the webhook).
+- **Blueprints** seed starting targets (`kpis:` in the frontmatter, no goals yet): Marketing, Sales (from ERPNext), Software House, ERP Consultant, Legal.
+- Roles: goals and definitions are the Owner's; Members enter values; Viewers read.
+- Tests: `kpi.test.js` (status and periods, a Marketing squad's seeded targets, goals, manual and webhook values, KPI.md, the Squad Log, roles, ERPNext and CSV measured on their interval against a fake ERPNext, the cockpit, the digest, Owner-only hiding).
+- Not yet: targets from other integrations (`mcp:<integration>`, Sprint 15), a KPI below target as a trigger (Sprint 14), charts beyond the sparkline.
+
 ## How to run
 
 ```
