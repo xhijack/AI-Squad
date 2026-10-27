@@ -30,7 +30,7 @@ function clientWords({ entry, cfg }) {
 }
 export function scrub(text, sp) {
   let t = redact(String(text || ''), { pii: true });
-  for (const { w, as } of clientWords(sp)) t = t.replace(new RegExp(`\\b${esc(w)}\\b`, 'gi'), as);
+  for (const { w, as } of clientWords(sp)) t = t.replace(new RegExp(`\\b(?:the\\s+)?${esc(w)}\\b`, 'gi'), as);   // "the Acme shop" -> "the project", not "the the project"
   return oneLine(t, 400);
 }
 const leftovers = (text, sp) => clientWords(sp).map((x) => x.w).filter((w) => new RegExp(`\\b${esc(w)}\\b`, 'i').test(text));
