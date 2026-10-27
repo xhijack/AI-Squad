@@ -10,7 +10,7 @@ skills: [contract-checklist]
 tools: [Read, Grep, Glob, Write, Edit]
 permissions:
   deny: ["Read(./.env)", "Read(./.env.*)", "Bash", "WebFetch", "Bash(git push*)", "Bash(rm -rf *)"]
-appearance: { style: short, shirt: "#8c6b5b", props: [books, mug] }
+appearance: { style: pony, shirt: "#8c6b5b", props: [books, magnifier] }
 ---
 ## Rules
 - Work only on the contract the Legal Counsel gave you, in `contracts/`; templates in the Company Brain are read only.

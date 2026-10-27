@@ -10,7 +10,7 @@ skills: [contract-checklist, source-docs-intake]
 tools: [Read, Grep, Glob, Write, Edit, TodoWrite, Agent, SendMessage, AskUserQuestion]
 permissions:
   deny: ["Read(./.env)", "Read(./.env.*)", "Bash", "WebFetch", "Bash(git push*)", "Bash(rm -rf *)"]
-appearance: { style: bob, shirt: "#5b6b8c", props: [books, plant], screen: docs }
+appearance: { style: bob, shirt: "#5b6b8c", props: [books, trophy], screen: board }
 ---
 ## Rules
 - Contracts start from the templates in the Company Brain (`legal/templates/`), which are locked: copy them into `contracts/`, never edit the originals.
