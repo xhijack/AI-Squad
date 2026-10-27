@@ -12,6 +12,8 @@
 //   aisquad verify FILE [--passphrase-env VAR]            check that a backup reads back
 //   aisquad restore FILE [--dry-run] [--force] [--relink OLD=NEW]... [--projects-dir DIR] [--no-clone] [--passphrase-env VAR]
 //   aisquad doctor                                        check this machine and the Building
+//   aisquad node --head URL --name NAME [--token TOKEN] [--max-agents 6]   run this machine as a worker of a Head
+//                                                         (the token from Admin → Machines, or AISQUAD_NODE_TOKEN)
 // The server runs as a systemd user service (aisquad.service) where systemd exists, as a launchd agent on
 // macOS, otherwise as a detached process, so it survives closing the terminal or editor.
 // Options: --port 8097  --host 127.0.0.1  --no-open
@@ -158,6 +160,15 @@ async function passphrase() {
   const backup = await import('../server/backup.js');
   return backup.storedPassphrase();
 }
+// a worker machine: stays in the foreground (run it as a service the same way as the Head)
+async function nodeCmd() {
+  const head = opt('--head', process.env.AISQUAD_HEAD || ''), name = opt('--name', process.env.AISQUAD_NODE_NAME || ''), token = opt('--token', process.env.AISQUAD_NODE_TOKEN || '');
+  if (!head || !name || !token) { console.log('Usage: aisquad node --head http://head-machine:8097 --name box-2 --token TOKEN   (Admin → Machines → Add a machine)'); process.exitCode = 1; return; }
+  const { startWorker } = await import('../server/worker.js');
+  startWorker({ head: /^https?:\/\//.test(head) ? head : `http://${head}`, name, token, maxAgents: Number(opt('--max-agents', 6)) || 6 });
+  console.log(`Worker ${name} connected to ${head}. Background jobs of the Head run here with this machine's Claude sign-in.`);
+  await new Promise(() => {});
+}
 async function backupCmd() {
   const backup = await import('../server/backup.js');
   const r = backup.createBackup({ out: opt('--out', ''), passphrase: await passphrase(), secrets: flag('--with-secrets'), logs: !flag('--no-logs') });
@@ -209,6 +220,7 @@ async function main() {
   if (cmd === 'verify') return verifyCmd();
   if (cmd === 'restore') return restoreCmd();
   if (cmd === 'doctor') return doctorCmd();
+  if (cmd === 'node') return nodeCmd();
   if (cmd === 'audit') return audit();
   if (cmd === 'status') return status();
   if (cmd === 'stop') {

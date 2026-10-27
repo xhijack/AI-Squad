@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Fake `claude -p --output-format stream-json`: reads the prompt on stdin, prints an init event, a tool call, a text
 // reply and the result. FAKE_CLAUDE_MODE: fail (an error result, exit 1), budget (stopped at the budget), slow (waits
-// before answering), quota (a rate-limit event first). Args, the prompt and whether ANTHROPIC_API_KEY was set go to
+// before answering), quota (a rate-limit event first), commit (writes a file in its folder and commits it). Args, the prompt and whether ANTHROPIC_API_KEY was set go to
 // $FAKE_CLAUDE_LOG.
 const fs = require('fs');
 let prompt = '';
@@ -18,6 +18,11 @@ process.stdin.on('end', () => {
     if (mode === 'quota') out({ type: 'rate_limit_event', session_id: sid, rate_limits: { five_hour: { used_percentage: 91, resets_at: 1793050000 } } });
     out({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'README.md' } }] } });
     out({ type: 'assistant', session_id: sid, message: { content: [{ type: 'text', text: `Done: ${prompt.trim().slice(0, 40)}` }] } });
+    if (mode === 'commit') {
+      require('fs').writeFileSync(require('path').join(process.cwd(), `work-${sid}.txt`), prompt.slice(0, 200));
+      require('child_process').execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A'], { cwd: process.cwd() });
+      require('child_process').execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `work ${sid}`], { cwd: process.cwd() });
+    }
     if (mode === 'fail') { out({ type: 'result', subtype: 'error_during_execution', is_error: true, result: 'Something broke', session_id: sid, total_cost_usd: 0.01, num_turns: 1 }); process.exit(1); }
     if (mode === 'budget') { out({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: '', session_id: sid, total_cost_usd: 0.5, num_turns: 3 }); process.exit(1); }
     out({ type: 'result', subtype: 'success', is_error: false, result: `Done: ${prompt.trim().slice(0, 40)}`, session_id: sid, total_cost_usd: 0.0421, num_turns: 2, duration_ms: 1200, usage: { input_tokens: 900, output_tokens: 120 } });
