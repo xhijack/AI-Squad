@@ -285,6 +285,12 @@ Admin → Machines also has the **Move to another machine** steps (backup, copy,
 
 Admin → ERPNext shows the pipeline: Leads handed over, prices approved, orders, and the median time from Lead to draft and to approved Quotation.
 
+### Background services and stall notices (1.0.2)
+
+**Services.** A dev server, a watcher or a log tail an agent starts in the background runs until it is stopped, so it is never treated as stuck. The Desk, the agent's row and its bubble show "Running in the background: <label> · since <time>" with a **Stop** button; it does not count as work, does not skew the usual durations, and only raises a stall when the agent itself waits on it and it has written nothing for 10 minutes.
+
+**Stalls are notices.** Stall cards appear muted under **Notices**, below the questions, permissions, replies and approvals that really need you. They send a Notification or Telegram message only once they have lasted 15 minutes. **Dismiss** sticks: a dismissed stall stays away until something changes (new work for the agent, or it becomes active again); the assigned work itself is kept.
+
 ### Dialogs with several questions, denials in background runs (1.0.1)
 
 **Several questions at once.** When an agent asks a Claude Code question dialog with several questions (tabs) or a multi-select question, the Attention card and the conversation view show one block per question: radio buttons for one choice, checkboxes for several, the "Recommended" options marked, an Other field for your own answer, and one **Send answers**. The AI Squad types the answers into the dialog question by question and checks the screen after each step; if the screen does not match, it stops and says why. On Telegram such a question is listed in full with a link to answer it in the app. Autopilot answers it only when every question has a recommended option and nothing is critical.

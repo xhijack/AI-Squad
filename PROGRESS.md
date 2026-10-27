@@ -864,6 +864,13 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - **Servers** (Floor settings): host alias or `user@host` with its purpose; each one writes `Bash(ssh <host> *)` (removed with the server) and is listed in the DevOps agent file; DevOps role v4 says only those are servers.
 - Tests: `askdialog.test.js` (parser, keys for 1-4 questions, a fake dialog in a real tmux pane), `permits.test.js`, denial parsing in `jobs.test.js`, Allow and retry in `people.test.js`, Servers in `floors.test.js`.
 
+## 1.0.2: background services and stall notices (27 Oct 2026)
+
+- **Services are not stalls** (`server/tasks.js`): a background shell that serves or watches (`pnpm dev`, `next dev`, `vite`, `docker compose up` without `-d`, `--watch`, `tail -f`, `bench start`, a "start dev server" description, or output with a listening URL / "ready on") is a service. It does not make the agent "working", never stalls by itself, is left out of the usual durations and of the "command ended" cards, and shows on the Desk, the agent row and the bubble as "Running in the background: <label> · since <time>" with **Stop** (SIGTERM to its shell and children, found under the agent's tmux session by its command line). Waiting on a service (a foreground wait while it runs) stalls only when the service has written nothing for 10 minutes.
+- **Dismiss sticks**: each stall has a key: its task, or the agent's (or the whole Floor's) last activity or assignment. A dismissed key is kept in runtime (`dismissedStalls`, last 300) and that stall does not come back; a new assignment or new activity is a new stall. Dismissing no longer drops the assigned work.
+- **Stall cards are notices**: muted, under "Notices" below the owner's asks, not counted in Needs you and not turning the Floor lamp; a browser Notification or Telegram message only once the condition has lasted 15 minutes.
+- Tests: service detection on commands and output, Stop's process matching, stall keys, a dismissed stall gone across snapshots and back after a new assignment, Telegram waiting 15 minutes.
+
 ## How to run
 
 ```
