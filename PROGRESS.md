@@ -871,6 +871,13 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - **Stall cards are notices**: muted, under "Notices" below the owner's asks, not counted in Needs you and not turning the Floor lamp; a browser Notification or Telegram message only once the condition has lasted 15 minutes.
 - Tests: service detection on commands and output, Stop's process matching, stall keys, a dismissed stall gone across snapshots and back after a new assignment, Telegram waiting 15 minutes.
 
+## 1.0.3: hotfix: focus, double submits, double notifications (27 Oct 2026)
+
+- **Focus lost while typing** (cause: the Desk's task form is kept alive across panel updates, but each update took it out of the page and put it back, which drops focus and caret; Desk updates come every few seconds with the live screen. A card rebuilt between pointer-down and pointer-up also swallowed the click on Send). `ui/patch.js`: an update never replaces a focused field or the element under a pressed pointer (it waits and is applied on release or blur); the kept task form keeps its focus, caret and selection. Escape no longer leaves the Desk while typing.
+- **Double submits**: every submit (Send task, Reply, Send answers, options, Approve, Dismiss, the chat, the conversation view) runs one at a time with a spinner, Enter included; each carries an idempotency key and the server (`server/idempotency.js`) runs the same key once a minute per person.
+- **Double notifications** (cause: the same dialog changed its Attention id once the screen, the hook event or the transcript caught up, so it was announced again; and every open tab announced it). One id per dialog episode on the server; Telegram also skips the same message within 30 minutes; one browser tab claims each item (localStorage, by id and content) before it notifies or speaks.
+- Tests: a headless-Chrome DOM test (typing through updates keeps the element, text and caret; Send during an update sends once; a second click and Ctrl+Enter while it runs do nothing), idempotent API calls, one claim per item across tabs, stable dialog ids, Telegram de-duplication.
+
 ## How to run
 
 ```
