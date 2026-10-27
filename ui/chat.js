@@ -2,7 +2,7 @@
 // Desk → Chat (0.14): talk to one agent directly. "This Space": the agent in its project (a running Desk session
 // gets the message typed in, else a background job answers). "General": the same agent with no project, only its
 // role and the Company Brain. Messages from people go first in the dispatcher's queue.
-import { esc, api, toast, openModal, mdLite, ago } from './lib.js';
+import { esc, api, toast, openModal, mdLite, ago, oneAtATime, newKey } from './lib.js';
 import { ctx } from './ctx.js';
 import { t, tx } from './i18n.js';
 
@@ -60,18 +60,19 @@ async function openChat(floorId, agentId, context = 'space') {
       await poll();
     } catch (err) { toast(tx(err.message), 6000); b.disabled = false; }
   };
-  form.onsubmit = async (e) => {
+  // one message per send (a double click, Ctrl+Enter and a click): one at a time, and its key makes a duplicate a no-op
+  form.onsubmit = (e) => {
     e.preventDefault();
     const text = ta.value.trim(); if (!text) return;
-    form.querySelector('button').disabled = true;
-    try {
-      const r = await api('POST', `/api/floors/${floorId}/agents/${agentId}/chat`, { text, context });
-      ta.value = '';
-      if (r.delivery === 'queued') toast(t('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) }), 6000);
-      await poll();
-    } catch (err) { toast(err.message, 5000); }
-    form.querySelector('button').disabled = false;
-    ta.focus();
+    form.dataset.key ||= newKey();
+    oneAtATime(form, async () => {
+      try {
+        const r = await api('POST', `/api/floors/${floorId}/agents/${agentId}/chat`, { text, context }, { key: form.dataset.key });
+        ta.value = ''; delete form.dataset.key;
+        if (r.delivery === 'queued') toast(t('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) }), 6000);
+        await poll();
+      } catch (err) { toast(err.message, 5000); }
+    }).then(() => ta.focus());
   };
   ta.focus();
 }

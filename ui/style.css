@@ -752,3 +752,8 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .denied code { word-break: break-all; }
 /* stall notices under the owner's real asks (1.0.2) */
 .noticesHead { margin: 12px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+/* a submission in flight (1.0.3): the button shows a spinner and takes no second click */
+button.busy { position: relative; color: transparent !important; pointer-events: none; }
+button.busy::after { content: ''; position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted, #6b7280); border-top-color: transparent; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { button.busy::after { animation-duration: 2s; } }

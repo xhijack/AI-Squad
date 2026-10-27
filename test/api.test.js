@@ -366,3 +366,15 @@ test('static JSON (the UI translations) is served as it is', async () => {
   const j = await r.json();
   assert.equal(j['Send task'], 'Kirim tugas');
 });
+
+test('a submission sent twice with the same idempotency key runs once and both get the first answer (1.0.3)', async () => {
+  const post = (body, key) => fetch(`${base}/api/users`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-aisquad-pin': pin, ...(key ? { 'x-idempotency-key': key } : {}) }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const [a, b] = await Promise.all([post({ name: 'Idem', role: 'viewer' }, 'k-1'), post({ name: 'Idem', role: 'viewer' }, 'k-1')]);
+  assert.deepEqual([a.status, b.status], [200, 200]); assert.equal(a.body.pin, b.body.pin, 'the same answer');
+  assert.equal((await post({ name: 'Idem', role: 'viewer' }, 'k-1')).body.pin, a.body.pin, 'a late duplicate too');
+  assert.equal((await call('GET', '/api/users')).body.users.filter((u) => u.name === 'Idem').length, 1, 'one person');
+  assert.equal((await post({ name: 'Idem', role: 'viewer' })).status, 400, 'without a key it really runs again');
+  const bad = await post({ name: '', role: 'viewer' }, 'k-2');
+  assert.equal(bad.status, 400);
+  assert.equal((await post({ name: 'Idem2', role: 'viewer' }, 'k-2')).status, 200, 'a failure is not kept: a retry runs');
+});

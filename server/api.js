@@ -24,6 +24,7 @@ import { runDoctor } from './doctor.js';
 import * as service from './service.js';
 import * as auth from './auth.js';
 import * as jobs from './jobs.js';
+import * as idem from './idempotency.js';
 import * as history from './history.js';
 import * as company from './company.js';
 import * as admin from './admin.js';
@@ -337,12 +338,14 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
         if (body && typeof body === 'object' && body.floorId && access.hiddenPath(`/api/floors/${body.floorId}`, user)) return send(res, 404, { error: 'Floor not found' });
         // configuration is code: changes to the Building or a Space are recorded with their before and after (server/history.js)
-        let out = await access.actorStore.run({ user }, async () => {
+        // a submission sent twice (double click, two tabs) runs once: x-idempotency-key (server/idempotency.js)
+        const run = (fn) => (method === 'GET' ? fn() : idem.once(user?.id || 'owner', req.headers['x-idempotency-key'], fn));
+        let out = await run(() => access.actorStore.run({ user }, async () => {
           if (!opts.history) return handler(m.slice(1), body, req);
           const h = opts.history(m.slice(1), body);
           let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
           return history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor }, () => handler(m.slice(1), body, req));
-        });
+        }));
         if (method !== 'GET' && /^\/api\/floors/.test(url.pathname)) access.forgetOwnerFloors();
         out = access.redact(url.pathname, out, user);
         if (out === null) return send(res, 404, { error: 'Not found' });

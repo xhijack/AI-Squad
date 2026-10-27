@@ -2,7 +2,7 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { createSceneHost } from './renderer.js';
 import { OVERVIEWS, defaultOverview } from './scene-model.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago, oneAtATime, newKey } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -29,6 +29,7 @@ import { readAskForm } from './askform.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
+import { makePatcher } from './patch.js';
 
 translateDom();                                       // the static parts of index.html
 $('langName').textContent = LANGS[LANG];
@@ -146,25 +147,26 @@ function getTaskForm() {
     }
     e.target.value = '';
   });
-  f.addEventListener('submit', async (e) => {
+  // one submission at a time (Enter and a click, a double click); its key makes a duplicate that still arrives a no-op
+  f.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = f.elements.text.value.trim();
     if (!text) return;
-    const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
-    try {
-      if (f.elements.bg.checked) {
-        const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' });
-        if (!r) { btn.disabled = false; return; }
-        toast(r.waiting ? queuedText(r) : tt('Background job started'), r.waiting ? 6000 : 2800);
-        f.elements.text.value = ''; taskFiles = []; drawFiles(); btn.disabled = false; refresh();
-        return;
-      }
-      const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) });
-      toast(r.waiting ? queuedText(r) : r.queued ? tx(r.note) : tt('Task sent'), r.waiting ? 6000 : 2800);
-      f.elements.text.value = ''; taskFiles = []; drawFiles();
-      refresh();
-    } catch (err) { toast(err.message); }
-    btn.disabled = false;
+    f.dataset.key ||= newKey();
+    oneAtATime(f, async () => {
+      try {
+        if (f.elements.bg.checked) {
+          const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' }, false, f.dataset.key);
+          if (!r) return;
+          toast(r.waiting ? queuedText(r) : tt('Background job started'), r.waiting ? 6000 : 2800);
+        } else {
+          const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) }, { key: f.dataset.key });
+          toast(r.waiting ? queuedText(r) : r.queued ? tx(r.note) : tt('Task sent'), r.waiting ? 6000 : 2800);
+        }
+        f.elements.text.value = ''; taskFiles = []; drawFiles(); delete f.dataset.key;
+        refresh();
+      } catch (err) { toast(err.message); }
+    });
   });
   f.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) f.requestSubmit(); });
   function drawFiles() {
@@ -196,24 +198,22 @@ function tabsHtml(list, active, group) {
   return list.map((s) => `<button role="tab" data-tab="${group}:${s.id}" aria-selected="${s.id === active}">${s.icon ? icon(s.icon) : ''}${esc(s.title)}${s.count ? `<span class="count ${s.countClass || ''}">${s.count}</span>` : ''}</button>`).join('');
 }
 
-// set innerHTML only when it changed and the user is not typing inside; keep scroll positions and slots
-function patch(el, html) {
-  if (el._html === html) return;
-  const active = document.activeElement;
-  if (active && el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName) && !active.closest('[data-slot]')) return;
-  const scrolls = {};
-  el.querySelectorAll('[data-scroll]').forEach((s) => { scrolls[s.dataset.scroll] = { top: s.scrollTop, bottom: s.scrollHeight - s.scrollTop - s.clientHeight < 24 }; });
-  const bodies = [...el.querySelectorAll('.cardBody')].map((x) => x.scrollTop);
-  const bodyTop = el.scrollTop;
-  for (const slot of el.querySelectorAll('[data-slot]')) for (const c of [...slot.children]) c.remove();   // keep slot nodes alive
-  el.innerHTML = html;
-  el._html = html;
-  el.querySelectorAll('[data-slot="task"]').forEach((s) => s.appendChild(getTaskForm()));
-  // new scroll areas start at the end (screens, a reply card's ask); a Finished report starts at its first lines
-  el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p ? ('top' in s.dataset ? 0 : s.scrollHeight) : p.bottom && !('top' in s.dataset) ? s.scrollHeight : p.top; });
-  el.querySelectorAll('.cardBody').forEach((x, i) => { x.scrollTop = bodies[i] || 0; });
-  el.scrollTop = bodyTop;
-}
+// set innerHTML only when it changed, never under the owner's typing or a click (ui/patch.js); keep scroll positions and slots
+const patcher = makePatcher({
+  fillSlots: (el) => el.querySelectorAll('[data-slot="task"]').forEach((s) => s.appendChild(getTaskForm())),
+  before: (el) => {
+    const scrolls = {};
+    el.querySelectorAll('[data-scroll]').forEach((s) => { scrolls[s.dataset.scroll] = { top: s.scrollTop, bottom: s.scrollHeight - s.scrollTop - s.clientHeight < 24 }; });
+    return { scrolls, bodies: [...el.querySelectorAll('.cardBody')].map((x) => x.scrollTop), top: el.scrollTop };
+  },
+  after: (el, { scrolls, bodies, top }) => {
+    // new scroll areas start at the end (screens, a reply card's ask); a Finished report starts at its first lines
+    el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p ? ('top' in s.dataset ? 0 : s.scrollHeight) : p.bottom && !('top' in s.dataset) ? s.scrollHeight : p.top; });
+    el.querySelectorAll('.cardBody').forEach((x, i) => { x.scrollTop = bodies[i] || 0; });
+    el.scrollTop = top;
+  },
+});
+const patch = (el, html) => patcher.patch(el, html);
 
 // one floating card: an optional back link, tabs when it holds several sections, the active section's body
 function cardHtml(list, group) {
@@ -446,13 +446,14 @@ function announceAttention(list, route) {
   // items that arrive later open the popover, so the two never open together
   if (!attBooted) { attBooted = true; fresh.forEach((a) => seenAtt.add(a.id)); return; }
   if (!fresh.length) return;
+  const mine = fresh;
   // the newest report or question is said aloud by its character (short; the full text is in the conversation view)
-  const say = fresh.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
+  const say = mine.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
   if (say && seenAtt.size) playLine({ floorId: say.floorId, agentId: say.agentId, kind: say.kind, text: say.text });
   fresh.forEach((a) => seenAtt.add(a.id));
   try { sessionStorage.setItem('aisquad.seenAtt', JSON.stringify([...seenAtt].slice(-200))); } catch { /* private mode */ }
-  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-    const a = fresh[0];
+  if (mine.length && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    const a = mine[0];
     try { new Notification(a.kind === 'finished' ? tt('{name} finished', { name: a.agentName || tt('An agent') }) : tt('{name} needs you', { name: a.agentName || tt('An agent') }), { body: String(a.text || '').slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
   }
   // do not interrupt: typing, an open dialog, another popover, or the screen / first person view
@@ -506,6 +507,7 @@ document.addEventListener('click', (e) => {
 }, true);
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable) return;   // typing: Escape is the field's
   if (POPS.some((id) => !$(id).hidden)) return closePopovers();
   if (ctx.editing) return;
   if (state.route.eyes || state.route.follow) location.hash = `#/floor/${state.route.floorId}`;
@@ -529,11 +531,11 @@ addEventListener('resize', () => { for (const id of ['hud', 'dock', 'sideTop', '
 // starts that the Watchdog may question first (swap above 80 %, the Floor at its maximum of agents): ask, then force
 // the dispatcher queued it (0.13): why it waits; it starts by itself when there is room
 const queuedText = (r) => tt('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) });
-async function guarded(url, body = {}, force = false) {
-  try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }); } catch (e) {
+async function guarded(url, body = {}, force = false, key = '') {
+  try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }, { key }); } catch (e) {
     if (e.status !== 409) throw e;
     if (!confirm(tt('Watchdog: {message}', { message: tx(e.message) }))) return null;
-    return api('POST', url, { ...body, force: true });
+    return api('POST', url, { ...body, force: true }, { key: key && `${key}-force` });
   }
 }
 
@@ -637,7 +639,8 @@ document.addEventListener('click', async (e) => {
     if (!fn) return;
     e.preventDefault();
     closePopovers();
-    try { await fn(act); } catch (err) { if (err.status !== 401) toast(err.message); }
+    // one at a time per button: a second click while the first runs does nothing (answers, Approve, Dismiss, …)
+    await oneAtATime(act, async () => { try { await fn(act); } catch (err) { if (err.status !== 401) toast(err.message); } });
     refresh();
     return;
   }
@@ -656,13 +659,14 @@ document.addEventListener('submit', async (e) => {
   const r = e.target.closest('form[data-act="reply"]');
   if (!r) return;
   e.preventDefault();
-  const btn = r.querySelector('button:not([type=button])'); btn.disabled = true;   // Send reply (reply card) or Reply (Finished card)
   // the typed text stays (textarea and draft) until the server confirms; a moved-on item still gets it as a message
-  try {
-    const res = await answerItem(r.dataset.id, { option: 1, text: r.elements.text.value }, itemContext(r));
-    drafts.delete(r.dataset.id); r.elements.text.value = ''; r.elements.text.blur();
-    toast(res.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Reply sent'));
-  } catch (err) { btn.disabled = false; drafts.set(r.dataset.id, r.elements.text.value); toast(err.message); }
+  await oneAtATime(r, async () => {
+    try {
+      const res = await answerItem(r.dataset.id, { option: 1, text: r.elements.text.value }, itemContext(r));
+      drafts.delete(r.dataset.id); r.elements.text.value = ''; r.elements.text.blur();
+      toast(res.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Reply sent'));
+    } catch (err) { drafts.set(r.dataset.id, r.elements.text.value); toast(err.message); }
+  });
   refresh();
 });
 // a dialog with several questions or multi-select (askform.js): every answer at once
@@ -672,16 +676,17 @@ document.addEventListener('submit', async (e) => {
   e.preventDefault();
   const item = (state.building?.attention || []).concat(state.floor?.attentionItems || []).find((x) => x.id === f.dataset.id);
   if (!item) { toast(tt('Already answered')); refresh(); return; }
-  const btn = f.querySelector('button.gold'); btn.disabled = true;
-  try { await answerItem(f.dataset.id, { answers: readAskForm(f, item) }, itemContext(f)); toast(tt('Answers sent')); }
-  catch (err) { f.querySelector('[data-askerr]').textContent = err.message; btn.disabled = false; }
+  await oneAtATime(f, async () => {
+    try { await answerItem(f.dataset.id, { answers: readAskForm(f, item) }, itemContext(f)); toast(tt('Answers sent')); }
+    catch (err) { f.querySelector('[data-askerr]').textContent = err.message; }
+  });
   refresh();
 });
 document.addEventListener('submit', async (e) => {
   const f = e.target.closest('form[data-act="answer-free"]');
   if (!f) return;
   e.preventDefault();
-  try { const r = await answerItem(f.dataset.id, { option: +f.dataset.n, text: f.elements.text.value }, itemContext(f)); toast(r.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Answer sent')); } catch (err) { toast(err.message); }
+  await oneAtATime(f, async () => { try { const r = await answerItem(f.dataset.id, { option: +f.dataset.n, text: f.elements.text.value }, itemContext(f)); toast(r.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Answer sent')); } catch (err) { toast(err.message); } });
   refresh();
 });
 // theme: light (default) → dark → auto (follows the system), remembered per browser

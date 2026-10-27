@@ -3,7 +3,7 @@
 // as a speech bubble (readable markdown that scrolls between a fixed header and action bar), the actions for the
 // item (options, Reply, OK / Dismiss, Open desk), and "n of m" with previous / next. While it is open the office
 // camera eases to the agent and a short bubble appears over its head. Esc closes.
-import { esc, api, toast, ago, mdLite, drafts, answerItem } from './lib.js';
+import { esc, api, toast, ago, mdLite, drafts, answerItem, oneAtATime } from './lib.js';
 import { ctx } from './ctx.js';
 import { preview, bubbleText, actionsFor, step, ofText } from './convo-model.js';
 import { playLine, stopVoice } from './voice.js';
@@ -76,8 +76,15 @@ function render() {
   (d.querySelector('.convoActions textarea') || d.querySelector('.convoActions button.gold') || d.querySelector('.convoBody')).focus({ preventScroll: true });
 }
 
+// one action at a time in the conversation view: a second click or Enter while it runs does nothing
+let acting = false;
 async function act(fn, done = t('Sent')) {
-  try { const r = await fn(); if (!r?.gone) toast(done); } catch (e) { toast(e.message); return; }   // gone: the helper already said "Already answered"
+  if (acting) return;
+  acting = true;
+  const bar = dialogEl().querySelectorAll('button, input, textarea');
+  bar.forEach((b) => { b.disabled = true; }); dialogEl().classList.add('busy');
+  try { const r = await fn(); if (!r?.gone) toast(done); } catch (e) { toast(e.message); bar.forEach((b) => { b.disabled = false; }); return; }   // gone: the helper already said "Already answered"
+  finally { acting = false; dialogEl().classList.remove('busy'); }
   C.list.splice(C.i, 1);
   await ctx.refresh();
   if (!C.list.length) return dialogEl().close();
