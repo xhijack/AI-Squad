@@ -118,7 +118,7 @@ export class Office {
       if (el) {
         const html = f ? `${floorLabelHtml(f)}<span class="k">${f.kind === 'department' ? tt('Department') : tt('Project')}</span>`
           : r.kind === 'lobby' ? `<b>${tt('Lobby')}</b> <span class="${company.queued ? 'q' : 'm'}">${tt('{n} queued', { n: company.queued || 0 })}</span>`
-          : r.kind === 'owner' ? `<b>${tt('Owner')}</b> <span class="${company.attention ? 'q' : 'm'}">${tt('{n} waiting for you', { n: company.attention || 0 })}</span>`
+          : r.kind === 'owner' ? `<b>${tt('Owner')}</b> <span class="${company.attention ? 'q' : 'm'}">${tt('{n} waiting for you', { n: company.attention || 0 })}</span>${company.targets?.total ? ` <span class="${company.targets.behind ? 'q' : 'm'}">${tt('{met}/{n} targets', { met: company.targets.met, n: company.targets.total })}</span>` : ''}`
           : `<b>${tt('Server room')}</b> <span class="m">${esc(serverText(company))}</span>`;
         if (el.innerHTML !== html) el.innerHTML = html;
         if (f) el.style.setProperty('--c', f.accent || '#7c5cd6');

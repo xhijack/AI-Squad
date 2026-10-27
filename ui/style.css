@@ -739,3 +739,8 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .moveSteps li { line-height: 1.5; }
 .moveSteps code { word-break: break-all; }
 .contractText { white-space: pre-wrap; font-size: 12px; max-height: 360px; overflow: auto; background: var(--sunk); border-radius: 10px; padding: 10px 12px; margin: 6px 0 0; }
+.lvTop { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.kval { font-weight: 700; }
+.spark { color: var(--muted); margin-left: 6px; }
+.badText { color: var(--bad); }
+.kadd { margin-top: 8px; } .kadd summary { cursor: pointer; }

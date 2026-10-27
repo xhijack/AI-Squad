@@ -61,6 +61,7 @@ const scene = createSceneHost($('scene'), {
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && (state.route.floorId === floorId || state.route.mode === 'lobby')) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
   onPickQueue: () => ctx.actions.admin?.({ dataset: { tab: 'dispatcher' } }),                          // Office / List: the Lobby
   onPickOwner: () => document.querySelector('[data-pop="attPop"]')?.click(),                            // Office / List: approvals
+  onPickTargets: () => ctx.actions.admin?.({ dataset: { tab: 'targets' } }),                           // List: the targets (1.1)
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
   onPickRack: () => { if (!ctx.editing) ctx.actions.meter(); },
   onPickEyes: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/eyes`; },
@@ -396,7 +397,7 @@ function render() {
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
   scene.route(route, !!ctx.editing, ctx.overview);                     // three.js, Iso Pixel or the List (ui/renderer.js)
   scene.sync(floorsForScene);
-  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits });
+  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits, targets: b.targets || null });
   showRenderer();
   const viewKey = routeKey(route) + (state.desk ? '' : '-') + ctx.overview;
   if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route, overview: ctx.overview }); }
