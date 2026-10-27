@@ -34,6 +34,9 @@ import * as inbox from './inbox.js';
 import * as insight from './insight.js';
 import * as nodes from './nodes.js';
 import * as erp from './erpnext.js';
+import * as tiering from './tiering.js';
+import * as trust from './trust.js';
+import * as promote from './promote.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -245,6 +248,11 @@ const routes = [
   ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
+  // contracts in Legal Spaces and model tiering (0.20): the Owner's
+  ['GET', /^\/api\/legal$/, () => squad.legalOverview(), { pin: true }],
+  ['GET', /^\/api\/legal\/contract$/, (p, b, req) => squad.contractText(new URL(req.url, 'http://x').searchParams.get('key') || ''), { pin: true }],
+  ['GET', /^\/api\/tiering$/, () => tiering.status(), { pin: true }],
+  ['PATCH', /^\/api\/tiering$/, (p, b) => tiering.saveSettings(b), { pin: true, history: () => ({ label: 'Model tiering' }) }],
   ['GET', /^\/api\/handoffs$/, (p, b, req) => squad.handoffsOverview(req.user), { pin: true }],
   ['POST', /^\/api\/handoffs\/scan$/, () => squad.handoffTick(), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],
@@ -266,6 +274,12 @@ const routes = [
   ['GET', /^\/api\/insights$/, () => inbox.list(), { pin: true }],
   ['PATCH', /^\/api\/insights$/, (p, b) => { building.setPrefs({ insight: insight.cleanInsight({ ...building.loadBuilding().prefs.insight, ...b }) }); return inbox.list(); }, { pin: true, history: () => ({ label: 'Daily Insight settings' }) }],
   ['POST', /^\/api\/insights\/run$/, () => { const r = inbox.run(); return { ...inbox.list(), added: r.added.length }; }, { pin: true }],
+  ['POST', /^\/api\/insights\/trust$/, (p, b) => ({ trust: trust.setLevel(String(b.category || ''), b.level) }), { pin: true, history: () => ({ label: 'Daily Insight trust level' }) }],
+  ['POST', /^\/api\/insights\/([\w-]+)\/canary$/, ([id], b, req) => trust.decideCanary(id, b.keep === true, { by: req.user?.name || 'Owner', rollback: history.rollback }), { pin: true }],
+  // promoting a lesson from a Space (L2) to a Role Template (L1), always the Owner's call
+  ['GET', /^\/api\/promote$/, () => promote.candidates(), { pin: true }],
+  ['POST', /^\/api\/promote\/preview$/, (p, b) => promote.preview(b), { pin: true }],
+  ['POST', /^\/api\/promote$/, (p, b, req) => promote.apply({ ...b, by: req.user?.name || 'Owner' }), { pin: true }],
   ['POST', /^\/api\/insights\/([\w-]+)\/accept$/, ([id], b, req) => inbox.accept(id, req.user), { pin: true }],
   ['POST', /^\/api\/insights\/([\w-]+)\/dismiss$/, ([id], b, req) => inbox.dismiss(id, req.user, b.reason), { pin: true }],
   // direct chat with one agent (0.14): ?context=space|general

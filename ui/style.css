@@ -738,3 +738,4 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .moveSteps { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 8px; }
 .moveSteps li { line-height: 1.5; }
 .moveSteps code { word-break: break-all; }
+.contractText { white-space: pre-wrap; font-size: 12px; max-height: 360px; overflow: auto; background: var(--sunk); border-radius: 10px; padding: 10px 12px; margin: 6px 0 0; }

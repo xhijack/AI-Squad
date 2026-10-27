@@ -836,6 +836,27 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `handoff.test.js`, `erpnext.test.js` (a fake ERPNext), `sales-pilot.test.js` (API end to end with the fake headless Claude), the secret file for tmux sessions.
 - Not yet: the acceptance with three real Sopwer opportunities (needs `office.sopwer.id`, on the Sopwer machine), OAuth for FAC, Sales Orders and invoices, agents walking between Rooms in the Office view.
 
+## Phase 4, Sprint 11: Legal, Marketing at night and model tiering, 0.20.0 (27 Oct 2026)
+
+- **Legal Blueprint and roles**: `legal-counsel` (lead) and `contract-drafter` (no shell, no web), `docs/LEGAL-POLICY.md` as the source document, `contracts/`; a Blueprint can now set its Space (`space: { kind, access, shift }`): Legal is an Owner-only department.
+- **Locked bilingual templates** in the Company Brain (`legal/templates/nda.md`, `service-agreement.md`; Indonesian governing; UU PDP clauses), seeded into every Company Brain and never overwritten; the `contract-checklist` skill (Pasal 1320 KUHPerdata, UU 24/2009, UU 27/2022, UU ITE and PP 71/2019, bea meterai, commercial points).
+- **Contracts stay DRAFT** (`server/legal.js`): READY FOR REVIEW is an Owner-only card (hard stop: legal) for the version it shows; Approve writes APPROVED with the date and keeps a fingerprint; Request changes puts it back to DRAFT with a task for the lead; the guard (every 20 s) puts anything APPROVED behind the Owner's back, or changed after approval, back to DRAFT. Admin → Legal.
+- **Marketing at night**: the Digital Marketing Blueprint v2 makes a department with a 22:00-05:00 shift every day.
+- **Model tiering** (`server/tiering.js`): a tier per role, routine background work one tier lighter, Legal pinned, the owner's model and chats kept; the tier is recorded on each job; cost per job before and since in Admin → Dispatcher (target −30 %).
+- Tests: `legal.test.js`, `legal-squad.test.js` (API: the Legal squad, the contract card, the guard, tiering on a routine handoff).
+- Not yet: the cost target measured on real work (needs a few weeks of jobs on the Sopwer machine), a template library beyond NDA and services, e-signing from the app.
+
+## Phase 4, Sprint 12: self-learning v2, ERP Consultant and release 1.0.0 (27 Oct 2026)
+
+- **Trust ladder level 1** (`server/trust.js`): per category (rules for agents, models), earned with 10 accepted suggestions, 80 % accepted and improved follow-ups (60 % of 3+ measured); a new suggestion of a level 1 category is applied by itself as a 7-day canary on its one agent (never a Legal role or Space), measured with the counts that raised it, and a card asks the Owner to keep it or roll it back (the change history undoes it; `history.track` now reports the record id). Every accepted change gets a follow-up measurement a week later. Admin → Improvements: the ladder, running canaries, decisions with their follow-up.
+- **Capacity advice**: queue waits limited by memory or CPU suggest adding a machine (with the workers' free slots); out-of-memory crashes mention it too.
+- **Promote a lesson** (`server/promote.js`): a line of a Space's LEARNINGS.md becomes a Role Template rule after the client is taken out (Space name, folder, agents, personal data, secrets); refused while anything of the client is left; a new template version; logged in `insights/promotions.jsonl`.
+- **ERP Consultant Blueprint**: Project Manager, the new ERP Functional Consultant role, Frappe Developer, QA; BRD, fit-gap, data migration and UAT plans; the `fit-gap-analysis` skill.
+- **Quickstart**: `install.sh` (checks Node 22, git, tmux, Claude Code; installs into `~/.aisquad-app` without sudo; links `aisquad`) and `aisquad quickstart [--blueprint ID --name NAME]`. Docs: `docs/QUICKSTART.md`, Indonesian `docs/id/QUICKSTART.md` and `docs/id/PANDUAN.md`.
+- Fix: the Legal roles' appearance used values the role editor does not know.
+- Tests: `trust.test.js` (the ladder, a canary measured and rolled back, capacity advice, a promoted lesson), the quickstart on a clean home.
+- Not yet: trust level 2 (auto-apply everywhere with auto-rollback), suggestions for shift hours and Claude Code version pins, the real-world 30 % cost target and the three ERPNext opportunities (on the Sopwer machine).
+
 ## How to run
 
 ```

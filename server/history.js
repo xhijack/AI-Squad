@@ -22,13 +22,14 @@ export function filesOf({ root = '', floorId = '' } = {}) {
 const snapshot = (files) => Object.fromEntries(Object.entries(files).map(([k, p]) => [k, readText(p)]));
 
 // runs fn and records what it changed; nothing is recorded when nothing changed. scope: { root, floorId }
-export async function track(label, { root = '', floorId = '', actor = 'owner', now = Date.now } = {}, fn) {
+// onRecord(id): the id of the record, for a caller that may roll it back later (0.21: canaries)
+export async function track(label, { root = '', floorId = '', actor = 'owner', now = Date.now, onRecord = null } = {}, fn) {
   const files = filesOf({ root, floorId });
   const before = snapshot(files);
   const result = await fn();
   const after = snapshot(files);
   const changed = Object.keys(files).filter((k) => before[k] !== after[k]);
-  if (changed.length) record({ label, floorId, actor, ts: now(), files: changed.map((k) => ({ key: k, path: files[k], before: before[k], after: after[k] })) });
+  if (changed.length) { const id = record({ label, floorId, actor, ts: now(), files: changed.map((k) => ({ key: k, path: files[k], before: before[k], after: after[k] })) }); onRecord?.(id); }
   return result;
 }
 let seq = 0;

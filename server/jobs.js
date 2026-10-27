@@ -81,7 +81,7 @@ export function recordRemote(spec, { now = Date.now() } = {}) {
   writeText(file(id, 'prompt'), String(spec.prompt || ''), 0o600);
   const job = { id, floorId: spec.floorId || '', agentId: spec.agentId || '', kind: spec.kind || 'task', title: clip(oneLine(spec.title || spec.prompt, 120), 120), prompt: clip(String(spec.prompt || ''), 2000),
     cwd: '', model: spec.model || '', budgetUsd: spec.budgetUsd || null, permissionMode: spec.permissionMode || 'dontAsk', via: spec.via || 'aisquad', node: spec.node, opts: spec.opts || {},
-    meta: spec.meta || null, status: 'running', createdAt: now, startedAt: now, endedAt: null, pid: null, sessionId: '', cost: 0, turns: 0, activity: `queued on ${spec.node}`, result: '', error: '' };
+    meta: spec.meta || null, ...(spec.tier ? { tier: spec.tier } : {}), status: 'running', createdAt: now, startedAt: now, endedAt: null, pid: null, sessionId: '', cost: 0, turns: 0, activity: `queued on ${spec.node}`, result: '', error: '' };
   saveJob(job);
   return job;
 }
@@ -136,7 +136,7 @@ export function startJob(spec, { spawnFn = spawn, now = Date.now() } = {}) {
   child.unref?.();
   const job = { id, floorId: spec.floorId || '', agentId: spec.agentId || '', kind: spec.kind || 'task', title: clip(oneLine(spec.title || prompt, 120), 120), prompt: clip(prompt, 2000),
     cwd: spec.cwd, model: spec.model || '', budgetUsd: spec.budgetUsd || null, permissionMode: spec.permissionMode || 'dontAsk', via: spec.via || 'aisquad',
-    meta: spec.meta || null, status: 'running', createdAt: now, startedAt: now, endedAt: null, pid: child.pid || null, sessionId: '', cost: 0, turns: 0, activity: 'starting', result: '', error: '' };
+    meta: spec.meta || null, ...(spec.tier ? { tier: spec.tier } : {}), status: 'running', createdAt: now, startedAt: now, endedAt: null, pid: child.pid || null, sessionId: '', cost: 0, turns: 0, activity: 'starting', result: '', error: '' };
   saveJob(job);
   return job;
 }

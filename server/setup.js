@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import * as building from './building.js';
 import * as floors from './floors.js';
 import { getBlueprint } from './blueprints.js';
+import * as company from './company.js';
 import { kebab, clip, bad } from './util.js';
 
 export const squadsDir = (b = building.loadBuilding()) => b.prefs.squadsDir || path.join(os.homedir(), 'aisquad-squads');
@@ -28,7 +29,9 @@ export async function createSquad(input) {
     name, goal: input.goal, tagline: input.tagline || `${bp.title} squad`, directory: { mode, path: target }, team: team.map((m) => ({ displayName: m.displayName || m.template, template: m.template, lead: !!m.lead })),
     workflow: bp.workflow, layout: floors.LAYOUTS.includes(bp.layout) ? bp.layout : 'rows', budget: input.budget, blueprint: { id: bp.id, version: bp.version },
     git: { qualityGate: String(input.qualityGate || '') }, installSkills: input.installSkills !== false, autopilot: input.autopilot,
+    ...bp.space,                                       // cleaned by the Space rules (server/space.js)
   });
+  if (bp.space.access === 'owner') company.ensure(company.companyDir(building.loadBuilding().prefs));   // the locked templates it works from
   const lead = r.team.agents.find((a) => a.lead);
   return { ok: true, id: r.entry.id, number: r.entry.number, path: r.entry.path, lead: lead?.id || null, blueprint: { id: bp.id, version: bp.version } };
 }

@@ -44,6 +44,11 @@ import * as dispatcher from './dispatcher.js';
 import * as nodesLib from './nodes.js';
 import * as hb from './handoff.js';
 import * as erp from './erpnext.js';
+import * as legal from './legal.js';
+import * as tiering from './tiering.js';
+import * as trust from './trust.js';
+import * as insightLib from './insight.js';
+import * as history from './history.js';
 import { execFileSync, execFile } from 'node:child_process';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
@@ -688,7 +693,7 @@ export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DE
   if (guard) return admit({ floorId, agentId, action: 'job', task: prompt, title, priority, via: 'owner', opts: { budgetUsd, permissionMode, kind, resume } });
   return launchJob(floorId, agentId, prompt, { budgetUsd, permissionMode, via, kind, title, resume });
 }
-function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD } = {}) {
+function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD, routine = false } = {}) {
   const { entry, cfg, agent } = locate(floorId, agentId);
   const b = building.loadBuilding();
   const remote = node && node !== nodesLib.HEAD;
@@ -697,6 +702,9 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
     ...floors.commitIdentity(agent, cfg.git), ...(remote ? {} : auth.backgroundEnv(b.prefs.auth)) };
   floors.generate(entry.path);
   const eff = floors.effectiveOf(entry.path, agent);
+  // model tiering (0.20): routine background work on a lighter model; the owner's own choice and Legal stay
+  const tierPick = kind === 'chat' ? null : tiering.modelFor({ role: eff.role, ownerModel: !!agent.overrides?.model, routine });   // a chat is you talking: the role's model
+  if (tierPick) eff.model = tierPick.model;
   // the General chat (0.14): a neutral folder with only the agent's identity and the Company Brain, no repositories
   const general = chat?.context === 'general';
   const cwd = general ? chatLib.neutralDir(floorId, agentId, path.join(entry.path, '.claude', 'agents', `${agentId}.md`)) : entry.path;
@@ -708,7 +716,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
     disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
     extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
-  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : null };
+  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : null };
   let job;
   if (remote) {
     // the Head keeps the record; the worker gets what it needs to run it in its own clone of the repository
@@ -739,7 +747,7 @@ export function spacesForHandoff() {
   return building.loadBuilding().floors.flatMap((e) => {
     try {
       const c = floors.readFloor(e.path);
-      return [{ id: e.id, number: e.number, name: c.floor.name, root: e.path, access: c.floor.access || 'team',
+      return [{ id: e.id, number: e.number, name: c.floor.name, root: e.path, access: c.floor.access || 'team', blueprint: c.floor.blueprint?.id || '',
         agents: c.team.agents.map((a) => ({ id: a.id, displayName: a.displayName, lead: !!a.lead || sprint.roleKind(a) === 'lead' })) }];
     } catch { return []; }
   });
@@ -750,14 +758,20 @@ Object.assign(hb.deps, {
   log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); },
   // the receiver works on it in the background: P1 (a handoff), this machine, edits allowed in its own Space
   wake: ({ floorId, agentId, prompt, title, handoff }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: 'handoff',
-    opts: { kind: 'handoff', permissionMode: 'acceptEdits', headOnly: true, handoff } }),
+    opts: { kind: 'handoff', permissionMode: 'acceptEdits', headOnly: true, handoff, routine: tiering.LIGHT_KINDS.has(hb.get(handoff)?.kind) } }),
   ownerItem: async (h) => { if (h.kind === 'quotation') await erp.prepareApproval(h); invalidate(); },
 });
 erp.deps.invalidate = () => invalidate();
+Object.assign(legal.deps, {
+  spaces: spacesForHandoff,
+  log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); },
+  ask: ({ floorId, agentId, prompt, title }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: 'owner', opts: { kind: 'task', permissionMode: 'acceptEdits', headOnly: true } }),
+  invalidate: () => invalidate(),
+});
 
 // what only the Owner decides, on the Owner's desk: packages leaving an Owner-only Space, questions about ERPNext
 // work, price approvals (a hard stop: money) and ERPNext alerts. Hidden from everyone else (ownerOnly).
-const OWNER_DESK = new Set(['handoff', 'price', 'erpnext']);
+const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary']);
 function ownerDesk(states) {
   const where = (floorId, agentId) => {
     const s = states.find((x) => x.entry.id === floorId);
@@ -779,6 +793,13 @@ function ownerDesk(states) {
     }
   }
   for (const a of erp.loadState().alerts) out.push({ id: attId('erp', a.id), kind: 'erpnext', floorId: null, ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
+  // contracts (0.20): READY FOR REVIEW is a card for the version it shows; the guard's alerts
+  for (const c of legal.reviewItems()) out.push({ ...where(c.floorId, ''), id: attId('contract', c.key, c.hash), kind: 'contract', ownerOnly: true, answerable: true, hardStop: ['legal'],
+    contractKey: c.key, contractHash: c.hash, file: c.rel, text: c.text, ts: Date.now(), options: [{ n: 1, label: 'Approve the contract' }, { n: 2, label: 'Request changes…', free: true }] });
+  // a canary of Daily Insight finished its week (0.21): keep it or roll it back
+  for (const it of insightLib.loadInbox().items.filter((x) => x.status === 'canary-done')) out.push({ ...where(it.change?.floorId, it.change?.agentId), id: attId('canary', it.id), kind: 'canary', ownerOnly: true, answerable: true,
+    suggestionId: it.id, text: trust.canaryText(it), ts: it.canaryUntil, options: [{ n: 1, label: 'Keep it' }, { n: 2, label: 'Roll it back' }] });
+  for (const a of legal.alerts()) out.push({ ...where(a.floorId, ''), id: attId('legal', a.id), kind: 'legal', ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
   return out;
 }
 async function answerOwnerDesk(item, option, text = '') {
@@ -787,6 +808,16 @@ async function answerOwnerDesk(item, option, text = '') {
   const by = who?.name || 'Owner', n = Number(option) || 0, note = String(text || '').trim();
   let r;
   if (item.kind === 'erpnext') r = erp.dismissAlert(item.alertId);
+  else if (item.kind === 'legal') r = legal.dismissAlert(item.alertId);
+  else if (item.kind === 'canary') {
+    if (!n) throw bad('Keep it or roll it back');
+    r = trust.decideCanary(item.suggestionId, n === 1, { by, rollback: history.rollback });
+  }
+  else if (item.kind === 'contract') {
+    if (n === 1) r = legal.approve(item.contractKey, item.contractHash, { by });
+    else if (note) r = await legal.requestChanges(item.contractKey, note, { by });
+    else throw bad('Approve it, or write what has to change');
+  }
   else if (item.kind === 'price') {
     if (n === 1) r = await erp.approve(item.handoffId, { by, seenModified: item.quotation?.modified || '' });
     else if (note) r = await erp.sendBack(item.handoffId, note, { by });
@@ -801,9 +832,16 @@ async function answerOwnerDesk(item, option, text = '') {
 // the bus and the ERPNext watcher, from the server's tick
 export async function handoffTick(now = Date.now()) {
   const sent = await hb.scan({ now });
+  const reverted = legal.guard(now);                                     // contracts: nothing APPROVED behind the Owner's back
   const erpRun = await erp.tick(now).catch((e) => ({ error: e.message }));
   if (sent.length) invalidate();
-  return { sent, erp: erpRun };
+  return { sent, erp: erpRun, reverted };
+}
+export const legalOverview = () => ({ contracts: legal.list(), metrics: legal.metrics(), alerts: legal.alerts() });
+export function contractText(key) {
+  const c = legal.contracts().find((x) => x.key === key);
+  if (!c) throw notFound('Contract not found');
+  return { key, file: c.rel, status: c.status, text: c.text };
 }
 export const handoffsOverview = (user) => (user?.role === 'owner' ? { handoffs: hb.listFor(), metrics: hb.metrics() }
   : { handoffs: hb.listFor(accessOwnerFloors(), { owner: false }), metrics: hb.metrics() });

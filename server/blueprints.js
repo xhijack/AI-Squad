@@ -32,6 +32,8 @@ export function parseBlueprint(text, fallbackId = '') {
     gates: list(data.gates), kickoff: String(data.kickoff || ''), body: String(body || '').trim(),
     // Autopilot (balanced): topics only the owner decides, besides the hard-stop list
     ownerOnly: list(data.ownerOnly).map(String).filter(Boolean),
+    // the Space a squad of this Blueprint becomes (0.20): kind, access, shift (Legal: Owner only; Marketing: nights)
+    space: (({ kind, access, shift }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
   };
 }
 

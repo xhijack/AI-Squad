@@ -12,6 +12,7 @@
 //   aisquad verify FILE [--passphrase-env VAR]            check that a backup reads back
 //   aisquad restore FILE [--dry-run] [--force] [--relink OLD=NEW]... [--projects-dir DIR] [--no-clone] [--passphrase-env VAR]
 //   aisquad doctor                                        check this machine and the Building
+//   aisquad quickstart [--blueprint ID --name NAME] [--dir PATH]   start, print the PIN, and set up a first squad (1.0)
 //   aisquad node --head URL --name NAME [--token TOKEN] [--max-agents 6]   run this machine as a worker of a Head
 //                                                         (the token from Admin → Machines, or AISQUAD_NODE_TOKEN)
 // The server runs as a systemd user service (aisquad.service) where systemd exists, as a launchd agent on
@@ -215,11 +216,41 @@ async function doctorCmd() {
   if (!r.ok) process.exitCode = 1;
 }
 
+// the first run on a new machine (install.sh ends here): the server, the PIN, and optionally a first squad
+const FIRST = ['Rina', 'Budi', 'Sari', 'Dewi', 'Agus', 'Lia', 'Dimas', 'Mira', 'Rio', 'Tono', 'Maya', 'Yudi'];
+async function quickstartCmd() {
+  const t0 = Date.now();
+  const started = await ensureServer();
+  const pin = fs.readFileSync(paths.pin(), 'utf8').trim();
+  const bpId = opt('--blueprint', '');
+  let squadLine = '';
+  if (bpId) {
+    const { getBlueprint } = await import('../server/blueprints.js');
+    const roles = await import('../server/roles.js');
+    const bp = getBlueprint(bpId);
+    let k = 0;
+    const team = bp.roles.flatMap((r) => Array.from({ length: Math.max(r.min, r.default) }, () => ({ template: r.template, displayName: `${FIRST[k++ % FIRST.length]} - ${roles.getTemplate(r.template)?.title || r.template}` })));
+    (team.find((m) => m.template === bp.lead) || team[0]).lead = true;
+    const name = opt('--name', bp.title);
+    const body = { blueprint: bp.id, name, team, ...(opt('--dir') ? { directory: { mode: 'new', path: path.resolve(opt('--dir')) } } : {}) };
+    const r = await fetch(`${BASE}/api/squads`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-aisquad-pin': pin }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    squadLine = r.ok ? `First squad: ${name} (${bp.title}, ${team.length} agents) in ${j.path}. Open it and start its lead: it asks you for the source documents first.` : `The first squad was not created: ${j.error || r.status}`;
+  }
+  const url = `${BASE}/`;
+  const opened = args.includes('--no-open') ? false : openBrowser(url);
+  console.log(`\nThe AI Squad ${VERSION} is ${started === 'running' ? 'running' : 'started'} at ${url}${opened ? ' (opened in your browser)' : ''}`);
+  console.log(`Your PIN (for changes): ${pin}   (kept in ${paths.pin()})`);
+  if (squadLine) console.log(squadLine);
+  console.log(`Ready in ${Math.round((Date.now() - t0) / 1000)} s. Next: Set up Squad in the app, or /plugin marketplace add xhijack/AI-Squad in Claude Code for /aisquad.`);
+}
+
 async function main() {
   if (cmd === 'backup') return backupCmd();
   if (cmd === 'verify') return verifyCmd();
   if (cmd === 'restore') return restoreCmd();
   if (cmd === 'doctor') return doctorCmd();
+  if (cmd === 'quickstart') return quickstartCmd();
   if (cmd === 'node') return nodeCmd();
   if (cmd === 'audit') return audit();
   if (cmd === 'status') return status();
@@ -233,7 +264,7 @@ async function main() {
     return console.log(r.removed ? `Removed the ${r.mode === 'systemd' ? 'aisquad.service user service' : 'launchd agent'}; the server is stopped. ~/.aisquad and your Floors are untouched.` : 'No service was installed.' + (r.stopped ? ' The detached server was stopped.' : ''));
   }
   if (cmd !== 'start' && cmd !== 'new-floor' && cmd !== 'open') {
-    console.log('Usage: aisquad [start | new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export | backup | verify FILE | restore FILE | doctor] [--port 8097] [--host 127.0.0.1] [--no-open]');
+    console.log('Usage: aisquad [start | quickstart [--blueprint ID --name NAME] | new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export | backup | verify FILE | restore FILE | doctor] [--port 8097] [--host 127.0.0.1] [--no-open]');
     process.exitCode = 1;
     return;
   }

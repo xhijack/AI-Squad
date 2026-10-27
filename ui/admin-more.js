@@ -49,11 +49,16 @@ export function improvementsHtml(x) {
     ${i.change ? `<div class="note mono">${esc(changeText(i.change))}</div>` : i.advice ? `<div class="note">${esc(i.advice)}</div>` : ''}
     <div class="note">${t('Check')}: ${esc(i.verify || '')}${i.metric ? ` (${t('now')}: ${esc(i.metric.before)} ${esc(i.metric.name)})` : ''}</div>
     ${i.status === 'open' ? `<div class="row"><span class="spacer"></span><button class="small ghost" data-sdismiss>${t('Dismiss')}</button><button class="small gold" data-saccept>${i.change ? t('Accept and apply') : t('Mark done')}</button></div>`
-    : `<div class="note">${i.status === 'accepted' ? t('Accepted by {by}', { by: esc(i.by || '') }) : t('Dismissed by {by}', { by: esc(i.by || '') })} · ${ago(i.decidedAt)}</div>`}</div>`;
+    : `<div class="note">${decidedText(i)}${i.decidedAt ? ` · ${ago(i.decidedAt)}` : ''}${i.followUp ? ` · ${t('a week later: {after} ({how})', { after: esc(i.followUp.after), how: i.followUp.improved ? t('better') : t('not better') })}` : ''}</div>`}</div>`;
   return `<p class="note">${t('Every night The AI Squad reads its own week (the Squad Log, crashes, the queue) and suggests improvements here. Nothing changes until you accept; an accepted change is in Changes and can be rolled back. No model is called for this.')}</p>
     <div class="row"><span class="note grow">${x.lastRun ? t('Last run {ago}', { ago: ago(x.lastRun) }) : t('Not run yet')} · ${t('every night at {at}', { at: esc(x.settings.at) })}</span><button class="small" data-srun>${t('Run now')}</button></div>
     <div class="section"><div class="sectionHead"><h3 class="grow">${t('Open ({n})', { n: open.length })}</h3></div>${open.length ? `<div class="adminList">${open.map(card).join('')}</div>` : `<div class="empty">${t('No open suggestions.')}</div>`}</div>
     ${done.length ? `<div class="section"><div class="sectionHead"><h3 class="grow">${t('Decided')}</h3></div><div class="adminList">${done.map(card).join('')}</div></div>` : ''}`;
+}
+function decidedText(i) {
+  const by = esc(i.by || '');
+  return { accepted: t('Accepted by {by}', { by }), dismissed: t('Dismissed by {by}', { by }), canary: t('Running as a canary until {when}', { when: new Date(i.canaryUntil || 0).toLocaleDateString() }),
+    'canary-done': t('Canary finished: waits for you'), kept: t('Kept after its canary by {by}', { by }), 'rolled-back': t('Rolled back after its canary by {by}', { by }) }[i.status] || esc(i.status);
 }
 function changeText(c) {
   if (c.kind === 'prefs') return Object.entries(c.patch).map(([k, v]) => `${k} → ${v}`).join(', ');
