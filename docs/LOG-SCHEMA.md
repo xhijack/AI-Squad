@@ -94,6 +94,15 @@ slot; `queue` is true when work was waiting. Resume continues the session.
 
 ### Work (`work`)
 
+**`legal.reverted`**, **`legal.approved`**, **`legal.changes`** (0.20): a contract in a Legal Space was put back to DRAFT
+(`reason`: marked APPROVED without the owner's approval, or changed after it), the owner approved it (`by`,
+`checklistOpen`: open checklist items at that moment), or asked for changes. `file` is the contract's path; its text
+is never logged.
+
+```json
+{"v":1,"id":"3e9a0b7c5d21","ts":"2026-10-27T04:10:00.000Z","floor":"legal","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"legal.reverted","summary":"contracts/2026-10-klinik-sow.md is a DRAFT again: marked APPROVED without the owner's approval","data":{"file":"contracts/2026-10-klinik-sow.md","reason":"marked APPROVED without the owner's approval"}}
+```
+
 **`erpnext.lead`**, **`erpnext.won`**, **`erpnext.approval`**, **`erpnext.approved`**, **`erpnext.sent-back`**, **`erpnext.alert`**
 (0.19): the ERPNext watcher handed a new Lead to the team, a Quotation became an order (a project handoff), an agent
 asked for a price approval, the Owner approved it (submitted with the owner key) or sent it back, a Quotation was

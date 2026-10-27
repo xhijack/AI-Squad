@@ -836,6 +836,16 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `handoff.test.js`, `erpnext.test.js` (a fake ERPNext), `sales-pilot.test.js` (API end to end with the fake headless Claude), the secret file for tmux sessions.
 - Not yet: the acceptance with three real Sopwer opportunities (needs `office.sopwer.id`, on the Sopwer machine), OAuth for FAC, Sales Orders and invoices, agents walking between Rooms in the Office view.
 
+## Phase 4, Sprint 11: Legal, Marketing at night and model tiering, 0.20.0 (27 Oct 2026)
+
+- **Legal Blueprint and roles**: `legal-counsel` (lead) and `contract-drafter` (no shell, no web), `docs/LEGAL-POLICY.md` as the source document, `contracts/`; a Blueprint can now set its Space (`space: { kind, access, shift }`): Legal is an Owner-only department.
+- **Locked bilingual templates** in the Company Brain (`legal/templates/nda.md`, `service-agreement.md`; Indonesian governing; UU PDP clauses), seeded into every Company Brain and never overwritten; the `contract-checklist` skill (Pasal 1320 KUHPerdata, UU 24/2009, UU 27/2022, UU ITE and PP 71/2019, bea meterai, commercial points).
+- **Contracts stay DRAFT** (`server/legal.js`): READY FOR REVIEW is an Owner-only card (hard stop: legal) for the version it shows; Approve writes APPROVED with the date and keeps a fingerprint; Request changes puts it back to DRAFT with a task for the lead; the guard (every 20 s) puts anything APPROVED behind the Owner's back, or changed after approval, back to DRAFT. Admin → Legal.
+- **Marketing at night**: the Digital Marketing Blueprint v2 makes a department with a 22:00-05:00 shift every day.
+- **Model tiering** (`server/tiering.js`): a tier per role, routine background work one tier lighter, Legal pinned, the owner's model and chats kept; the tier is recorded on each job; cost per job before and since in Admin → Dispatcher (target −30 %).
+- Tests: `legal.test.js`, `legal-squad.test.js` (API: the Legal squad, the contract card, the guard, tiering on a routine handoff).
+- Not yet: the cost target measured on real work (needs a few weeks of jobs on the Sopwer machine), a template library beyond NDA and services, e-signing from the app.
+
 ## How to run
 
 ```
