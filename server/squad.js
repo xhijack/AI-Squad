@@ -19,6 +19,7 @@ import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as tasksLib from './tasks.js';
 import * as askLib from './askdialog.js';
+import * as permits from './permits.js';
 import * as reposLib from './repos.js';
 import { redact } from './redact.js';
 import * as blueprintsLib from './blueprints.js';
@@ -743,6 +744,8 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
 export function logJobEnded(job) {
   if (!job.floorId) return;
   if (job.meta?.chat) chatAnswered(job);
+  // tools denied without a prompt ("dontAsk"): the Audit counts them; the command only as its first words
+  for (const d of job.denials || []) logEvent(job.floorId, { type: 'permission.denied', agent: job.agentId || null, data: { job: job.id, tool: d.tool, command: d.command.split(/\s+/).slice(0, 3).join(' ') } });
   hb.scan({ floorId: job.floorId }).then((r) => { if (r.length) invalidate(); }, (e) => console.error('[handoff]', e.message));   // its packages go now
   logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}), ...(job.node ? { node: job.node } : {}), ...(job.branch ? { branch: job.branch } : {}) } });
   invalidate();
@@ -1051,24 +1054,71 @@ export async function sendChat(floorId, agentId, text, { context = 'space', user
     await sendTask(floorId, agentId, chatLib.typedText(who.name, t), [], { via: 'owner', priority: 'P0' });
     chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'typed' } });
     delivery = 'typed';
-  } else {
-    const st = chatLib.getState(p.key);
-    const prompt = chatLib.jobPrompt({ name: who.name, text: t, context, messages: chatLib.read(p.file, 20), spaceName: p.cfg.floor.name });
-    const r = await admit({ floorId, agentId, action: 'job', task: prompt, title: `Chat: ${t.replace(/\s+/g, ' ').slice(0, 100)}`, priority: 'P0', via: 'owner',
-      opts: { kind: 'chat', budgetUsd: 1, permissionMode: 'dontAsk', resume: st.sessionId || '', chat: { context, key: p.key, msgId: msg.id } } });
-    if (r.waiting) { delivery = 'queued'; dispatch = r.dispatch; chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'queued', queue: r.dispatch.id } }); }
-  }
+  } else ({ delivery, dispatch } = await chatJob(p, who.name, msg, t, context));
   const lead = p.cfg.team.agents.find((x) => x.lead) || p.cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
   if (context === 'space' && lead && lead.id !== agentId) chatLib.noteForLead(p.entry.path, { name: who.name, agentName: p.agent.displayName, text: t });
   logEvent(floorId, { type: 'chat.message', agent: agentId, data: { context, delivery, from: who.name, text: t.slice(0, 200) } });
   invalidate();
   return { ok: true, message: msg, delivery, ...(dispatch ? { dispatch } : {}) };
 }
+// a background job answers a chat message ("dontAsk": only what the Space's settings allow)
+async function chatJob(p, name, msg, text, context) {
+  const st = chatLib.getState(p.key);
+  const prompt = chatLib.jobPrompt({ name, text, context, messages: chatLib.read(p.file, 20), spaceName: p.cfg.floor.name });
+  const r = await admit({ floorId: p.entry.id, agentId: p.agent.id, action: 'job', task: prompt, title: `Chat: ${text.replace(/\s+/g, ' ').slice(0, 100)}`, priority: 'P0', via: 'owner',
+    opts: { kind: 'chat', budgetUsd: 1, permissionMode: 'dontAsk', resume: st.sessionId || '', chat: { context, key: p.key, msgId: msg.id } } });
+  if (!r.waiting) return { delivery: 'job', dispatch: null };
+  chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'queued', queue: r.dispatch.id } });
+  return { delivery: 'queued', dispatch: r.dispatch };
+}
+// a reply whose background run was denied tools, and the message it answered
+function deniedReply(p, msgId) {
+  const messages = chatLib.read(p.file, 200);
+  const reply = messages.find((m) => m.id === msgId && m.from === 'agent');
+  if (!reply?.denials?.length) throw bad('This reply has no denied tools');
+  const asked = messages.find((m) => m.id === reply.replyTo);
+  if (!asked) throw bad('The message it answered is no longer in the chat');
+  return { reply, asked };
+}
+// Allow and retry (1.0.1): the owner confirmed narrow allow rules for what was denied; they go into the Space's
+// .claude/settings.json and the same message runs again in the background
+export async function chatAllowRetry(floorId, agentId, { context = 'space', msgId, rules = null } = {}) {
+  if (context !== 'space') throw bad('Allow rules belong to a Space; use the Space chat or the Desk');
+  const p = chatPlace(floorId, agentId, context);
+  const { reply, asked } = deniedReply(p, msgId);
+  const list = (Array.isArray(rules) ? rules.map(String) : reply.denials.map((d) => d.rule)).filter(Boolean).slice(0, 10);
+  if (!list.length) throw bad('No narrow rule fits what was denied: run it on the Desk');
+  if (chatLib.getState(p.key).awaiting) throw bad('The agent is still answering in this chat');
+  const added = permits.addAllowRules(p.entry.path, list);
+  const who = currentActor() || { id: 'owner', name: 'Owner' };
+  logEvent(floorId, { type: 'permission.answered', agent: agentId, data: { allowed: list, via: 'chat', waitMs: Date.now() - reply.ts } });
+  chatLib.append(p.file, { from: 'system', context, text: `${who.name} allowed ${list.join(', ')}. Running the message again.`, replyTo: asked.id });
+  const r = await chatJob(p, asked.name || who.name, asked, asked.text, context);
+  invalidate();
+  return { ok: true, added, ...r };
+}
+// Run on the Desk (1.0.1): the same message typed into the agent's interactive session, where a permission prompt
+// reaches Needs you; a stopped session is started with it
+export async function chatOnDesk(floorId, agentId, { context = 'space', msgId } = {}) {
+  if (context !== 'space') throw bad('The Desk works in the Space; use the Space chat');
+  const p = chatPlace(floorId, agentId, context);
+  const { asked } = deniedReply(p, msgId);
+  const typed = chatLib.typedText(asked.name || 'Owner', asked.text);
+  let r;
+  if (tm.isRunning(p.name)) r = await sendTask(floorId, agentId, typed, [], { via: 'owner', priority: 'P0' });
+  else r = await startAgent(floorId, agentId, typed, { guard: true, via: 'owner' });
+  if (r?.waiting) { invalidate(); return { ok: true, delivery: 'queued', dispatch: r.dispatch }; }
+  chatLib.setState(p.key, { awaiting: { msgId: asked.id, since: Date.now(), mode: 'typed' } });
+  chatLib.append(p.file, { from: 'system', context, text: 'Running on the Desk: permission prompts reach Needs you.', replyTo: asked.id });
+  invalidate();
+  return { ok: true, delivery: 'typed' };
+}
 function chatAnswered(job) {
   const c = job.meta.chat;
   let p; try { p = chatPlace(job.floorId, job.agentId, c.context); } catch { return; }
   const text = job.status === 'done' ? job.result : `(${job.status}) ${job.error || job.result || 'no answer'}`;
-  chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost });
+  const denials = (job.denials || []).map((d) => ({ ...d, rule: permits.proposeRule(d) }));
+  chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost, ...(denials.length ? { denials } : {}) });
   chatLib.setState(p.key, { awaiting: undefined, ...(job.sessionId ? { sessionId: job.sessionId } : {}) });
   logEvent(job.floorId, { type: 'chat.reply', agent: job.agentId, data: { context: c.context, status: job.status, job: job.id } });
   bus.emit('chat.reply', { floorId: job.floorId, agentId: job.agentId, agentName: p.agent.displayName, context: c.context, text });

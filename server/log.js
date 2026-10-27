@@ -27,7 +27,7 @@ export const TYPES = {
   'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
-  'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
+  'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'permission.denied': 'communication', 'report.delivered': 'communication',
   'tool.call': 'tools',
   'usage.turn': 'usage', 'voice.spoken': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
@@ -88,6 +88,7 @@ function summarize(e) {
     case 'question.asked': return `${who} asked the owner${t(d.text)}`;
     case 'question.answered': return `owner answered ${who} after ${secs(d.waitMs)}${t(d.answer, 60)}`;
     case 'permission.asked': return `${who} waits for permission${d.tool ? ` (${d.tool})` : ''}`;
+    case 'permission.denied': return `${who} was denied ${d.tool || 'a tool'} in the background${d.command ? `: ${oneLine(d.command, 80)}` : ''}`;
     case 'permission.answered': return `${who} got permission after ${secs(d.waitMs)}`;
     case 'tool.call': return `${who} ${d.tool}${d.target ? ` ${oneLine(d.target, 60)}` : ''}${d.ok ? '' : ' FAILED'}${d.ms != null ? ` (${secs(d.ms)})` : ''}`;
     case 'usage.turn': return `${who} turn: ${d.input + d.cacheRead + d.cacheWrite} in, ${d.output} out, $${(+d.cost || 0).toFixed(4)}`;

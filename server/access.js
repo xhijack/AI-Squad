@@ -35,6 +35,7 @@ const OWNER_ROUTES = [
   /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/agents(\/[\w-]+(\/template)?)?$/,
   /^POST \/api\/floors\/[\w-]+\/(blueprint\/update|merge-approval|merges|skills\/install|docs\/approve)$/,
   /^POST \/api\/floors\/[\w-]+\/audits\/[\w-]+\/findings\/F\d+\/apply$/,
+  /^POST \/api\/floors\/[\w-]+\/agents\/[\w-]+\/chat\/allow$/,          // allow rules: only the Owner widens permissions
 ];
 // -> 'viewer' | 'member' | 'owner'
 export function requiredRole(method, pathname) {
