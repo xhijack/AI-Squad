@@ -64,6 +64,32 @@ export function checkRule(rule) {
   return no(`${tool} rules are not added from here`);
 }
 
+// ---------- Servers (Floor settings): the hosts DevOps may reach with ssh ----------
+// [{ host: alias or user@host, purpose }] -> cleaned, each with a narrow rule; throws on a host that is not
+export const MAX_SERVERS = 20;
+export const sshRule = (host) => `Bash(ssh ${host} *)`;
+export function cleanServers(list = []) {
+  if (!Array.isArray(list)) throw bad('Servers must be a list');
+  const out = [];
+  for (const s of list.slice(0, MAX_SERVERS)) {
+    const host = String(s?.host || '').trim();
+    if (!host) continue;
+    if (!/^([\w.-]+@)?[\w.-]+$/.test(host) || host.startsWith('-')) throw bad(`${host}: write a host alias or user@host`);
+    const c = checkRule(sshRule(host));
+    if (!c.ok) throw bad(`${host}: ${c.error}`);
+    if (out.some((x) => x.host === host)) continue;
+    out.push({ host, purpose: String(s.purpose || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 160) });
+  }
+  return out;
+}
+// the allow rules follow the list: new hosts added, removed hosts taken out
+export function syncServerRules(root, before = [], after = []) {
+  const want = new Set(after.map((s) => sshRule(s.host)));
+  const removed = removeAllowRules(root, before.map((s) => sshRule(s.host)).filter((r) => !want.has(r)));
+  const added = addAllowRules(root, [...want]);
+  return { added, removed };
+}
+
 const settingsFile = (root) => path.join(root, '.claude', 'settings.json');
 // adds narrow allow rules (each checked) -> the rules added
 export function addAllowRules(root, rules) {

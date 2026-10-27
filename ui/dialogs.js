@@ -56,6 +56,8 @@ async function editAgent(el) {
   };
 }
 
+const serverRowHtml = (s) => `<div class="row serverRow"><input data-host value="${esc(s.host || '')}" placeholder="erpnext@192.168.0.150" aria-label="${tt('Host')}" style="max-width:220px">
+  <input data-purpose class="grow" value="${esc(s.purpose || '')}" placeholder="${esc(tt('Staging ERPNext (bench in ~/frappe-bench)'))}" aria-label="${tt('Purpose')}"><button type="button" class="small ghost danger" data-rmserver aria-label="${tt('Remove server')}">×</button></div>`;
 async function floorSettings() {
   const f = ctx.state.floor;
   if (!f?.floor) return;
@@ -98,6 +100,10 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="auditAuto" ${c.audit?.auto ? 'checked' : ''}> ${tt('Audit automatically after a sprint closes')}</label>
     <label>${tt('Audit model')}</label>${segHtml('auditModel', [['sonnet', 'Sonnet'], ['haiku', 'Haiku'], ['opus', 'Opus']], c.audit?.model || 'sonnet')}
     <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
+    <h3 style="margin-top:18px">${tt('Servers')}</h3>
+    <p class="note">${tt('The servers DevOps may reach: a host alias from ~/.ssh/config or user@host, and what it is for. Each one allows <code>ssh &lt;host&gt; …</code> in this Space (also in background runs) and is listed in the DevOps prompt; anything else is local development.')}</p>
+    <div id="dServers">${(c.servers || []).map(serverRowHtml).join('')}</div>
+    <button type="button" class="small" data-addserver>${tt('+ Add server')}</button>
     <h3 style="margin-top:18px">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
     <h3 style="margin-top:18px">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
   `<button class="ghost danger" data-remove>${tt('Remove Floor')}</button><span class="spacer"></span><button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
@@ -107,6 +113,9 @@ async function floorSettings() {
   body.querySelector('[data-vpreview]').onclick = () => { const c = readVoiceControls(body); previewVoice({ lang: c.lang, settings: c.settings }, body.querySelector('#dVErr')); };
   loadMerges(f.id, body.querySelector('#dMerges'));
   loadRepos(f.id, body.querySelector('#dRepos'), f.agents);
+  const servers = body.querySelector('#dServers');
+  servers.onclick = (e) => e.target.closest('[data-rmserver]')?.closest('.serverRow').remove();
+  body.querySelector('[data-addserver]').onclick = () => { servers.insertAdjacentHTML('beforeend', serverRowHtml({})); servers.lastElementChild.querySelector('input').focus(); };
   body.querySelector('[data-remove]').onclick = async () => {
     if (!confirm(tt('Remove this Floor from the Building? The project directory and its files stay untouched.'))) return;
     try { await api('DELETE', `/api/floors/${f.id}`); closeModal(); toast(tt('Floor removed')); location.hash = '#/'; } catch (e) { fail(e); }
@@ -119,7 +128,8 @@ async function floorSettings() {
         budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked },
         log: { messages: form.elements.logMessages.checked, maskPersonalData: form.elements.logMask.checked },
         audit: { auto: form.elements.auditAuto.checked, model: segValue(form, 'auditModel') }, recovery: { autoResume: form.elements.autoResume.checked, maxAgents: Number(v('maxAgents')) || 4 },
-        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form), voice: readVoiceControls(form) });
+        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form), voice: readVoiceControls(form),
+        servers: [...servers.querySelectorAll('.serverRow')].map((r) => ({ host: r.querySelector('[data-host]').value.trim(), purpose: r.querySelector('[data-purpose]').value.trim() })).filter((s) => s.host) });
       closeModal(); toast(tt('Floor saved')); ctx.refresh();
     } catch (e) { fail(e); }
   };

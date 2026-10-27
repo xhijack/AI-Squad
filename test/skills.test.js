@@ -43,9 +43,10 @@ test('DevOps v2: server skills with their safety rules, and the owner / lead spl
   assert.match(read('server-health'), /neighbour/i);
   assert.match(read('canary'), /roll back at once/); assert.match(read('canary'), /Production:\*\* do not roll back on your own/); assert.match(read('git-deploy'), /Ship readiness/);
   const t = listTemplates().find((x) => x.role === 'devops-engineer');
-  assert.equal(t.version, 3);
+  assert.equal(t.version, 4, 'v4 (1.0.1): the servers the owner registered');
   const rules = t.rules.join('\n');
   assert.match(rules, /AISQUAD_AGENT/); assert.match(rules, /Task from the owner.*setup preparation/); assert.match(rules, /Task from the lead.*deployment/);
+  assert.match(rules, /registered \(Floor settings → Servers\).*local development/);
   assert.match(rules, /Desk session prepares and never deploys/);
 });
 
