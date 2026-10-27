@@ -63,10 +63,44 @@ function changeText(c) {
   return JSON.stringify(c);
 }
 
+// Admin → Machines (0.18): the Head and its workers, adding one (its token shown once), draining, removing,
+// and moving the whole Building to another machine
+const gbOf = (b) => (b ? `${(b / 2 ** 30).toFixed(1)} GB` : '–');
+export function machinesHtml(x) {
+  const h = x.head || {};
+  const row = (n) => `<div class="adminRow" data-node="${esc(n.name)}"><div class="row"><span class="badge ${n.online ? 'live' : ''}">${n.online ? t('Online') : t('Offline')}</span><b class="grow">${esc(n.name)}</b>
+      <span class="note">${n.lastSeen ? t('seen {ago}', { ago: ago(n.lastSeen) }) : t('never connected')}</span></div>
+    <div class="note">${[n.lastSeen && [n.host, n.version].filter(Boolean).map(esc).join(' · '), n.lastSeen && t('{n} of {max} jobs', { n: n.running?.length || 0, max: n.maxAgents || 6 }), n.resources?.mem?.available && t('{gb} free', { gb: gbOf(n.resources.mem.available) }), n.drain && `<b>${t('draining: no new jobs')}</b>`].filter(Boolean).join(' · ')}</div>
+    <div class="row"><span class="spacer"></span><button class="small ghost" data-ndrain="${n.drain ? '0' : '1'}">${n.drain ? t('Take jobs again') : t('Drain')}</button><button class="small ghost danger" data-nremove>${t('Remove')}</button></div></div>`;
+  return `<p class="note">${t('More machines run more background jobs without upgrading this one. A worker only connects out to this machine (over Tailscale or WireGuard), signs in to Claude itself and works in its own clones of the repositories; this machine keeps every Space, the queue, the log and the chats. Desk sessions stay here. A worker that goes silent for 45 seconds loses its jobs, and they are queued again.')}</p>
+    <div class="adminList"><div class="adminRow"><div class="row"><span class="badge live">${t('Head')}</span><b class="grow">${t('This machine')}</b><span class="note">${t('{n} of {max} agents', { n: h.running ?? 0, max: h.maxAgents ?? '–' })}${h.remote ? ` · ${t('{n} jobs on workers', { n: h.remote })}` : ''}</span></div></div>
+      ${(x.nodes || []).map(row).join('')}</div>
+    <form class="row wrap addAgent" data-addnode><input name="name" placeholder="${esc(t('Name, e.g. box-2'))}" required pattern="[a-z0-9][a-z0-9-]{0,39}"><button class="small gold" type="submit">${t('Add a machine')}</button></form>
+    <div id="nodeToken"></div>
+    <div class="section"><div class="sectionHead"><h3 class="grow">${t('Move to another machine')}</h3></div>
+      <ol class="moveSteps note">
+        <li>${t('Make a backup (encrypted when a passphrase is saved in Backups and health):')} <button class="small" data-mkbackup>${t('Back up now')}</button> <span id="bkOut" class="mono"></span></li>
+        <li>${t('Copy the file to the new machine (a USB disk, scp, a synced folder).')}</li>
+        <li>${t('There, install The AI Squad and Claude Code, then:')} <code>aisquad restore FILE --dry-run</code>, ${t('then without')} <code>--dry-run</code>. ${t('Repositories come back from their git remotes; paths are relinked (--projects-dir, --relink OLD=NEW).')}</li>
+        <li>${t('Check it:')} <code>aisquad doctor</code>, ${t('then give one agent a small task.')}</li>
+        <li>${t('Approve auto-merge again on the new machine (approvals do not travel), and stop the server here.')}</li>
+      </ol></div>`;
+}
+
 // the handlers of both tabs; again(msg) re-renders the tab
 export function bindMore(body, again) {
   body.addEventListener('submit', async (e) => {
     const f = e.target;
+    if (f.dataset.addnode !== undefined) {
+      e.preventDefault();
+      try {
+        const r = await api('POST', '/api/nodes', { name: f.elements.name.value.trim() });
+        await again(t('Machine added'));
+        const box = document.querySelector('#nodeToken');
+        if (box) box.innerHTML = `<div class="pinShown"><b>${t('Run this on {name} (the token is shown only once):', { name: esc(r.node.name) })}</b><div class="mono" style="margin-top:6px;word-break:break-all">${esc(r.command)}</div></div>`;
+      } catch (err) { toast(err.message, 5000); }
+      return;
+    }
     if (f.dataset.notify === undefined) return;
     e.preventDefault();
     try {
@@ -88,6 +122,10 @@ export function bindMore(body, again) {
       if (el.dataset.unpair) { await api('DELETE', `/api/notify/chats/${el.dataset.unpair}`); return again(t('Chat removed')); }
       if (el.dataset.tgtest !== undefined) { await api('POST', '/api/notify/test', {}); return toast(t('Test sent')); }
       if (el.dataset.tgdigest !== undefined) { await api('POST', '/api/notify/digest', {}); return toast(t('Digest sent')); }
+      const node = el.closest('[data-node]')?.dataset.node;
+      if (node && el.dataset.ndrain) { await api('PATCH', `/api/nodes/${node}`, { drain: el.dataset.ndrain === '1' }); return again(t('Saved')); }
+      if (node && el.dataset.nremove !== undefined) { if (!confirm(t('Remove this machine? Its token stops working; running jobs there are lost and queued again.'))) return; await api('DELETE', `/api/nodes/${node}`); return again(t('Machine removed')); }
+      if (el.dataset.mkbackup !== undefined) { el.disabled = true; const r = await api('POST', '/api/backups', {}); el.disabled = false; const o = body.querySelector('#bkOut'); if (o) o.textContent = r.file || ''; return toast(t('Backup written')); }
       if (el.dataset.srun !== undefined) { const r = await api('POST', '/api/insights/run', {}); return again(t('{n} new suggestions', { n: r.added })); }
       const sug = el.closest('[data-sug]')?.dataset.sug;
       if (sug && el.dataset.saccept !== undefined) { await api('POST', `/api/insights/${sug}/accept`, {}); return again(t('Accepted')); }
