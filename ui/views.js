@@ -5,7 +5,7 @@
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
 
-const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design') };
+const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext' };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
 const SYSTEM_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'crash', 'scope']);
 
@@ -72,9 +72,10 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       body = `<div class="row wrap">${a.options.map((o) => `<button class="small ${o.n === 1 ? 'gold' : 'ghost'}" data-act="crash-answer" data-id="${a.id}" data-n="${o.n}">${o.n === 1 ? tt('Resume') : tt('Start fresh')}</button>`).join('')}
         <button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button></div>${a.resumable ? `<div class="note" style="margin-top:6px">${tt('Resume continues the last session with its context. Start fresh begins a new session.')}</div>` : ''}`;
     } else if (a.answerable && a.options?.length) {
+      const lab = (o) => esc(['price', 'handoff'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
       body = `<div class="opts">${a.options.map((o) => o.free
-        ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${esc(o.label)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
-        : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${esc(o.label)}</button>`).join('')}</div>`;
+        ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${lab(o)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
+        : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${lab(o)}</button>`).join('')}</div>`;
     } else if (a.kind === 'permission' && a.live) {
       body = `<div class="note">${a.agentId ? tt("Reported live by Claude Code. Answer it on the Desk (Screen tab) or in the agent's terminal.") : tt('Reported live by Claude Code.')}</div>`;
     } else if (a.kind === 'question') {
@@ -83,7 +84,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     const links = [];
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">${tt('Open desk')}</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">${tt('Open Floor')}</a>`);
-    if (a.kind === 'stall' || a.kind === 'merge') links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button>`);
+    if (a.kind === 'stall' || a.kind === 'merge' || a.kind === 'erpnext' || (a.kind === 'handoff' && a.mode === 'question')) links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${a.kind === 'erpnext' ? tt('OK') : tt('Dismiss')}</button>`);
     body = apNote(a) + body;
     // a click on the message opens it large (the conversation view)
     const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="${tt('Open large')}" aria-label="${tt('Message from {name}, open large', { name: esc(a.agentName || tt('the agent')) })}">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="${tt('Open large')}">${esc(a.kind === 'taskdone' && a.task ? taskDoneText(a.task) : SYSTEM_KINDS.has(a.kind) ? tx(a.text) : a.text)}</div>`;
@@ -93,6 +94,8 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
 
 // what Autopilot does with an item: critical ones wait for the owner; others are answered or nudged after the timeout
 function apNote(a) {
+  // a hard stop the server decided (a price, a package leaving an Owner-only Space, 0.19): only the Owner
+  if (a.hardStop?.length) return `<div class="apNote crit">${tt('Hard stop ({reasons}): only you decide this.', { reasons: esc(a.hardStop.map((r) => tx(r)).join(', ')) })}</div>`;
   const ap = a.autopilot;
   if (!ap) return '';
   if (ap.critical) return `<div class="apNote crit">${ap.reasons?.length && ap.reasons[0] !== 'unclear' ? tt('Critical ({reasons}): Autopilot leaves this to you.', { reasons: esc(ap.reasons.map((r) => tx(r.replace(/-/g, ' '))).join(', ')) }) : tt('Critical: Autopilot leaves this to you.')}</div>`;
