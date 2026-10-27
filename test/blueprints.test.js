@@ -17,7 +17,8 @@ const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures',
 
 test('the shipped Blueprints are seeded with roles, counts and a lead', () => {
   const list = bp.listBlueprints();
-  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'legal', 'sales-crm', 'software-house']);
+  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'erp-consultant', 'legal', 'sales-crm', 'software-house']);
+  assert.equal(bp.getBlueprint('erp-consultant').lead, 'project-manager');
   assert.deepEqual(bp.getBlueprint('legal').space, { kind: 'department', access: 'owner' }, 'Legal is an Owner-only department (0.20)');
   assert.equal(bp.getBlueprint('digital-marketing').space.shift.from, '22:00', 'Marketing works nights');
   const sh = bp.getBlueprint('software-house');
