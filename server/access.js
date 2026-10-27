@@ -18,6 +18,8 @@ const OWNER_ROUTES = [
   /^POST \/api\/notify\/(test)$/,
   /^POST \/api\/insights\//,
   /^GET \/api\/(notify|insights)$/,
+  /^(GET|POST) \/api\/nodes$/,
+  /^(PATCH|DELETE) \/api\/nodes\/[\w-]+$/,
   /^GET \/api\/(auth|backups|doctor|users)(\/|$)/,
   /^(POST|PATCH|DELETE) \/api\/dispatcher\/queue\//,
   /^POST \/api\/history\/[\w-]+\/rollback$/,

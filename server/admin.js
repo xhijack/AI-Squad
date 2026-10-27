@@ -2,6 +2,7 @@
 // The Admin Panel's data (0.12): every Space with its kind, access, memory and shift; every agent across Spaces with
 // its role, model, effort and skills; the skill catalog and who uses it; the Company Brain; recent changes.
 // The Admin is an editor of the same configuration files (it never keeps data of its own).
+import * as nodes from './nodes.js';
 import fs from 'node:fs';
 import * as building from './building.js';
 import * as floors from './floors.js';
@@ -28,5 +29,6 @@ export function overview() {
   const templates = listTemplates();
   const catalog = skills.bundledSkills().map((s) => ({ ...s, roles: templates.filter((t) => (t.skills || []).includes(s.name)).map((t) => t.role) }));
   return { spaces, agents, skills: catalog, templates: templates.map((t) => ({ role: t.role, title: t.title, version: t.version, model: t.model, effort: t.effort })),
-    company: company.summary(company.companyDir(b.prefs)), companyPath: b.prefs.company?.path || '', history: history.list({ limit: 40 }), maxAgents: b.prefs.maxAgents || null };
+    company: company.summary(company.companyDir(b.prefs)), companyPath: b.prefs.company?.path || '', history: history.list({ limit: 40 }), maxAgents: b.prefs.maxAgents || null,
+    machines: nodes.listNodes().map((n) => n.name) };
 }

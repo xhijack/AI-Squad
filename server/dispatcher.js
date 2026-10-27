@@ -105,8 +105,11 @@ export function setPriority(id, priority) {
 // which items start now and why the others wait. ctx: { free, reserve, quotaPaused, inShift(floorId),
 // floorFree(floorId) (slots left under the Space's own maximum), busy(item) }. Automated work is everything the
 // owner did not start (via != 'owner'): it waits outside the Space's shift.
-export function plan(items, { free = 0, reserve = 0, quotaPaused = false, cpuBusy = false, inShift = () => true, floorFree = () => Infinity, busy = () => false } = {}, now = Date.now()) {
+// headFree (0.18): the slots on this machine; free counts the workers too. Desk sessions need a slot here, background
+// jobs fit anywhere (this machine first). busy(item) may return its own reason.
+export function plan(items, { free = 0, headFree = free, reserve = 0, quotaPaused = false, cpuBusy = false, inShift = () => true, floorFree = () => Infinity, busy = () => false } = {}, now = Date.now()) {
   const start = [], held = [];
+  let headUsed = 0;
   const chosen = new Set(), perFloor = new Map();
   for (const it of order(items, now)) {
     const p = effectivePriority(it, now);
@@ -114,12 +117,15 @@ export function plan(items, { free = 0, reserve = 0, quotaPaused = false, cpuBus
     let reason = '';
     if (it.via !== 'owner' && !inShift(it.floorId)) reason = 'outside the Space\'s shift';
     else if (p > 0 && quotaPaused) reason = 'the quota guard pauses automated work';
-    else if (chosen.has(key) || busy(it)) reason = 'the agent is busy';
+    else if (chosen.has(key)) reason = 'the agent is busy';
+    else if (busy(it)) reason = typeof busy(it) === 'string' ? busy(it) : 'the agent is busy';
     else if ((perFloor.get(it.floorId) || 0) >= floorFree(it.floorId)) reason = 'the Space runs its maximum of agents at once';
     else if (start.length >= free - (p > 0 ? reserve : 0)) reason = p > 0 && start.length < free ? 'the last free slot is kept for the owner' : 'waiting for a free slot';
+    else if (it.action !== 'job' && headUsed >= headFree - (p > 0 ? reserve : 0)) reason = headUsed < headFree ? 'the last free slot is kept for the owner' : 'waiting for a free slot on this machine';
     else if (p > 0 && cpuBusy) reason = 'the CPU is busy';
     if (reason) { held.push({ id: it.id, reason, priority: PRIORITIES[p] }); continue; }
     chosen.add(key);
+    if (it.action !== 'job' || headUsed < headFree) headUsed++;
     perFloor.set(it.floorId, (perFloor.get(it.floorId) || 0) + 1);
     start.push(it);
   }

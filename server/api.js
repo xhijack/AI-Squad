@@ -32,6 +32,7 @@ import * as access from './access.js';
 import * as notify from './notify.js';
 import * as inbox from './inbox.js';
 import * as insight from './insight.js';
+import * as nodes from './nodes.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -123,7 +124,7 @@ const routes = [
   // background jobs (headless runner)
   ['GET', /^\/api\/jobs$/, (p, b, req) => { const q = new URL(req.url, 'http://x').searchParams; return { jobs: jobs.listJobs({ floorId: q.get('floor') || '', agentId: q.get('agent') || '', limit: 50 }).map(({ prompt, ...j }) => j) }; }, { pin: true }],
   ['GET', /^\/api\/jobs\/(j-[\w-]+)$/, ([id]) => jobs.jobDetail(id), { pin: true }],
-  ['POST', /^\/api\/jobs\/(j-[\w-]+)\/stop$/, ([id]) => { const j = jobs.stopJob(id); squad.logJobEnded(j); return { ok: true, job: j }; }, { pin: true }],
+  ['POST', /^\/api\/jobs\/(j-[\w-]+)\/stop$/, ([id]) => { const j = jobs.stopJob(id); squad.stopRemote(j); squad.logJobEnded(j); return { ok: true, job: j }; }, { pin: true }],
   ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => b), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber() })],
   ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
   ['POST', /^\/api\/floors\/([\w-]+)\/skills\/install$/, ([id], b) => squad.installSkills(id, b.names || b.name), { pin: true }],
@@ -234,6 +235,14 @@ const routes = [
   ['POST', /^\/api\/dispatcher\/queue\/([\w-]+)\/start$/, ([id]) => squad.startQueued(id), { pin: true }],
   ['PATCH', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id], b) => { dispatcher.setPriority(id, String(b.priority || '')); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['DELETE', /^\/api\/dispatcher\/queue\/([\w-]+)$/, ([id]) => squad.dropQueued(id), { pin: true }],
+  // more machines (0.18): a worker's own calls (its token, not a PIN) and the Owner's list of machines
+  ['POST', /^\/api\/nodes\/heartbeat$/, (p, b, req) => nodes.heartbeat(req.node.name, b), { node: true }],
+  ['GET', /^\/api\/nodes\/work$/, (p, b, req) => nodes.nextWork(req.node.name, Math.min(30e3, (Number(new URL(req.url, 'http://x').searchParams.get('wait')) || 25) * 1000)), { node: true }],
+  ['POST', /^\/api\/nodes\/jobs\/(j-[\w-]+)$/, ([id], b, req) => squad.remoteReport(req.node.name, id, b), { node: true }],
+  ['GET', /^\/api\/nodes$/, () => ({ nodes: nodes.listNodes(), head: squad.buildingSnapshot().limits, offlineAfterMs: nodes.OFFLINE_MS }), { pin: true }],
+  ['POST', /^\/api\/nodes$/, (p, b) => { const r = nodes.addNode(b.name); return { ...r, command: `aisquad node --head <address of this machine>:8097 --name ${r.node.name} --token ${r.token}` }; }, { pin: true, history: () => ({ label: 'Machine added' }) }],
+  ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
+  ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // the Notification Gateway (0.15): Telegram token (write-only), settings, pairing, chats, test, digest
   ['GET', /^\/api\/notify$/, () => notify.status(), { pin: true }],
   ['PATCH', /^\/api\/notify$/, (p, b) => { building.setPrefs({ notify: notify.cleanNotify({ ...notify.settings(), ...b, quiet: { ...notify.settings().quiet, ...(b.quiet || {}) } }) }); notify.restart(); return notify.status(); }, { pin: true, history: () => ({ label: 'Notification settings' }) }],
@@ -281,6 +290,13 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (method !== req.method) continue;
         const m = url.pathname.match(re);
         if (!m) continue;
+        // a worker machine (0.18): its own token, only for its own routes
+        if (opts.node) {
+          const node = nodes.authNode(req.headers['x-aisquad-node']);
+          if (!node) return send(res, 401, { error: 'Unknown machine or token' });
+          req.node = node;
+          return send(res, 200, await handler(m.slice(1), method === 'GET' ? {} : await readBody(req), req));
+        }
         // who is asking (0.14): the Owner's PIN, or a person's own PIN; reads on loopback stay open without one
         const user = users.identify(req.headers['x-aisquad-pin'], pin);
         if ((opts.pin || lockReads) && !user) return send(res, 401, { error: 'PIN required' });
