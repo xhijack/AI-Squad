@@ -524,6 +524,8 @@ export function buildingSnapshot() {
   const floorsOut = [independent.summary, ...states.map(summary)].sort((x, y) => x.number - y.number);
   const value = {
     name: b.name, now: Date.now(), floors: floorsOut, attention, detected,
+    // handoffs between Spaces in the last minutes: in the Office the sender walks to the other room (1.1.0)
+    walks: recentWalks(new Set(floorsOut.map((f) => f.id))),
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
@@ -535,6 +537,11 @@ export function buildingSnapshot() {
   };
   snapCache = { at: Date.now(), value };
   return value;
+}
+const WALK_MS = 3 * 60e3;
+function recentWalks(spaces, now = Date.now()) {
+  return hb.load().filter((h) => now - (h.createdAt || 0) < WALK_MS && h.from?.agentId && spaces.has(h.from.floorId) && spaces.has(h.to?.floorId) && h.from.floorId !== h.to.floorId)
+    .slice(-10).map((h) => ({ id: h.id, from: h.from.floorId, agent: h.from.agentId, to: h.to.floorId, ts: h.createdAt }));
 }
 // the Lobby digest "Decided by autopilot today: N" (read from the Squad Log at most once a minute)
 let apToday = { at: 0, day: '', n: 0 };

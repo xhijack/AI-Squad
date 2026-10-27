@@ -399,7 +399,7 @@ function render() {
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
   scene.route(route, !!ctx.editing, ctx.overview);                     // three.js, Iso Pixel or the List (ui/renderer.js)
   scene.sync(floorsForScene);
-  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits });
+  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits, walks: b.walks || [] });
   showRenderer();
   const viewKey = routeKey(route) + (state.desk ? '' : '-') + ctx.overview;
   if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route, overview: ctx.overview }); }

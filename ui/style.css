@@ -757,3 +757,13 @@ button.busy { position: relative; color: transparent !important; pointer-events:
 button.busy::after { content: ''; position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted, #6b7280); border-top-color: transparent; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { button.busy::after { animation-duration: 2s; } }
+/* the Office in 3D (1.1.0): agent chips placed by ui/office3d.js, the hover tip, the room bar */
+.officeAgent { position: absolute; left: 0; top: 0; will-change: transform; }
+.officeAgent .say { display: none; max-width: 220px; margin-bottom: 4px; padding: 5px 9px; border-radius: 10px; background: var(--panel); color: var(--text); font-size: 12px; box-shadow: var(--shadow-sm); white-space: normal; order: -1; }
+.officeAgent.saying .say { display: block; }
+.officeRoom { transform: translate(0, -100%); font-size: 12px; padding: 4px 9px; }
+.officeRoom.lobby, .officeRoom.owner, .officeRoom.server, .officeRoom.meeting, .officeRoom.pantry { --c: #2f3a4a; }
+.officeTip { position: absolute; z-index: 5; pointer-events: none; padding: 4px 9px; border-radius: 8px; background: rgba(31, 41, 55, .92); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.officeBar { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 4; display: flex; gap: 8px; align-items: center; padding: 8px 10px 8px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+.officeBar[hidden] { display: none; }
+.officeBar b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -19,6 +19,7 @@ import { REAL } from './look.js';
 import { mergeStatic } from './merge.js';
 import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realDeskProps, REAL_DEVICES } from './realistic-office.js';
 import { t as tt, tx } from './i18n.js';
+import { Office3D } from './office3d.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -563,6 +564,7 @@ export class BuildingScene {
       const draw = moving || this.dirty || (this.animating && tick % 2 === 0);
       if (!draw && now - lastLogic < 500) return;
       if (draw && lastDraw && now - lastDraw < 40 && tick - this.lastDrawTick === 1) this.quality.sample((now - lastDraw) / 1000);   // Auto quality: back-to-back frames only
+      if (draw && lastDraw && this.officeOn() && tick - this.lastDrawTick === 1) this.officeSample(now - lastDraw);
       lastLogic = now;
       if (draw) { lastDraw = now; this.lastDrawTick = tick; }
       this.frame(draw);
@@ -570,9 +572,29 @@ export class BuildingScene {
     requestAnimationFrame(loop);
   }
 
+  // ---------- the Office overview in 3D (1.1.0, ui/office3d.js) ----------
+  officeOn() { return this.view.mode === 'lobby' && this.view.overview === 'office' && !this.view.eyes; }
+  // ?states=…: agent states by position, for screenshots of a look (as on the Floors)
+  officeFloors(floors = this.lastFloors || []) { return DEMO_STATES ? floors.map((f) => ({ ...f, agents: (f.agents || []).map((a, i) => (DEMO_STATES[i] ? { ...a, state: DEMO_STATES[i] } : a)) })) : floors; }
+  officeKit() {
+    return { THREE, box, mat, basic, label, buildStation, updateStation, poseDesk, buildDevice, deskHome, mergeStatic, TOP, inkOn, floorLabelHtml };
+  }
+  // the machine and the queue for the Office (Lobby, Server room, Owner's room)
+  setCompany(c) { this.company = c; if (this.office) { this.office.update(this.officeFloors(), c); this.racks = this.office.racks(); } }
+  // Auto: the Office in 3D must hold ~30 fps, else the host switches the Office to Iso Pixel (renderer.js)
+  officeSample(ms) {
+    const s = this.officeFrames ||= [];
+    s.push(ms); if (s.length > 90) s.shift();
+    if (s.length === 90 && !this.officeSlowSent) {
+      const median = [...s].sort((a, b) => a - b)[45];
+      if (median > 34) { this.officeSlowSent = true; this.handlers.onOfficeSlow?.(median); }
+    }
+  }
+
   // switching to another renderer (0.16): stop drawing and give the GPU memory and the WebGL context back
   dispose() {
     this.disposed = true;
+    this.office?.dispose();
     this.quality.disposed = true;
     removeEventListener('resize', this.onResize);
     for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) removeEventListener(ev, this.onInput);
@@ -643,6 +665,7 @@ export class BuildingScene {
     if (this.top !== top || !this.columns) this.buildColumns(top);
     this.top = top;
     this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))];
+    if (this.office) { this.office.update(this.officeFloors(floors), this.company); this.racks = this.office.racks(); }
     this.applyVisibility();
     if (!this.placed) { this.placed = true; this.snapTo(this.poseFor(this.view)); }
     this.dirty = true;
@@ -701,6 +724,12 @@ export class BuildingScene {
     this.quality.setAO(view.mode !== 'lobby');
     const wasEyes = this.view.eyes, wasPersp = this.camera === this.persp;
     this.view = view;
+    // the Office overview: built when it opens, given back when it closes (memory)
+    if (this.officeOn()) {
+      if (!this.office) { this.office = new Office3D(this, this.officeKit()); this.officeFrames = []; }
+      this.office.update(this.officeFloors(), this.company);
+      this.racks = this.office.racks();
+    } else if (this.office) { this.office.dispose(); this.office = null; this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))]; }
     const persp = !!(view.eyes || view.screen || view.follow);
     if (persp && !wasPersp) {
       // hand over from the isometric camera: start the perspective camera where the ortho view looked from
@@ -777,17 +806,22 @@ export class BuildingScene {
 
   applyVisibility() {
     const v = this.view, focus = v.mode !== 'lobby' ? v.floorId : null;
+    const office = this.officeOn();
+    this.building.visible = !office;
+    this.office?.show(office);
+    this.sun.castShadow = !office || !!this.office?.near;                       // the Office far away: blob shadows only
     for (const [id, o] of this.floors) {
       // inside a Floor only that Floor is drawn: less clutter, less GPU on a shared machine
       o.g.visible = !focus || id === focus;
-      o.label.visible = !focus;
+      o.label.visible = !focus && !office;                                     // CSS labels do not follow a hidden parent
       for (const st of o.stations.values()) { st.labelsOn = id === focus; updateStation(st, { ...(o.data.agents || []).find((a) => a.id === st.id) }); }
       if (o.empty) o.empty.visible = id === focus;
+      if (office) for (const st of o.stations.values()) { st.label.visible = false; st.say.visible = false; }
     }
     this.lobby.visible = !focus;
     if (this.columns) this.columns.visible = !focus;
     this.roof.visible = !focus;
-    this.roofSign.visible = !focus;
+    this.roofSign.visible = !focus && !office;
     this.ground.visible = !focus;
   }
 
@@ -826,6 +860,7 @@ export class BuildingScene {
   }
 
   poseFor(v) {
+    if (v.mode === 'lobby' && v.overview === 'office' && this.office) return this.office.pose();
     if (v.mode === 'lobby') {
       const h = floorY(this.top + 1);                         // roof sign included
       return this.fitIso(corners(-FW / 2 - .3, FW / 2 + 5, 0, h, -FD / 2 - .3, FD / 2 + .3), .04);
@@ -892,18 +927,20 @@ export class BuildingScene {
   setShot(floorId, shot) { const o = this.floors.get(floorId); if (o) o.shot = shot; }
   // the conversation view: ease to the agent's desk while its message is open (only on the Floor in view), back after
   focusAgent(floorId, agentId) {
+    if (this.officeOn()) return this.office.focusAgent(floorId, agentId);
     const v = this.view;
     if (v.mode === 'lobby' || v.floorId !== floorId || v.eyes || v.screen || !this.floors.get(floorId)?.stations.get(agentId)) return false;
     this.convoFocus = true;
     this.flyTo(this.poseFor({ ...v, mode: 'desk', agentId }), 700);
     return true;
   }
-  unfocus() { if (!this.convoFocus) return; this.convoFocus = false; if (!this.view.eyes) this.flyTo(this.poseFor(this.view), 600); }
+  unfocus() { if (this.officeOn()) return this.office.unfocus(); if (!this.convoFocus) return; this.convoFocus = false; if (!this.view.eyes) this.flyTo(this.poseFor(this.view), 600); }
   // voice: the mouth follows the audio level (0..1) while the agent speaks
-  setTalk(floorId, agentId, level) { const st = this.floors.get(floorId)?.stations.get(agentId); if (st) st.talkLevel = level; }
+  setTalk(floorId, agentId, level) { if (this.officeOn()) return this.office.setTalk(floorId, agentId, level); const st = this.floors.get(floorId)?.stations.get(agentId); if (st) st.talkLevel = level; }
   // speech bubble over an agent for ms milliseconds
   say(floorId, agentId, text, ms = 7000) {
     this.dirty = true;
+    if (this.officeOn()) return this.office.say(floorId, agentId, text, ms);
     const st = this.floors.get(floorId)?.stations.get(agentId);
     if (!st) return;
     st.say.element.textContent = text; st.sayUntil = performance.now() + ms;
@@ -968,6 +1005,7 @@ export class BuildingScene {
       this.handlers.onPointerDown?.(e);
     });
     el.addEventListener('pointermove', (e) => {          // first person: drag to look around
+      if (this.officeOn() && !e.buttons) this.office.hover(e);                // the Office: room and agent names on hover
       const d = this.view.eyes && this.look?.drag;
       if (!d) return;
       this.look.yaw = Math.max(-1.6, Math.min(1.6, d.yaw - (e.clientX - d.x) * .004));
@@ -977,6 +1015,7 @@ export class BuildingScene {
     el.addEventListener('pointerup', (e) => {
       if (this.view.eyes) { if (this.look) this.look.drag = null; return; }
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+      if (this.officeOn()) return this.office.pick(e);
       this.ray.setFromCamera(this.ndc(e), this.camera);
       if (this.lobby.visible && this.ray.intersectObject(this.lobbyRack, true).length) return this.handlers.onPickRack?.();
       const hit = this.pick(e);
@@ -1021,7 +1060,12 @@ export class BuildingScene {
     const dt = Math.min(.1, t - (this.lastT ?? t)); this.lastT = t;
     const v = this.view;
     let walking = false, animating = false;
-    for (const [fid, o] of this.floors) {
+    if (this.officeOn() && this.office) {
+      const r = this.office.frame(t, dt); walking = r.walking; animating = r.animating;
+      const cast = !!this.office.near;
+      if (this.sun.castShadow !== cast) { this.sun.castShadow = cast; this.dirty = true; }
+    }
+    for (const [fid, o] of this.officeOn() ? [] : this.floors) {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
       // characters away from their desks are moving obstacles for each other

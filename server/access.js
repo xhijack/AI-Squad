@@ -73,7 +73,7 @@ export function redact(pathname, out, user) {
   const hide = ownerFloors();
   if (!hide.size) return out;
   const keep = (x) => !hide.has(x?.floorId) && !hide.has(x?.id);
-  if (pathname === '/api/building') return { ...out, floors: out.floors.filter((f) => !hide.has(f.id)), attention: out.attention.filter((a) => !hide.has(a.floorId)) };
+  if (pathname === '/api/building') return { ...out, floors: out.floors.filter((f) => !hide.has(f.id)), attention: out.attention.filter((a) => !hide.has(a.floorId)), walks: (out.walks || []).filter((w) => !hide.has(w.from) && !hide.has(w.to)) };
   if (pathname === '/api/admin') return { ...out, spaces: out.spaces.filter(keep), agents: out.agents.filter((a) => !hide.has(a.floorId)), history: out.history.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/history') return { ...out, changes: out.changes.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/jobs') return { ...out, jobs: out.jobs.filter((j) => !hide.has(j.floorId)) };

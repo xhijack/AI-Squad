@@ -5,8 +5,9 @@
 // use is disposed, so its memory (and the WebGL context) is given back.
 //   Auto: Iso on phones, on devices with 4 GB or less, or with more than 12 agents; three.js otherwise.
 //   The first person, screen and follow views and Edit Mode always use three.js.
-// The Lobby has three overviews (0.17): the Building (stacked Floors, in the chosen renderer), the Office (one floor
-// plan for the whole company, Iso Pixel) and the List (plain DOM, the default on phones).
+// The Lobby has three overviews (0.17): the Building (stacked Floors), the Office (one floor plan for the whole
+// company; in 3D too since 1.1.0) and the List (plain DOM, the default on phones). The Building and the Office follow
+// the chosen renderer; on Auto the 3D Office falls back to Iso Pixel on this browser once it cannot hold ~30 fps.
 import { BuildingScene } from './scene.js';
 import { IsoScene } from './iso.js';
 import { ListScene } from './list.js';
@@ -16,9 +17,13 @@ export const RENDERERS = ['auto', 'three', 'iso'];
 const KEY = 'aisquad.renderer';
 export const savedRenderer = () => { try { const r = localStorage.getItem(KEY); return RENDERERS.includes(r) ? r : 'auto'; } catch { return 'auto'; } };
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
+const SLOW_KEY = 'aisquad.office3dSlow';
+const officeSlow = () => { try { return localStorage.getItem(SLOW_KEY) === '1'; } catch { return false; } };
 export const autoRenderer = ({ agents = 0 } = {}) => auto({ agents, phone: isPhone(), memory: navigator.deviceMemory || 8 });
 
 export function createSceneHost(container, handlers) {
+  // the 3D Office measured too slow on Auto: Iso Pixel from now on in this browser (choosing 3D still gets 3D)
+  handlers = { ...handlers, onOfficeSlow: () => { try { localStorage.setItem(SLOW_KEY, '1'); } catch { /* private mode */ } if (host.chosen === 'auto') setTimeout(() => host.use(host.want()), 0); } };   // not inside the renderer's own frame
   const host = {
     chosen: savedRenderer(),
     kind: null, impl: null, last: {},
@@ -26,10 +31,10 @@ export function createSceneHost(container, handlers) {
     overview: null,
     want(route = host.last.view || {}, editing = false, overview = host.overview) {
       if (editing || route.eyes || route.screen || route.follow) return 'three';
-      if (route.mode === 'lobby' && overview === 'office') return 'iso';
       if (route.mode === 'lobby' && overview === 'list') return 'list';
       if (host.chosen !== 'auto') return host.chosen;
       const agents = (host.last.floors || []).reduce((n, f) => n + (f.agents?.length || 0), 0);
+      if (route.mode === 'lobby' && overview === 'office' && officeSlow()) return 'iso';
       return autoRenderer({ agents });
     },
     route(route, editing, overview) { host.overview = overview; host.use(host.want(route, editing, overview)); },
