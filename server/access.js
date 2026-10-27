@@ -19,6 +19,9 @@ const OWNER_ROUTES = [
   /^POST \/api\/insights\//,
   /^GET \/api\/(notify|insights)$/,
   /^(GET|POST) \/api\/nodes$/,
+  /^(GET|PATCH) \/api\/erpnext$/,
+  /^(PUT|DELETE) \/api\/erpnext\/keys\//,
+  /^POST \/api\/erpnext\/(test|sync)$/,
   /^(PATCH|DELETE) \/api\/nodes\/[\w-]+$/,
   /^GET \/api\/(auth|backups|doctor|users)(\/|$)/,
   /^(POST|PATCH|DELETE) \/api\/dispatcher\/queue\//,
@@ -61,6 +64,8 @@ export function hiddenPath(pathname, user) {
 // what a list shows to someone who is not the Owner
 export function redact(pathname, out, user) {
   if (isOwner(user) || !out || typeof out !== 'object') return out;
+  // what only the Owner decides (price approvals, held handoffs, 0.19) is never shown to anyone else
+  if (pathname === '/api/building' && Array.isArray(out.attention)) out = { ...out, attention: out.attention.filter((a) => !a.ownerOnly) };
   const hide = ownerFloors();
   if (!hide.size) return out;
   const keep = (x) => !hide.has(x?.floorId) && !hide.has(x?.id);

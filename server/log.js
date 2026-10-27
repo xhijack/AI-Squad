@@ -22,6 +22,8 @@ export const TYPES = {
   'gate.passed': 'work', 'gate.failed': 'work', 'merge.done': 'work', 'merge.refused': 'work', 'sprint.planned': 'work', 'sprint.closed': 'work',
   'task.started': 'work', 'task.ended': 'work', 'job.started': 'work', 'job.ended': 'work',
   'dispatch.queued': 'work', 'dispatch.started': 'work', 'dispatch.failed': 'work', 'dispatch.removed': 'work', 'dispatch.idle-stopped': 'lifecycle', 'node.lost': 'lifecycle',
+  'handoff.sent': 'communication', 'handoff.received': 'communication', 'handoff.held': 'communication', 'handoff.rejected': 'communication', 'handoff.invalid': 'communication',
+  'erpnext.lead': 'work', 'erpnext.won': 'work', 'erpnext.approval': 'work', 'erpnext.approved': 'work', 'erpnext.sent-back': 'work', 'erpnext.alert': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
@@ -91,6 +93,17 @@ function summarize(e) {
     case 'task.started': return `${who} started ${d.label || d.kind}`;
     case 'job.started': return `${who} started a background job${t(d.title)}`;
     case 'node.lost': return `${who}'s job was lost with the machine ${d.node} and queued again`;
+    case 'handoff.sent': return `${who} handed ${d.kind} "${oneLine(d.title || '', 60)}" to ${d.to}${d.replyTo ? ` (re ${d.replyTo})` : ''}`;
+    case 'handoff.received': return `${d.kind} "${oneLine(d.title || '', 60)}" arrived from ${d.from}${e.agent ? ` for ${e.agent}` : ''}`;
+    case 'handoff.held': return `${who}'s handoff to ${d.to} waits for the owner (it leaves an Owner-only Space)`;
+    case 'handoff.rejected': return `the owner did not deliver ${who}'s handoff ${d.handoff}${t(d.reason)}`;
+    case 'handoff.invalid': return `${who}'s package ${d.file} was not sent: ${oneLine(d.reason || '', 80)}`;
+    case 'erpnext.lead': return `new Lead ${d.lead} from ERPNext handed to the team`;
+    case 'erpnext.won': return `Quotation ${d.quotation} became an order: handed over as a project`;
+    case 'erpnext.approval': return `${who} asked the owner to approve the prices of ${d.quotation}`;
+    case 'erpnext.approved': return `the owner approved ${d.quotation}; it is submitted in ERPNext`;
+    case 'erpnext.sent-back': return `the owner sent ${d.quotation} back to ${who}`;
+    case 'erpnext.alert': return `Quotation ${d.quotation} was submitted by ${d.user} without the owner's approval`;
     case 'dispatch.queued': return `${who} queued (${d.action}, ${d.priority}): ${d.reason}`;
     case 'dispatch.started': return `${who} started from the queue (${d.action}) after ${Math.round((d.waitedMs || 0) / 60e3)} min`;
     case 'dispatch.failed': return `${who} could not start from the queue: ${oneLine(d.error || '', 80)}${d.dropped ? ' (removed)' : ''}`;

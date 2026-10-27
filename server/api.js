@@ -33,6 +33,7 @@ import * as notify from './notify.js';
 import * as inbox from './inbox.js';
 import * as insight from './insight.js';
 import * as nodes from './nodes.js';
+import * as erp from './erpnext.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -243,6 +244,15 @@ const routes = [
   ['POST', /^\/api\/nodes$/, (p, b) => { const r = nodes.addNode(b.name); return { ...r, command: `aisquad node --head <address of this machine>:8097 --name ${r.node.name} --token ${r.token}` }; }, { pin: true, history: () => ({ label: 'Machine added' }) }],
   ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
+  // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
+  ['GET', /^\/api\/handoffs$/, (p, b, req) => squad.handoffsOverview(req.user), { pin: true }],
+  ['POST', /^\/api\/handoffs\/scan$/, () => squad.handoffTick(), { pin: true }],
+  ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],
+  ['PATCH', /^\/api\/erpnext$/, (p, b) => erp.saveSettings(b), { pin: true, history: () => ({ label: 'ERPNext settings' }) }],
+  ['PUT', /^\/api\/erpnext\/keys\/(sales|delivery|owner)$/, async ([role], b) => ({ keys: await erp.setKey(role, b.key, b.secret, { check: b.check !== false }) }), { pin: true }],
+  ['DELETE', /^\/api\/erpnext\/keys\/(sales|delivery|owner)$/, ([role]) => ({ keys: erp.clearKey(role) }), { pin: true }],
+  ['POST', /^\/api\/erpnext\/test$/, () => erp.testAll(), { pin: true }],
+  ['POST', /^\/api\/erpnext\/sync$/, () => erp.sync(), { pin: true }],
   // the Notification Gateway (0.15): Telegram token (write-only), settings, pairing, chats, test, digest
   ['GET', /^\/api\/notify$/, () => notify.status(), { pin: true }],
   ['PATCH', /^\/api\/notify$/, (p, b) => { building.setPrefs({ notify: notify.cleanNotify({ ...notify.settings(), ...b, quiet: { ...notify.settings().quiet, ...(b.quiet || {}) } }) }); notify.restart(); return notify.status(); }, { pin: true, history: () => ({ label: 'Notification settings' }) }],

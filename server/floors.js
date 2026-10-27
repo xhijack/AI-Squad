@@ -108,7 +108,7 @@ export function cleanFloor(f = {}, prev = {}) {
     // the Floor's default voice language and settings (each agent may set its own; server/voice.js)
     ...(pick('voice') ? { voice: { lang: voiceLib.cleanLang(pick('voice').lang), settings: voiceLib.cleanVoice(pick('voice').settings || {}) } } : {}),
     // the Space: kind, access, where its auto memory lives, its shift and machine (server/space.js)
-    ...space.cleanSpace({ kind: pick('kind'), access: pick('access'), memory: pick('memory'), shift: pick('shift'), node: pick('node') }),
+    ...space.cleanSpace({ kind: pick('kind'), access: pick('access'), memory: pick('memory'), shift: pick('shift'), node: pick('node'), erpnext: pick('erpnext') }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({

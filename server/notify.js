@@ -114,17 +114,18 @@ export function inQuiet(q, now = Date.now()) {
   const t = hhmm(now), a = mins(q.from), b = mins(q.to);
   return a <= b ? t >= a && t < b : t >= a || t < b;
 }
-const isCritical = (item) => !!item.autopilot?.critical || (['question', 'permission', 'reply'].includes(item.kind) && autopilot.classify(item.text, { level: 'full' }).reasons.some((r) => r !== 'unclear'));
-const reasonsOf = (item) => [...new Set([...(item.autopilot?.reasons || []), ...autopilot.classify(item.text, { level: 'full' }).reasons])].filter((r) => r !== 'unclear');
+const isCritical = (item) => !!item.hardStop?.length || !!item.autopilot?.critical || (['question', 'permission', 'reply'].includes(item.kind) && autopilot.classify(item.text, { level: 'full' }).reasons.some((r) => r !== 'unclear'));
+const reasonsOf = (item) => [...new Set([...(item.hardStop || []), ...(item.autopilot?.reasons || []), ...autopilot.classify(item.text, { level: 'full' }).reasons])].filter((r) => r !== 'unclear');
 const short = (s, n) => { const t = redact(String(s || '').replace(/\s+/g, ' ').trim()); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot' };
+const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext' };
 
 // a person may see this item: Owner-only Spaces only for the Owner
-const visible = (item, user) => user && (user.role === 'owner' || !access.ownerFloors().has(item.floorId));
+const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOnly && !access.ownerFloors().has(item.floorId)));
 
 export function messageFor(item, tok, s = settings()) {
   const where = [item.floorName || item.floorId, item.agentName].filter(Boolean).join(' · ');
-  const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(item.text, 600)];
+  // a price approval: only its first line (customer, total) travels; the lines and the note are opened in the app
+  const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(item.kind === 'price' ? String(item.text).split('\n')[0] : item.text, 600)];
   const opts = (item.options || []).filter((o) => !o.free).slice(0, 6);
   if (opts.length) lines.push('', ...opts.map((o) => `${o.n}. ${short(o.label, 80)}`));
   if (isCritical(item)) lines.push('', `Hard stop: ${reasonsOf(item).join(', ') || 'critical'}`);
@@ -132,9 +133,9 @@ export function messageFor(item, tok, s = settings()) {
   if (tok) {
     if (opts.length) for (let i = 0; i < opts.length; i += 3) buttons.push(opts.slice(i, i + 3).map((o) => ({ text: `${o.n}. ${short(o.label, 24)}`, data: `a:${tok}:${o.n}` })));
     const row = [];
-    if (['question', 'permission', 'reply', 'finished', 'decided'].includes(item.kind)) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
+    if (['question', 'permission', 'reply', 'finished', 'decided', 'price'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
     if (item.kind === 'crash') buttons.push([{ text: 'Resume', data: `a:${tok}:1` }, { text: 'Start fresh', data: `a:${tok}:2` }]);
-    if (!['question', 'permission'].includes(item.kind)) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });     // a dialog is answered, not dismissed
+    if (!['question', 'permission', 'price'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
     if (s.publicUrl) row.push({ text: say('openBtn', {}, s.lang), url: item.floorId ? `${s.publicUrl}/#/floor/${item.floorId}${item.agentId ? `/agent/${item.agentId}` : ''}` : `${s.publicUrl}/` });
     buttons.push(row);
   }
@@ -180,12 +181,12 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const quiet = inQuiet(s.quiet, now);
   for (const item of items) {
     if (st.sent[item.id]) continue;
-    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical;
+    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext'].includes(item.kind);
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
     if (quiet && item.kind !== 'resource') continue;                                         // after the quiet hours
     if (st.hourly.length >= s.maxPerHour) break;
     const tok = crypto.randomBytes(5).toString('hex');
-    st.tokens[tok] = { itemId: item.id, floorId: item.floorId || '', agentId: item.agentId || '', kind: item.kind, critical: isCritical(item), reasons: reasonsOf(item),
+    st.tokens[tok] = { itemId: item.id, floorId: item.floorId || '', agentId: item.agentId || '', kind: item.kind, ownerOnly: !!item.ownerOnly, critical: isCritical(item), reasons: reasonsOf(item),
       options: (item.options || []).map(({ n, label }) => ({ n, label: String(label).slice(0, 200) })), agentName: item.agentName || '', exp: now + TOKEN_MS };
     const msgs = [];
     for (const c of st.chats) {
@@ -334,7 +335,7 @@ async function handleCallback(q, { fetchFn, now, lang }) {
   const t = st.tokens[tok];
   if (!user || !t || t.exp < now) return ack(say('expired', {}, lang));
   if (user.role === 'viewer') return ack(say('noRole', { role: user.role }, lang));
-  if (!visible({ floorId: t.floorId }, user)) return ack(say('expired', {}, lang));
+  if (!visible({ floorId: t.floorId, ownerOnly: t.ownerOnly }, user)) return ack(say('expired', {}, lang));
   if (act === 'r') { update((s) => { s.pending[chatId] = { mode: 'reply', tok, exp: now + TOKEN_MS }; }); await ack(''); return send(chatId, say('reply', { agent: t.agentName || 'the agent' }, lang), [], fetchFn); }
   if (act === 'x') { await ack(''); return answer(chatId, user, tok, 0, '', { fetchFn, lang, tokens: st.tokens }); }
   if (act === 'a') {

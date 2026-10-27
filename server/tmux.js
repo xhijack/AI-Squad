@@ -195,10 +195,22 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 // when available, so the session survives the terminal or editor that launched the server and an out of
 // memory kill of one scope takes only this agent
 // env: extra variables for the agent (hook target, git identity), set with `env` in front of the command
-export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {} }) {
+// secretEnv: variables that must not show in a command line (ERPNext keys, 0.19): a 0600 file the shell reads and
+// removes before it starts Claude Code
+export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {}, secretEnv = {} }) {
   if (isRunning(name)) return { ok: true, already: true };
-  const vars = Object.entries(agentEnv).filter(([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null).map(([k, v]) => `${k}=${v}`);
-  const cmd = [...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', ...disallowedTools] : []), ...extraArgs].map(shq).join(' ');
+  const ok = ([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null;
+  const vars = Object.entries(agentEnv).filter(ok).map(([k, v]) => `${k}=${v}`);
+  const secrets = Object.entries(secretEnv).filter(ok);
+  let pre = [];
+  if (secrets.length) {
+    const f = path.join(config.home, 'run', `${name}.env`);
+    fs.mkdirSync(path.dirname(f), { recursive: true, mode: 0o700 });
+    try { fs.unlinkSync(f); } catch { /* none */ }
+    fs.writeFileSync(f, secrets.map(([k, v]) => `export ${k}=${shq(v)}`).join('\n') + '\n', { mode: 0o600, flag: 'wx' });   // a new file: never through a link
+    pre = ['sh', '-c', '. "$1"; rm -f "$1"; shift; exec "$@"', 'sh', f];
+  }
+  const cmd = [...pre, ...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', ...disallowedTools] : []), ...extraArgs].map(shq).join(' ');
   const tm = ['tmux', ...tmuxArgs(['new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, cmd], socketOf(name))];
   const env = { ...process.env, PATH: `${process.execPath.replace(/\/node$/, '')}:${process.env.PATH || ''}` };
   delete env.TMUX;
@@ -212,6 +224,7 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
     if (!isRunning(name)) await exec(tm[0], tm.slice(1));
   }
   if (isRunning(name)) { keepSize(name); sized.add(name); }
+  else if (pre.length) try { fs.rmSync(pre[4]); } catch { /* read already */ }
   return { ok: isRunning(name), unit };
 }
 

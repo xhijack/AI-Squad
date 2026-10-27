@@ -16,6 +16,7 @@ import { safeReaddir, writeText } from './util.js';
 export const KINDS = ['project', 'department'];
 export const ACCESS = ['team', 'owner'];
 export const MEMORY = ['claude', 'repo'];
+export const ERPNEXT = ['off', 'sales', 'delivery'];          // which ERPNext credential the Space's agents get (0.19)
 export const DEFAULT_SHIFT = { enabled: false, days: [1, 2, 3, 4, 5], from: '08:00', to: '17:00' };
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -30,6 +31,7 @@ export function cleanSpace(s = {}) {
     memory: MEMORY.includes(s.memory) ? s.memory : 'claude',
     shift: cleanShift(s.shift),
     node: /^[a-z0-9][a-z0-9-]{0,39}$/.test(String(s.node || '')) ? s.node : 'auto',
+    erpnext: ERPNEXT.includes(s.erpnext) ? s.erpnext : 'off',
   };
 }
 

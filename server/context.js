@@ -10,7 +10,9 @@ import path from 'node:path';
 import { config } from './config.js';
 import * as company from './company.js';
 import * as space from './space.js';
+import * as erp from './erpnext.js';
 
+const PRIVATE = ['secrets.json', 'pin', 'users.json', 'notify.json', 'handoffs.json', 'erpnext.json'];
 // the rules that keep an agent's identity and the machine's shared memory out of reach of one Space's work
 export function identityDenyRules() {
   const claude = config.claudeHome, home = config.home;
@@ -18,6 +20,10 @@ export function identityDenyRules() {
     ...['Edit', 'Write', 'MultiEdit'].map((t) => `${t}(/${path.join(claude, 'CLAUDE.md')})`),
     ...['Edit', 'Write', 'MultiEdit'].map((t) => `${t}(/${path.join(claude, 'agent-memory')}/**)`),
     ...['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].map((t) => `${t}(/${home}/**)`),
+    // the machine's secrets and the Owner's desk are not for reading either (0.19): keys, PINs, people, held packages,
+    // price approvals, and other processes' environments
+    ...PRIVATE.map((f) => `Read(/${path.join(home, f)})`), 'Read(//proc/**)',
+    ...PRIVATE.filter((f) => f !== 'pin').map((f) => `Bash(*${f}*)`), `Bash(*${path.join(home, 'pin')}*)`, 'Bash(*.aisquad/pin*)', 'Bash(*/proc/*/environ*)', 'Bash(*AISQUAD_ERP_*)',
   ];
 }
 
@@ -42,5 +48,7 @@ export function contextLines(sp, dir, owner) {
     'Never write client or project facts to `~/.claude/CLAUDE.md`, `~/.aisquad` or the Company Brain: other Spaces would see them. Those paths are read-only for you.',
     ...(dir ? [`The Company Brain is at \`${dir}\` (read only): ${company.TEAM_DIRS.join(', ')}${owner ? `, and for this Owner Space ${company.OWNER_DIRS.join(', ')}` : ''}. Read what the task needs; follow the brand and the SOPs there.`] : []),
     ...(!owner && dir ? [`Legal, finance and pricing are not for this Space: ask the lead or the owner instead of looking for them.`] : []),
+    'Work for another Space goes as a handoff package: a Markdown file in `docs/squad/handoffs/outbox/` with a header (`to:` the Space, `kind:`, `title:`), see the space-handoff skill; the server delivers it and wakes the receiver. Work handed to this Space arrives in `docs/squad/handoffs/inbox/`.',
+    ...(erp.sessionFor(sp) ? [erp.contextLine(sp.erpnext)] : []),
   ];
 }

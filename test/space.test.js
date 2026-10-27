@@ -34,10 +34,11 @@ const until = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now(
 const proj = path.join(root, 'projects', 'sales');
 let floorId = '', agentId = '';
 
-test('a Space: kind, access, memory, shift and node, cleaned with safe defaults', () => {
-  assert.deepEqual(space.cleanSpace({}), { kind: 'project', access: 'team', memory: 'claude', shift: space.DEFAULT_SHIFT, node: 'auto' });
-  const s = space.cleanSpace({ kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [5, 1, 1, 9], from: '22:00', to: '05:00' }, node: 'box-2' });
-  assert.deepEqual(s, { kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [1, 5], from: '22:00', to: '05:00' }, node: 'box-2' });
+test('a Space: kind, access, memory, shift, node and ERPNext role, cleaned with safe defaults', () => {
+  assert.deepEqual(space.cleanSpace({}), { kind: 'project', access: 'team', memory: 'claude', shift: space.DEFAULT_SHIFT, node: 'auto', erpnext: 'off' });
+  const s = space.cleanSpace({ kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [5, 1, 1, 9], from: '22:00', to: '05:00' }, node: 'box-2', erpnext: 'sales' });
+  assert.deepEqual(s, { kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [1, 5], from: '22:00', to: '05:00' }, node: 'box-2', erpnext: 'sales' });
+  assert.equal(space.cleanSpace({ erpnext: 'owner' }).erpnext, 'off', 'the owner key is never for agents');
   assert.equal(space.cleanSpace({ kind: 'x', access: 'root', node: '../etc' }).kind, 'project');
 });
 
@@ -82,7 +83,8 @@ test('session context: Company Brain read-only, Owner folders closed to team Spa
   assert.equal(team.settings, null);
   assert.match(team.lines.join('\n'), /Legal, finance and pricing are not for this Space/);
   const owner = context.sessionContext('/p/legal', { access: 'owner', memory: 'repo' }, {});
-  assert.ok(!owner.deny.some((d) => d.startsWith('Read(')), 'an Owner Space reads everything');
+  assert.ok(!owner.deny.some((d) => d.startsWith('Read(') && d.includes(dir)), 'an Owner Space reads the whole Company Brain');
+  for (const c of [team, owner]) assert.ok(c.deny.includes(`Read(/${path.join(config.home, 'secrets.json')})`) && c.deny.includes('Bash(*secrets.json*)') && c.deny.includes('Bash(*AISQUAD_ERP_*)'), 'no agent reads the machine\'s keys');
   assert.deepEqual(owner.settings, { autoMemoryDirectory: path.join('/p/legal', '.claude', 'aisquad', 'memory') });
   assert.match(owner.lines.join('\n'), /for this Owner Space legal, finance, pricing/);
 });

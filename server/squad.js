@@ -42,10 +42,12 @@ import * as auth from './auth.js';
 import { runnerFor } from './runner.js';
 import * as dispatcher from './dispatcher.js';
 import * as nodesLib from './nodes.js';
+import * as hb from './handoff.js';
+import * as erp from './erpnext.js';
 import { execFileSync, execFile } from 'node:child_process';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
-import { currentActor } from './access.js';
+import { currentActor, ownerFloors as accessOwnerFloors } from './access.js';
 import * as chatLib from './chat.js';
 import * as contextLib from './context.js';
 import { config, ROOT, paths } from './config.js';
@@ -459,6 +461,7 @@ export function buildingSnapshot() {
     ...wd.resourceWarnings(res).map((w) => ({ id: attId('resource', w.key), kind: 'resource', floorId: null, text: w.text, ts: res.ts })),
     ...backupLib.backupAlerts(b.prefs.backup).map((w) => ({ id: attId('backup', w.key), kind: 'backup', floorId: null, text: w.text, ts: Date.now() })),
     ...states.flatMap((s) => s.attention || []),
+    ...ownerDesk(states),
   ];
   for (const s of states) if (s.budget?.level === 'warn') attention.push({ id: attId('budget-warn', s.entry.id), kind: 'budget', level: 'warn', floorId: s.entry.id, floorNumber: s.entry.number, floorName: s.cfg.floor.name, text: `Budget at ${s.budget.pct} %: $${s.budget.used.toFixed(2)} of $${s.cfg.floor.budget.usd} this ${s.cfg.floor.budget.period}`, ts: Date.now() });
   stampAlerts(attention);
@@ -643,7 +646,10 @@ async function launchAgent(floorId, agentId, task = '', { resume = '', via = 'ai
   // the context layers: the Company Brain read-only, the identity guard, the Space's memory (server/context.js)
   const sc = floors.sessionContext(entry.path);
   extraArgs.push(...sc.addDirs, ...(sc.settings ? ['--settings', JSON.stringify(sc.settings)] : []));
-  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny], extraArgs, env });
+  // ERPNext through Frappe Assistant Core when the Space has a role (0.19): its key only as a hidden variable
+  const ex = erp.sessionFor(floors.readFloor(entry.path).floor);
+  if (ex) extraArgs.push(...ex.args, '--allowedTools', ...ex.allow);
+  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], extraArgs, env, secretEnv: ex ? ex.env : {} });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -696,8 +702,12 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const cwd = general ? chatLib.neutralDir(floorId, agentId, path.join(entry.path, '.claude', 'agents', `${agentId}.md`)) : entry.path;
   const repos = general ? [] : floors.agentReposOf(entry.path, agentId);
   const sc = general ? contextLib.sessionContext(cwd, { ...cfg.floor, memory: 'claude' }, b.prefs) : floors.sessionContext(entry.path);
+  const ex = general ? null : erp.sessionFor(cfg.floor);                 // ERPNext (0.19): this machine only, never sent to a worker
+  if (ex && remote) throw bad('A Space with ERPNext keys runs its jobs on this machine only');
+  if (ex) Object.assign(env, ex.env);
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
-    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny], pluginDir: config.useHooks && !general ? ROOT : '', extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs] });
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
+    extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
   const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : null };
   let job;
   if (remote) {
@@ -719,9 +729,84 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
 export function logJobEnded(job) {
   if (!job.floorId) return;
   if (job.meta?.chat) chatAnswered(job);
+  hb.scan({ floorId: job.floorId }).then((r) => { if (r.length) invalidate(); }, (e) => console.error('[handoff]', e.message));   // its packages go now
   logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}), ...(job.node ? { node: job.node } : {}), ...(job.branch ? { branch: job.branch } : {}) } });
   invalidate();
 }
+
+// ---------- handoffs between Spaces and ERPNext (0.19), see server/handoff.js and server/erpnext.js ----------
+export function spacesForHandoff() {
+  return building.loadBuilding().floors.flatMap((e) => {
+    try {
+      const c = floors.readFloor(e.path);
+      return [{ id: e.id, number: e.number, name: c.floor.name, root: e.path, access: c.floor.access || 'team',
+        agents: c.team.agents.map((a) => ({ id: a.id, displayName: a.displayName, lead: !!a.lead || sprint.roleKind(a) === 'lead' })) }];
+    } catch { return []; }
+  });
+}
+const realFloor = (id) => building.loadBuilding().floors.some((f) => f.id === id);
+Object.assign(hb.deps, {
+  spaces: spacesForHandoff,
+  log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); },
+  // the receiver works on it in the background: P1 (a handoff), this machine, edits allowed in its own Space
+  wake: ({ floorId, agentId, prompt, title, handoff }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: 'handoff',
+    opts: { kind: 'handoff', permissionMode: 'acceptEdits', headOnly: true, handoff } }),
+  ownerItem: async (h) => { if (h.kind === 'quotation') await erp.prepareApproval(h); invalidate(); },
+});
+erp.deps.invalidate = () => invalidate();
+
+// what only the Owner decides, on the Owner's desk: packages leaving an Owner-only Space, questions about ERPNext
+// work, price approvals (a hard stop: money) and ERPNext alerts. Hidden from everyone else (ownerOnly).
+const OWNER_DESK = new Set(['handoff', 'price', 'erpnext']);
+function ownerDesk(states) {
+  const where = (floorId, agentId) => {
+    const s = states.find((x) => x.entry.id === floorId);
+    const a = s?.cfg.team.agents.find((x) => x.id === agentId);
+    return { floorId, floorNumber: s?.entry.number, floorName: s?.cfg.floor.name, ...(a ? { agentId, agentName: a.displayName } : {}) };
+  };
+  const out = [];
+  for (const h of hb.load()) {
+    const base = { ...where(h.from.floorId, h.from.agentId), ownerOnly: true, answerable: true, handoffId: h.id, ts: h.createdAt };
+    if (h.status === 'held') out.push({ ...base, id: attId('handoff', h.id), kind: 'handoff', mode: 'held', hardStop: ['legal'],
+      text: `Handoff from an Owner-only Space to ${h.to.name}: ${h.title}\n\n${h.body}`, options: [{ n: 1, label: 'Deliver it' }, { n: 2, label: 'Do not deliver' }] });
+    else if (h.status === 'question') out.push({ ...base, id: attId('handoff-q', h.id), kind: 'handoff', mode: 'question',
+      text: `${h.title}${h.erpnext ? ` (ERPNext ${h.erpnext})` : ''}\n\n${h.body}`, options: [{ n: 1, label: 'Your answer…', free: true }] });
+    else if (h.status === 'approval') {
+      // the card is the version of the Quotation it shows: a changed draft is a new card (and a new Telegram message)
+      const q = erp.approvalOf(h.id);
+      out.push({ ...base, id: attId('price', h.id, q?.modified || ''), kind: 'price', hardStop: ['money'], quotation: q, text: erp.approvalText(h),
+        options: [...(q?.modified && !q.error ? [{ n: 1, label: erp.credential('owner') ? 'Approve and submit' : 'Approve (you submit it in ERPNext)' }] : []), { n: 2, label: 'Send back with a note…', free: true }] });
+    }
+  }
+  for (const a of erp.loadState().alerts) out.push({ id: attId('erp', a.id), kind: 'erpnext', floorId: null, ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
+  return out;
+}
+async function answerOwnerDesk(item, option, text = '') {
+  const who = currentActor();
+  if (!who || who.role !== 'owner') throw new HttpError(403, 'Only the Owner decides this');
+  const by = who?.name || 'Owner', n = Number(option) || 0, note = String(text || '').trim();
+  let r;
+  if (item.kind === 'erpnext') r = erp.dismissAlert(item.alertId);
+  else if (item.kind === 'price') {
+    if (n === 1) r = await erp.approve(item.handoffId, { by, seenModified: item.quotation?.modified || '' });
+    else if (note) r = await erp.sendBack(item.handoffId, note, { by });
+    else throw bad('Approve it, or send it back with a note');
+  } else if (item.mode === 'held') {
+    if (!n && !note) throw bad('Deliver it or not');
+    r = await hb.release(item.handoffId, n === 1, { by, reason: note });
+  } else r = note ? await hb.ownerReply(item.handoffId, note) : hb.closeOwnerItem(item.handoffId);
+  invalidate();
+  return { ok: true, ...r };
+}
+// the bus and the ERPNext watcher, from the server's tick
+export async function handoffTick(now = Date.now()) {
+  const sent = await hb.scan({ now });
+  const erpRun = await erp.tick(now).catch((e) => ({ error: e.message }));
+  if (sent.length) invalidate();
+  return { sent, erp: erpRun };
+}
+export const handoffsOverview = (user) => (user?.role === 'owner' ? { handoffs: hb.listFor(), metrics: hb.metrics() }
+  : { handoffs: hb.listFor(accessOwnerFloors(), { owner: false }), metrics: hb.metrics() });
 
 // ---------- more machines (0.18), see server/nodes.js and server/worker.js ----------
 export function remoteUrl(root) {
@@ -734,9 +819,10 @@ function placedNow(now = Date.now()) {
   return out;
 }
 // where a background job of this Space runs now: 'head', a worker, or null
-export function placeJob(floorId, headFree, now = Date.now()) {
+// headOnly: handoff work and Spaces with ERPNext keys stay here (their files and keys never go to a worker, 0.19)
+export function placeJob(floorId, headFree, now = Date.now(), { headOnly = false } = {}) {
   let pin = 'auto', root = '';
-  try { root = building.floorEntry(floorId).path; pin = floors.readFloor(root).floor.node || 'auto'; } catch { /* gone */ }
+  try { root = building.floorEntry(floorId).path; const f = floors.readFloor(root).floor; pin = f.node || 'auto'; if (headOnly || (f.erpnext && f.erpnext !== 'off')) pin = nodesLib.HEAD; } catch { /* gone */ }
   const workers = nodesLib.listNodes(now);
   if (!workers.length && (pin === 'auto' || pin === nodesLib.HEAD)) return headFree > 0 ? nodesLib.HEAD : null;
   return nodesLib.place({ pin, headFree, hasRemote: !!remoteUrl(root), floorId, placedNow: placedNow(now) }, now);
@@ -818,7 +904,7 @@ function dispatchContext(now = Date.now(), { res = readRes() } = {}) {
     inShift: (id) => space.inShift(cfgOf(id)?.floor.shift, now),
     floorFree: (id) => { const c = cfgOf(id); if (!c) return 0; return Math.max(0, c.floor.recovery.maxAgents - (byFloor.get(id)?.agents.filter((a) => a.running).length || 0)); },
     busy: (it) => {
-      if (it.action === 'job') return !hasWorkers || placeJob(it.floorId, cap.free, now) ? false : 'no machine for this Space has room';   // one machine: the slots decide
+      if (it.action === 'job') return !hasWorkers || placeJob(it.floorId, cap.free, now, { headOnly: !!it.opts?.headOnly }) ? false : 'no machine for this Space has room';   // one machine: the slots decide
       if (it.action !== 'sprint') return false;
       const a = byFloor.get(it.floorId)?.agents.find((x) => x.id === it.agentId); return !!a && (a.state === 'working' || a.state === 'waiting');
     },
@@ -830,7 +916,7 @@ async function execItem(it, ctx = null) {
   if (it.action === 'start') return launchAgent(it.floorId, it.agentId, it.task, { via: it.via });
   if (it.action === 'resume') return resumeNow(it.floorId, it.agentId, { via: it.via });
   if (it.action === 'sprint') { stopAgent(it.floorId, it.agentId); return launchAgent(it.floorId, it.agentId, it.task, { via: it.via }); }
-  const node = placeJob(it.floorId, ctx ? ctx.capacity.free - (ctx.headUsed || 0) : 1) || nodesLib.HEAD;   // the owner's "start now" runs here
+  const node = placeJob(it.floorId, ctx ? ctx.capacity.free - (ctx.headUsed || 0) : 1, Date.now(), { headOnly: !!it.opts?.headOnly }) || nodesLib.HEAD;   // the owner's "start now" runs here
   if (ctx && node === nodesLib.HEAD) ctx.headUsed = (ctx.headUsed || 0) + 1;
   const job = launchJob(it.floorId, it.agentId, it.task, { ...it.opts, title: it.title, via: it.via, node });
   return { ok: true, job };
@@ -1162,6 +1248,7 @@ export async function answerAttention(id, option, text = '', { force = false, fl
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) return answerGone({ floorId, agentId, kind }, option, text);
+  if (OWNER_DESK.has(item.kind)) return answerOwnerDesk(item, option, text);
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'taskdone') { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'reply' || item.kind === 'finished') {
