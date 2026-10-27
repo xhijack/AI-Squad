@@ -50,6 +50,7 @@ import * as trust from './trust.js';
 import * as insightLib from './insight.js';
 import * as history from './history.js';
 import * as kpiLib from './kpi.js';
+import * as guideLib from './guide.js';
 import { execFileSync, execFile } from 'node:child_process';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
@@ -477,8 +478,9 @@ export function buildingSnapshot() {
   attention.push(...independent.attention);
   const floorsOut = [independent.summary, ...states.map(summary)].sort((x, y) => x.number - y.number);
   let targets = null; try { const o = kpiLib.overview(); targets = { total: o.total, met: o.met, behind: o.behind, unset: o.unset }; } catch { /* none */ }   // the cockpit's counts (1.1)
+  let guide = { done: false, firstRun: false }; try { const g = guideLib.load(); guide = { done: !!g.done, firstRun: !g.done && !b.floors.length, language: b.prefs.language || null }; } catch { /* none */ }   // the Company Guide (1.2)
   const value = {
-    name: b.name, now: Date.now(), floors: floorsOut, attention, detected, targets,
+    name: b.name, now: Date.now(), floors: floorsOut, attention, detected, targets, guide,
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
@@ -765,6 +767,7 @@ Object.assign(hb.deps, {
 });
 erp.deps.invalidate = () => invalidate();
 Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate() });
+Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });
 Object.assign(legal.deps, {
   spaces: spacesForHandoff,
   log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); },

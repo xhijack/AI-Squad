@@ -6,6 +6,18 @@
 // prompt "Handoff h-..." gets a done reply in the outbox; any other prompt writes $FAKE_CLAUDE_OUTBOX as a package).
 // Args, the prompt and whether ANTHROPIC_API_KEY or an ERPNext key was set go to $FAKE_CLAUDE_LOG.
 const fs = require('fs');
+// `claude -p --output-format json --json-schema S PROMPT` (recommend, the Company Guide): the prompt is an argument,
+// the answer is one JSON object shaped by the schema; nothing is read from stdin
+const si = process.argv.indexOf('--json-schema');
+if (si > 0) {
+  const schema = JSON.parse(process.argv[si + 1] || '{}'), props = Object.keys(schema.properties || {}), prompt = process.argv.at(-1);
+  if (process.env.FAKE_CLAUDE_LOG) fs.appendFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify({ args: process.argv.slice(2), prompt, structured: true }) + '\n');
+  if (process.env.FAKE_CLAUDE_MODE === 'fail') { process.stdout.write(JSON.stringify({ type: 'result', is_error: true, result: 'Something broke' })); process.exit(1); }
+  const out = props.includes('summary') ? { summary: `Fake summary for: ${prompt.slice(0, 60).replace(/\s+/g, ' ')}`, targets: [], materials: [{ space: 'marketing', item: 'A fake material the fake Claude suggested', why: 'fake' }] }
+    : props.includes('blueprint') ? { blueprint: 'software-house', name: 'Fake squad', goal: 'Fake goal.', team: [{ template: 'project-manager', count: 1, reason: 'fake' }] } : {};
+  process.stdout.write(JSON.stringify({ type: 'result', is_error: false, result: JSON.stringify(out), structured_output: out, total_cost_usd: 0.001 }));
+  process.exit(0);
+}
 let prompt = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (c) => { prompt += c; });

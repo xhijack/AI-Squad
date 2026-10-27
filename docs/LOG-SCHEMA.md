@@ -105,6 +105,9 @@ entered.
 **`kpi.failed`** (1.1): the server could not measure an ERPNext or CSV target: `kpi`, `name`, `source`, `error` (one line).
 The last value stays, marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
 
+**`guide.built`** (1.2, lifecycle): the Company Guide built this Space: `division`, `blueprint`, `mode` (automatic, supervised,
+manual), `targets` (how many targets got a goal).
+
 **`legal.reverted`**, **`legal.approved`**, **`legal.changes`** (0.20): a contract in a Legal Space was put back to DRAFT
 (`reason`: marked APPROVED without the owner's approval, or changed after it), the owner approved it (`by`,
 `checklistOpen`: open checklist items at that moment), or asked for changes. `file` is the contract's path; its text
