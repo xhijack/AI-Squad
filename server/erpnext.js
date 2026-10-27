@@ -81,8 +81,8 @@ export async function request(who, method, p, body, { url = settings().url, time
   return j.data !== undefined ? j.data : j.message;
 }
 const q = (o) => Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(typeof v === 'string' ? v : JSON.stringify(v))}`).join('&');
-export const list = (who, doctype, { fields = ['name'], filters = [], orderBy = 'creation asc', limit = 20 } = {}) =>
-  request(who, 'GET', `/api/resource/${encodeURIComponent(doctype)}?${q({ fields, filters, order_by: orderBy, limit_page_length: limit })}`);
+export const list = (who, doctype, { fields = ['name'], filters = [], orderBy = 'creation asc', limit = 20, start = 0 } = {}) =>
+  request(who, 'GET', `/api/resource/${encodeURIComponent(doctype)}?${q({ fields, filters, order_by: orderBy, limit_page_length: limit, ...(start ? { limit_start: start } : {}) })}`);
 export const getDoc = (who, doctype, name) => request(who, 'GET', `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`);
 // submit the document as it was read: ERPNext refuses it when it changed since (its own "modified" check)
 export async function submitDoc(who, doctype, name, doc = null) {

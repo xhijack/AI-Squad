@@ -9,7 +9,7 @@ export function fakeFrappe({ users = {}, submitters = [] } = {}) {
   let clock = Date.parse('2026-10-27T01:00:00Z');
   const stamp = () => { clock += 60e3; return new Date(clock).toISOString().replace('T', ' ').slice(0, 19); };
   const userOf = (h) => { const m = String(h || '').match(/^token ([^:]+):(.+)$/); return m && users[m[1]]?.secret === m[2] ? users[m[1]].user : null; };
-  const pass = (d, [f, op, v]) => (op === '=' ? d[f] === v : op === '>' ? String(d[f]) > String(v) : op === '<' ? String(d[f]) < String(v) : true);
+  const pass = (d, [f, op, v]) => (op === '=' ? d[f] === v : op === '>' ? String(d[f]) > String(v) : op === '<' ? String(d[f]) < String(v) : op === '>=' ? String(d[f]) >= String(v) : op === '<=' ? String(d[f]) <= String(v) : true);
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
@@ -35,8 +35,8 @@ export function fakeFrappe({ users = {}, submitters = [] } = {}) {
         if (m[2]) { const d = list.find((x) => x.name === decodeURIComponent(m[2])); return d ? send(200, { data: d }) : send(404, { exc_type: 'DoesNotExistError' }); }
         const fields = JSON.parse(u.searchParams.get('fields') || '["name"]'), filters = JSON.parse(u.searchParams.get('filters') || '[]');
         const [key, dir] = String(u.searchParams.get('order_by') || 'creation asc').split(' ');
-        const limit = +u.searchParams.get('limit_page_length') || 20;
-        const rows = list.filter((d) => filters.every((f) => pass(d, f))).sort((a, b) => (String(a[key]) < String(b[key]) ? -1 : 1) * (dir === 'desc' ? -1 : 1)).slice(0, limit);
+        const limit = +u.searchParams.get('limit_page_length') || 20, start = +u.searchParams.get('limit_start') || 0;
+        const rows = list.filter((d) => filters.every((f) => pass(d, f))).sort((a, b) => (String(a[key]) < String(b[key]) ? -1 : 1) * (dir === 'desc' ? -1 : 1)).slice(start, start + limit);
         return send(200, { data: rows.map((d) => Object.fromEntries(fields.map((f) => [f, d[f]]))) });
       }
       return send(404, { exc_type: 'NotFound' });

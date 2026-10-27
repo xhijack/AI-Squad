@@ -94,6 +94,17 @@ slot; `queue` is true when work was waiting. Resume continues the session.
 
 ### Work (`work`)
 
+**`kpi.measured`** (1.1): a target of the Space got a value: `kpi` (its id), `name`, `value`, `unit`, `target` (the goal, or
+null), `period`, `source` (manual, erpnext, csv, webhook), `state` (met, behind, unset, unknown), `by` for a value a person
+entered.
+
+```json
+{"v":1,"id":"6f2b1c9e0a47","ts":"2026-10-27T15:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.measured","summary":"target Leads from the site: 31 leads (behind, goal 50, manual)","data":{"kpi":"leads","name":"Leads from the site","value":31,"unit":"leads","target":50,"period":"month","source":"manual","state":"behind","by":"Ramdani"}}
+```
+
+**`kpi.failed`** (1.1): the server could not measure an ERPNext or CSV target: `kpi`, `name`, `source`, `error` (one line).
+The last value stays, marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
+
 **`legal.reverted`**, **`legal.approved`**, **`legal.changes`** (0.20): a contract in a Legal Space was put back to DRAFT
 (`reason`: marked APPROVED without the owner's approval, or changed after it), the owner approved it (`by`,
 `checklistOpen`: open checklist items at that moment), or asked for changes. `file` is the contract's path; its text
