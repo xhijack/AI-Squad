@@ -53,7 +53,8 @@ const TEXT = {
     chatOn: 'Chatting with {agent} in {space}. Type your message; /end stops.', chatOff: 'Chat ended.', noAgent: 'No agent called "{q}". Try its name or id.', many: 'Several agents match: {list}',
     sent: 'Sent to {agent}.', queued: 'Queued ({reason}); {agent} answers when there is room.', digestTitle: 'Summary for {day}', nothingOpen: 'Nothing waits for you.', open: 'Waiting for you ({n}):',
     lastDay: 'Last 24 hours: {done} background jobs done, {failed} failed, ${cost} spent; {stops} idle agents stopped; {chats} chat answers.', suggestions: '{n} new improvement suggestions in Admin → Improvements.',
-    status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.' },
+    status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.',
+    askMany: 'Several questions (or several choices): answer them in The AI Squad.' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
     help: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/help daftar ini',
     reply: 'Ketik balasanmu untuk {agent}.', confirm: 'Hard stop ({reasons}). Ketik {code} dalam 5 menit untuk mengonfirmasi "{choice}". Ketikan lain membatalkan.', cancelled: 'Dibatalkan: tidak ada yang dikirim.',
@@ -61,7 +62,7 @@ const TEXT = {
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
     sent: 'Terkirim ke {agent}.', queued: 'Masuk antrean ({reason}); {agent} menjawab saat ada slot.', digestTitle: 'Ringkasan {day}', nothingOpen: 'Tidak ada yang menunggumu.', open: 'Menunggumu ({n}):',
     lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
-    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.' },
+    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
@@ -126,7 +127,13 @@ export function messageFor(item, tok, s = settings()) {
   const where = [item.floorName || item.floorId, item.agentName].filter(Boolean).join(' · ');
   // a price approval: only its first line (customer, total) travels; the lines and the note are opened in the app
   const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(['price', 'contract'].includes(item.kind) ? String(item.text).split('\n')[0] : item.text, 600)];
-  const opts = (item.options || []).filter((o) => !o.free).slice(0, 6);
+  // several questions or multi-select (1.0.1): every question with its options, answered in the app (no one-tap buttons)
+  const many = item.questions?.length && (item.questions.length > 1 || item.questions.some((q) => q.multiSelect));
+  const opts = many ? [] : (item.options || []).filter((o) => !o.free).slice(0, 6);
+  if (many) {
+    lines.splice(1, 1, ...item.questions.flatMap((q, i) => ['', `${i + 1}. ${q.header ? `[${q.header}] ` : ''}${short(q.question, 200)}${q.multiSelect ? ' (multi)' : ''}`, ...q.options.map((o) => `   - ${short(o.label, 80)}`)]));
+    lines.push('', say('askMany', {}, s.lang));
+  }
   if (opts.length) lines.push('', ...opts.map((o) => `${o.n}. ${short(o.label, 80)}`));
   if (isCritical(item)) lines.push('', `Hard stop: ${reasonsOf(item).join(', ') || 'critical'}`);
   const buttons = [];

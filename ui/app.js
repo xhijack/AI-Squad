@@ -25,6 +25,7 @@ import './admin.js';
 import './people.js';
 import './chat.js';
 import { attentionIndexHtml } from './convo.js';
+import { readAskForm } from './askform.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
@@ -644,6 +645,18 @@ document.addEventListener('submit', async (e) => {
     drafts.delete(r.dataset.id); r.elements.text.value = ''; r.elements.text.blur();
     toast(res.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Reply sent'));
   } catch (err) { btn.disabled = false; drafts.set(r.dataset.id, r.elements.text.value); toast(err.message); }
+  refresh();
+});
+// a dialog with several questions or multi-select (askform.js): every answer at once
+document.addEventListener('submit', async (e) => {
+  const f = e.target.closest('form[data-act="answer-ask"]');
+  if (!f) return;
+  e.preventDefault();
+  const item = (state.building?.attention || []).concat(state.floor?.attentionItems || []).find((x) => x.id === f.dataset.id);
+  if (!item) { toast(tt('Already answered')); refresh(); return; }
+  const btn = f.querySelector('button.gold'); btn.disabled = true;
+  try { await answerItem(f.dataset.id, { answers: readAskForm(f, item) }, itemContext(f)); toast(tt('Answers sent')); }
+  catch (err) { f.querySelector('[data-askerr]').textContent = err.message; btn.disabled = false; }
   refresh();
 });
 document.addEventListener('submit', async (e) => {

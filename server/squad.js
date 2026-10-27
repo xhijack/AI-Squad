@@ -389,8 +389,7 @@ function autopilotItems(entry, floor, out) {
     const labels = a.questions ? a.questions.flatMap((q) => [q.question, ...q.options.map((o) => o.label)]) : (a.options || []).filter((o) => !o.free).map((o) => o.label);
     const c = autopilot.classify([a.text, ...labels].join('\n'), { level: floor.autopilot, ownerOnly });
     // several questions: answered only when every one has a recommended option (and nothing is critical)
-    const recAll = a.questions && a.answerable && a.questions.every((q) => q.options.some((o) => o.recommended))
-      ? a.questions.map((q) => ({ choices: q.multiSelect ? q.options.filter((o) => o.recommended).map((o) => o.n) : [q.options.find((o) => o.recommended).n] })) : null;
+    const recAll = a.questions && a.answerable ? askLib.recommendedAnswers(a.questions) : null;
     const rec = a.kind === 'question' && a.answerable && !a.questions ? autopilot.recommendedOption(a.options) : null;
     const auto = !c.critical && (a.kind === 'reply' || !!rec || !!recAll);     // permission prompts are never answered
     if (!apSeen.has(a.id)) apSeen.set(a.id, now);

@@ -739,3 +739,9 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .moveSteps li { line-height: 1.5; }
 .moveSteps code { word-break: break-all; }
 .contractText { white-space: pre-wrap; font-size: 12px; max-height: 360px; overflow: auto; background: var(--sunk); border-radius: 10px; padding: 10px 12px; margin: 6px 0 0; }
+/* a question dialog with several questions or multi-select (askform.js) */
+.askForm .askQ { border: 1px solid var(--line, #e5e7eb); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.askForm legend { font-size: 12px; color: var(--muted, #6b7280); padding: 0 4px; }
+.askForm .askText { margin: 2px 0 6px; white-space: pre-wrap; }
+.askForm .askOpt { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
+.askForm .askOther { margin-top: 6px; width: 100%; }

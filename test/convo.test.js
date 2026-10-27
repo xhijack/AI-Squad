@@ -55,3 +55,11 @@ test('desk monitors: an edit as a diff, and the QA / merge strip', async () => {
   assert.equal(mergeStatus({ board: null, merge: { approved: false, last: [] } }), 'auto-merge not approved');
   assert.equal(mergeStatus(null), '');
 });
+
+test('a dialog with several questions or multi-select opens as one form (ask mode)', async () => {
+  const { actionsFor } = await import('../ui/convo-model.js');
+  const q = (multi) => ({ header: 'h', question: 'q?', multiSelect: multi, options: [{ n: 1, label: 'a' }] });
+  assert.equal(actionsFor({ kind: 'question', answerable: true, options: [{ n: 1, label: 'a' }], questions: [q(false), q(false)] }).mode, 'ask');
+  assert.equal(actionsFor({ kind: 'question', answerable: true, options: [{ n: 1, label: 'a' }], questions: [q(true)] }).mode, 'ask');
+  assert.equal(actionsFor({ kind: 'question', answerable: true, options: [{ n: 1, label: 'a' }], questions: [q(false)] }).mode, 'options', 'one plain question keeps its buttons');
+});

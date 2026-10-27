@@ -8,6 +8,7 @@ import { ctx } from './ctx.js';
 import { preview, bubbleText, actionsFor, step, ofText } from './convo-model.js';
 import { playLine, stopVoice } from './voice.js';
 import { t } from './i18n.js';
+import { askFormHtml, readAskForm } from './askform.js';
 
 let C = null;            // { list, i, portrait, dlg }
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -36,6 +37,7 @@ function dialogEl() {
 function actionsHtml(item, a) {
   const desk = item.floorId && item.agentId ? `<a class="btn ghost" href="#/floor/${esc(item.floorId)}/desk/${esc(item.agentId)}" data-desk>${t('Open desk')}</a>` : '';
   const dismiss = a.dismiss ? `<button type="button" class="ghost" data-dismiss>${esc(a.dismiss === 'OK' ? t('OK') : t('Dismiss'))}</button>` : '';
+  if (a.mode === 'ask') return `${askFormHtml(item, { act: 'convo-ask' })}<div class="convoBar">${desk}</div>`;
   if (a.mode === 'options') {
     const free = a.options.find((o) => o.free);
     return `<div class="convoOpts">${a.options.filter((o) => !o.free).map((o) => `<button type="button" class="big ${o.recommended ? 'gold' : ''}" data-n="${o.n}">${o.recommended ? `<small>${t('Recommended')}</small>` : ''}${esc(o.label)}</button>`).join('')}</div>
@@ -95,6 +97,8 @@ function wire(d, item, a) {
     if (a.act === 'crash-answer') return ctx.actions['crash-answer']({ dataset: { id: item.id, n: b.dataset.n }, closest: () => null });
     return answer(item, { option: +b.dataset.n });
   }, t('Answer sent')); });
+  const askF = d.querySelector('form[data-act="convo-ask"]');
+  if (askF) askF.onsubmit = (e) => { e.preventDefault(); try { const answers = readAskForm(askF, item); act(() => answer(item, { answers }), t('Answers sent')); } catch (x) { askF.querySelector('[data-askerr]').textContent = x.message; } };
   const free = d.querySelector('[data-free]');
   if (free) free.onsubmit = (e) => { e.preventDefault(); act(() => answer(item, { option: +free.dataset.free, text: free.elements.text.value }), t('Answer sent')); };
   const reply = d.querySelector('[data-reply]');

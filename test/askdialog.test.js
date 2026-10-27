@@ -94,3 +94,22 @@ test('round trip: one multi-select question; four questions mixed; a mismatch st
   assert.match((await ask.answerAll(QS, [{ choices: [] }, { choices: [1] }, { choices: [1] }], d.io)).error, /Question 1 \(Protokol\) has no answer/);
   assert.match((await ask.answerAll(QS, [{ choices: [1] }, { choices: [1, 2] }, { choices: [1] }], d.io)).error, /Question 2 takes one answer/);
 });
+
+test('Autopilot answers several questions only when every one has a recommended option', async () => {
+  const { askQuestions } = await import('../server/squad.js');
+  const qs = askQuestions([{ header: 'A', question: 'a?', multiSelect: true, options: ['x', 'y (Recommended)', 'z (Recommended)'] }, { header: 'B', question: 'b?', options: ['Yes (Recommended)', 'No'] }]);
+  assert.deepEqual(qs[0].options.map((o) => o.recommended), [false, true, true]);
+  assert.deepEqual(ask.recommendedAnswers(qs), [{ choices: [2, 3] }, { choices: [1] }]);
+  assert.equal(ask.recommendedAnswers(askQuestions([{ question: 'a?', options: ['x (Recommended)'] }, { question: 'b?', options: ['Yes', 'No'] }])), null, 'one without: it waits');
+});
+
+test('the Telegram message lists every question and sends the owner to the app (no one-tap buttons)', async () => {
+  const { messageFor } = await import('../server/notify.js');
+  const { askQuestions } = await import('../server/squad.js');
+  const item = { id: 'x', kind: 'question', floorName: 'DTamu', agentName: 'PM', text: 'joined', options: [{ n: 1, label: '[✔] Link' }],
+    questions: askQuestions([{ header: 'Protokol', question: 'Apa saja?', multiSelect: true, options: ['Link', 'QR'] }, { header: 'Efek', question: 'Suara?', options: ['On', 'Off'] }]) };
+  const m = messageFor(item, 'tok', { lang: 'en' });
+  assert.match(m.text, /1\. \[Protokol\] Apa saja\? \(multi\)\n   - Link\n   - QR\n\n2\. \[Efek\] Suara\?\n   - On\n   - Off/);
+  assert.match(m.text, /answer them in The AI Squad/);
+  assert.ok(!m.buttons.flat().some((b) => /^a:/.test(b.data || '')), 'no option buttons');
+});

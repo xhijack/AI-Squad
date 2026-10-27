@@ -126,6 +126,13 @@ export async function answerAll(questions, answers, io, { settleMs = 450 } = {})
   return s ? { ok: false, error: 'The dialog is still open after Submit', step: questions.length } : { ok: true };
 }
 
+// Autopilot: the recommended answers when every question has a recommended option, else null (it waits for a person).
+// questions: the Attention item's ({ multiSelect, options: [{ n, label, recommended }] })
+export function recommendedAnswers(questions = []) {
+  if (!questions.length || !questions.every((q) => q.options.some((o) => o.recommended))) return null;
+  return questions.map((q) => ({ choices: q.multiSelect ? q.options.filter((o) => o.recommended).map((o) => o.n) : [q.options.find((o) => o.recommended).n] }));
+}
+
 // tmux keys for one send: names stay names, text goes with -l (in its own send-keys call)
 export function tmuxCalls(keys) {
   const out = [];

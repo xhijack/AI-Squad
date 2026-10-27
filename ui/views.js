@@ -4,6 +4,7 @@
 // panel (desktop) or as tabs of the bottom sheet (phone).
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
+import { isAsk, askFormHtml } from './askform.js';
 
 const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
@@ -71,6 +72,8 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       // Resume continues the agent's last session (the default after a crash); Start fresh loses its context
       body = `<div class="row wrap">${a.options.map((o) => `<button class="small ${o.n === 1 ? 'gold' : 'ghost'}" data-act="crash-answer" data-id="${a.id}" data-n="${o.n}">${o.n === 1 ? tt('Resume') : tt('Start fresh')}</button>`).join('')}
         <button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button></div>${a.resumable ? `<div class="note" style="margin-top:6px">${tt('Resume continues the last session with its context. Start fresh begins a new session.')}</div>` : ''}`;
+    } else if (a.answerable && isAsk(a)) {
+      body = askFormHtml(a);                                                     // several questions or multi-select
     } else if (a.answerable && a.options?.length) {
       const lab = (o) => esc(['price', 'handoff', 'contract', 'canary'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
       body = `<div class="opts">${a.options.map((o) => o.free
