@@ -27,13 +27,17 @@ Langsung dengan squad pertama:
 curl -fsSL https://raw.githubusercontent.com/xhijack/AI-Squad/main/install.sh | bash -s -- --blueprint erp-consultant --name "Implementasi Klinik"
 ```
 
-Blueprint: `software-house`, `erp-consultant`, `sales-crm`, `digital-marketing`, `legal` (khusus Owner).
+Blueprint: `software-house`, `erp-consultant`, `sales-crm`, `digital-marketing`, `product`, `legal` (khusus Owner).
 Branch lain: tulis `AISQUAD_BRANCH=development` sebelum `bash`.
 
 ## 3. Langkah pertama di aplikasi
 
-1. **Siapkan Squad**: jelaskan apa yang ingin dibangun atau dijalankan; pilih Blueprint dan timnya.
-2. Buka Space-nya dan jalankan lead-nya: lead akan meminta dokumen sumber (PRD, BRD, brief…) lebih dulu.
+1. **Siapkan Perusahaan** (terbuka sendiri saat Gedung masih kosong): pilih bahasa, jawab beberapa pertanyaan
+   (usaha, tujuan, yang sudah ada, divisi, seberapa otomatis, mesin dan budget), periksa rencananya, tekan **Bangun**.
+   Hasilnya satu Space per divisi dengan target awal, jam kerja, dan daftar bahan yang masih dibutuhkan darimu;
+   rencananya ada di Company Brain (`PLAN.md`). Bisa dijalankan lagi dari Lobby untuk menambah divisi.
+   Atau **Siapkan Squad** untuk satu tim saja: jelaskan apa yang ingin dibangun; pilih Blueprint dan timnya.
+2. Buka Space-nya dan jalankan lead-nya: lead akan meminta bahan dan dokumen sumber (PRD, BRD, brief…) lebih dulu.
 3. **Menu → Admin**: Space (jenis, akses, shift, mesin, ERPNext), pengguna dan PIN-nya, Telegram, backup.
 4. Opsional: **Admin → Notifikasi** untuk menjawab agent dari Telegram, **Admin → Mesin** untuk menambah mesin worker.
 
