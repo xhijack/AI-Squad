@@ -330,6 +330,25 @@ function agentView(root, l, cost) {
 const attId = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
 const PERMISSION = /(do you want to|allow|permission|proceed|trust|make this edit|run this command)/i;
 
+// one id per open dialog, whichever way it is seen first (1.0.3: a new id meant a second notification): an
+// AskUserQuestion by its tool call (the transcript, before and after the screen shows it), a permission prompt by
+// its hook event, anything else by the screen's question and options
+function dialogId(floorId, l, now = Date.now()) {
+  if (l.status?.ask?.questions?.length) return episodeId(floorId, l.agent.id, attId(floorId, l.agent.id, l.status.ask.id), 'ask', now);
+  const pm = l.hook?.state === 'waiting' && l.hook.permission;
+  if (pm) return episodeId(floorId, l.agent.id, attId(floorId, l.agent.id, 'hook', pm.ts), 'hook', now);
+  return episodeId(floorId, l.agent.id, attId(l.session, l.dialog.question, l.dialog.options.map((o) => String(o.label).replace(/^\[[ ✔xX]\]\s*/, '')).join('|')), 'screen', now);
+}
+// the same dialog seen first on the screen and seconds later by its hook (or the transcript) keeps its first id
+const episodes = new Map();                     // floor/agent -> { id, src, at, alias }
+export function episodeId(floorId, agentId, id, src, now = Date.now()) {
+  const k = `${floorId}/${agentId}`, e = episodes.get(k);
+  if (e && (e.id === id || e.alias === id)) { e.seen = now; return e.id; }
+  if (e && e.src !== src && !e.alias && now - e.at < 30e3 && now - e.seen < 10e3) { e.alias = id; e.seen = now; return e.id; }
+  episodes.set(k, { id, src, at: now, seen: now, alias: null });
+  if (episodes.size > 500) episodes.delete(episodes.keys().next().value);
+  return id;
+}
 function floorAttention(entry, floor, lives, cost) {
   const out = [], dismissedNow = new Set(loadRuntime().dismissedReplies);
   for (const l of lives) {
@@ -342,16 +361,16 @@ function floorAttention(entry, floor, lives, cost) {
         agentId: l.agent.id, agentName: l.agent.displayName, text: taskDoneText(tk), task: tk, options: [], answerable: true, calm: true, canReply: false, ts: tk.endedAt });
     }
     if (l.dialog) {
-      out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) && !l.dialog.ask ? 'permission' : 'question',
+      out.push({ id: dialogId(entry.id, l), kind: PERMISSION.test(l.dialog.question) && !l.dialog.ask ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, ts: l.lastTs || Date.now() });
     } else if (l.hook?.state === 'waiting' && l.hook.permission && (l.hook.permission.tool || !(l.status?.ask && l.state === 'waiting'))) {
       const pm = l.hook.permission;
-      out.push({ id: attId(entry.id, l.agent.id, 'hook', pm.ts), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
+      out.push({ id: episodeId(entry.id, l.agent.id, attId(entry.id, l.agent.id, 'hook', pm.ts), 'hook'), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: pm.message + (pm.detail ? `\n${pm.detail}` : ''), options: [], answerable: false, live: true, ts: pm.ts });
     } else if (l.status?.ask && l.state === 'waiting') {
       const q = l.status.ask.questions;
-      out.push({ id: attId(entry.id, l.agent.id, l.status.ask.id), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+      out.push({ id: episodeId(entry.id, l.agent.id, attId(entry.id, l.agent.id, l.status.ask.id), 'ask'), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: q.map((x) => x.question).join('\n\n'),
         options: (q[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.status.ask.ts });
     } else if (l.reply) {
@@ -1407,6 +1426,7 @@ export async function answerAttention(id, option, text = '', { force = false, fl
   const item = attentionItems().find((x) => x.id === id);
   if (!item) return answerGone({ floorId, agentId, kind }, option, text);
   if (OWNER_DESK.has(item.kind)) return answerOwnerDesk(item, option, text);
+  if (item.kind === 'question' || item.kind === 'permission') episodes.delete(`${item.floorId}/${item.agentId}`);   // the next dialog is a new one
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'taskdone') { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'reply' || item.kind === 'finished') {

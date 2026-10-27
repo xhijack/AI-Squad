@@ -30,6 +30,7 @@ import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { makePatcher } from './patch.js';
+import { claim } from './notified.js';
 
 translateDom();                                       // the static parts of index.html
 $('langName').textContent = LANGS[LANG];
@@ -430,7 +431,7 @@ function announceNotices(list) {
   for (const a of list) {
     if (!a.notice || noticed.has(a.id) || Date.now() < (a.notifyAt || 0)) continue;
     noticed.add(a.id);
-    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    if (claim(a) && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
       try { new Notification(tt('Notice: {floor}', { floor: a.floorName || 'The AI Squad' }), { body: tx(String(a.text || '')).slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
     }
   }
@@ -446,7 +447,8 @@ function announceAttention(list, route) {
   // items that arrive later open the popover, so the two never open together
   if (!attBooted) { attBooted = true; fresh.forEach((a) => seenAtt.add(a.id)); return; }
   if (!fresh.length) return;
-  const mine = fresh;
+  // the voice line and the Notification come from one tab only, once per item (ui/notified.js); every tab updates its panels
+  const mine = fresh.filter((a) => claim(a));
   // the newest report or question is said aloud by its character (short; the full text is in the conversation view)
   const say = mine.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
   if (say && seenAtt.size) playLine({ floorId: say.floorId, agentId: say.agentId, kind: say.kind, text: say.text });

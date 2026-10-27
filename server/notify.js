@@ -69,7 +69,7 @@ export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang
 // ---------- state ----------
 export function loadState() {
   const s = readJson(file(), {}) || {};
-  return { offset: 0, chats: [], pairing: null, sent: {}, tokens: {}, pending: {}, hourly: [], lastDigest: '', lastError: '', ...s };
+  return { offset: 0, chats: [], pairing: null, sent: {}, sentText: {}, tokens: {}, pending: {}, hourly: [], lastDigest: '', lastError: '', ...s };
 }
 const saveState = (s) => writeJson(file(), s, 0o600);
 function update(fn) { const s = loadState(); const r = fn(s); saveState(s); return r; }
@@ -176,6 +176,8 @@ const insightsCount = (since) => insight.newSince(since);
 const send = (chatId, text, buttons, fetchFn) => tg.sendMessage(botToken(), chatId, text, { buttons, fetchFn });
 
 // every 15 s: send what is new, take the buttons off what was answered elsewhere, the digest once a day
+const SAME_MS = 30 * 60e3;
+const contentKey = (item) => crypto.createHash('sha1').update([item.kind, item.floorId || '', item.agentId || '', String(item.text || '').trim()].join('|')).digest('hex').slice(0, 16);
 export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const s = settings();
   const out = { sent: 0, cleared: 0, digest: 0 };
@@ -188,6 +190,9 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const quiet = inQuiet(s.quiet, now);
   for (const item of items) {
     if (st.sent[item.id]) continue;
+    // the same message for the same agent within half an hour is one message, whatever its id (1.0.3)
+    const same = contentKey(item);
+    if (st.sentText[same] && now - st.sentText[same] < SAME_MS) { st.sent[item.id] = { ts: now, duplicate: true, msgs: [] }; continue; }
     if (item.notice && now < (item.notifyAt || 0)) continue;                                // a stall notice: only once it has lasted 15 min
     const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal'].includes(item.kind);
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
@@ -205,6 +210,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
       catch (e) { st.lastError = `${new Date(now).toISOString()} ${e.message}`; }
     }
     st.sent[item.id] = { ts: now, msgs, tok };
+    st.sentText[same] = now;
   }
   for (const [id, x] of Object.entries(st.sent)) {
     if (open.has(id)) continue;
@@ -212,6 +218,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
     if (now - x.ts > 2 * 864e5) delete st.sent[id];
   }
   for (const [k, t] of Object.entries(st.tokens)) if (t.exp < now) delete st.tokens[k];
+  for (const [k, t] of Object.entries(st.sentText)) if (now - t > SAME_MS) delete st.sentText[k];
   const today = new Date(now - new Date(now).getTimezoneOffset() * 60e3).toISOString().slice(0, 10);
   if (st.lastDigest !== today && hhmm(now) >= mins(s.digestAt) && !quiet) {
     st.lastDigest = today;

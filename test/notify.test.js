@@ -127,6 +127,19 @@ test('a hard stop (money) needs a 4-digit code; anything else cancels', async ()
   assert.equal(answered.length, n + 1); assert.equal(lastText(), 'Done: Yes');
 });
 
+test('the same question under a new id (the screen, then the hook) is one Telegram message', async () => {
+  const q = { ...question, text: 'Which payment gateway for the shop?' };
+  items = [{ ...q, id: 'dup-a' }];
+  const n = sent().length;
+  await notify.notifyTick(T + 6000);
+  assert.equal(sent().length, n + 1);
+  items = [{ ...q, id: 'dup-b' }];
+  await notify.notifyTick(T + 9000);
+  assert.equal(sent().length, n + 1, 'not again');
+  assert.ok(notify.loadState().sent['dup-b'].duplicate);
+  items = [];
+});
+
 test('a stall notice reaches Telegram only once it has lasted 15 minutes, even when stalls are sent at once', async () => {
   const prev = building.loadBuilding().prefs.notify;
   building.setPrefs({ notify: notify.cleanNotify({ ...prev, immediate: [...notify.IMMEDIATE, 'stall'] }) });
