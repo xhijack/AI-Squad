@@ -394,7 +394,8 @@ function taskProps(st, task) {
 // the line under an agent's name (shared with the Iso Pixel renderer, 0.16)
 export function agentStatus(a) {
   const taskStatus = a.task && a.state === 'working' ? tt('{label} · {n} min', { label: a.task.label, n: Math.max(1, Math.round((Date.now() - a.task.startedAt) / 60000)) }) : '';
-  return a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
+  const service = !taskStatus && a.services?.length && a.state !== 'stopped' ? tt('Running in the background: {label} · since {time}', { label: a.services[0].label, time: new Date(a.services[0].startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : '';
+  return a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || service || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
 }
 function updateStation(st, a) {
   st.state = a.state; st.data = a;

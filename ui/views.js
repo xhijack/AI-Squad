@@ -42,8 +42,22 @@ function taskHtml(t) {
     ${stall ? `<div class="note warnText">${stall}</div>` : ''}<div class="note"><code>${esc(t.command)}</code></div></div>`;
 }
 
-export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) {
+// the owner's real asks first; system notices (stalls) muted under "Notices" below them (1.0.2)
+// background services (a dev server, a watcher): not work, not a stall; shown with a Stop button (1.0.2)
+const hhmm = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+export const serviceLine = (s) => tt('Running in the background: {label} · since {time}', { label: s.label, time: hhmm(s.startedAt) });
+function servicesHtml(floorId, agentId, services = []) {
+  return services.map((s) => `<div class="att service muted" style="margin-top:10px"><div class="row"><span class="grow">${esc(serviceLine(s))}</span>
+    <button type="button" class="small ghost danger" data-act="stop-service" data-floor="${esc(floorId)}" data-agent="${esc(agentId)}" data-service="${esc(s.id)}">${tt('Stop')}</button></div>
+    ${s.lines?.length ? `<pre class="taskOut">${esc(s.lines.join('\n'))}</pre>` : ''}<div class="note"><code>${esc(s.command)}</code></div></div>`).join('');
+}
+
+export function attentionHtml(items, opts = {}) {
   if (!items.length) return `<div class="empty">${tt('All clear. Nothing is waiting for you.')}</div>`;
+  const asks = items.filter((a) => !a.notice), notices = items.filter((a) => a.notice);
+  return cardsHtml(asks, opts) + (notices.length ? `<h4 class="noticesHead">${tt('Notices')}</h4>${cardsHtml(notices, opts)}` : '');
+}
+function cardsHtml(items, { showFloor = true, onDesk = false } = {}) {
   return items.map((a) => {
     const where = [a.kind === 'finished' ? tt('{name} finished', { name: esc(String(a.agentName || tt('The agent')).split(' - ')[0]) }) : KIND_TEXT[a.kind] || a.kind, showFloor && a.floorNumber ? tt('Floor {n} · {name}', { n: a.floorNumber, name: esc(a.floorName) }) : '', a.agentName ? esc(a.agentName) : ''].filter(Boolean).join(' · ');
     let body = '';
@@ -151,6 +165,7 @@ export function agentRow(floorId, a, selected) {
   const act = a.standby ? tx(a.activity) : a.crash && !a.crash.withLead ? tx(a.crash.text) : a.stopNote ? `${tx(a.stopNote)}${a.lastTs ? ` · ${ago(a.lastTs)}` : ''}`
     : a.state === 'stopped' ? (a.independent ? tx(a.activity) || tt('not running') : a.lastTs ? tt('stopped · last seen {ago}', { ago: ago(a.lastTs) }) : tt('stopped'))
     : a.task ? taskLine(a.task)
+    : a.services?.length ? serviceLine(a.services[0])
     : a.state === 'idle' ? (a.lastTs ? tt('idle {ago}', { ago: ago(a.lastTs).replace(' ago', '') }) : tt('idle')) : tx(a.activity) || STATE_TEXT[a.state];
   // a running command: its last output lines as the tooltip, the row marked while it stalls
   const tip = a.task?.lines?.length ? ` title="${esc(a.task.lines.join('\n'))}"` : '';
@@ -332,7 +347,7 @@ ${d.resume ? '' : `<div class="row" style="margin-top:8px"><button class="small"
     : d.crash?.withLead ? `<div class="att stall" style="margin-top:10px"><div class="where">${tt('Stopped with the lead')}</div><div class="q">${esc(tx(d.stopNote || d.crash.text))}</div><div class="note">${tt("This teammate ran inside the lead's session. Resume the lead; it re-spawns the teammates whose work is still open.")}</div></div>` : '';
   const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:10px"><div class="where">${tt('Update available')}</div><div class="q">${tt('{title} template v{from} → v{to}', { title: esc(e.title), from: d.agent.role.version, to: ts.latestVersion })}</div>
       <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">${tt('View diff')}</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">${tt('Update')}</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">${tt('Keep current')}</button></div></div>` : '';
-  const overview = `${head}${crash}${d.task ? taskHtml(d.task) : ''}${modelWarn}${update}
+  const overview = `${head}${crash}${d.task ? taskHtml(d.task) : ''}${servicesHtml(d.floorId, d.id, d.services)}${modelWarn}${update}
     ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
     <div class="section"><div class="sectionHead"><h3 class="grow">${tt('Send task')}</h3></div><div data-slot="task"></div>
       ${d.pending ? `<div class="note">${tt('Queued: {text}', { text: esc(d.pending.slice(0, 120)) })}</div>` : ''}

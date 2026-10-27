@@ -368,6 +368,7 @@ function render() {
   patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
   announceAttention(needsYou(b.attention), route);
+  announceNotices(b.attention);
   if (!$('attPop').hidden) patch($('attPop'), attPopHtml(b.attention));
   if (!$('floorMenu').hidden && f) patch($('floorMenu'), floorMenuHtml(f));
   if (state.offline) toast(tt('Server not reachable, retrying…'));
@@ -423,6 +424,17 @@ ctx.updateInsets = () => { insetKey = ''; updateInsets(); };
 ctx.isPhone = isPhone;
 ctx.panelBody = () => (isPhone() ? $('sheetBody') : $('sideMain'));
 
+// a stall notice is muted; a Notification only once it has lasted 15 minutes (its notifyAt), and once
+const noticed = new Set();
+function announceNotices(list) {
+  for (const a of list) {
+    if (!a.notice || noticed.has(a.id) || Date.now() < (a.notifyAt || 0)) continue;
+    noticed.add(a.id);
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(tt('Notice: {floor}', { floor: a.floorName || 'The AI Squad' }), { body: tx(String(a.text || '')).slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
+    }
+  }
+}
 // ---------- new Attention: open it by itself, badge the tab, notify when the tab is in the background ----------
 const lastMeeting = {};                // floorId -> the meeting already announced
 let seenAtt = null, attBooted = false;
@@ -594,6 +606,11 @@ const actions = Object.assign(ctx.actions, {
     const r = await api('POST', `/api/floors/${state.route.floorId}/skills/install`, { names });
     const n = r.results.filter((x) => x.installed).length;
     toast(n ? (n === 1 ? tt('Installed {n} skill into .claude/skills', { n }) : tt('Installed {n} skills into .claude/skills', { n })) : tt('Already installed'));
+  },
+  async 'stop-service'(el) {
+    if (!confirm(tt('Stop this background service? The agent sees its shell end.'))) return;
+    try { await api('POST', `/api/floors/${el.dataset.floor}/agents/${el.dataset.agent}/services/${el.dataset.service}/stop`, {}); toast(tt('Service stopped')); refresh(); }
+    catch (e) { toast(tx(e.message), 6000); }
   },
   async 'job-stop'(el) { await api('POST', `/api/jobs/${el.dataset.job}/stop`, {}); toast(tt('Job stopped')); },
   async 'job-open'(el) {

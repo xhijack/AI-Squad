@@ -750,3 +750,5 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .bubble .denied { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); color: var(--warn-ink); font-size: 13px; }
 .denied ul { margin: 4px 0 6px 18px; padding: 0; }
 .denied code { word-break: break-all; }
+/* stall notices under the owner's real asks (1.0.2) */
+.noticesHead { margin: 12px 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
