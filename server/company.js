@@ -6,7 +6,7 @@
 // L3 the session (thrown away after the task).
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.js';
+import { config, ROOT } from './config.js';
 import { safeReaddir, writeText, bad } from './util.js';
 
 export const TEAM_DIRS = ['brand', 'sop', 'templates', 'products'];
@@ -17,7 +17,7 @@ const README = {
   sop: '# Standard procedures\n\nHow we work: proposals, onboarding, implementation steps, support.\n',
   templates: '# Templates\n\nReusable documents: proposal outline, project brief, handoff, report.\n',
   products: '# Products\n\nWhat we sell and what each product does.\n',
-  legal: '# Legal (Owner only)\n\nContract templates, clauses, privacy (UU PDP) checklist. Only agents of Owner Spaces read this folder.\n',
+  legal: '# Legal (Owner only)\n\nContract templates (`templates/`, bilingual, locked: the Legal Space copies them, never edits them), clauses, the privacy (UU PDP) checklist. Only agents of Owner Spaces read this folder.\n',
   finance: '# Finance (Owner only)\n\nRates, payment terms, invoicing rules. Only agents of Owner Spaces read this folder.\n',
   pricing: '# Pricing (Owner only)\n\nPrice lists and discount rules. Only agents of Owner Spaces read this folder.\n',
 };
@@ -31,12 +31,16 @@ export function cleanCompany(c = {}) {
   if (p && !path.isAbsolute(p)) throw bad('The Company Brain folder must be an absolute path');
   return { path: p ? path.resolve(p) : '' };
 }
-// creates the folders and their READMEs that are missing; never overwrites
+// the shipped starting files (0.20: the bilingual contract templates in legal/templates), copied when missing
+export const SEEDS = path.join(ROOT, 'templates', 'company');
+const seedFiles = (d, base = d) => safeReaddir(d).flatMap((f) => { const p = path.join(d, f); try { return fs.statSync(p).isDirectory() ? seedFiles(p, base) : [path.relative(base, p)]; } catch { return []; } });
+// creates the folders, their READMEs and the shipped templates that are missing; never overwrites
 export function ensure(dir) {
   for (const d of ['', ...TEAM_DIRS, ...OWNER_DIRS]) {
     const f = path.join(dir, d, 'README.md');
     if (!fs.existsSync(f)) writeText(f, README[d]);
   }
+  for (const rel of seedFiles(SEEDS)) { const f = path.join(dir, rel); if (!fs.existsSync(f)) writeText(f, fs.readFileSync(path.join(SEEDS, rel), 'utf8')); }
   return summary(dir);
 }
 const countFiles = (d) => { let n = 0; for (const f of safeReaddir(d)) { const p = path.join(d, f); try { const st = fs.statSync(p); if (st.isDirectory()) n += countFiles(p); else if (st.isFile() && f !== 'README.md') n++; } catch { /* gone */ } } return n; };

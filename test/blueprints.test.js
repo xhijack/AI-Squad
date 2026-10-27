@@ -15,9 +15,11 @@ import { readFloor } from '../server/floors.js';
 const root = scratch();
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-claude-print.cjs');
 
-test('the three shipped Blueprints are seeded with roles, counts and a lead', () => {
+test('the shipped Blueprints are seeded with roles, counts and a lead', () => {
   const list = bp.listBlueprints();
-  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'sales-crm', 'software-house']);
+  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'legal', 'sales-crm', 'software-house']);
+  assert.deepEqual(bp.getBlueprint('legal').space, { kind: 'department', access: 'owner' }, 'Legal is an Owner-only department (0.20)');
+  assert.equal(bp.getBlueprint('digital-marketing').space.shift.from, '22:00', 'Marketing works nights');
   const sh = bp.getBlueprint('software-house');
   assert.equal(sh.lead, 'project-manager');
   assert.equal(sh.workflow, 'squad-sprint');
@@ -135,7 +137,7 @@ test('the standard is written into AISQUAD.md and every agent file, with the rul
 
 test('Blueprint body sections and per-role rules', () => {
   const b = bp.getBlueprint('digital-marketing');
-  assert.deepEqual(bp.sections(b.body).map((s) => s.title), ['Purpose', 'Source documents', 'Channels', 'Work items', 'Handoff', 'Gates', 'Definition of done', 'Rules per role']);
+  assert.deepEqual(bp.sections(b.body).map((s) => s.title), ['Purpose', 'Shift', 'Source documents', 'Channels', 'Work items', 'Handoff', 'Gates', 'Definition of done', 'Rules per role']);
   assert.match(bp.roleRules(b, 'social-media-specialist'), /Follow `docs\/BRAND\.md` exactly/);
   assert.equal(bp.roleRules(b, 'frappe-developer'), '');
   assert.match(b.kickoff, /marketing brief, the brand rules and the channel plan/);

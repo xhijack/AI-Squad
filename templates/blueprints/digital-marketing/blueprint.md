@@ -1,12 +1,13 @@
 ---
 id: digital-marketing
 title: Digital Marketing
-version: 1
+version: 2
 category: marketing
 description: A marketing team that turns a brief, brand rules and a channel plan into content, social posts, SEO and campaigns, and reports results against KPIs.
 keywords: [marketing, digital marketing, seo, content, blog, social, "social media", instagram, tiktok, linkedin, facebook, ads, advertising, campaign, brand, branding, awareness, traffic, newsletter, email marketing, influencer, launch, growth, audience, followers, copywriting]
 workflow: free-team
 layout: open-space
+space: { kind: department, shift: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '22:00', to: '05:00' } }
 roles:
   - { template: marketing-strategist, min: 1, default: 1, max: 1, lead: true, why: "Leads the squad: collects the marketing brief, brand rules and channel plan from you, plans campaigns and reports the KPIs." }
   - { template: seo-specialist, min: 0, default: 1, max: 1, why: "Makes the site findable: technical SEO, keywords and content optimisation, measured against a baseline." }
@@ -23,6 +24,9 @@ kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) 
 ---
 ## Purpose
 A marketing team that turns an approved brief, brand rules and channel plan into content, social posts, SEO and campaigns, and reports results against the KPIs.
+
+## Shift
+The squad works at night (22:00-05:00, every day): automated work waits for the shift, so it does not take the machine's slots from the day's work, and its results reach the owner in the morning digest. Change it in Admin → Spaces.
 
 ## Source documents
 The documents below are the main reference for every agent. Each starts with a `STATUS:` line (`DRAFT` or `APPROVED`).
