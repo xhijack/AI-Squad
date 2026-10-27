@@ -97,7 +97,7 @@ test('a finding for the project adds LEARNINGS.md entries once the owner applies
 });
 
 test('the next audit records the metrics after each applied change', () => {
-  const next = saveAudit('2026-10-27T09-00-00Z', [], metricsOf(0.06, 0.75));
+  const next = saveAudit('2030-01-01T09-00-00Z', [], metricsOf(0.06, 0.75));
   const out = improve.recordOutcomes('pos', next);
   assert.equal(out.length, 4, 'four applied changes');
   assert.equal(improve.recordOutcomes('pos', next).length, 0, 'once only');
