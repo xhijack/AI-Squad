@@ -6,9 +6,17 @@ The AI Squad turns a machine running Claude Code into a 3D **Building**. Every p
 - **Floor**: a 3D office with a desk per agent (working, idle, waiting, stopped), the team panel, an activity feed, messages between agents, and a board when the Floor uses the Squad Sprint workflow.
 - **Desk**: one agent: send a task (with attachments), answer its questions and permission prompts, its live terminal screen, transcript and profile (role, template version, overrides, skills, model), start and stop.
 
-Agents are Claude Code sessions in tmux, created from **Role Templates** with per-agent **overrides**. A **Squad Blueprint** turns a group of agents into a team: it sets the roles, the source documents every agent works from, who talks to whom, the gates and the definition of done. Blueprints ship for a Software House, Digital Marketing and Sales & CRM, with 19 Role Templates and 25 built-in skills.
+Agents are Claude Code sessions in tmux, created from **Role Templates** with per-agent **overrides**. A **Squad Blueprint** turns a group of agents into a team: it sets the roles, the source documents every agent works from, who talks to whom, the gates and the definition of done. Blueprints ship for a Software House, an ERP Consultant (ERPNext implementations), Digital Marketing, Sales & CRM and Legal, with 24 Role Templates and 41 built-in skills.
 
 Floor 1 shows the **independent agents** already running on your machine (terminal, tmux, VS Code); squads start at Floor 2.
+
+**Quickstart** (1.0): one command on a new machine, see [`docs/QUICKSTART.md`](docs/QUICKSTART.md):
+
+```
+curl -fsSL https://raw.githubusercontent.com/xhijack/AI-Squad/main/install.sh | bash
+```
+
+**Bahasa Indonesia:** [mulai cepat](docs/id/QUICKSTART.md) · [panduan](docs/id/PANDUAN.md).
 
 ## Requirements
 
@@ -276,6 +284,18 @@ Admin → Machines also has the **Move to another machine** steps (backup, copy,
 - a Quotation submitted by an agent's user without your approval raises an alert.
 
 Admin → ERPNext shows the pipeline: Leads handed over, prices approved, orders, and the median time from Lead to draft and to approved Quotation.
+
+### Self-learning v2, ERP Consultant and release 1.0 (1.0.0)
+
+**Trust ladder** (Admin → Improvements). Level 0 (the default): every Daily Insight suggestion waits for you. Level 1, per category, only for low-risk changes to one agent (a rule after a failing command, a lighter model): a new suggestion is applied by itself as a **canary** for 7 days, measured against its "before" with the same counts that raised it, and then a card asks you to keep it or roll it back (through the change history). A category earns level 1 with 10 accepted suggestions, 80 % of its decisions accepted, and improved follow-ups (60 % of at least 3 measured). Every accepted change is measured a week later. Never automatic: the hard-stop list, wider permissions, Building settings, Legal Spaces and roles, the Company Brain, promoting lessons.
+
+**Capacity advice.** When the queue waits and memory or the CPU is the limit, Daily Insight suggests adding a machine (Admin → Machines) instead of upgrading this one, and says whether the connected workers still have room.
+
+**Promote a lesson** (Admin → Improvements). A lesson a Space learned (`docs/squad/LEARNINGS.md`, L2) becomes a rule of a Role Template (L1): the server takes the client out (the Space's name and folder, its agents, personal data, secrets) and refuses a rule that still names them; you edit and approve it; the template gets a new version.
+
+**ERP Consultant Blueprint.** An ERPNext implementation team (Project Manager, ERP Functional Consultant, Frappe Developer, QA) with a BRD, a fit-gap (`fit-gap-analysis` skill: Fit, Configure, Gap, Process change), a data migration plan and a UAT plan; every gap needs your approval before development.
+
+**Quickstart.** `install.sh` checks the machine, installs into `~/.aisquad-app` without sudo, links `aisquad`, and runs `aisquad quickstart [--blueprint ID --name NAME]`: the server, the PIN, and optionally a first squad. Indonesian documentation in `docs/id/`.
 
 ### Legal, Marketing at night and model tiering (0.20)
 

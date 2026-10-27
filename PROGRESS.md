@@ -846,6 +846,17 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `legal.test.js`, `legal-squad.test.js` (API: the Legal squad, the contract card, the guard, tiering on a routine handoff).
 - Not yet: the cost target measured on real work (needs a few weeks of jobs on the Sopwer machine), a template library beyond NDA and services, e-signing from the app.
 
+## Phase 4, Sprint 12: self-learning v2, ERP Consultant and release 1.0.0 (27 Oct 2026)
+
+- **Trust ladder level 1** (`server/trust.js`): per category (rules for agents, models), earned with 10 accepted suggestions, 80 % accepted and improved follow-ups (60 % of 3+ measured); a new suggestion of a level 1 category is applied by itself as a 7-day canary on its one agent (never a Legal role or Space), measured with the counts that raised it, and a card asks the Owner to keep it or roll it back (the change history undoes it; `history.track` now reports the record id). Every accepted change gets a follow-up measurement a week later. Admin → Improvements: the ladder, running canaries, decisions with their follow-up.
+- **Capacity advice**: queue waits limited by memory or CPU suggest adding a machine (with the workers' free slots); out-of-memory crashes mention it too.
+- **Promote a lesson** (`server/promote.js`): a line of a Space's LEARNINGS.md becomes a Role Template rule after the client is taken out (Space name, folder, agents, personal data, secrets); refused while anything of the client is left; a new template version; logged in `insights/promotions.jsonl`.
+- **ERP Consultant Blueprint**: Project Manager, the new ERP Functional Consultant role, Frappe Developer, QA; BRD, fit-gap, data migration and UAT plans; the `fit-gap-analysis` skill.
+- **Quickstart**: `install.sh` (checks Node 22, git, tmux, Claude Code; installs into `~/.aisquad-app` without sudo; links `aisquad`) and `aisquad quickstart [--blueprint ID --name NAME]`. Docs: `docs/QUICKSTART.md`, Indonesian `docs/id/QUICKSTART.md` and `docs/id/PANDUAN.md`.
+- Fix: the Legal roles' appearance used values the role editor does not know.
+- Tests: `trust.test.js` (the ladder, a canary measured and rolled back, capacity advice, a promoted lesson), the quickstart on a clean home.
+- Not yet: trust level 2 (auto-apply everywhere with auto-rollback), suggestions for shift hours and Claude Code version pins, the real-world 30 % cost target and the three ERPNext opportunities (on the Sopwer machine).
+
 ## How to run
 
 ```
