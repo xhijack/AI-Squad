@@ -82,5 +82,5 @@ test('the Office plan: departments and the Server room at the back, projects in 
   assert.equal(sm.roomAt(l, c.x + 1, c.z + 1).id, 'pos'); assert.equal(sm.roomAt(l, 1e3, 1e3), null);
   assert.equal(sm.defaultOverview({ phone: true }), 'list'); assert.equal(sm.defaultOverview({}), 'building');
   const empty = sm.officeLayout([]);
-  assert.deepEqual(empty.rooms.map((r) => r.kind), ['server', 'lobby', 'owner'], 'no Spaces yet: the fixed rooms');
+  assert.deepEqual(empty.rooms.map((r) => r.kind), ['server', 'lobby', 'meeting', 'pantry', 'owner'], 'no Spaces yet: the fixed and shared rooms');
 });
