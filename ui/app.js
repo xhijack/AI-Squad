@@ -601,6 +601,7 @@ const actions = Object.assign(ctx.actions, {
     const body = openModal(`<div class="mHead"><h3 class="grow">${esc(j.title)}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
       <div class="mBody"><p class="note">${tt('{status} · {cost} · {turns} turns · started {ago}', { status: esc(j.status), cost: money(j.cost), turns: j.turns || 0, ago: ago(j.startedAt) })}${j.sessionId ? ` · <code>${esc(j.sessionId.slice(0, 8))}</code>` : ''}</p>
       ${j.error ? `<div class="att budget warn"><div class="q">${esc(tx(j.error))}</div></div>` : ''}
+      ${j.denials?.length ? `<div class="denied"><b>${tt('Denied in the background (no one could be asked):')}</b><ul>${j.denials.map((d) => `<li><code>${esc(d.tool)}</code> ${esc(d.command)}</li>`).join('')}</ul>${tt('Start the agent on its Desk for work that needs these, so the prompts reach Needs you.')}</div>` : ''}
       ${j.text ? `<div class="md">${mdLite(j.text)}</div>` : ''}
       ${j.events?.length ? `<details><summary>${tt('Steps ({n})', { n: j.events.length })}</summary><ul class="feed events">${j.events.map((e) => `<li><span class="k ${e.kind === 'tool' ? 'tool' : 'text'}"></span><div class="grow d ${e.kind === 'tool' ? 'mono' : ''}">${esc(e.detail)}</div></li>`).join('')}</ul></details>` : ''}</div>`);
     body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
