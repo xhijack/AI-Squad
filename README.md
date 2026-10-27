@@ -285,6 +285,14 @@ Admin → Machines also has the **Move to another machine** steps (backup, copy,
 
 Admin → ERPNext shows the pipeline: Leads handed over, prices approved, orders, and the median time from Lead to draft and to approved Quotation.
 
+### Dialogs with several questions, denials in background runs (1.0.1)
+
+**Several questions at once.** When an agent asks a Claude Code question dialog with several questions (tabs) or a multi-select question, the Attention card and the conversation view show one block per question: radio buttons for one choice, checkboxes for several, the "Recommended" options marked, an Other field for your own answer, and one **Send answers**. The AI Squad types the answers into the dialog question by question and checks the screen after each step; if the screen does not match, it stops and says why. On Telegram such a question is listed in full with a link to answer it in the app. Autopilot answers it only when every question has a recommended option and nothing is critical.
+
+**Denied in the background.** Chat replies and background jobs cannot ask for permission: they run in `dontAsk` mode, so a tool the Space's settings do not allow is denied silently. The reply now shows what was denied (tool and command) with two actions: **Allow and retry** adds one narrow allow rule per denial to the Space's `.claude/settings.json` after you confirm (Owner only; never a wildcard, `sudo`/`sh -c`-like commands, `git push` or anything on the hard-stop list) and sends the message again; **Run on the Desk** types it into the agent's interactive session, where prompts reach Needs you. Every denial is in the Squad Log (`permission.denied`) and counted in the Audit.
+
+**Servers** (Floor settings → Servers). List the servers DevOps may reach: a host alias from `~/.ssh/config` or `user@host`, and what each is for. Each server allows `ssh <host> …` in that Space, also in background runs, and the list goes into the DevOps agent's prompt, so it does not mix up local development with a real server. Removing a server removes its rule.
+
 ### Self-learning v2, ERP Consultant and release 1.0 (1.0.0)
 
 **Trust ladder** (Admin → Improvements). Level 0 (the default): every Daily Insight suggestion waits for you. Level 1, per category, only for low-risk changes to one agent (a rule after a failing command, a lighter model): a new suggestion is applied by itself as a **canary** for 7 days, measured against its "before" with the same counts that raised it, and then a card asks you to keep it or roll it back (through the change history). A category earns level 1 with 10 accepted suggestions, 80 % of its decisions accepted, and improved follow-ups (60 % of at least 3 measured). Every accepted change is measured a week later. Never automatic: the hard-stop list, wider permissions, Building settings, Legal Spaces and roles, the Company Brain, promoting lessons.

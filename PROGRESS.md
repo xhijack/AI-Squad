@@ -857,6 +857,13 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Tests: `trust.test.js` (the ladder, a canary measured and rolled back, capacity advice, a promoted lesson), the quickstart on a clean home.
 - Not yet: trust level 2 (auto-apply everywhere with auto-rollback), suggestions for shift hours and Claude Code version pins, the real-world 30 % cost target and the three ERPNext opportunities (on the Sopwer machine).
 
+## 1.0.1: dialogs with several questions, and denials in background runs (27 Oct 2026)
+
+- **AskUserQuestion with several questions or multi-select** (`server/askdialog.js`, `ui/askform.js`): the structure comes from the tool input in the transcript, the screen says which tab is open and what is checked. The Attention card and the conversation view show one block per question (radio buttons or checkboxes, "Recommended", an Other field) and one Send answers; the server drives the keys question by question and checks the screen after each step (☒ on the tab bar, [✔] marks, the review's Submit), stopping with a clear error on a mismatch. Telegram lists the questions and sends the owner to the app. Autopilot answers such a dialog only when every question has a recommended option and none is critical.
+- **Denials in background runs** (`server/jobs.js`, `server/permits.js`): chat replies and jobs run in `dontAsk`; the tools they were denied are collected from the stream, kept on the job, shown on the chat reply and in the job dialog, and logged as `permission.denied` (the Audit counts them). On a chat reply: **Allow and retry** (Owner only, after a confirm: one narrow rule per denial into the Space's `.claude/settings.json`, never a wildcard, a command that runs other commands, `git push`, the squad's deny list or the hard-stop list) and **Run on the Desk** (the message typed into the interactive session, so prompts reach Needs you).
+- **Servers** (Floor settings): host alias or `user@host` with its purpose; each one writes `Bash(ssh <host> *)` (removed with the server) and is listed in the DevOps agent file; DevOps role v4 says only those are servers.
+- Tests: `askdialog.test.js` (parser, keys for 1-4 questions, a fake dialog in a real tmux pane), `permits.test.js`, denial parsing in `jobs.test.js`, Allow and retry in `people.test.js`, Servers in `floors.test.js`.
+
 ## How to run
 
 ```
