@@ -73,14 +73,50 @@ export function parseStream(text) {
 }
 
 // ---------- jobs ----------
+export const newId = (now = Date.now()) => `j-${new Date(now).toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex')}`;
+// a job that runs on another machine (0.18): the Head keeps its record and its event stream; the worker reports
+export function recordRemote(spec, { now = Date.now() } = {}) {
+  fs.mkdirSync(jobsDir(), { recursive: true });
+  const id = spec.id || newId(now);
+  writeText(file(id, 'prompt'), String(spec.prompt || ''), 0o600);
+  const job = { id, floorId: spec.floorId || '', agentId: spec.agentId || '', kind: spec.kind || 'task', title: clip(oneLine(spec.title || spec.prompt, 120), 120), prompt: clip(String(spec.prompt || ''), 2000),
+    cwd: '', model: spec.model || '', budgetUsd: spec.budgetUsd || null, permissionMode: spec.permissionMode || 'dontAsk', via: spec.via || 'aisquad', node: spec.node, opts: spec.opts || {},
+    meta: spec.meta || null, status: 'running', createdAt: now, startedAt: now, endedAt: null, pid: null, sessionId: '', cost: 0, turns: 0, activity: `queued on ${spec.node}`, result: '', error: '' };
+  saveJob(job);
+  return job;
+}
+export const promptOf = (id) => readTail(file(id, 'prompt'));
+// a worker's report: more of the event stream, and the end when it came -> { job, ended }
+export function applyReport(id, r = {}, now = Date.now()) {
+  const job = readJob(id);
+  if (!job || !job.node) return { job, ended: false };
+  if (typeof r.chunk === 'string' && r.chunk && Number(r.offset) === (job.streamed || 0)) {
+    fs.appendFileSync(file(id, 'jsonl'), r.chunk);
+    job.streamed = (job.streamed || 0) + Buffer.byteLength(r.chunk);
+  }
+  const s = parseStream(readTail(file(id, 'jsonl')));
+  if (s.sessionId) job.sessionId = s.sessionId;
+  if (s.model) job.model = s.model;
+  const last = s.events.at(-1);
+  if (last) job.activity = last.kind === 'tool' ? last.detail : `writing: ${last.detail}`;
+  if (s.rateLimits) job.rateLimits = s.rateLimits;
+  let ended = false;
+  if (job.status === 'running' && ['done', 'failed', 'stopped'].includes(r.status)) {
+    ended = true;
+    Object.assign(job, { status: r.status, endedAt: now, activity: '', cost: +r.cost || 0, turns: +r.turns || 0, result: clip(String(r.result || ''), 20000), error: oneLine(String(r.error || ''), 300), branch: r.branch || '' });
+  }
+  saveJob(job);
+  return { job, ended };
+}
 export function readJob(id) { return validId(id) ? readJson(file(id, 'json'), null) : null; }
-const saveJob = (j) => writeJson(file(j.id, 'json'), j);
+export const saveJob = (j) => writeJson(file(j.id, 'json'), j);
 export function listJobs({ floorId = '', agentId = '', status = '', limit = 50 } = {}) {
   return safeReaddir(jobsDir()).filter((f) => f.endsWith('.json')).map((f) => readJson(path.join(jobsDir(), f), null)).filter(Boolean)
     .filter((j) => (!floorId || j.floorId === floorId) && (!agentId || j.agentId === agentId) && (!status || j.status === status))
     .sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 }
 export const runningJobs = () => listJobs({ status: 'running', limit: 500 });
+export const localRunningJobs = () => runningJobs().filter((j) => !j.node);
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 // spec: { floorId, agentId, kind, title, prompt, cwd, args (from buildArgs), env } -> the job record
@@ -89,7 +125,7 @@ export function startJob(spec, { spawnFn = spawn, now = Date.now() } = {}) {
   if (!prompt) throw bad('The job needs a prompt');
   if (!spec.cwd || !fs.existsSync(spec.cwd)) throw bad('The job folder does not exist');
   fs.mkdirSync(jobsDir(), { recursive: true });
-  const id = `j-${new Date(now).toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(4).toString('hex')}`;
+  const id = validId(spec.id) ? spec.id : newId(now);                    // a worker runs a job under the Head's id (0.18)
   writeText(file(id, 'prompt'), prompt, 0o600);
   const cmd = [claudeBin(), ...(spec.args || [])].map(shq).join(' ');
   // the exit code lands in <id>.exit; output and errors in their own files
@@ -110,7 +146,7 @@ const readTail = (f, max = 2 * 2 ** 20) => { try { const st = fs.statSync(f); if
 
 // where a running job is now; finishes it when its exit code is there (or its process is gone). -> { job, changed, ended }
 export function refreshJob(job, now = Date.now()) {
-  if (job.status !== 'running') return { job, changed: false, ended: false };
+  if (job.status !== 'running' || job.node) return { job, changed: false, ended: false };     // a remote job: its worker reports
   const s = parseStream(readTail(file(job.id, 'jsonl')));
   const before = JSON.stringify([job.sessionId, job.activity, job.cost]);
   if (s.sessionId) job.sessionId = s.sessionId;
@@ -156,6 +192,7 @@ export function stopJob(id, now = Date.now()) {
   const j = readJob(id);
   if (!j) throw notFound('Job not found');
   if (j.status !== 'running') return j;
+  if (j.node) { j.status = 'stopped'; j.endedAt = now; j.activity = ''; j.error = 'stopped by the owner'; saveJob(j); return j; }   // the worker is told (server/nodes.js)
   try { process.kill(-j.pid, 'SIGTERM'); } catch { try { process.kill(j.pid, 'SIGTERM'); } catch { /* gone */ } }
   j.status = 'stopped'; j.endedAt = now; j.activity = ''; j.error = 'stopped by the owner';
   saveJob(j);
