@@ -24,6 +24,7 @@ export const TYPES = {
   'dispatch.queued': 'work', 'dispatch.started': 'work', 'dispatch.failed': 'work', 'dispatch.removed': 'work', 'dispatch.idle-stopped': 'lifecycle', 'node.lost': 'lifecycle',
   'handoff.sent': 'communication', 'handoff.received': 'communication', 'handoff.held': 'communication', 'handoff.rejected': 'communication', 'handoff.invalid': 'communication',
   'erpnext.lead': 'work', 'erpnext.won': 'work', 'erpnext.approval': 'work', 'erpnext.approved': 'work', 'erpnext.sent-back': 'work', 'erpnext.alert': 'work',
+  'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'report.delivered': 'communication',
@@ -103,6 +104,9 @@ function summarize(e) {
     case 'erpnext.approval': return `${who} asked the owner to approve the prices of ${d.quotation}`;
     case 'erpnext.approved': return `the owner approved ${d.quotation}; it is submitted in ERPNext`;
     case 'erpnext.sent-back': return `the owner sent ${d.quotation} back to ${who}`;
+    case 'legal.reverted': return `${d.file} is a DRAFT again: ${d.reason}`;
+    case 'legal.approved': return `the owner approved the contract ${d.file}`;
+    case 'legal.changes': return `the owner asked for changes to the contract ${d.file}`;
     case 'erpnext.alert': return `Quotation ${d.quotation} was submitted by ${d.user} without the owner's approval`;
     case 'dispatch.queued': return `${who} queued (${d.action}, ${d.priority}): ${d.reason}`;
     case 'dispatch.started': return `${who} started from the queue (${d.action}) after ${Math.round((d.waitedMs || 0) / 60e3)} min`;

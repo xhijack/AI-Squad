@@ -34,6 +34,7 @@ import * as inbox from './inbox.js';
 import * as insight from './insight.js';
 import * as nodes from './nodes.js';
 import * as erp from './erpnext.js';
+import * as tiering from './tiering.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -245,6 +246,11 @@ const routes = [
   ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
+  // contracts in Legal Spaces and model tiering (0.20): the Owner's
+  ['GET', /^\/api\/legal$/, () => squad.legalOverview(), { pin: true }],
+  ['GET', /^\/api\/legal\/contract$/, (p, b, req) => squad.contractText(new URL(req.url, 'http://x').searchParams.get('key') || ''), { pin: true }],
+  ['GET', /^\/api\/tiering$/, () => tiering.status(), { pin: true }],
+  ['PATCH', /^\/api\/tiering$/, (p, b) => tiering.saveSettings(b), { pin: true, history: () => ({ label: 'Model tiering' }) }],
   ['GET', /^\/api\/handoffs$/, (p, b, req) => squad.handoffsOverview(req.user), { pin: true }],
   ['POST', /^\/api\/handoffs\/scan$/, () => squad.handoffTick(), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],

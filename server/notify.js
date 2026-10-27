@@ -117,7 +117,7 @@ export function inQuiet(q, now = Date.now()) {
 const isCritical = (item) => !!item.hardStop?.length || !!item.autopilot?.critical || (['question', 'permission', 'reply'].includes(item.kind) && autopilot.classify(item.text, { level: 'full' }).reasons.some((r) => r !== 'unclear'));
 const reasonsOf = (item) => [...new Set([...(item.hardStop || []), ...(item.autopilot?.reasons || []), ...autopilot.classify(item.text, { level: 'full' }).reasons])].filter((r) => r !== 'unclear');
 const short = (s, n) => { const t = redact(String(s || '').replace(/\s+/g, ' ').trim()); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext' };
+const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal' };
 
 // a person may see this item: Owner-only Spaces only for the Owner
 const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOnly && !access.ownerFloors().has(item.floorId)));
@@ -125,7 +125,7 @@ const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOn
 export function messageFor(item, tok, s = settings()) {
   const where = [item.floorName || item.floorId, item.agentName].filter(Boolean).join(' · ');
   // a price approval: only its first line (customer, total) travels; the lines and the note are opened in the app
-  const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(item.kind === 'price' ? String(item.text).split('\n')[0] : item.text, 600)];
+  const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(['price', 'contract'].includes(item.kind) ? String(item.text).split('\n')[0] : item.text, 600)];
   const opts = (item.options || []).filter((o) => !o.free).slice(0, 6);
   if (opts.length) lines.push('', ...opts.map((o) => `${o.n}. ${short(o.label, 80)}`));
   if (isCritical(item)) lines.push('', `Hard stop: ${reasonsOf(item).join(', ') || 'critical'}`);
@@ -133,9 +133,9 @@ export function messageFor(item, tok, s = settings()) {
   if (tok) {
     if (opts.length) for (let i = 0; i < opts.length; i += 3) buttons.push(opts.slice(i, i + 3).map((o) => ({ text: `${o.n}. ${short(o.label, 24)}`, data: `a:${tok}:${o.n}` })));
     const row = [];
-    if (['question', 'permission', 'reply', 'finished', 'decided', 'price'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
+    if (['question', 'permission', 'reply', 'finished', 'decided', 'price', 'contract'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
     if (item.kind === 'crash') buttons.push([{ text: 'Resume', data: `a:${tok}:1` }, { text: 'Start fresh', data: `a:${tok}:2` }]);
-    if (!['question', 'permission', 'price'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
+    if (!['question', 'permission', 'price', 'contract'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
     if (s.publicUrl) row.push({ text: say('openBtn', {}, s.lang), url: item.floorId ? `${s.publicUrl}/#/floor/${item.floorId}${item.agentId ? `/agent/${item.agentId}` : ''}` : `${s.publicUrl}/` });
     buttons.push(row);
   }
@@ -181,7 +181,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const quiet = inQuiet(s.quiet, now);
   for (const item of items) {
     if (st.sent[item.id]) continue;
-    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext'].includes(item.kind);
+    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal'].includes(item.kind);
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
     if (quiet && item.kind !== 'resource') continue;                                         // after the quiet hours
     if (st.hourly.length >= s.maxPerHour) break;

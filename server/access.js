@@ -20,6 +20,8 @@ const OWNER_ROUTES = [
   /^GET \/api\/(notify|insights)$/,
   /^(GET|POST) \/api\/nodes$/,
   /^(GET|PATCH) \/api\/erpnext$/,
+  /^GET \/api\/legal(\/contract)?$/,
+  /^(GET|PATCH) \/api\/tiering$/,
   /^(PUT|DELETE) \/api\/erpnext\/keys\//,
   /^POST \/api\/erpnext\/(test|sync)$/,
   /^(PATCH|DELETE) \/api\/nodes\/[\w-]+$/,
