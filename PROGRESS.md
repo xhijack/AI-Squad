@@ -814,6 +814,16 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - Checked in headless Chromium (Indonesian UI): Office and List on desktop and phone, a click on a room opens that Space, no page errors.
 - Not yet: agents walking from their department's room to a project's room (an agent is still one team member per Space; a shared identity across Spaces comes with the handoff bus), the golden-ratio split of plan and panel, and the Room zoom staying in Iso when the Scene view is 3D (it follows the Scene view).
 
+## Phase 4, Sprint 9: more machines, a Head and its workers, 0.18.0 (27 Oct 2026)
+
+- **Machines (`server/nodes.js`)**: add, drain and remove workers; a token per machine shown once and stored as a SHA-256 hash (`~/.aisquad/nodes.json`, 0600); heartbeats (free memory, CPU, running jobs, cached repositories); online until 45 s of silence; a work queue per machine with a long poll.
+- **Placement**: this machine first, then the online, not draining worker with the most free memory (its own maximum and 2 GB kept free), preferring one that already has the repository; a Space can be pinned (`floor.node`: auto, head or a worker). Only Spaces with a git remote go to workers. The dispatcher counts the workers' room in its slots, but starts of Desk sessions still need a slot on this machine.
+- **Worker (`server/worker.js`, `aisquad node --head --name --token`)**: connects out only; clones or pulls the repository, works on `<agent>/job-<id>` from the main branch with the agent file from the Head, maps the Head's paths in the arguments to its clone, runs the same headless runner with its own Claude sign-in, streams the events back in chunks (offset-checked), pushes the branch when it committed; a stop on the Head reaches it.
+- **Head side**: remote jobs are recorded like local ones (`node`), their events appended as they come, the branch fetched at the end; `job.ended` carries `node` and `branch`. **Failover**: a worker silent for 45 s, or removed, loses its running jobs (failed, `lost: ...`), each queued again at P1 with a note to continue from its branch; `node.lost` in the Squad Log.
+- **Admin → Machines** (owner only): this machine and every worker (online, last seen, jobs, free memory, version), add (the command with the token, once), drain, remove; the Space form's **Background jobs run on**; the **Move to another machine** steps with Back up now.
+- Tests (`test/nodes.test.js`): placement and free slots, the worker's arguments, a real worker process running a job in its clone (events back, branch pushed and fetched, no credentials from the Head, no slot used here), and a worker killed mid-job (lost, requeued once, its token cannot report other jobs).
+- Not yet: Desk sessions on workers (tmux stays on the Head), sharing Claude Code's auto memory with workers, and placement by CPU load.
+
 ## How to run
 
 ```

@@ -82,6 +82,13 @@ The first scan of a Floor only records a baseline (the current board and files a
 ```
 
 
+**`node.lost`** (0.18, lifecycle): a worker machine went silent (45 s without a heartbeat) or was removed while
+running this agent's background job. The job is marked failed (`lost: ...`) and queued again; `queued` is the new queue item.
+
+```json
+{"v":1,"id":"a91c0e2d7b13","ts":"2026-10-27T03:10:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":null,"type":"node.lost","summary":"budi-dev's job was lost with the machine box-3 and queued again","data":{"job":"j-20261027-c3d4e5f6","node":"box-3","queued":"q-20261027-0a1b2c"}}
+```
+
 **`dispatch.idle-stopped`** (0.13, lifecycle): the dispatcher stopped an agent that sat idle (`idleMin`) to free its
 slot; `queue` is true when work was waiting. Resume continues the session.
 
@@ -178,7 +185,7 @@ Desk) or the part of The AI Squad that started it.
 {"v":1,"id":"1f0a6c3e9b21","ts":"2026-10-26T02:19:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"sonnet","type":"job.started","summary":"budi-dev started a background job: write the README","data":{"job":"j-20261026-a1b2c3d4","kind":"task","title":"write the README","budgetUsd":2,"permissionMode":"dontAsk","via":"aisquad"}}
 ```
 
-**`job.ended`** (0.11): the job ended: `done`, `failed` (with `error`, e.g. stopped at its budget) or `stopped`.
+**`job.ended`** (0.11): the job ended: `done`, `failed` (with `error`, e.g. stopped at its budget) or `stopped`. From 0.18 a job that ran on a worker has `node` (the machine) and `branch` (the branch it pushed).
 
 ```json
 {"v":1,"id":"7c2d1e0f4a65","ts":"2026-10-26T02:21:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"claude-sonnet-5-5","type":"job.ended","summary":"budi-dev's background job done ($0.04)","data":{"job":"j-20261026-a1b2c3d4","kind":"task","status":"done","cost":0.0421,"turns":2,"ms":121000}}
