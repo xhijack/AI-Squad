@@ -8,7 +8,8 @@
 //   slow answers     the owner's answers take 30+ minutes (median, 3+)       → advice: notifications, Autopilot
 //   idle with work   10+ idle-with-open-work events on a Space, Autopilot off → Autopilot balanced there
 //   out of memory    2+ out-of-memory crashes                                → one agent less at once
-//   queue waits      p95 wait 2+ hours (5+ starts)                           → capacity advice
+//   queue waits      p95 wait 2+ hours (5+ starts)                           → capacity advice: another worker when RAM or
+//                    CPU is the limit (0.21: machines can be added), one agent more when the Building limit is
 //   repeated asks    the same chat question 3+ times                         → a skill candidate
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -26,11 +27,11 @@ const WEEK = 7 * 864e5, DISMISS_QUIET_MS = 14 * 864e5;
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : 0; };
 const p95 = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.ceil(s.length * 0.95) - 1)] : 0; };
 const ids = (evs) => evs.slice(-5).map((e) => e.id);
-const words = (t, n) => String(t || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, n).join(' ');
+export const words = (t, n) => String(t || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, n).join(' ');
 
 // spaces: [{ id, name, autopilot, agents: [{ id, name, model, lead }] }], events: { floorId: [log events of the week] },
 // prefs: { maxAgents }, limiting: what limits the dispatcher now -> suggestions (not yet in the inbox)
-export function analyze({ spaces = [], events = {}, prefs = {}, limiting = '' } = {}) {
+export function analyze({ spaces = [], events = {}, prefs = {}, limiting = '', workers = { count: 0, free: 0 } } = {}) {
   const out = [];
   const allEv = (type) => spaces.flatMap((s) => (events[s.id] || []).filter((e) => e.type === type).map((e) => ({ ...e, floorId: s.id })));
   for (const s of spaces) {
@@ -87,6 +88,7 @@ export function analyze({ spaces = [], events = {}, prefs = {}, limiting = '' } 
     out.push({ key: 'oom', category: 'capacity', title: `${oom.length} agents were killed for lack of memory this week`,
       evidence: [...new Set(oom.map((e) => e.floorId))].map((f) => ({ floorId: f, ids: ids(oom.filter((e) => e.floorId === f)), summary: '' })),
       impact: 'No more out-of-memory kills.', risk: 'Low: work waits a little longer in the queue.',
+      advice: `If the queue then waits too long, add a machine instead of upgrading this one: Admin → Machines → Add a machine (a worker runs background jobs with its own memory)${workers.count ? `; ${workers.count} worker${workers.count > 1 ? 's are' : ' is'} connected now` : ''}.`,
       change: { kind: 'prefs', patch: { maxAgents: max - 1 } }, verify: 'Out-of-memory crashes for 7 days', metric: { name: 'oom/week', before: oom.length } });
   }
   // queue waits
@@ -97,7 +99,9 @@ export function analyze({ spaces = [], events = {}, prefs = {}, limiting = '' } 
       evidence: [{ floorId: '', ids: [], summary: `limited by ${limiting || 'the slots'} now` }],
       impact: 'Faster starts.', risk: limiting === 'building' ? 'Medium: one more agent at once uses more RAM.' : 'None by itself: advice only.',
       change: limiting === 'building' ? { kind: 'prefs', patch: { maxAgents: (prefs.maxAgents || 6) + 1 } } : null,
-      advice: limiting === 'ram' ? 'RAM is the limit: add a second machine as a worker (planned for 0.18) rather than more agents on this one.' : limiting === 'cpu' ? 'The CPU is the limit: move heavy builds and tests off this machine, or add a worker.' : '',
+      advice: ['ram', 'cpu'].includes(limiting)
+        ? `${limiting === 'ram' ? 'Memory' : 'The CPU'} is the limit: add a machine rather than upgrading this one (Admin → Machines → Add a machine; background jobs then run there).${workers.count ? ` The ${workers.count} connected worker${workers.count > 1 ? 's have' : ' has'} ${workers.free} free slot${workers.free === 1 ? '' : 's'} now${workers.free ? '' : ': add another one'}.` : ''}`
+        : '',
       verify: 'p95 queue wait for 7 days', metric: { name: 'p95 wait h', before: +h } });
   }
   // repeated asks
@@ -141,6 +145,16 @@ export function decide(id, status, { by = 'Owner', reason = '', result = null } 
   saveInbox(inbox);
   fs.mkdirSync(dir(), { recursive: true });
   fs.appendFileSync(path.join(dir(), 'decisions.jsonl'), `${JSON.stringify({ ts: now, id, key: it.key, category: it.category, status, by, metric: it.metric })}\n`);
+  return it;
+}
+// a change of an item outside the open -> decided step (0.21: canaries and their follow-up), and its decision line
+export function updateItem(id, patch, { log = '', by = '' } = {}, now = Date.now()) {
+  const inbox = loadInbox();
+  const it = inbox.items.find((x) => x.id === id);
+  if (!it) throw notFound('Suggestion not found');
+  Object.assign(it, typeof patch === 'function' ? patch(it) || {} : patch);
+  saveInbox(inbox);
+  if (log) { fs.mkdirSync(dir(), { recursive: true }); fs.appendFileSync(path.join(dir(), 'decisions.jsonl'), `${JSON.stringify({ ts: now, id, key: it.key, category: it.category, status: log, by, metric: it.metric, followUp: it.followUp })}\n`); }
   return it;
 }
 export const newSince = (since) => loadInbox().items.filter((x) => x.createdAt >= since && x.status === 'open').length;

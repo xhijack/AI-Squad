@@ -9,6 +9,8 @@ import * as history from './history.js';
 import * as insight from './insight.js';
 import * as squad from './squad.js';
 import * as dispatcher from './dispatcher.js';
+import * as trust from './trust.js';
+import * as nodes from './nodes.js';
 import { bad } from './util.js';
 
 const settings = () => insight.cleanInsight(building.loadBuilding().prefs.insight);
@@ -27,8 +29,12 @@ export function run(now = Date.now()) {
   }
   let limiting = '';
   try { limiting = squad.dispatchStatus(now).capacity.limiting; } catch { /* no snapshot yet */ }
-  const found = insight.analyze({ spaces, events, prefs: { maxAgents: b.prefs.maxAgents }, limiting });
+  const workers = nodes.listNodes(now).filter((n) => n.online && !n.drain);
+  const found = insight.analyze({ spaces, events, prefs: { maxAgents: b.prefs.maxAgents }, limiting, workers: { count: workers.length, free: nodes.clusterFree(now) } });
   const added = insight.addSuggestions(found, now);
+  // level 1 (0.21): low-risk suggestions of a trusted category start as canaries; last week's canaries are measured
+  trust.startCanaries(added, applyChange, now).catch((e) => console.error('[insight] canary:', e.message));
+  trust.review(now);
   insight.writeReport(dayKey(now), { ts: now, found: found.length, added: added.map((x) => x.id), spaces: spaces.length, events: Object.values(events).reduce((n, l) => n + l.length, 0) });
   return { found: found.length, added };
 }
@@ -46,16 +52,16 @@ export function tick(now = Date.now()) {
   return run(now);
 }
 
-async function applyChange(c, actor) {
+export async function applyChange(c, actor, { onRecord = null } = {}) {
   if (!c) return { applied: false };
   if (c.kind === 'prefs') {
     const patch = {};
     if (c.patch.maxAgents !== undefined) patch.maxAgents = Math.max(1, Math.min(40, parseInt(c.patch.maxAgents, 10) || 6));
     if (!Object.keys(patch).length) throw bad('Nothing to change');
-    return history.track('Improvement: Building settings', { actor }, () => { building.setPrefs(patch); return { applied: true }; });
+    return history.track('Improvement: Building settings', { actor, onRecord }, () => { building.setPrefs(patch); return { applied: true }; });
   }
   const root = building.floorEntry(c.floorId).path;
-  const track = (label, fn) => history.track(label, { root, floorId: c.floorId, actor }, () => { fn(); floors.generate(root); return { applied: true }; });
+  const track = (label, fn) => history.track(label, { root, floorId: c.floorId, actor, onRecord }, () => { fn(); floors.generate(root); return { applied: true }; });
   if (c.kind === 'floor') return track('Improvement: Space settings', () => floors.updateFloorConfig(root, c.patch));
   const a = floors.readFloor(root).team.agents.find((x) => x.id === c.agentId);
   if (!a) throw bad(`The agent ${c.agentId} is no longer in this Space`);
@@ -75,5 +81,5 @@ export async function accept(id, user) {
 export const dismiss = (id, user, reason) => insight.decide(id, 'dismissed', { by: user?.name || 'Owner', reason });
 export function list() {
   const inbox = insight.loadInbox();
-  return { settings: settings(), lastRun: inbox.lastRun, queued: dispatcher.load().length, items: [...inbox.items].reverse().slice(0, 100) };
+  return { settings: settings(), lastRun: inbox.lastRun, queued: dispatcher.load().length, items: [...inbox.items].reverse().slice(0, 100), trust: trust.ladder(), ladderRules: trust.LADDER };
 }
