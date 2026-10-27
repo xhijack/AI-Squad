@@ -8,9 +8,17 @@ import { t, tx } from './i18n.js';
 
 let timer = null;
 const CTX = { space: t('This Space'), general: t('General') };
+// tools a background reply was denied ("dontAsk"), with Allow and retry (narrow rules, the Owner) and Run on the Desk
+function deniedHtml(m, context) {
+  if (!m.denials?.length) return '';
+  const rules = m.denials.map((d) => d.rule).filter(Boolean);
+  return `<div class="denied"><b>${t('Denied in the background (no one could be asked):')}</b><ul>${m.denials.map((d) => `<li><code>${esc(d.tool)}</code> ${esc(d.command)}</li>`).join('')}</ul>
+    ${context === 'space' ? `<div class="row wrap">${rules.length ? `<button type="button" class="small gold" data-allow="${esc(m.id)}" data-rules="${esc(JSON.stringify(rules))}">${t('Allow and retry')}</button>` : `<span class="note">${t('No narrow rule fits; run it on the Desk.')}</span>`}
+      <button type="button" class="small" data-desk="${esc(m.id)}">${t('Run on the Desk')}</button></div>` : `<span class="note">${t('Ask it in the Space chat to allow it or run it on the Desk.')}</span>`}</div>`;
+}
 function messagesHtml(th) {
   if (!th.messages.length) return `<div class="empty">${t('No messages yet. Ask {name} anything, or give a direct instruction.', { name: esc(th.agent.displayName) })}</div>`;
-  return th.messages.map((m) => `<div class="msg ${esc(m.from)}"><div class="note">${esc(m.from === 'system' ? t('The AI Squad') : m.name || '')} · ${ago(m.ts)}${m.cost ? ` · $${(+m.cost).toFixed(2)}` : ''}</div><div class="bubble">${m.from === 'agent' ? mdLite(m.text) : esc(m.from === 'system' ? tx(m.text) : m.text)}</div></div>`).join('')
+  return th.messages.map((m) => `<div class="msg ${esc(m.from)}"><div class="note">${esc(m.from === 'system' ? t('The AI Squad') : m.name || '')} · ${ago(m.ts)}${m.cost ? ` · $${(+m.cost).toFixed(2)}` : ''}</div><div class="bubble">${m.from === 'agent' ? mdLite(m.text) : esc(m.from === 'system' ? tx(m.text) : m.text)}${deniedHtml(m, th.context)}</div></div>`).join('')
     + (th.awaiting ? `<div class="msg agent"><div class="bubble note">${th.awaiting.mode === 'queued' ? t('Waiting in the queue…') : th.awaiting.mode === 'typed' ? t('Typed into the Desk session; waiting for the answer…') : t('Thinking…')}</div></div>` : '');
 }
 async function openChat(floorId, agentId, context = 'space') {
@@ -38,6 +46,20 @@ async function openChat(floorId, agentId, context = 'space') {
     } catch { /* next time */ }
   };
   timer = setInterval(poll, 3000);
+  log.onclick = async (e) => {
+    const b = e.target.closest('[data-allow], [data-desk]');
+    if (!b) return;
+    if (b.dataset.allow) {
+      const rules = JSON.parse(b.dataset.rules);
+      if (!confirm(t('Allow {rules} for every background run in this Space, then send the message again? The rules go into .claude/settings.json; remove them there to take them back.', { rules: rules.join(', ') }))) return;
+    }
+    b.disabled = true;
+    try {
+      const r = await api('POST', `/api/floors/${floorId}/agents/${agentId}/chat/${b.dataset.allow ? 'allow' : 'desk'}`, { msgId: b.dataset.allow || b.dataset.desk, context });
+      toast(r.delivery === 'queued' ? t('Queued: it starts by itself when there is room') : b.dataset.allow ? t('Allowed; running it again') : t('Typed into the Desk session; prompts reach Needs you'), 4000);
+      await poll();
+    } catch (err) { toast(tx(err.message), 6000); b.disabled = false; }
+  };
   form.onsubmit = async (e) => {
     e.preventDefault();
     const text = ta.value.trim(); if (!text) return;

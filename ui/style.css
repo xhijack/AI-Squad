@@ -745,3 +745,7 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .askForm .askText { margin: 2px 0 6px; white-space: pre-wrap; }
 .askForm .askOpt { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
 .askForm .askOther { margin-top: 6px; width: 100%; }
+/* tools a background chat reply was denied (chat.js) */
+.bubble .denied { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); color: var(--warn-ink); font-size: 13px; }
+.bubble .denied ul { margin: 4px 0 6px 18px; padding: 0; }
+.bubble .denied code { word-break: break-all; }
