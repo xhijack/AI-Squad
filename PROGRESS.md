@@ -878,6 +878,25 @@ Company Mode starts (`PHASE-4-COMPANY-MODE.md`): before the big changes, a safet
 - **Double notifications** (cause: the same dialog changed its Attention id once the screen, the hook event or the transcript caught up, so it was announced again; and every open tab announced it). One id per dialog episode on the server; Telegram also skips the same message within 30 minutes; one browser tab claims each item (localStorage, by id and content) before it notifies or speaks.
 - Tests: a headless-Chrome DOM test (typing through updates keeps the element, text and caret; Send during an update sends once; a second click and Ctrl+Enter while it runs do nothing), idempotent API calls, one claim per item across tabs, stable dialog ids, Telegram de-duplication.
 
+## Phase 5: the Office overview in 3D, 1.1.0 (27 Oct 2026)
+
+- **One plan, two renderers** (`ui/scene-model.js` officeLayout): the shared meeting room and the pantry join the front row, every room has one door onto a corridor and its furniture in the plan; desks sit 3.5 m apart in depth so agents can walk behind the chairs. `ui/office-plan.js`: glass walls with a gap at the door, the navigation grid of the whole floor (walls, desks and furniture are obstacles; doors are the only openings), trips (a meeting gathers its agents in the shared room; the sender of a handoff walks to the other room's door and back), the level of detail, and rooms that came or went. The Iso Pixel Office draws the two new rooms too.
+- **The 3D Office** (`ui/office3d.js`, hosted by the 3D scene): rooms with a low wall and glass, accent stripe and name plate; instanced low-poly chibis (body, head, hair, blob shadow, state ring: five instanced meshes for every agent) at merged low-poly desks far away; the room zoomed into (or the one in the middle when the camera is close) gets the full stations; hover names, a click zooms into a room (Open Space, Whole office), an agent opens its Desk; `?` bubbles, the conversation view's focus and speech; rooms grow in and shrink out when a Space is added or removed and are disposed. Walking follows the clock, a dozen walkers per frame at most; the grid is built only when someone walks. While the Office is open the Building's Floors are not built (memory); a poll that changes nothing draws nothing. The snapshot carries recent cross-Space handoffs (`walks`, Owner-only Spaces left out for others).
+- **Renderer**: the Office follows the Scene view (3D, Iso Pixel, Auto); on Auto it falls back to Iso Pixel in that browser when the median frame time over 90 drawn frames exceeds ~34 ms.
+- Measured in headless Chrome with SwiftShader (CPU rendering, on this shared machine with a load of ~14, so frame rates and ms are far below a real GPU; draw calls and triangles compare), `scripts/seed-office.js N`, `scripts/measure.js` (new: `MEASURE_STORAGE`, `MEASURE_MOVE`):
+
+  | Spaces (5 agents) | View | Draw calls | Triangles | JS heap MB (idle) | JS ms / frame, moving (Low · High) | Frames / s idle |
+  |---|---|---|---|---|---|---|
+  | 1 | Office 3D | 152 | 30k | 31–36 | 19 · n/a | 0.3 |
+  | 3 | Office 3D | 174 | 45k | 21 | 12 · 215 | 0.3 |
+  | 6 | Office 3D | 207 | 66k | 15–83 | 6 · 11 | 0.15 (21 polls / min) |
+  | 1 · 3 · 6 | Building 3D | 1,453 · 3,385 · 5,157 | 0.9M · 2.2M · 3.7M | 51 · 133 · 78 | | |
+  | 1 · 3 · 6 | Office Iso | | | 10.4 · 11.1 · 10.4 | 3.6 · 3.0 · 5.4 | |
+
+  Heap readings move with the garbage collector between runs; one High run at 1 Space failed to load (a module import right after the server started). Reference screenshots: `playground/reference/office-3d-{1space,4spaces,room}-{1440,390}.png` and `office-iso-*` beside them.
+- Tests: `office-plan.test.js` (rooms without overlaps and with open doors, every door and desk reachable from the Lobby, glass in between neighbours and the path through both doors, trips, level of detail, rooms added and removed), the plan in `scene-model.test.js`.
+- Not yet: the agents in the far view do not turn or animate (they sit, or glide while walking); live screens only on Floors.
+
 ## How to run
 
 ```

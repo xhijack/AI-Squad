@@ -42,14 +42,14 @@ export class Office3D {
   // ---------- data ----------
   update(floors, company = {}) {
     this.company = company;
-    const spaces = (floors || []).filter((f) => !f.missing && !f.independent);
+    const spaces = (floors || []).filter((f) => !f.missing);                 // the same rooms as the Iso Office (independents included)
     this.floors = new Map(spaces.map((f) => [f.id, f]));
     const key = JSON.stringify(spaces.map((f) => [f.id, f.kind, f.number, f.name, f.accent, (f.agents || []).map((a) => [a.id, a.appearance, a.lead])]));
     if (key !== this.key) {
       this.key = key;
       const layout = officeLayout(spaces.map((f) => ({ id: f.id, name: f.name, number: f.number, kind: f.kind || 'project', agents: f.agents || [] })));
       const diff = this.plan ? roomDiff(this.plan.rooms, layout.rooms) : { added: layout.rooms.map((r) => r.id), removed: [], moved: [] };
-      this.plan = officePlan(layout); this.nav = null;              // the grid is built when someone walks
+      this.plan = officePlan(layout); this.nav = null; this.s.dirty = true;     // the grid is built when someone walks
       this.buildSlab();
       const next = new Map(this.plan.rooms.map((r) => [r.id, r]));
       for (const id of diff.removed) this.removeRoom(id);
@@ -65,7 +65,6 @@ export class Office3D {
     this.placeAgents();
     for (const o of this.rooms.values()) this.updatePlate(o);
     this.updateRacks();
-    this.s.dirty = true;
   }
 
   buildSlab() {
@@ -178,6 +177,10 @@ export class Office3D {
   }
   writeInstances() {
     const { q, c } = this, near = this.near?.room;
+    // a poll that changes nothing on the floor asks for no frame (render on demand)
+    const sig = JSON.stringify([near, this.agents.map((x) => [x.key, x.pos.x, x.pos.z, x.walking, x.away, x.a.state, x.a.appearance])]);
+    if (sig === this.instSig) return;
+    this.instSig = sig;
     let k = 0;
     for (const x of this.agents) {
       const hide = near && x.room.id === near && !x.walking;                    // drawn in full detail instead
@@ -405,6 +408,9 @@ export class Office3D {
   updateRacks() {
     const res = this.company?.resources || {};
     const v = { ram: res.mem?.total ? 1 - res.mem.available / res.mem.total : 0, cpu: res.cpus && res.load ? Math.min(1, res.load[0] / res.cpus) : 0 };
+    const sig = JSON.stringify([Math.round(v.ram * 20), Math.round(v.cpu * 20)]);     // 5 % steps: no frame for every small change
+    if (sig === this.barSig) return;
+    this.barSig = sig; this.s.dirty = true;
     for (const b of this.bars || []) {
       const k = Math.max(.05, v[b.userData.bar]);
       b.scale.y = k * 1.6; b.position.y = this.kit.TOP + k * .8;

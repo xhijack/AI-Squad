@@ -645,6 +645,8 @@ export class BuildingScene {
     if (key === this.syncKey) return;
     this.syncKey = key;
     this.lastFloors = floors;
+    // the Office overview draws its own rooms: the Floors are not built meanwhile (memory), only the Office updated
+    if (this.officeOn() && this.office) { this.office.update(this.officeFloors(floors), this.company); this.racks = this.office.racks(); return; }   // it asks for a frame when something changed
     const seen = new Set();
     for (const f of floors) {
       seen.add(f.id);
@@ -726,10 +728,17 @@ export class BuildingScene {
     this.view = view;
     // the Office overview: built when it opens, given back when it closes (memory)
     if (this.officeOn()) {
-      if (!this.office) { this.office = new Office3D(this, this.officeKit()); this.officeFrames = []; }
+      if (!this.office) {
+        this.office = new Office3D(this, this.officeKit()); this.officeFrames = [];
+        for (const o of this.floors.values()) dispose(o.g);                    // the Building's Floors give their memory back
+        this.floors.clear(); this.syncKey = null;
+      }
       this.office.update(this.officeFloors(), this.company);
       this.racks = this.office.racks();
-    } else if (this.office) { this.office.dispose(); this.office = null; this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))]; }
+    } else if (this.office) {
+      this.office.dispose(); this.office = null;
+      this.syncKey = null; if (this.lastFloors) this.sync(this.lastFloors);       // the Floors again
+    }
     const persp = !!(view.eyes || view.screen || view.follow);
     if (persp && !wasPersp) {
       // hand over from the isometric camera: start the perspective camera where the ortho view looked from

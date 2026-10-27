@@ -5,6 +5,8 @@
 // geometries, shader programs, JS heap, polls (JSON bytes, fetch ms, DOM + scene ms). Read only: it loads the page,
 // wraps the scene's frame() to count, and reads counters (ui/scene.js stats, ui/app.js ctx.stats); it clicks nothing.
 //   node scripts/measure.js <url> [settle seconds = 15] [window seconds = 20] [renderer = page default | three | iso]
+//   MEASURE_STORAGE='{"aisquad.overview":"office","aisquad.quality":"low"}'   localStorage keys set before loading
+//   MEASURE_MOVE=1   pans the camera a little every display frame during the window (frame cost under motion)
 // Note: headless Chrome draws with SwiftShader (the CPU), so ms per frame here is far above a real GPU; frames per
 // second idle, draw calls, triangles and payloads are what compare across changes.
 import { openChrome, sleep } from './chrome.js';
@@ -13,7 +15,12 @@ const [url, settle = 15, span = 20, renderer = ''] = process.argv.slice(2);
 if (!url) { console.error('usage: measure.js <url> [settle s] [window s]'); process.exit(1); }
 const c = await openChrome();
 await c.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-if (renderer) { await c.send('Page.navigate', { url: new URL('/', url).href }); await sleep(800); await c.evaluate(`localStorage.setItem('aisquad.renderer', ${JSON.stringify(renderer)})`); await c.send('Page.navigate', { url: 'about:blank' }); await sleep(200); }
+const storage = { ...(renderer ? { 'aisquad.renderer': renderer } : {}), ...JSON.parse(process.env.MEASURE_STORAGE || '{}') };
+if (Object.keys(storage).length) {
+  await c.send('Page.navigate', { url: new URL('/', url).href }); await sleep(800);
+  for (const [k, v] of Object.entries(storage)) await c.evaluate(`localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)})`);
+  await c.send('Page.navigate', { url: 'about:blank' }); await sleep(200);
+}
 await c.send('Page.navigate', { url });
 await sleep(settle * 1000);
 // count frames by wrapping the scene's frame() (works on builds without ui/scene.js stats too)
@@ -32,6 +39,7 @@ const snap = () => c.evaluate(`(() => {
     apiBytes: api.reduce((n, e) => n + (e.encodedBodySize || 0), 0), apiCount: api.length, dpr: s?.renderer?.getPixelRatio() ?? s?.dpr, quality: s?.kind === 'iso' ? 'iso' : s?.quality.active };
 })()`);
 const a = await snap();
+if (process.env.MEASURE_MOVE) await c.evaluate(`(() => { const s = window.aisquad?.scene; if (!s?.controls) return; let k = 0; const step = () => { if (k++ > 1e5) return; s.controls.target.x += Math.sin(k / 30) * .01; s.camera.position.x += Math.sin(k / 30) * .01; requestAnimationFrame(step); }; requestAnimationFrame(step); })()`);
 await sleep(span * 1000);
 const b = await snap();
 const d = (k) => b[k] - a[k];
