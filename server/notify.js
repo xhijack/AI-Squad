@@ -117,7 +117,7 @@ export function inQuiet(q, now = Date.now()) {
 const isCritical = (item) => !!item.hardStop?.length || !!item.autopilot?.critical || (['question', 'permission', 'reply'].includes(item.kind) && autopilot.classify(item.text, { level: 'full' }).reasons.some((r) => r !== 'unclear'));
 const reasonsOf = (item) => [...new Set([...(item.hardStop || []), ...(item.autopilot?.reasons || []), ...autopilot.classify(item.text, { level: 'full' }).reasons])].filter((r) => r !== 'unclear');
 const short = (s, n) => { const t = redact(String(s || '').replace(/\s+/g, ' ').trim()); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal' };
+const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal', canary: 'Canary' };
 
 // a person may see this item: Owner-only Spaces only for the Owner
 const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOnly && !access.ownerFloors().has(item.floorId)));

@@ -46,6 +46,9 @@ import * as hb from './handoff.js';
 import * as erp from './erpnext.js';
 import * as legal from './legal.js';
 import * as tiering from './tiering.js';
+import * as trust from './trust.js';
+import * as insightLib from './insight.js';
+import * as history from './history.js';
 import { execFileSync, execFile } from 'node:child_process';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
@@ -768,7 +771,7 @@ Object.assign(legal.deps, {
 
 // what only the Owner decides, on the Owner's desk: packages leaving an Owner-only Space, questions about ERPNext
 // work, price approvals (a hard stop: money) and ERPNext alerts. Hidden from everyone else (ownerOnly).
-const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal']);
+const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary']);
 function ownerDesk(states) {
   const where = (floorId, agentId) => {
     const s = states.find((x) => x.entry.id === floorId);
@@ -793,6 +796,9 @@ function ownerDesk(states) {
   // contracts (0.20): READY FOR REVIEW is a card for the version it shows; the guard's alerts
   for (const c of legal.reviewItems()) out.push({ ...where(c.floorId, ''), id: attId('contract', c.key, c.hash), kind: 'contract', ownerOnly: true, answerable: true, hardStop: ['legal'],
     contractKey: c.key, contractHash: c.hash, file: c.rel, text: c.text, ts: Date.now(), options: [{ n: 1, label: 'Approve the contract' }, { n: 2, label: 'Request changes…', free: true }] });
+  // a canary of Daily Insight finished its week (0.21): keep it or roll it back
+  for (const it of insightLib.loadInbox().items.filter((x) => x.status === 'canary-done')) out.push({ ...where(it.change?.floorId, it.change?.agentId), id: attId('canary', it.id), kind: 'canary', ownerOnly: true, answerable: true,
+    suggestionId: it.id, text: trust.canaryText(it), ts: it.canaryUntil, options: [{ n: 1, label: 'Keep it' }, { n: 2, label: 'Roll it back' }] });
   for (const a of legal.alerts()) out.push({ ...where(a.floorId, ''), id: attId('legal', a.id), kind: 'legal', ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
   return out;
 }
@@ -803,6 +809,10 @@ async function answerOwnerDesk(item, option, text = '') {
   let r;
   if (item.kind === 'erpnext') r = erp.dismissAlert(item.alertId);
   else if (item.kind === 'legal') r = legal.dismissAlert(item.alertId);
+  else if (item.kind === 'canary') {
+    if (!n) throw bad('Keep it or roll it back');
+    r = trust.decideCanary(item.suggestionId, n === 1, { by, rollback: history.rollback });
+  }
   else if (item.kind === 'contract') {
     if (n === 1) r = legal.approve(item.contractKey, item.contractHash, { by });
     else if (note) r = await legal.requestChanges(item.contractKey, note, { by });
