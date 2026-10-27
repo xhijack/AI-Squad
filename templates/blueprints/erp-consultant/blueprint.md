@@ -1,7 +1,7 @@
 ---
 id: erp-consultant
 title: ERP Consultant
-version: 1
+version: 2
 category: erp
 description: An ERPNext implementation team for a client: requirements, fit-gap, configuration, custom development for the real gaps, data migration, UAT and training, with the owner approving scope and every customisation.
 keywords: [erp, erpnext, frappe, implementation, implementasi, konsultan, consultant, accounting, akuntansi, inventory, stock, gudang, manufacturing, manufaktur, pos, hr, payroll, gaji, purchasing, pembelian, penjualan, sales order, migration, migrasi data, uat, training, pelatihan, go-live]
@@ -18,6 +18,10 @@ sourceDocs:
   - { path: docs/FIT-GAP.md, title: Fit-gap, purpose: "Each requirement as Fit, Configure, Gap or Process change, with effort and risk", owner: erp-functional-consultant, readers: all }
   - { path: docs/DATA-MIGRATION.md, title: Data migration plan, purpose: "Masters and opening balances to migrate, templates, order, cut-off date, who checks them", owner: erp-functional-consultant, readers: all }
   - { path: docs/UAT-PLAN.md, title: UAT plan, purpose: "Test scripts per process and role, from the acceptance criteria; sign-off rules", owner: erp-functional-consultant, readers: all }
+kpis:
+  - { id: requirements-covered, name: Requirements with a fit-gap row, unit: "%", direction: up, period: total, source: { kind: manual } }
+  - { id: uat-pass, name: UAT scripts passed, unit: "%", direction: up, period: total, source: { kind: manual } }
+  - { id: open-gaps, name: Gaps waiting for approval, unit: gaps, direction: down, period: total, source: { kind: manual } }
 gates: [source documents approved, owner approval of every gap before development, tests green, UAT pass before go-live]
 ownerOnly: [scope, price, go-live date, customisation of accounting or stock ledgers]
 kickoff: "Start as the lead of this implementation. Read AISQUAD.md first. Then ask me for the client's business requirements (or an interview with me about their processes) and draft docs/BRD.md for my approval. Then the fit-gap: no development starts before the BRD and the fit-gap are approved, and every gap needs my approval."

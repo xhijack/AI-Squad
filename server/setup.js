@@ -28,7 +28,7 @@ export async function createSquad(input) {
   const r = await floors.createFloor({
     name, goal: input.goal, tagline: input.tagline || `${bp.title} squad`, directory: { mode, path: target }, team: team.map((m) => ({ displayName: m.displayName || m.template, template: m.template, lead: !!m.lead })),
     workflow: bp.workflow, layout: floors.LAYOUTS.includes(bp.layout) ? bp.layout : 'rows', budget: input.budget, blueprint: { id: bp.id, version: bp.version },
-    git: { qualityGate: String(input.qualityGate || '') }, installSkills: input.installSkills !== false, autopilot: input.autopilot,
+    git: { qualityGate: String(input.qualityGate || '') }, installSkills: input.installSkills !== false, autopilot: input.autopilot, kpis: bp.kpis,
     ...bp.space,                                       // cleaned by the Space rules (server/space.js)
   });
   if (bp.space.access === 'owner') company.ensure(company.companyDir(building.loadBuilding().prefs));   // the locked templates it works from

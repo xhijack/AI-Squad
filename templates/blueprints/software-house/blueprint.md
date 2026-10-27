@@ -1,7 +1,7 @@
 ---
 id: software-house
 title: Software House
-version: 4
+version: 5
 category: software
 description: A software team that builds and ships an application from a PRD, a tech spec and a design, in QA-gated sprints.
 keywords: [software, app, application, website, web, mobile, saas, platform, pos, "point of sale", erp, crm system, api, backend, frontend, dashboard, portal, marketplace, ecommerce, "e-commerce", shop, store, booking, system, develop, build, code, startup, mvp]
@@ -20,6 +20,10 @@ sourceDocs:
   - { path: docs/TECH.md, title: Tech Spec, purpose: "How: architecture, stack, data model, APIs, conventions", owner: project-manager, readers: all }
   - { path: docs/DESIGN.md, title: Design Document, purpose: "Screens, design system, mockups (docs/design/) and which parts are fixed", owner: ui-ux-designer, readers: all }
   - { path: docs/ENVIRONMENTS.md, title: Environments, purpose: "Development / staging / production: URLs, services, how to deploy, env var names only", owner: devops-engineer, readers: all }
+kpis:
+  - { id: stories-done, name: Story points done, unit: SP, direction: up, period: week, source: { kind: manual } }
+  - { id: open-bugs, name: Open bugs (high and critical), unit: bugs, direction: down, period: total, source: { kind: manual } }
+  - { id: uptime, name: Production uptime, unit: "%", direction: up, period: month, source: { kind: manual } }
 gates: [source documents approved, plan review before each sprint, tests green, QA pass per module, design review, final QA smoke test]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then run the source document intake: ask me for the PRD, the Tech Spec and the Design Document (and what you need for docs/ENVIRONMENTS.md). For anything missing, interview me and draft it in docs/ for my approval. No sprint starts until PRD, Tech Spec and Design are approved. Ask me every decision and approval with AskUserQuestion (one question per decision, with options), and keep your plain-text summaries short."
 ---

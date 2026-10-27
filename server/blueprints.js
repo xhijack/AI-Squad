@@ -33,6 +33,8 @@ export function parseBlueprint(text, fallbackId = '') {
     // Autopilot (balanced): topics only the owner decides, besides the hard-stop list
     ownerOnly: list(data.ownerOnly).map(String).filter(Boolean),
     // the Space a squad of this Blueprint becomes (0.20): kind, access, shift (Legal: Owner only; Marketing: nights)
+    // starting targets (1.1): the Owner sets their values in Admin → Targets
+    kpis: Array.isArray(data.kpis) ? data.kpis.filter((k) => k && k.name) : [],
     space: (({ kind, access, shift }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
   };
 }
