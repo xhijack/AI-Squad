@@ -45,9 +45,16 @@ const toolLine = (b) => {
   const what = i.file_path || i.path || i.pattern || i.command || i.url || i.description || '';
   return `${b.name}${what ? ` ${oneLine(String(what), 80)}` : ''}`;
 };
-// the events of one run, in order -> { sessionId, model, events: [{ kind: text | tool, detail }], text, result, rateLimits }
+// a denied tool call (1.0.1): in "dontAsk" mode Claude Code refuses what the settings do not allow without asking.
+// -> { id, tool, command } (command: the Bash command, the file or the URL it wanted)
+const DENIED = /Permission to use \S+ has been denied|has been denied because Claude Code is running in don't ask mode/i;
+const denialOf = (id, name, input = {}) => ({ id: id || '', tool: name || 'tool', command: oneLine(String(input.command || input.file_path || input.path || input.url || input.pattern || ''), 300) });
+const resultText = (c) => (Array.isArray(c) ? c.map((x) => x.text || '').join(' ') : String(c || ''));
+// the events of one run, in order -> { sessionId, model, events: [{ kind: text | tool, detail }], text, result, rateLimits,
+// denials: [{ id, tool, command }] }
 export function parseStream(text) {
-  const out = { sessionId: '', model: '', events: [], text: '', result: null, rateLimits: null };
+  const out = { sessionId: '', model: '', events: [], text: '', result: null, rateLimits: null, denials: [] };
+  const calls = new Map(), denied = new Map();
   for (const line of String(text || '').split('\n')) {
     if (!line.trim()) continue;
     let e; try { e = JSON.parse(line); } catch { continue; }
@@ -59,15 +66,24 @@ export function parseStream(text) {
     if (e.type === 'assistant') {
       for (const b of e.message?.content || []) {
         if (b.type === 'text' && b.text?.trim()) { out.events.push({ kind: 'text', detail: oneLine(b.text, 200) }); out.text = b.text; }
-        else if (b.type === 'tool_use') out.events.push({ kind: 'tool', detail: toolLine(b) });
+        else if (b.type === 'tool_use') { out.events.push({ kind: 'tool', detail: toolLine(b) }); calls.set(b.id, b); }
+      }
+    }
+    if (e.type === 'user') {
+      for (const b of Array.isArray(e.message?.content) ? e.message.content : []) {
+        if (b.type !== 'tool_result' || !b.is_error || !DENIED.test(resultText(b.content))) continue;
+        const call = calls.get(b.tool_use_id);
+        denied.set(b.tool_use_id, denialOf(b.tool_use_id, call?.name || resultText(b.content).match(/use (\S+) has/)?.[1], call?.input));
       }
     }
     if (e.type === 'result') {
       out.result = { subtype: e.subtype || '', isError: !!e.is_error, text: String(e.result ?? ''), cost: +(e.total_cost_usd || 0), usage: e.usage || null,
         turns: e.num_turns || 0, durationMs: e.duration_ms || 0 };
       if (e.session_id) out.sessionId = e.session_id;
+      for (const d of e.permission_denials || []) denied.set(d.tool_use_id || `d${denied.size}`, denialOf(d.tool_use_id, d.tool_name, d.tool_input));
     }
   }
+  out.denials = [...denied.values()].slice(0, 20);
   if (out.events.length > 200) out.events = out.events.slice(-200);
   return out;
 }
@@ -104,6 +120,7 @@ export function applyReport(id, r = {}, now = Date.now()) {
   if (job.status === 'running' && ['done', 'failed', 'stopped'].includes(r.status)) {
     ended = true;
     Object.assign(job, { status: r.status, endedAt: now, activity: '', cost: +r.cost || 0, turns: +r.turns || 0, result: clip(String(r.result || ''), 20000), error: oneLine(String(r.error || ''), 300), branch: r.branch || '' });
+    if (s.denials.length) job.denials = s.denials;
   }
   saveJob(job);
   return { job, ended };
@@ -161,6 +178,7 @@ export function refreshJob(job, now = Date.now()) {
     job.endedAt = now;
     const r = s.result;
     if (r) { job.cost = r.cost; job.turns = r.turns; job.usage = r.usage; job.result = clip(r.text, 20000); job.subtype = r.subtype; }
+    if (s.denials.length) job.denials = s.denials;
     const code = exit === '' ? null : Number(exit);
     if (r && !r.isError && (code === 0 || code === null)) job.status = 'done';
     else {
