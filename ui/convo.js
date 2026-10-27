@@ -11,7 +11,7 @@ import { t } from './i18n.js';
 
 let C = null;            // { list, i, portrait, dlg }
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources'), price: t('Price approval'), handoff: t('Handoff'), erpnext: 'ERPNext' };
+const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources'), price: t('Price approval'), handoff: t('Handoff'), erpnext: 'ERPNext', contract: t('Contract'), legal: t('Legal') };
 
 function agentOf(item) {
   const f = ctx.state.building?.floors.find((x) => x.id === item.floorId);

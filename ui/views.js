@@ -5,7 +5,7 @@
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
 
-const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext' };
+const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
 const SYSTEM_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'crash', 'scope']);
 
@@ -72,7 +72,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
       body = `<div class="row wrap">${a.options.map((o) => `<button class="small ${o.n === 1 ? 'gold' : 'ghost'}" data-act="crash-answer" data-id="${a.id}" data-n="${o.n}">${o.n === 1 ? tt('Resume') : tt('Start fresh')}</button>`).join('')}
         <button class="small ghost" data-act="dismiss" data-id="${a.id}">${tt('Dismiss')}</button></div>${a.resumable ? `<div class="note" style="margin-top:6px">${tt('Resume continues the last session with its context. Start fresh begins a new session.')}</div>` : ''}`;
     } else if (a.answerable && a.options?.length) {
-      const lab = (o) => esc(['price', 'handoff'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
+      const lab = (o) => esc(['price', 'handoff', 'contract'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
       body = `<div class="opts">${a.options.map((o) => o.free
         ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${lab(o)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
         : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${lab(o)}</button>`).join('')}</div>`;
@@ -84,7 +84,7 @@ export function attentionHtml(items, { showFloor = true, onDesk = false } = {}) 
     const links = [];
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">${tt('Open desk')}</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">${tt('Open Floor')}</a>`);
-    if (a.kind === 'stall' || a.kind === 'merge' || a.kind === 'erpnext' || (a.kind === 'handoff' && a.mode === 'question')) links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${a.kind === 'erpnext' ? tt('OK') : tt('Dismiss')}</button>`);
+    if (a.kind === 'stall' || a.kind === 'merge' || a.kind === 'erpnext' || a.kind === 'legal' || (a.kind === 'handoff' && a.mode === 'question')) links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${['erpnext', 'legal'].includes(a.kind) ? tt('OK') : tt('Dismiss')}</button>`);
     body = apNote(a) + body;
     // a click on the message opens it large (the conversation view)
     const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="${tt('Open large')}" aria-label="${tt('Message from {name}, open large', { name: esc(a.agentName || tt('the agent')) })}">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="${tt('Open large')}">${esc(a.kind === 'taskdone' && a.task ? taskDoneText(a.task) : SYSTEM_KINDS.has(a.kind) ? tx(a.text) : a.text)}</div>`;

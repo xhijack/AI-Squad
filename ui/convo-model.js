@@ -27,7 +27,7 @@ const isRecommended = (item, o) => /\(recommended\)/i.test(o.label) || item.auto
 // -> { mode: 'options' | 'reply' | 'view', options, canReply, dismiss, act }
 // act: the action the existing Attention handlers use for an option (answer, crash-answer)
 export function actionsFor(item) {
-  const own = ['price', 'handoff'].includes(item.kind);                     // the server wrote these labels: translated
+  const own = ['price', 'handoff', 'contract'].includes(item.kind);                     // the server wrote these labels: translated
   const options = (item.options || []).map((o) => ({ ...o, recommended: !o.free && isRecommended(item, o), label: own ? tx(o.label) : String(o.label).replace(/\s*\(recommended\)\s*/i, ' ').trim() }));
   if (item.kind === 'reply' || item.kind === 'finished') return { mode: 'reply', options: [], canReply: item.canReply !== false, dismiss: item.kind === 'finished' ? 'OK' : 'Dismiss' };
   if (item.kind === 'crash') return { mode: 'options', options, canReply: false, dismiss: 'Dismiss', act: 'crash-answer' };
