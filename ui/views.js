@@ -128,6 +128,7 @@ export function lobbySections(b) {
       ${p.hasFloorConfig ? `<button class="small" data-act="adopt" data-i="${i}">${tt('Register')}</button>` : `<button class="small" data-act="from-detected" data-i="${i}">${tt('Create Floor')}</button>`}</div>`).join('');
   const out = [
     { id: 'floors', title: tt('Floors'), card: 'main', count: b.floors.length, html: `
+      ${document.body.dataset.role === 'owner' ? `<button class="setupBtn" data-act="guide"><svg><use href="#i-spark"/></svg><span><b>${b.guide?.done ? tt('Set up the company again') : tt('Set up the company')}</b><small>${tt('A few questions about your business; a squad per division with targets and what each needs from you')}</small></span></button>` : ''}
       <button class="setupBtn" data-act="setup-squad"><svg><use href="#i-spark"/></svg><span><b>${tt('Set up Squad')}</b><small>${tt('Describe what you want to build; get a team and how it works together')}</small></span></button>
       ${b.autopilotToday ? `<p class="note apDigest">${tt('Decided by autopilot today: <b>{n}</b>', { n: b.autopilotToday })} <span class="note">${tt("(see each Floor's Squad Log)")}</span></p>` : ''}
       <div class="list">${floors.map(floorRow).join('') || `<div class="empty">${tt('No Floors yet.')}</div>`}</div>
