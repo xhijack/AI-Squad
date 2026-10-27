@@ -18,6 +18,7 @@ import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as tasksLib from './tasks.js';
+import * as askLib from './askdialog.js';
 import * as reposLib from './repos.js';
 import { redact } from './redact.js';
 import * as blueprintsLib from './blueprints.js';
@@ -192,6 +193,8 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking && !squad.gate.passed ? 'docs' : 'sprint') : null;
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
+    // several questions or multi-select: the structure comes from the tool input, the screen says where we are
+    if (dialog && st?.ask?.questions?.length && askLib.parseAsk(screen)) dialog.ask = { questions: st.ask.questions };
     if (dialog && st?.ask?.questions?.length) {
       // the screen often cuts long questions; the transcript has the full text
       dialog.question = st.ask.questions.map((q) => (q.header ? `[${q.header}] ` : '') + q.question).join('\n\n');
@@ -321,9 +324,9 @@ function floorAttention(entry, floor, lives, cost) {
         agentId: l.agent.id, agentName: l.agent.displayName, text: taskDoneText(tk), task: tk, options: [], answerable: true, calm: true, canReply: false, ts: tk.endedAt });
     }
     if (l.dialog) {
-      out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
+      out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) && !l.dialog.ask ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
-        text: l.dialog.question, options: l.dialog.options, answerable: true, ts: l.lastTs || Date.now() });
+        text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, ts: l.lastTs || Date.now() });
     } else if (l.hook?.state === 'waiting' && l.hook.permission && (l.hook.permission.tool || !(l.status?.ask && l.state === 'waiting'))) {
       const pm = l.hook.permission;
       out.push({ id: attId(entry.id, l.agent.id, 'hook', pm.ts), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
@@ -383,12 +386,16 @@ function autopilotItems(entry, floor, out) {
   const ownerOnly = blueprintsLib.floorBlueprint(entry.path, floor.blueprint)?.ownerOnly || [];
   for (const a of out) {
     if (!ASKING.has(a.kind)) continue;
-    const c = autopilot.classify([a.text, ...(a.options || []).filter((o) => !o.free).map((o) => o.label)].join('\n'), { level: floor.autopilot, ownerOnly });
-    const rec = a.kind === 'question' && a.answerable ? autopilot.recommendedOption(a.options) : null;
-    const auto = !c.critical && (a.kind === 'reply' || !!rec);                 // permission prompts are never answered
+    const labels = a.questions ? a.questions.flatMap((q) => [q.question, ...q.options.map((o) => o.label)]) : (a.options || []).filter((o) => !o.free).map((o) => o.label);
+    const c = autopilot.classify([a.text, ...labels].join('\n'), { level: floor.autopilot, ownerOnly });
+    // several questions: answered only when every one has a recommended option (and nothing is critical)
+    const recAll = a.questions && a.answerable && a.questions.every((q) => q.options.some((o) => o.recommended))
+      ? a.questions.map((q) => ({ choices: q.multiSelect ? q.options.filter((o) => o.recommended).map((o) => o.n) : [q.options.find((o) => o.recommended).n] })) : null;
+    const rec = a.kind === 'question' && a.answerable && !a.questions ? autopilot.recommendedOption(a.options) : null;
+    const auto = !c.critical && (a.kind === 'reply' || !!rec || !!recAll);     // permission prompts are never answered
     if (!apSeen.has(a.id)) apSeen.set(a.id, now);
     const since = Math.min(a.ts || now, apSeen.get(a.id));
-    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
+    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, ...(recAll ? { recommendedAnswers: recAll } : {}), auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
   }
   const day = Date.now() - 864e5;
   for (const d of loadRuntime().autopilot.decided) {
@@ -1139,6 +1146,7 @@ function openTasks(root, floor) {
 }
 // the dialog is still the same one: choose the recommended option, keep a muted item so the owner can change it
 async function autoAnswer(f, a) {
+  if (a.questions) return autoAnswerAsk(f, a);
   const name = tm.sessionName(f.id, a.agentId);
   const dialog = tm.parsePrompt(tm.capture(name));
   const rec = dialog && autopilot.recommendedOption(dialog.options);
@@ -1152,6 +1160,21 @@ async function autoAnswer(f, a) {
   saveRuntime(rt);
   logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec2.question.slice(0, 300), option: rec2.option, critical: false, waitedMs: rec2.waitedMs } });
   return { floorId: f.id, agentId: a.agentId, kind: 'answered', option: rec2.option };
+}
+// several questions, every one with a recommended option: the recommended answers, then a muted record
+async function autoAnswerAsk(f, a) {
+  const name = tm.sessionName(f.id, a.agentId);
+  if (!askLib.parseAsk(tm.capture(name))) return { floorId: f.id, agentId: a.agentId, kind: 'gone' };
+  const answers = a.autopilot.recommendedAnswers;
+  const r = await askLib.answerAll(a.questions.map((q) => ({ ...q, options: q.options.map((o) => o.label) })), answers, tm.askIO(name));
+  if (!r.ok) throw new Error(r.error);
+  const option = a.questions.map((q, i) => `${q.header || q.question}: ${answers[i].choices.map((n) => autopilot.cleanLabel(q.options[n - 1].label)).join(', ')}`).join(' · ');
+  const rt = loadRuntime();
+  const rec = { id: crypto.randomBytes(5).toString('hex'), floorId: f.id, agentId: a.agentId, agentName: a.agentName, question: a.text.slice(0, 1000), option, optionLabel: option, options: [], ts: Date.now(), by: 'server', waitedMs: Date.now() - (a.ts || Date.now()) };
+  rt.autopilot.decided = [...rt.autopilot.decided, rec].slice(-300);
+  saveRuntime(rt);
+  logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec.question.slice(0, 300), option, critical: false, waitedMs: rec.waitedMs, questions: a.questions.length } });
+  return { floorId: f.id, agentId: a.agentId, kind: 'answered', option };
 }
 async function nudgeReply(f, a, timeout) {
   const rt = loadRuntime();
@@ -1282,7 +1305,19 @@ async function answerGone({ floorId, agentId, kind }, option, text) {
   throw new HttpError(409, 'Already answered');
 }
 
-export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '' } = {}) {
+// a dialog with several questions or multi-select: one answer per question ({ choices: [option numbers], text })
+async function answerAsk(item, answers) {
+  const io = item.independent ? tm.askIO('', { target: item.target, socket: config.scanTmuxSocket }) : tm.askIO(tm.sessionName(item.floorId, item.agentId));
+  const r = await askLib.answerAll(item.questions.map((q) => ({ ...q, options: q.options.map((o) => o.label) })), answers.map((a) => ({ choices: (a.choices || []).map(Number).filter(Boolean), text: String(a.text || '') })), io);
+  if (!r.ok) throw bad(r.error);
+  if (item.independent) ind.resetCache();
+  invalidate();
+  return { ok: true };
+}
+// the tool input of a question dialog for the UI: per question its options, multiSelect, the recommended one
+export const askQuestions = (qs = []) => qs.map((q) => ({ header: q.header || '', question: q.question || '', multiSelect: !!q.multiSelect,
+  options: (q.options || []).map((label, i) => ({ n: i + 1, label, recommended: /\(recommended\)/i.test(label) })) }));
+export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '', answers = null } = {}) {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) return answerGone({ floorId, agentId, kind }, option, text);
@@ -1329,6 +1364,7 @@ export async function answerAttention(id, option, text = '', { force = false, fl
   }
   if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
+  if (item.questions && Array.isArray(answers)) return answerAsk(item, answers);
   if (item.independent) {
     const dialog = tm.parsePrompt(tm.capturePane(item.target, config.scanTmuxSocket));
     if (!dialog) throw new HttpError(409, 'Already answered');
@@ -1538,6 +1574,7 @@ function independentLives({ events = false } = {}) {
     const working = a.live && ((a.tmux && tm.isBusy(screen)) || (!a.tmux && st?.turnOpen && now - st.lastTs < tx.ACTIVE_MS));
     const state = !a.live ? 'stopped' : dialog || asking ? 'waiting' : working ? 'working' : 'idle';
     if (dialog && st?.ask?.questions?.length) dialog.question = st.ask.questions.map((q) => q.question).join('\n\n');
+    if (dialog && st?.ask?.questions?.length && askLib.parseAsk(screen)) dialog.ask = { questions: st.ask.questions };
     return { a, st, screen, dialog, state };
   });
 }
@@ -1560,7 +1597,7 @@ function independentState(b) {
   for (const l of lives) {
     const base = { floorId: ind.FLOOR_ID, floorNumber: building.INDEPENDENT_FLOOR, floorName: INDEPENDENT_NAME, agentId: l.a.id, agentName: ind.displayNameOf(l.a), independent: true };
     if (l.dialog) attention.push({ ...base, id: attId('ind', l.a.key, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
-      text: l.dialog.question, options: l.dialog.options, answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
+      text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
     else if (l.state === 'waiting' && l.st?.ask) attention.push({ ...base, id: attId('ind', l.a.key, l.st.ask.id), kind: 'question', text: l.st.ask.questions.map((q) => q.question).join('\n\n'),
       options: (l.st.ask.questions[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.st.ask.ts });
     else if (l.state === 'idle' && l.st) {

@@ -110,7 +110,7 @@ export function transcriptStatus(file, root = '', { events = false } = {}) {
       for (const c of content) {
         if (c.type === 'tool_use') {
           [kind, activity] = describeTool(c.name, c.input, root);
-          if (c.name === 'AskUserQuestion') ask = { id: c.id, ts, questions: (c.input?.questions || []).map((q) => ({ header: q.header || '', question: q.question || '', options: (q.options || []).map((o) => o.label) })) };
+          if (c.name === 'AskUserQuestion') ask = { id: c.id, ts, questions: (c.input?.questions || []).map((q) => ({ header: q.header || '', question: q.question || '', options: (q.options || []).map((o) => o.label), multiSelect: !!q.multiSelect })) };
           if (c.name === 'SendMessage') { const m = c.input?.summary ?? c.input?.message; messages.push({ ts, to: String(c.input?.to || ''), text: oneLine(typeof m === 'string' ? m : JSON.stringify(m), 160) }); }
           if (events) evs.push({ ts, kind, title: activity, tool: c.name, detail: toolDetail(c.name, c.input, root) });
           const pk = peekOf(c, root, ts, kind);

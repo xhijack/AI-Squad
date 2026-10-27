@@ -40,7 +40,7 @@ export function socketOf(name) {
   return s.length <= room ? s : `${s.slice(0, room - 9)}-${crypto.createHash('sha1').update(s).digest('hex').slice(0, 8)}`;
 }
 const shared = new Set();                       // sessions found on the shared server (older versions)
-const socketFor = (name) => (shared.has(name) ? config.tmuxSocket : socketOf(name));
+export const socketFor = (name) => (shared.has(name) ? config.tmuxSocket : socketOf(name));
 const hasSession = (name, socket) => tmux(['has-session', '-t', `=${name}`], socket) !== null;
 
 export function isRunning(name) {
@@ -273,6 +273,11 @@ export async function typeTask(name, text, { settleMs = 600, verifyMs = 1500 } =
   return { ok: false, error: 'Task text is still in the input box' };
 }
 
+// a multi-question / multi-select AskUserQuestion dialog (server/askdialog.js): keys and screen of one pane
+export function askIO(name, { target = `=${name}:`, socket = socketFor(name) } = {}) {
+  return { send: async (keys) => { for (const c of askCalls(keys)) tmux(['send-keys', '-t', target, ...c], socket); },
+    capture: async () => (target === `=${name}:` && name ? capture(name) : capturePane(target, socket)), sleep };
+}
 // choose option n of the open dialog (arrow keys + Enter); free-text options get the typed text.
 // opts.target / opts.socket address a pane outside our own sessions (independent agents).
 export function answerDialog(name, dialog, n, text = '', { target = `=${name}:`, socket = socketFor(name) } = {}) {
