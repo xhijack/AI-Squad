@@ -42,6 +42,17 @@ test('serves the UI and refuses path traversal', async () => {
   assert.equal((await fetch(base + '/..%2fpackage.json')).status, 404);
 });
 
+test('the Building language is on the page for the first paint (1.2.0)', async () => {
+  let html = await (await fetch(`${base}/`)).text();
+  assert.match(html, /<html lang="en" data-theme/);
+  assert.equal((await call('PATCH', '/api/building', { lang: 'id' })).status, 200);
+  html = await (await fetch(`${base}/`)).text();
+  assert.match(html, /<html lang="id" data-lang="id"/);
+  assert.equal((await call('PATCH', '/api/building', { lang: 'xx' }, false)).status, 401);
+  await call('PATCH', '/api/building', { lang: 'en' });
+  assert.match(await (await fetch(`${base}/`)).text(), /<html lang="en" data-lang="en"/);
+});
+
 test('create a Floor through the wizard API and read it back', async () => {
   const r = await call('POST', '/api/floors', { name: 'Acme', goal: 'Coffee shop', directory: { mode: 'new', path: proj },
     team: [{ displayName: 'Rina - PM', template: 'project-manager', lead: true }, { displayName: 'Budi - Dev', template: 'fullstack-developer' }] });

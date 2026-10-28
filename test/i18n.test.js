@@ -50,3 +50,13 @@ test('t fills placeholders; tx matches server text by pattern', async () => {
   i18n.setTable({});
   assert.equal(i18n.tx('Idle'), 'Idle', 'English: no table, as it is');
 });
+
+test('language on the first paint: this browser, then the Building, then the browser language (1.2.0)', async () => {
+  const { pickLang } = await import('../ui/i18n.js');
+  assert.equal(pickLang({}), 'en');
+  assert.equal(pickLang({ browser: ['id-ID', 'en-US'] }), 'id');
+  assert.equal(pickLang({ browser: ['en-GB', 'id'] }), 'en');
+  assert.equal(pickLang({ building: 'id', browser: ['en-US'] }), 'id');
+  assert.equal(pickLang({ stored: 'en', building: 'id' }), 'en');
+  assert.equal(pickLang({ stored: 'xx', building: 'zz', browser: ['de-DE', 'id-ID'] }), 'id');
+});

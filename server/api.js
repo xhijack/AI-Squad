@@ -80,6 +80,14 @@ function serveStatic(res, pathname) {
     res.end(fs.readFileSync(file));
     return true;
   }
+  // the page carries the Building's language, so the first paint is already in it (ui/i18n.js)
+  if (rel === 'index.html') {
+    const lang = building.loadBuilding().prefs.lang;
+    const html = fs.readFileSync(file, 'utf8');
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+    res.end(['en', 'id'].includes(lang) ? html.replace('<html lang="en"', `<html lang="${lang}" data-lang="${lang}"`) : html);
+    return true;
+  }
   // the file as it is (send() would JSON-encode a .json file's Buffer)
   res.writeHead(200, { 'content-type': `${TYPES[path.extname(file)] || 'application/octet-stream'}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
   res.end(fs.readFileSync(file));
@@ -96,6 +104,7 @@ const routes = [
   ['GET', /^\/api\/meter$/, () => meter.detail()],
   ['PATCH', /^\/api\/building$/, (p, b) => {
     if (b.name !== undefined) building.setBuildingName(b.name);
+    if (b.lang !== undefined) building.setPrefs({ lang: ['en', 'id'].includes(b.lang) ? b.lang : 'en' });      // the Building's UI language (1.2.0)
     // agents running at once on the whole machine; nightly backups
     if (b.maxAgents !== undefined) building.setPrefs({ maxAgents: Math.max(1, Math.min(40, parseInt(b.maxAgents, 10) || 6)) });
     if (b.backup !== undefined) building.setPrefs({ backup: backup.cleanSettings({ ...building.loadBuilding().prefs.backup, ...b.backup }) });

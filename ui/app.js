@@ -740,7 +740,7 @@ function showRenderer() { $('rendererName').textContent = `${RENDERER_TEXT[scene
 showRenderer();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 applyTheme();
-$('menu').addEventListener('click', (e) => {
+$('menu').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-menu]'); if (!b) return;
   closePopovers();
   if (b.dataset.menu === 'theme') {
@@ -749,7 +749,10 @@ $('menu').addEventListener('click', (e) => {
     try { localStorage.setItem('aisquad.theme', next); } catch { /* private mode */ }
     applyTheme(); toast(tt('Theme: {name}', { name: THEMES[next] }));
   } else if (b.dataset.menu === 'voice') { ctx.actions['voice-settings']();
-  } else if (b.dataset.menu === 'language') { setLang(LANG === 'en' ? 'id' : 'en');                 // reloads in the other language
+  } else if (b.dataset.menu === 'language') {                   // this browser, and with the PIN the Building's too (1.2.0)
+    const next = LANG === 'en' ? 'id' : 'en';
+    if (hasPin()) await api('PATCH', '/api/building', { lang: next }).catch(() => {});
+    setLang(next);                                               // reloads in the other language
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
     scene.quality.set(next); showQuality(); toast(tt('Graphics: {name}', { name: QUALITY_TEXT[next] }));
