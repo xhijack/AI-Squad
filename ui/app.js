@@ -134,7 +134,7 @@ function getTaskForm() {
   f.className = 'taskBox';
   f.innerHTML = `<textarea name="text" placeholder="${tt('Describe the task. The agent gets it as a message in its Claude Code session.')}" aria-label="${tt('Task')}" required></textarea>
     <div class="files" data-files></div>
-    <div class="row" style="margin-top:var(--sp-2)"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="chip" style="cursor:pointer">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>
+    <div class="row" style="margin-top:var(--sp-2)"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="btn small ghost" tabindex="0" role="button">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>
     <details class="bgOpts"><summary>${tt('Run in the background')}</summary>
       <label class="inline"><input type="checkbox" name="bg"> ${tt('As a background job: no terminal, ends by itself, every step in the Squad Log')}</label>
       <div class="row"><label class="inline" style="margin:0">${tt('Budget (USD)')} <input name="budget" type="number" min="0.1" max="50" step="0.5" value="2" style="width:80px"></label>
@@ -201,7 +201,8 @@ function tabsHtml(list, active, group) {
 
 // set innerHTML only when it changed, never under the owner's typing or a click (ui/patch.js); keep scroll positions and slots
 const patcher = makePatcher({
-  fillSlots: (el) => el.querySelectorAll('[data-slot="task"]').forEach((s) => s.appendChild(getTaskForm())),
+  // the kept task form; Send task is filled (primary) only while it is the Desk's next useful action
+  fillSlots: (el) => el.querySelectorAll('[data-slot="task"]').forEach((s) => { const f = getTaskForm(); f.querySelector('[type=submit]').classList.toggle('gold', s.dataset.primary === '1'); s.appendChild(f); }),
   before: (el) => {
     const scrolls = {};
     el.querySelectorAll('[data-scroll]').forEach((s) => { scrolls[s.dataset.scroll] = { top: s.scrollTop, bottom: s.scrollHeight - s.scrollTop - s.clientHeight < 24 }; });

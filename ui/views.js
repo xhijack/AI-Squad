@@ -5,6 +5,7 @@
 import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
 import { isAsk, askFormHtml } from './askform.js';
+import { primaryAction, deskActionsHtml } from './desk-actions.js';
 
 const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
@@ -92,7 +93,7 @@ function cardsHtml(items, { showFloor = true, onDesk = false } = {}) {
       const lab = (o) => esc(['price', 'handoff', 'contract', 'canary'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
       body = `<div class="opts">${a.options.map((o) => o.free
         ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${lab(o)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
-        : `<button data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${lab(o)}</button>`).join('')}</div>`;
+        : `<button class="${o.recommended || a.autopilot?.recommended === o.n ? 'gold' : ''}" data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${lab(o)}</button>`).join('')}</div>`;
     } else if (a.kind === 'permission' && a.live) {
       body = `<div class="note">${a.agentId ? tt("Reported live by Claude Code. Answer it on the Desk (Screen tab) or in the agent's terminal.") : tt('Reported live by Claude Code.')}</div>`;
     } else if (a.kind === 'question') {
@@ -280,16 +281,16 @@ function skillsHtml(d) {
 }
 function independentDeskSections(floor, d, routeScreen) {
   const dialog = (floor.attentionItems || []).filter((a) => a.agentId === d.id && (d.dialog || a.kind === 'reply' || a.kind === 'finished'));
-  const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:var(--fs-xl)">${esc(d.displayName)}</h2>
-      <div class="note">${esc(d.title)}${d.models?.observed ? ` · ${tt('last reply from {model}', { model: esc(d.models.observed) })}` : ''}</div>
-      <div class="note"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:var(--sp-2)"><button class="gold" data-act="adopt-agent" data-agent="${d.id}">${tt('Adopt into a squad')}</button>
-      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? tt('Leave screen') : tt('Look at screen')}</a></div></div>`;
+  const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis">${esc(d.displayName)}</h2>
+      <div class="deskSub">${esc(d.title)}${d.models?.observed ? modelChip(d.models.observed, tt('Last reply from this model')) : ''}</div>
+      <div class="deskState"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div></div>
+      <div class="deskActions"><button class="gold" data-act="adopt-agent" data-agent="${d.id}">${tt('Adopt into a squad')}</button>
+      <a class="btn ghost" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? tt('Leave screen') : tt('Look at screen')}</a></div>`;
   const overview = `${head}
     ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
     <dl class="kv" style="margin-top:var(--sp-3)"><dt>${tt('Directory')}</dt><dd><code>${esc(d.root)}</code></dd><dt>${tt('Runs in')}</dt><dd>${esc(d.via)}${d.pid ? ` <span class="note">pid ${d.pid}</span>` : ''}</dd><dt>${tt('Cost today')}</dt><dd>${money(d.costToday)}</dd></dl>
     <p class="note">${tt('An independent agent: The AI Squad shows its status, screen, transcript and questions, but does not start, stop or give it tasks. Adopt it to make it a member of a squad.')}</p>
-    ${d.attach ? `<div class="section note">${tt('Terminal:')} <code>${esc(d.attach)}</code> <button class="small ghost" data-act="copy" data-text="${esc(d.attach)}">${tt('Copy')}</button></div>` : ''}`;
+    ${d.attach ? advancedHtml(d.attach) : ''}`;
   const screen = d.screen ? `<pre class="screen" data-scroll="screen">${esc(d.screen)}</pre>` : `<div class="empty">${d.running ? tt('This agent does not run in tmux, so its screen cannot be shown. Its transcript is in the Transcript tab.') : tt('No Claude Code process is running for this agent.')}</div>`;
   const events = d.events.length ? `<ul class="feed events">${d.events.map((ev) => `<li><span class="k ${ev.kind}"></span><div class="grow"><div><b>${esc(tx(ev.title))}</b>${ev.tool ? ` <span class="note">${esc(ev.tool)}</span>` : ''}</div><div class="d ${ev.kind === 'think' || ev.kind === 'task' ? '' : 'mono'}">${esc(ev.detail)}</div><div class="t">${ago(ev.ts)}</div></div></li>`).join('')}</ul>` : `<div class="empty">${tt('No transcript yet.')}</div>`;
   return [
@@ -299,13 +300,11 @@ function independentDeskSections(floor, d, routeScreen) {
   ];
 }
 
-// stopped: Resume is the main action after a crash; otherwise Start, with Resume of the last session beside it
-function startButtons(d) { return startButtonsOnly(d) + `<button class="ghost" data-act="chat" data-agent="${d.id}" title="${tt('Talk to this agent directly')}">${tt('Chat')}</button>`; }
-function startButtonsOnly(d) {
-  if (d.running) return `<button class="ghost" data-act="stop" data-agent="${d.id}">${tt('Stop')}</button>`;
-  if (d.crash && !d.crash.withLead && d.resume) return `<button class="gold" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session')}">${tt('Resume')}</button><button class="ghost small" data-act="start" data-agent="${d.id}" title="${tt('A new session without the earlier context')}">${tt('Start fresh')}</button>`;
-  return `<button class="ok" data-act="start" data-agent="${d.id}">${tt('Start')}</button>${d.resume ? `<button class="ghost small" data-act="resume" data-agent="${d.id}" title="${tt('Continue the last session ({id})', { id: esc(d.resume.sessionId.slice(0, 8)) })}">${tt('Resume last session')}</button>` : ''}`;
-}
+// a model name as one chip: never broken mid-token
+const modelChip = (model, title, warn = false) => `<span class="chip model${warn ? ' warn' : ''}" title="${esc(title)}">${esc(model)}</span>`;
+// owner-facing first: the tmux attach command sits in a collapsed Advanced section
+const advancedHtml = (attach) => `<details class="section advanced"><summary>${tt('Advanced')}</summary><div class="note">${tt('Terminal:')}</div>
+  <div class="row"><code class="grow attach">${esc(attach)}</code><button class="small" data-act="copy" data-text="${esc(attach)}">${tt('Copy')}</button></div></details>`;
 
 // background jobs (headless runner, 0.11): status, title, cost; Stop while it runs, Open for what it did
 const JOB_TEXT = { running: tt('Running'), done: tt('Done'), failed: tt('Failed'), stopped: tt('Stopped') };
@@ -334,26 +333,26 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
       ${d.running ? `<button class="small" data-act="restart" data-agent="${d.id}">${tt('Restart with {model}', { model: esc(mr.configured) })}</button>` : `<div class="note">${tt('The next start uses the configured model.')}</div>`}</div>`
     : mr.restartNeeded ? `<div class="att stall" style="margin-top:var(--sp-3)"><div class="where">${tt('Restart to apply')}</div><div class="q">${tt('This session started with {old}; the agent is now configured for {model} ({effort} effort).', { old: esc(mr.startedWith), model: esc(mr.configured), effort: esc(e.effort) })}</div>
       <button class="small" data-act="restart" data-agent="${d.id}">${tt('Restart')}</button></div>` : '';
-  const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis" style="font-size:var(--fs-xl)">${esc(d.displayName)}</h2>
-      <div class="note">${esc(e.title || '')} · ${tt('model {model}', { model: esc(mr.configured || '?') })}${mr.observed ? ` · ${tt('last reply from {model}', { model: `<span class="${mr.mismatch ? 'warnText' : ''}">${esc(mr.observed)}</span>` })}` : ''}</div>
-      <div class="note"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div>
-      <div class="row" style="flex-direction:column;align-items:stretch;gap:var(--sp-2)">${startButtons(d)}
-      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? tt('Leave screen') : tt('Look at screen')}</a>
-      <a class="chip" style="justify-content:center" href="#/floor/${floor.id}/desk/${d.id}/follow" title="${tt('A camera that follows this agent around')}">${tt('Follow')}</a></div></div>`;
+  const primary = primaryAction(d, dialog);
+  const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis">${esc(d.displayName)}</h2>
+      <div class="deskSub">${esc(e.title || '')}${modelChip(mr.configured || '?', tt('Configured model'))}${mr.observed && mr.observed !== mr.configured ? modelChip(mr.observed, tt('Last reply from this model'), mr.mismatch) : ''}</div>
+      <div class="deskState"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div></div>
+      ${deskActionsHtml(d, primary, { floorId: floor.id, screen: routeScreen })}`;
   const crashed = d.crash && !d.crash.withLead;
   const crash = crashed ? `<div class="att crash" style="margin-top:var(--sp-3)"><div class="where">${tt('Stopped unexpectedly')}</div><div class="q">${esc(tx(d.crash.text))}</div>
       <div class="note">${d.resume ? (d.lead || d.kindOf === 'lead' ? tt('Resume continues session <code>{id}</code> with its context; the lead is told its teammates died and re-spawns only what is still needed. Start fresh begins a new session.', { id: esc(d.resume.sessionId.slice(0, 8)) }) : tt('Resume continues session <code>{id}</code> with its context. Start fresh begins a new session.', { id: esc(d.resume.sessionId.slice(0, 8)) })) : tt('No previous session was found; start it fresh.')}</div>
 ${d.resume ? '' : `<div class="row" style="margin-top:var(--sp-2)"><button class="small" data-act="start" data-agent="${d.id}">${tt('Start fresh')}</button></div>`}</div>`
     : d.crash?.withLead ? `<div class="att stall" style="margin-top:var(--sp-3)"><div class="where">${tt('Stopped with the lead')}</div><div class="q">${esc(tx(d.stopNote || d.crash.text))}</div><div class="note">${tt("This teammate ran inside the lead's session. Resume the lead; it re-spawns the teammates whose work is still open.")}</div></div>` : '';
-  const update = ts.updateAvailable ? `<div class="att stall" style="margin-top:var(--sp-3)"><div class="where">${tt('Update available')}</div><div class="q">${tt('{title} template v{from} → v{to}', { title: esc(e.title), from: d.agent.role.version, to: ts.latestVersion })}</div>
-      <div class="row wrap"><button class="small" data-act="tpl-diff" data-agent="${d.id}">${tt('View diff')}</button><button class="small gold" data-act="tpl-update" data-agent="${d.id}">${tt('Update')}</button><button class="small" data-act="tpl-keep" data-agent="${d.id}">${tt('Keep current')}</button></div></div>` : '';
+  // a template update is a compact notice, never the panel's primary action
+  const update = ts.updateAvailable ? `<div class="notice"><span class="grow">${tt('Template update: v{from} → v{to}', { from: d.agent.role.version, to: ts.latestVersion })}</span>
+      <button class="small ghost" data-act="tpl-diff" data-agent="${d.id}">${tt('View diff')}</button><button class="small" data-act="tpl-update" data-agent="${d.id}">${tt('Update')}</button><button class="small ghost" data-act="tpl-keep" data-agent="${d.id}">${tt('Keep current')}</button></div>` : '';
   const overview = `${head}${crash}${d.task ? taskHtml(d.task) : ''}${servicesHtml(d.floorId, d.id, d.services)}${modelWarn}${update}
     ${dialog.length ? `<div class="section">${attentionHtml(dialog, { showFloor: false, onDesk: true })}</div>` : ''}
-    <div class="section"><div class="sectionHead"><h3 class="grow">${tt('Send task')}</h3></div><div data-slot="task"></div>
+    <div class="section"><div class="sectionHead"><h3 class="grow">${tt('Send task')}</h3></div><div data-slot="task" data-primary="${primary === 'send' ? 1 : 0}"></div>
       ${d.pending ? `<div class="note">${tt('Queued: {text}', { text: esc(d.pending.slice(0, 120)) })}</div>` : ''}
       ${d.work ? `<div class="note" style="margin-top:var(--sp-2)">${d.work.doneAt ? tt('Current work (done {ago}):', { ago: ago(d.work.doneAt) }) : tt('Current work (since {ago}):', { ago: ago(d.work.assignedAt) })} ${esc(d.work.text.slice(0, 160))} <button class="small ghost" data-act="work-done" data-agent="${d.id}">${tt('Clear')}</button></div>` : ''}</div>
     ${jobsHtml(d)}
-    <div class="section note">${tt('Terminal:')} <code>${esc(d.attach)}</code> <button class="small ghost" data-act="copy" data-text="${esc(d.attach)}">${tt('Copy')}</button></div>`;
+    ${advancedHtml(d.attach)}`;
   const screen = d.running ? `<pre class="screen" data-scroll="screen">${esc(d.screen) || ' '}</pre>` : `<div class="empty">${d.resume ? tt('The agent is stopped. Resume or start it to see its live screen.') : tt('The agent is stopped. Start it to see its live screen.')}</div>`;
   const events = d.events.length ? `<ul class="feed events">${d.events.map((ev) => `<li><span class="k ${ev.kind}"></span><div class="grow"><div><b>${esc(tx(ev.title))}</b>${ev.tool ? ` <span class="note">${esc(ev.tool)}</span>` : ''}</div><div class="d ${ev.kind === 'think' || ev.kind === 'task' ? '' : 'mono'}">${esc(ev.detail)}</div><div class="t">${ago(ev.ts)}</div></div></li>`).join('')}</ul>` : `<div class="empty">${tt('No transcript yet.')}</div>`;
   const pills = (list, cls = '') => list.map((s) => `<span class="pill ${cls}">${esc(s)}</span>`).join('');

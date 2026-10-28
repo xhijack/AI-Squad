@@ -16,16 +16,19 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 
 /* controls */
 button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); min-height: 36px; font-weight: 600; }
-button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-muted); }
+/* one button system (1.2.0): primary = filled (.gold), secondary = outlined (default), tertiary = ghost;
+   40 px high on desktop, 44 px on touch (--control-h); .small for dense rows. .btn is a link that looks like one. */
+button, .btn { cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-4); min-height: var(--control-h); font-weight: 600; font-size: var(--fs-md); line-height: 1.2;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); text-decoration: none; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard); }
+button:hover:not(:disabled), .btn:hover { border-color: var(--text-muted); background: var(--surface-muted); }
 button:disabled { opacity: .5; cursor: default; }
-button.gold { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
-button.gold:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
-button.ghost { background: transparent; border-color: transparent; }
-button.ghost:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
-button.danger { color: var(--danger); }
-button.ok { color: var(--success); }
-button.small { min-height: 30px; padding: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); }
+button.gold, .btn.gold { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
+button.gold:hover:not(:disabled), .btn.gold:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button.ghost, .btn.ghost { background: transparent; border-color: transparent; }
+button.ghost:hover:not(:disabled), .btn.ghost:hover { background: var(--hover); border-color: transparent; }
+button.danger { color: var(--danger-ink); }
+button.ok { color: var(--success-ink); }
+button.small, .btn.small { min-height: var(--control-h-sm); padding: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); }
 .iconBtn { width: 36px; height: 36px; min-height: 36px; padding: 0; display: inline-grid; place-items: center; border-radius: var(--r-md); border: 0; background: none; color: var(--text-muted); font-size: var(--fs-lg); }
 .iconBtn:hover { background: var(--hover); color: var(--text); }
 a.iconBtn { text-decoration: none; }
@@ -200,10 +203,21 @@ ul.feed.events b { color: var(--text); }
 .agent .meta { min-width: 0; flex: 1; }
 .agent .name { font-weight: 700; display: flex; gap: var(--sp-2); align-items: center; }
 .agent .act { color: var(--text-muted); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.deskHead { display: flex; gap: var(--sp-3); align-items: center; }
-.deskHead .avatar { width: 46px; height: 46px; font-size: var(--fs-lg); }
-.deskHead h2 { font-weight: 800; }
-.deskHead .note { overflow-wrap: anywhere; }
+.deskHead { display: flex; gap: var(--sp-3); align-items: flex-start; }
+.deskHead .avatar { width: 48px; height: 48px; font-size: var(--fs-lg); }
+.deskHead h2 { font-weight: 800; font-size: var(--fs-xl); line-height: 1.25; }
+.deskSub { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); align-items: center; color: var(--text-muted); font-size: var(--fs-sm); margin-top: var(--sp-1); }
+.deskState { color: var(--text); font-size: var(--fs-sm); margin-top: var(--sp-1); display: flex; gap: var(--sp-2); align-items: baseline; }
+.deskState .dot { flex: none; transform: translateY(-1px); }
+.chip.model { font-family: var(--mono); font-weight: 500; color: var(--text); background: var(--neutral-soft); padding: var(--sp-half) var(--sp-2); }
+.chip.model.warn { color: var(--warning-ink); background: var(--warning-soft); }
+.deskActions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-muted); font-size: var(--fs-sm); }
+details.advanced summary { min-height: var(--hit-min); display: flex; align-items: center; gap: var(--sp-1); list-style: none; }
+details.advanced summary::-webkit-details-marker { display: none; }
+details.advanced summary::before { content: '▸'; transition: transform var(--dur-fast) var(--ease-standard); }
+details.advanced[open] summary::before { transform: rotate(90deg); }
+details.advanced code.attach { word-break: break-all; font-size: var(--fs-xs); }
 .screen { background: var(--code); border-radius: var(--r-md); padding: var(--sp-3); white-space: pre; overflow: auto; max-height: 62vh; min-height: 160px; line-height: 1.3; color: var(--code-text); font-size: var(--fs-xs); margin: 0; }
 .kv { display: grid; grid-template-columns: 110px 1fr; gap: var(--sp-1) var(--sp-3); font-size: var(--fs-sm); }
 .kv dt { color: var(--text-muted); }
@@ -550,8 +564,6 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
   .convoOpts .big { flex: 1 1 100%; }
 }
 @media (prefers-reduced-motion: reduce) { #convo { animation: none; } }
-.convoBar a.btn { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); min-height: 36px; font-weight: 600; color: var(--text); }
-.convoBar a.btn:hover { background: var(--surface-muted); border-color: var(--border-strong); }
 
 /* Standup tab */
 .suAgent + .suAgent { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--border); }
