@@ -148,7 +148,9 @@ export function lobbySections(b) {
       ${p.hasFloorConfig ? `<button class="small" data-act="adopt" data-i="${i}">${tt('Register')}</button>` : `<button class="small" data-act="from-detected" data-i="${i}">${tt('Create Floor')}</button>`}</div>`).join('');
   const out = [
     { id: 'floors', title: tt('Floors'), card: 'main', count: b.floors.length, html: `
-      <button class="setupBtn" data-act="setup-squad"><svg><use href="#i-spark"/></svg><span><b>${tt('Set up Squad')}</b><small>${tt('Describe what you want to build; get a team and how it works together')}</small></span></button>
+      ${b.floors.some((f) => !f.independent && !f.missing)
+        ? `<button class="setupMini" data-act="setup-squad"><svg aria-hidden="true"><use href="#i-spark"/></svg>${tt('Set up another squad')}</button>`
+        : `<button class="setupBtn" data-act="setup-squad"><svg aria-hidden="true"><use href="#i-spark"/></svg><span><b>${tt('Set up Squad')}</b><small>${tt('Describe what you want to build; get a team and how it works together')}</small></span></button>`}
       ${b.autopilotToday ? `<p class="note apDigest">${tt('Decided by autopilot today: <b>{n}</b>', { n: b.autopilotToday })} <span class="note">${tt("(see each Floor's Squad Log)")}</span></p>` : ''}
       <div class="list">${floors.map(floorRow).join('') || `<div class="empty">${tt('No Floors yet.')}</div>`}</div>
       <div class="row" style="margin-top:var(--sp-2)"><span class="spacer"></span><button class="small ghost" data-act="new-floor" title="${tt('A Floor without a Blueprint, set up by hand')}">${tt('+ New Floor by hand')}</button></div>` },
@@ -156,8 +158,28 @@ export function lobbySections(b) {
       <p class="note" style="margin-top:0">${tt('Directories with Claude Code activity that are not Floors yet.')}</p>
       <div class="list">${detected || `<div class="empty">${tt('Nothing new detected.')}</div>`}</div>` },
   ];
+  out.push({ id: 'today', title: tt('Today'), icon: 'activity', card: 'tabs', html: todayHtml(b) });
   if (b.attention.length) out.unshift({ id: 'attention', title: tt('Needs you'), card: 'top', count: needsYou(b.attention).length || undefined, countClass: 'bad', html: attentionHtml(b.attention) });
   return out;
+}
+
+// the Lobby's "Needs you / Today": what waits for the owner, what it cost today, who is working (1.2.0)
+export function todaySummary(b) {
+  const asks = needsYou(b.attention).filter((a) => !a.notice);
+  const agents = b.floors.flatMap((f) => (f.agents || []).map((a) => ({ ...a, floorId: f.id, floorName: f.name, floorNumber: f.number })));
+  const working = agents.filter((a) => a.state === 'working' || a.state === 'waiting');
+  return { asks, cost: b.costToday || 0, running: agents.filter((a) => a.running).length, total: agents.length, working };
+}
+function todayHtml(b) {
+  const s = todaySummary(b);
+  const tile = (n, label, cls = '', attrs = '') => `<${attrs ? 'button' : 'div'} class="tile ${cls}" ${attrs}><b>${n}</b><span>${label}</span></${attrs ? 'button' : 'div'}>`;
+  const who = (a) => esc(String(a.agentName || a.displayName || '').split(' - ')[0]);
+  return `<div class="tiles">${tile(s.asks.length, s.asks.length === 1 ? tt('needs you') : tt('need you'), s.asks.length ? 'bad' : '', s.asks.length ? 'data-pop="attPop" aria-haspopup="true" aria-expanded="false"' : '')}
+      ${tile(money(s.cost), tt('cost today'))}${tile(`${s.running}<small>/${s.total}</small>`, tt('agents running'))}</div>
+    ${s.asks.length ? `<h4 class="todayHead">${tt('Needs you')}</h4><div class="list">${s.asks.slice(0, 3).map((a) => `<a class="frow" href="${a.floorId && a.agentId ? `#/floor/${a.floorId}/desk/${a.agentId}` : a.floorId ? `#/floor/${a.floorId}` : '#/'}"><span class="grow"><b>${who(a) || esc(KIND_TEXT[a.kind] || a.kind)}</b><span class="sub">${esc(KIND_TEXT[a.kind] || a.kind)}${a.floorName ? ` · ${esc(a.floorName)}` : ''} · ${ago(a.ts)}</span></span>${statusPill('waiting')}</a>`).join('')}</div>` : ''}
+    <h4 class="todayHead">${tt('Working now')}</h4>
+    ${s.working.length ? `<div class="list">${s.working.slice(0, 5).map((a) => `<a class="frow" href="#/floor/${a.floorId}/desk/${a.id}" title="${esc(a.activity || '')}"><span class="grow"><b>${who(a)}</b><span class="sub">${esc(activityLine(a).text)} · ${esc(a.floorName)}</span></span>${statusPill(a)}</a>`).join('')}</div>`
+      : `<div class="empty">${tt('Nobody is working right now.')}</div>`}`;
 }
 
 // ---------- Floor ----------

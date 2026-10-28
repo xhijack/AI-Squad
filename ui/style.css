@@ -162,6 +162,17 @@ button.hchip:hover:not(:disabled), a.hchip:hover { filter: brightness(.97); }
 .setupBtn { width: 100%; display: flex; gap: var(--sp-3); align-items: center; padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-3); border-radius: var(--r-md); text-align: left; background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .setupBtn:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .setupBtn svg { width: 22px; height: 22px; }
+.setupMini { width: 100%; justify-content: flex-start; margin-bottom: var(--sp-2); color: var(--accent-text); }
+.setupMini svg { width: 18px; height: 18px; }
+/* the Lobby's Today card (1.2.0) */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-2); }
+.tile { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-half); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); min-height: 0; font-weight: 500; text-align: left; justify-content: flex-start; }
+.tile b { font-size: var(--fs-xl); font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile b small { font-size: var(--fs-sm); color: var(--text-muted); font-weight: 600; }
+.tile span { font-size: var(--fs-xs); color: var(--text-muted); }
+.tile.bad { border-color: var(--danger); background: var(--danger-soft); }
+.tile.bad b, .tile.bad span { color: var(--danger-ink); }
+.todayHead { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin: var(--sp-4) 0 var(--sp-1); }
 .setupBtn b { display: block; font-size: var(--fs-lg); }
 .setupBtn small { display: block; font-weight: 500; opacity: .9; font-size: var(--fs-xs); }
 
