@@ -102,7 +102,7 @@ export function bindMore(body, again) {
         const r = await api('POST', '/api/nodes', { name: f.elements.name.value.trim() });
         await again(t('Machine added'));
         const box = document.querySelector('#nodeToken');
-        if (box) box.innerHTML = `<div class="pinShown"><b>${t('Run this on {name} (the token is shown only once):', { name: esc(r.node.name) })}</b><div class="mono" style="margin-top:6px;word-break:break-all">${esc(r.command)}</div></div>`;
+        if (box) box.innerHTML = `<div class="pinShown"><b>${t('Run this on {name} (the token is shown only once):', { name: esc(r.node.name) })}</b><div class="mono" style="margin-top:var(--sp-2);word-break:break-all">${esc(r.command)}</div></div>`;
       } catch (err) { toast(err.message, 5000); }
       return;
     }
@@ -121,7 +121,7 @@ export function bindMore(body, again) {
       if (el.dataset.tgclear !== undefined) { if (!confirm(t('Remove the bot token? Notifications stop.'))) return; await api('DELETE', '/api/notify/telegram/token'); return again(t('Token removed')); }
       if (el.dataset.pair !== undefined) {
         const p = await api('POST', '/api/notify/pair', {});
-        body.querySelector('#pairBox').innerHTML = `<div class="pinShown"><b>${t('Send this to {bot} in Telegram within 10 minutes:', { bot: p.bot ? `@${esc(p.bot)}` : t('your bot') })}</b><div class="mono" style="font-size:16px;margin-top:6px">/start ${esc(p.code)}</div></div>`;
+        body.querySelector('#pairBox').innerHTML = `<div class="pinShown"><b>${t('Send this to {bot} in Telegram within 10 minutes:', { bot: p.bot ? `@${esc(p.bot)}` : t('your bot') })}</b><div class="mono" style="font-size:var(--fs-lg);margin-top:var(--sp-2)">/start ${esc(p.code)}</div></div>`;
         return;
       }
       if (el.dataset.unpair) { await api('DELETE', `/api/notify/chats/${el.dataset.unpair}`); return again(t('Chat removed')); }

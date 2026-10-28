@@ -1,0 +1,85 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Design tokens (1.2.0): the only place for colours, type sizes, spacing, radius, elevation and motion.
+   style.css and inline styles use these names; scripts/contrast.js checks the text and border pairs.
+   Light is the default (warm beige office, brown accent); dark is an option (Menu → Theme). */
+:root {
+  /* type: one family, six sizes, nothing below 12 px */
+  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px; --fs-2xl: 24px;
+  /* spacing: a 4 px grid (--sp-half only for hairline offsets) */
+  --sp-half: 2px; --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-7: 28px; --sp-8: 32px; --sp-10: 40px;
+  /* radius */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-pill: 999px;
+  /* controls: primary / secondary / tertiary buttons; touch gets 44 px */
+  --control-h: 40px; --control-h-sm: 32px; --hit-min: 24px;
+  /* motion */
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.2, 0, 0, 1); --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --top: 56px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+
+  /* colour: light */
+  --bg: #efe9df; --scene: #efe9df;
+  --surface: #ffffff; --surface-muted: #f7f3ec; --surface-glass: rgba(255, 255, 255, .94); --hover: rgba(31, 41, 55, .05);
+  --border: rgba(31, 41, 55, .12); --border-strong: rgba(31, 41, 55, .24);
+  --text: #1f2937; --text-muted: #5b6170;
+  --accent: #9a6b1c; --accent-hover: #845a13; --accent-text: #85591a; --on-accent: #ffffff; --accent-soft: #fbf1dc;
+  --success: #16a34a; --success-ink: #15803d; --success-soft: #dcfce7;
+  --warning: #d97706; --warning-ink: #92400e; --warning-soft: #fef3c7; --warning-border: #c26a05;
+  --danger: #dc2626; --danger-hover: #b91c1c; --danger-ink: #b91c1c; --danger-soft: #fee2e2; --on-danger: #ffffff;
+  --info: #2563eb; --info-ink: #1d4ed8; --info-soft: #dbeafe;
+  --violet: #7c3aed; --violet-soft: #ede9fe;
+  --neutral: #6b7280; --neutral-ink: #4b5260; --neutral-soft: #eef0f3;
+  --crashed: #9f1239; --crashed-soft: #ffe4e6;
+  --chip: rgba(31, 41, 55, .06); --input: #ffffff; --code: #1e1f2b; --code-text: #d6dcf0;
+  --on-dark: #ffffff; --label-bg: rgba(255, 255, 255, .96); --label-text: #1f2937; --tip-bg: rgba(31, 41, 55, .92);
+  --diff-add: #86efac; --diff-add-bg: #12301f; --diff-del: #fca5a5; --diff-del-bg: #351820; --diff-same: #94a3b8; --room-shared: #2f3a4a;
+  /* name tags in the scene are light in both themes */
+  --tag-working: #16a34a; --tag-waiting: #dc2626; --tag-idle: #c26a05; --tag-stopped: #6b7280; --tag-crashed: #9f1239;
+  --focus: #1d4ed8; --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
+  --elev-1: 0 2px 8px rgba(60, 45, 20, .10); --elev-2: 0 10px 30px rgba(60, 45, 20, .12); --backdrop: rgba(31, 24, 12, .35);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1320; --scene: #141a2b;
+  --surface: #161b2b; --surface-muted: #11162a; --surface-glass: rgba(22, 27, 43, .94); --hover: rgba(255, 255, 255, .05);
+  --border: #2a3150; --border-strong: #4a5478;
+  --text: #e8ecf6; --text-muted: #a3adc6;
+  --accent: #f2b544; --accent-hover: #f6c460; --accent-text: #f2b544; --on-accent: #1b1607; --accent-soft: #3b2f12;
+  --success: #4fc38a; --success-ink: #4fc38a; --success-soft: #123024;
+  --warning: #f2b544; --warning-ink: #f2b544; --warning-soft: #3b2f12; --warning-border: #f2b544;
+  --danger: #ef5d6b; --danger-hover: #f37985; --danger-ink: #f58a95; --danger-soft: #3a1f2a; --on-danger: #1b0b0e;
+  --info: #6aa5ff; --info-ink: #6aa5ff; --info-soft: #182a4a;
+  --violet: #b388ff; --violet-soft: #2c2546;
+  --neutral: #8a94ae; --neutral-ink: #b4bdd3; --neutral-soft: #232a42;
+  --crashed: #fb7185; --crashed-soft: #3b1a24;
+  --chip: #232a42; --input: #11162a; --code: #0a0d17; --code-text: #d6dcf0;
+  --on-dark: #ffffff; --label-bg: rgba(255, 255, 255, .96); --label-text: #1f2937; --tip-bg: rgba(10, 13, 23, .94);
+  --focus: #8ab8ff;
+  --elev-1: 0 2px 8px rgba(0, 0, 0, .35); --elev-2: 0 12px 40px rgba(0, 0, 0, .45); --backdrop: rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] {
+  --bg: #0f1320; --scene: #141a2b;
+  --surface: #161b2b; --surface-muted: #11162a; --surface-glass: rgba(22, 27, 43, .94); --hover: rgba(255, 255, 255, .05);
+  --border: #2a3150; --border-strong: #4a5478;
+  --text: #e8ecf6; --text-muted: #a3adc6;
+  --accent: #f2b544; --accent-hover: #f6c460; --accent-text: #f2b544; --on-accent: #1b1607; --accent-soft: #3b2f12;
+  --success: #4fc38a; --success-ink: #4fc38a; --success-soft: #123024;
+  --warning: #f2b544; --warning-ink: #f2b544; --warning-soft: #3b2f12; --warning-border: #f2b544;
+  --danger: #ef5d6b; --danger-hover: #f37985; --danger-ink: #f58a95; --danger-soft: #3a1f2a; --on-danger: #1b0b0e;
+  --info: #6aa5ff; --info-ink: #6aa5ff; --info-soft: #182a4a;
+  --violet: #b388ff; --violet-soft: #2c2546;
+  --neutral: #8a94ae; --neutral-ink: #b4bdd3; --neutral-soft: #232a42;
+  --crashed: #fb7185; --crashed-soft: #3b1a24;
+  --chip: #232a42; --input: #11162a; --code: #0a0d17; --code-text: #d6dcf0;
+  --on-dark: #ffffff; --label-bg: rgba(255, 255, 255, .96); --label-text: #1f2937; --tip-bg: rgba(10, 13, 23, .94);
+  --focus: #8ab8ff;
+  --elev-1: 0 2px 8px rgba(0, 0, 0, .35); --elev-2: 0 12px 40px rgba(0, 0, 0, .45); --backdrop: rgba(0, 0, 0, .55);
+  color-scheme: dark;
+} }
+/* touch: 44 px controls */
+@media (pointer: coarse) { :root { --control-h: 44px; --control-h-sm: 36px; --hit-min: 44px; } }
+/* reduced motion: no easing, no pulses (the 3D camera reads the same media query) */
+@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; } }

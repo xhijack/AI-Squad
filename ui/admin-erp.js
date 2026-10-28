@@ -23,7 +23,7 @@ export function handoffsHtml(x) {
     <div class="kpis"><div><span>${t('Handoffs')}</span><b>${m.total}</b></div><div><span>${t('Done')}</span><b>${m.done}</b></div>
       <div><span>${t('Done without questions')}</span><b>${m.withoutClarification == null ? '–' : `${m.withoutClarification} %`}</b></div>
       <div><span>${t('Open')}</span><b>${m.open.delivered + m.open.clarify}</b></div><div><span>${t('Waits for you')}</span><b>${m.open.held + m.open.approval}</b></div></div>
-    <div class="row" style="margin-top:10px"><span class="spacer"></span><button class="small" data-hscan>${t('Check the outboxes now')}</button></div>
+    <div class="row" style="margin-top:var(--sp-3)"><span class="spacer"></span><button class="small" data-hscan>${t('Check the outboxes now')}</button></div>
     ${x.handoffs.length ? `<div class="adminList">${x.handoffs.map((h) => `<div class="adminRow"><div class="row"><span class="badge ${tone(h.status)}">${esc(STATUS[h.status] || h.status)}</span><b class="grow">${esc(h.title)}</b><span class="note">${ago(h.createdAt)}</span></div>
       <div class="note">${where(h.from)}${h.from.agentId ? ` (${esc(h.from.agentId)})` : ''} → ${h.to ? where(h.to) : '–'}${h.to?.agentId ? ` (${esc(h.to.agentId)})` : ''} · ${esc(KIND[h.kind] || h.kind)}${h.erpnext ? ` · <span class="mono">${esc(h.erpnext)}</span>` : ''}${h.rounds ? ` · ${t('{n} rounds of questions', { n: h.rounds })}` : ''} · <span class="mono">${esc(h.id)}</span></div>
       ${h.excerpt ? `<div class="note">${esc(h.excerpt)}</div>` : ''}</div>`).join('')}</div>` : `<div class="empty">${t('No handoffs yet.')}</div>`}`;
@@ -39,7 +39,7 @@ export function erpnextHtml(x, d) {
       <div class="grid4">
         <label style="grid-column: span 2">${t('ERPNext site')}<input name="url" placeholder="https://office.sopwer.id" value="${esc(s.url)}"></label>
         <label>${t('Check every (minutes)')}<input name="pollMin" type="number" min="1" max="60" value="${s.pollMin}"></label>
-        <label class="row" style="flex-direction:row;align-items:center;margin-top:18px"><input type="checkbox" name="enabled" ${s.enabled ? 'checked' : ''}> ${t('Watch the pipeline')}</label>
+        <label class="row" style="flex-direction:row;align-items:center;margin-top:var(--sp-5)"><input type="checkbox" name="enabled" ${s.enabled ? 'checked' : ''}> ${t('Watch the pipeline')}</label>
         <label>${t('New Leads go to')}<select name="salesFloor">${spaceOpts(s.sales.floorId)}</select></label>
         <label>${t('Agent')}<select name="salesAgent">${agentOpts(s.sales.floorId, s.sales.agentId)}</select></label>
         <label>${t('Orders go to')}<select name="deliveryFloor">${spaceOpts(s.delivery.floorId)}</select></label>

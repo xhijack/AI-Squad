@@ -13,7 +13,7 @@ function docHtml(d) {
   return `<details class="srcDoc ${d.status}" ${pending ? 'open' : ''} data-path="${esc(d.path)}">
     <summary><span class="grow"><b>${esc(d.title)}</b> <code>${esc(d.path)}</code></span><span class="chip ${STATE[d.status][0]}">${STATE[d.status][1]}</span></summary>
     <div class="note">${esc(d.purpose)}${d.owner ? ` · ${tt('written by <code>{owner}</code>', { owner: esc(d.owner) })}` : ''}</div>
-    <div class="row wrap" style="margin-top:8px">
+    <div class="row wrap" style="margin-top:var(--sp-2)">
       <button type="button" class="small" data-doc="view" ${missing ? `disabled title="${tt('Not written yet')}"` : ''}>${tt('View')}</button>
       ${pending ? `<button type="button" class="small gold" data-doc="approve" ${missing ? `disabled title="${tt('Not written yet')}"` : ''}>${tt('Approve')}</button>` : ''}
       <button type="button" class="small ghost" data-doc="changes">${tt('Request changes')}</button></div>
