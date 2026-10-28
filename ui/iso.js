@@ -13,6 +13,7 @@ import { lookFor, agentStatus, floorLabelHtml, STATION_SCALE } from './scene.js'
 import { t as tt } from './i18n.js';
 import { Office } from './office.js';
 import { TAG_HTML, setTagState, applySpread } from './tags.js';
+import { easeStep } from './motion.js';
 
 const SLAB = .36;
 const STATE_RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
@@ -139,7 +140,7 @@ export class IsoScene {
   tick(dt, t) {
     this.walking = false; this.animating = false;
     if (this.camGoal) {
-      const k = Math.min(1, dt * 6);
+      const k = easeStep(dt * 6);                                   // reduced motion: straight to the goal
       for (const p of ['x', 'y', 'zoom']) this.cam[p] += (this.camGoal[p] - this.cam[p]) * k;
       if (Math.abs(this.camGoal.zoom - this.cam.zoom) < .002 && Math.hypot(this.camGoal.x - this.cam.x, this.camGoal.y - this.cam.y) < .01) { Object.assign(this.cam, this.camGoal); this.camGoal = null; }
     }

@@ -21,6 +21,7 @@ import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realDeskProps
 import { t as tt, tx } from './i18n.js';
 import { Office3D } from './office3d.js';
 import { TAG_HTML, setTagState, applySpread } from './tags.js';
+import { easeMs, reducedMotion } from './motion.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -512,7 +513,7 @@ export class BuildingScene {
     this.container = container;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     // fixed isometric angle: drag pans, the wheel zooms (smoothly)
-    Object.assign(this.controls, { enableDamping: true, dampingFactor: .12, enableRotate: false, screenSpacePanning: true, minZoom: .04, maxZoom: 9, zoomSpeed: .8 });
+    Object.assign(this.controls, { enableDamping: !reducedMotion(), dampingFactor: .12, enableRotate: false, screenSpacePanning: true, minZoom: .04, maxZoom: 9, zoomSpeed: .8 });
     this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 
@@ -905,7 +906,7 @@ export class BuildingScene {
     this.camera.lookAt(p.target);
     this.camAnim = null;
   }
-  flyTo(p, ms = 900) { this.camAnim = { start: performance.now(), ms, fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), fromZ: this.camera.zoom, ...p }; }
+  flyTo(p, ms = 900) { this.camAnim = { start: performance.now(), ms: Math.max(1, easeMs(ms)), fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), fromZ: this.camera.zoom, ...p }; }
 
   resize() {
     this.dirty = true;

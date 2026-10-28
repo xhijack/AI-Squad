@@ -12,6 +12,7 @@
 import { officeLayout } from './scene-model.js';
 import { officePlan, officeNav, wallsOf, trips, lodFor, roomDiff, roomAtPoint, deskStand, doorPoints, LOW_WALL, GLASS_TOP, WALL_T } from './office-plan.js';
 import { t as tt } from './i18n.js';
+import { easeMs } from './motion.js';
 
 const FILL = { department: '#efe2c6', project: '#e3e9f0', server: '#d8dde4', lobby: '#f1e7d6', meeting: '#e6ebdf', pantry: '#f3e8da', owner: '#e9e1ef' };
 const RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
@@ -139,7 +140,7 @@ export class Office3D {
   dispose3(root) {
     root.traverse((x) => { if (x.userData.kit) return; x.geometry?.dispose?.(); if (x.material && !x.material.userData?.shared) [].concat(x.material).forEach((m) => m.dispose?.()); });
   }
-  animate(g, from, to, done) { g.scale.y = from || .001; this.anims.push({ g, from, to, start: performance.now(), ms: 450, done }); }
+  animate(g, from, to, done) { g.scale.y = from || .001; this.anims.push({ g, from, to, start: performance.now(), ms: Math.max(1, easeMs(450)), done }); }
 
   // ---------- agents (far: instances; near: full stations of one room) ----------
   placeAgents() {

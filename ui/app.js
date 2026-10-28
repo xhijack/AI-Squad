@@ -142,6 +142,8 @@ function getTaskForm() {
       <label class="inline"><input type="checkbox" name="bg"> ${tt('As a background job: no terminal, ends by itself, every step in the Squad Log')}</label>
       <div class="row"><label class="inline" style="margin:0">${tt('Budget (USD)')} <input name="budget" type="number" min="0.1" max="50" step="0.5" value="2" style="width:80px"></label>
       <label class="inline" style="margin:0"><input type="checkbox" name="edits"> ${tt('May edit files')}</label></div></details>`;
+  // the attach button is a label around the file input: Enter and Space open the picker too
+  f.querySelector('.btn[role=button]').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); f.querySelector('[data-file]').click(); } });
   f.querySelector('[data-file]').addEventListener('change', async (e) => {
     for (const file of e.target.files) {
       try {
@@ -505,9 +507,12 @@ const attPopHtml = (list) => `<div class="cardHead"><h3>${tt('Needs you')}</h3><
 
 // ---------- popovers (menu, Floor menu, attention, legend) ----------
 const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop', 'morePop'];
-function closePopovers() {
+let popAnchor = null;
+function closePopovers(refocus = false) {
   for (const id of POPS) $(id).hidden = true;
   document.querySelectorAll('[data-pop]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
+  if (refocus && popAnchor?.isConnected) popAnchor.focus();     // Escape: back to the button that opened it
+  popAnchor = null;
 }
 function openPopover(id, anchor) {
   const was = !$(id).hidden;
@@ -521,6 +526,8 @@ function openPopover(id, anchor) {
   if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');
+  popAnchor = anchor;
+  if (id === 'morePop') el.querySelector('button')?.focus();
   // under hud buttons, above dock buttons, kept on screen
   const below = r.top < innerHeight / 2, w = el.offsetWidth;
   Object.assign(el.style, { left: `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - (below ? 24 : w / 2)))}px`, top: below ? `${r.bottom + 8}px` : 'auto', bottom: below ? 'auto' : `${innerHeight - r.top + 8}px`, right: 'auto' });
@@ -533,8 +540,9 @@ document.addEventListener('click', (e) => {
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable) return;   // typing: Escape is the field's
-  if (POPS.some((id) => !$(id).hidden)) return closePopovers();
+  if (POPS.some((id) => !$(id).hidden)) return closePopovers(true);
   if (ctx.editing) return;
+  if ($('sheet').classList.contains('tall')) { $('sheet').classList.remove('tall'); setTimeout(() => { render(); updateInsets(); }, 250); return; }   // a raised sheet goes down first
   if (state.route.eyes || state.route.follow) location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
   else if (state.route.mode === 'desk') location.hash = `#/floor/${state.route.floorId}`;
