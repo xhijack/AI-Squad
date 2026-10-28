@@ -20,6 +20,7 @@ import { mergeStatic } from './merge.js';
 import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realDeskProps, REAL_DEVICES } from './realistic-office.js';
 import { t as tt, tx } from './i18n.js';
 import { Office3D } from './office3d.js';
+import { TAG_HTML, setTagState, applySpread } from './tags.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -331,8 +332,8 @@ function buildStation(agent, desk, accent) {
   human.add(rig.root, contactShadow());                                        // a soft shadow on the floor under the character
   human.scale.setScalar(STATION_SCALE);
   const st = { id: agent.id, g, human, rig, screens, ringMat, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6, accent };
-  // name chip in the agent's colour above the head, its status under it, zzz when idle (as in squad-3d)
-  st.label = label('<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div><div class="r"></div>', 'nlabel', human, 0, 1.95, 0);
+  // name tag in the agent's colour above the head with its state as an icon dot (1.2.0: one tag, no separate chip)
+  st.label = label(`${TAG_HTML}<div class="r"></div>`, 'nlabel', human, 0, 1.95, 0);
   st.label.center.set(.5, 1);
   const color = (agent.appearance && agent.appearance.shirt) || '#3d82d6';
   Object.assign(st.label.element.querySelector('.n').style, { background: color, color: inkOn(color) });
@@ -403,15 +404,17 @@ function updateStation(st, a) {
   const el = st.label.element;
   const name = String(a.displayName || '').split(' - ')[0];
   taskProps(st, a.task && a.state === 'working' ? a.task : null);
-  const status = st.away || agentStatus(a);
-  const cls = `nlabel ${a.state || 'stopped'}${a.standby ? ' standby' : ''}${st.away ? ' away' : ''}`;
-  if (el.className !== cls) el.className = cls;
-  const n = el.querySelector('.n'), s = el.querySelector('.a');
+  const status = st.away || '';                                                  // the tag says the state; a line only while away
+  const k = setTagState(el, a);
+  const cls = `nlabel ${k}${st.away ? ' away' : ''}`;
+  const keep = ['faded', 'sel'].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join('');      // set by spreadLabels
+  if (el.className !== cls + keep) el.className = cls + keep;
+  const n = el.querySelector('.nm'), s = el.querySelector('.a');
   if (n.textContent !== name) n.textContent = name;
   if (s.textContent !== status) s.textContent = status;
   const rp = el.querySelector('.r'), repos = a.repos?.length ? `⎇ ${a.repos.join(' · ')}` : '';   // linked repositories it writes in
   if (rp.textContent !== repos) { rp.textContent = repos; rp.hidden = !repos; }
-  el.title = `${a.displayName}: ${st.away || a.activity || a.state}`;
+  el.title = `${a.displayName}: ${st.away || agentStatus(a)}`;
   st.ringMat.color.set(STATE_RING[a.state] || STATE_RING.stopped);
   st.label.visible = !!st.labelsOn;
 }
@@ -992,6 +995,19 @@ export class BuildingScene {
     return { x: p.x, z: p.z };
   }
 
+  // name tags that overlap on screen: nudged up, the farther one faded, the selected agent's on top (ui/tags.js)
+  spreadLabels() {
+    const entries = [], cam = this.camera.position, p = new THREE.Vector3(), sel = this.view.mode === 'desk' ? this.view.agentId : null;
+    for (const [fid, o] of this.floors) {
+      if (!o.g.visible || !o.stations) continue;
+      for (const st of o.stations.values()) {
+        if (!st.label.visible) continue;
+        st.human.getWorldPosition(p);
+        entries.push({ id: `${fid}/${st.id}`, el: st.label.element, depth: p.distanceTo(cam), selected: st.id === sel });
+      }
+    }
+    if (entries.length) applySpread(entries);
+  }
   // Edit Mode: the selection ring turns red while the piece would overlap something or block a desk
   warnSelection(on) { if (this.ring) this.ring.material.color.set(on ? '#dc2626' : '#b7852a'); }
   select(floorId, sel) {
@@ -1120,6 +1136,7 @@ export class BuildingScene {
     if (cp.p.distanceToSquared(cam.position) > 1e-6 || cp.t.distanceToSquared(this.controls.target) > 1e-6 || Math.abs(cp.z - cam.zoom) > 1e-4) draw = true;
     if (draw) { cp.p.copy(cam.position); cp.t.copy(this.controls.target); cp.z = cam.zoom; }
     this.labels.render(this.scene, this.camera);
+    if (draw || t - (this.spreadAt || 0) > .5) { this.spreadAt = t; this.spreadLabels(); }
     if (!draw) return;
     // the shadow map is redrawn only when something casting moved: walking (every 3rd frame), typing (twice a
     // second), a rebuilt or changed Floor, a new view
