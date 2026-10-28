@@ -107,13 +107,19 @@ b.ok { color: var(--success); }
 .hpill { display: inline-flex; align-items: center; gap: var(--sp-2); font-weight: 700; font-size: var(--fs-sm); border-radius: var(--r-pill); padding: 0 var(--sp-4); min-height: 40px; box-shadow: var(--elev-2); white-space: nowrap; }
 .hpill.alert { background: var(--danger); color: var(--on-danger); border: 0; animation: pulse 1.6s infinite; }
 .hpill.alert:hover:not(:disabled) { background: var(--danger-hover); }
-.hpill.warn { background: var(--warning-soft); color: var(--warning-ink); border: 1px solid var(--warning-border); }
-button.hpill.warn:hover:not(:disabled) { background: var(--surface); border-color: var(--warning-ink); }
-.hpill.wait { background: var(--surface); color: var(--danger); border: 1px solid var(--danger); }
-button.hpill.wait:hover:not(:disabled) { background: var(--danger); color: var(--on-danger); }
 .hpill svg { width: 16px; height: 16px; }
 a.hpill { text-decoration: none; }
-a.hpill.wait:hover { background: var(--danger); color: var(--on-danger); }
+/* status chips inside the header card (1.2.0): icon + text in the state colour, with their action beside them */
+.hstatus { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.hchip { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--control-h-sm); padding: 0 var(--sp-3); border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: 700; white-space: nowrap; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); text-decoration: none; max-width: 320px; }
+.hchip svg { width: 16px; height: 16px; }
+.hchip.warn { background: var(--warning-soft); color: var(--warning-ink); border-color: var(--warning-border); }
+.hchip.bad, .hchip.wait { background: var(--danger-soft); color: var(--danger-ink); border-color: var(--danger); }
+.hchip.ap { color: var(--text-muted); font-weight: 600; }
+.hchip.ap.balanced, .hchip.ap.full { color: var(--info-ink); border-color: var(--info); background: var(--info-soft); }
+.hchip.ap.crit { color: var(--danger-ink); border-color: var(--danger); background: var(--danger-soft); }
+button.hchip:hover:not(:disabled), a.hchip:hover { filter: brightness(.97); }
+#hud .bar .small { min-height: var(--control-h-sm); }
 
 /* right panel: floating cards */
 #side { position: fixed; top: 16px; right: 16px; bottom: 16px; width: 360px; z-index: 6; display: flex; flex-direction: column; gap: var(--sp-3); pointer-events: none; }
@@ -244,6 +250,15 @@ body:has(#side.wide:not([hidden])) #dock { left: calc((100% - 452px) / 2); }
 .dk .sdot.warn { background: var(--warning); } .dk .sdot.bad { background: var(--danger); animation: pulse 1.4s infinite; }
 .dk.bad { color: var(--danger); } .dk.warn { color: var(--warning-ink); }
 .dsep { width: 1px; height: 24px; background: var(--border); margin: 0 var(--sp-1); }
+/* labels: values (cost, meter) from 761 px, every label from 1024 px unless they do not fit beside the panel */
+.dk .lbl { display: none; white-space: nowrap; }
+.dk .lbl.val { display: inline; }
+@media (min-width: 1024px) { #dock:not(.compact) .dk .lbl { display: inline; } }
+.morePop { min-width: 260px; padding: var(--sp-1); }
+.moreList { display: flex; flex-direction: column; }
+.moreRow { width: 100%; justify-content: flex-start; gap: var(--sp-3); border: 0; background: none; text-align: left; padding: var(--sp-2) var(--sp-3); }
+.moreRow b { display: block; font-size: var(--fs-md); }
+.moreRow small { display: block; color: var(--text-muted); font-size: var(--fs-xs); font-weight: 500; }
 /* tooltips for the dock, the elevator and the hud icons */
 [data-tip]:hover::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); background: var(--text); color: var(--surface); font-size: var(--fs-xs); font-weight: 600; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-md); white-space: nowrap; pointer-events: none; box-shadow: var(--elev-1); z-index: 30; }
 #elevator [data-tip]:hover::after { bottom: auto; top: 50%; left: calc(100% + 10px); transform: translateY(-50%); }
@@ -429,13 +444,12 @@ body.immersive #hud, body.immersive #dock, body.immersive #elevator { display: n
   #hud { top: 10px; left: 10px; right: 10px; max-width: none; flex-wrap: nowrap; }
   #hud .bar { min-height: 42px; padding-left: var(--sp-2); min-width: 0; flex: 1; }
   #hud .brand { max-width: 46vw; }
-  #hud .meta, #hud .sprintBtn .meta, #hud .sep, .hpill.warn { display: none; }
-  #hud:has(.hpill.alert) .hpill.wait { display: none; }
-  .hpill.wait { min-width: 0; flex: 0 1 auto; }
+  #hud .meta, #hud .sprintBtn .meta, #hud .sep, #hud .hstatus { display: none; }
   .hpill { min-height: 38px; padding: 0 var(--sp-3); }
   #dock { left: 50% !important; padding: var(--sp-1); max-width: calc(100vw - 16px); overflow-x: auto; }
   .dk { min-width: 40px; height: 40px; min-height: 40px; padding: 0 var(--sp-2); }
-  .dk span { display: none; }
+  .dk .lbl, .dk .lbl.val { display: none; }
+  .morePop { left: var(--sp-2) !important; right: var(--sp-2) !important; width: auto; }
   .dk .sdot { left: 23px; }
   [data-tip]:hover::after { display: none; }
   .hideSm { display: none; }
@@ -480,10 +494,6 @@ body.immersive #hud, body.immersive #dock, body.immersive #elevator { display: n
 .srcDoc .docChanges textarea { width: 100%; }
 
 /* Autopilot: the level chip, notes on Attention items, decided items in a muted style */
-.hpill.ap { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border-strong); font-weight: 600; }
-.hpill.ap.balanced, .hpill.ap.full { color: var(--info); border-color: var(--info); }
-.hpill.ap.crit { color: var(--danger); border-color: var(--danger); }
-button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .att.decided { border-left-color: var(--border-strong); }
 .att.muted { background: var(--chip); }
 .att.muted .q { font-weight: 500; color: var(--text-muted); }
@@ -494,7 +504,8 @@ button.hpill.ap:hover:not(:disabled) { background: var(--chip); }
 .apDigest { margin: 0 0 var(--sp-2); }
 .apMini { font-size: var(--fs-xs); padding: var(--sp-half) var(--sp-2); margin-left: var(--sp-2); display: none; }
 .apMini.crit { color: var(--danger); }
-@media (max-width: 760px) { .hpill.ap { display: none; } .apMini { display: inline-flex; } }
+.phoneOnly { display: none !important; }
+@media (max-width: 760px) { .apMini { display: inline-flex; } .phoneOnly { display: inline-flex !important; } }
 
 /* "Finished": an agent's report, calm (it blocks nothing) */
 .att.finished { border-left-color: var(--info); }

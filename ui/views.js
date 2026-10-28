@@ -233,7 +233,9 @@ function standardHtml(bp) {
 // the Autopilot level also sits here (on a phone the top bar has no room for its chip)
 const AP_LEVEL = { off: tt('off'), balanced: tt('balanced'), full: tt('full') };
 const apMini = (f) => (f.autopilot && !f.independent ? `<button class="chip apMini ${f.autopilot.level}${f.autopilot.critical ? ' crit' : ''}" data-act="floor-settings" title="${tt('Autopilot level (Floor settings)')}">${tt('Autopilot: {level}', { level: AP_LEVEL[f.autopilot.level] || f.autopilot.level })}${f.autopilot.critical ? ` · ${tt('{n} critical', { n: f.autopilot.critical })}` : ''}</button>` : '');
-const agentsHead = (f, extra = '') => `<div class="cardHead"><h3>${tt('Agents')}</h3>${apMini(f)}<span class="meta">${tt('{n}/{total} active', { n: f.agents.filter((a) => a.state === 'working' || a.state === 'waiting').length, total: f.agents.length })}</span>${extra}</div>`;
+// on a phone the header has no room for status chips: Start squad sits in the Agents card
+const startMini = (f) => (!f.independent && f.agents.length && !f.agents.some((a) => a.running) ? `<button class="small gold phoneOnly" data-act="start-all">${tt('Start squad')}</button>` : '');
+const agentsHead = (f, extra = '') => `<div class="cardHead"><h3>${tt('Agents')}</h3>${apMini(f)}${startMini(f)}<span class="meta">${tt('{n}/{total} active', { n: f.agents.filter((a) => a.state === 'working' || a.state === 'waiting').length, total: f.agents.length })}</span>${extra}</div>`;
 
 function independentFloorSections(f, deskAgentId) {
   const sections = [

@@ -30,6 +30,7 @@ import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { makePatcher } from './patch.js';
+import { dockLayout, dockHtml as renderDock, moreHtml } from './dock.js';
 import { claim } from './notified.js';
 
 translateDom();                                       // the static parts of index.html
@@ -290,17 +291,19 @@ function hudHtml(b, route, f) {
   const c = f.counts || {}, active = (c.working || 0) + (c.waiting || 0), board = state.floor?.id === f.id ? state.floor.board : null;
   const tasks = board?.tasks || [], done = tasks.filter((t) => t.column === 'DONE').length;
   const progress = tasks.length ? `<span class="sep"></span><button class="sprintBtn" data-act="board" title="${tt('Open the board')}">${board.sprint ? `<b>${tt('Sprint {name}', { name: esc(board.sprint) })}</b>` : `<b>${tt('Board')}</b>`}<span class="prog"><i style="width:${Math.round(done / tasks.length * 100)}%"></i></span><span class="meta">${done}/${tasks.length}</span></button>` : '';
+  // status chips inside the header card: icon + text, and the action that clears it
   let warn = '';
   if (!f.independent && !f.missing) {
-    if (f.budget?.level === 'over') warn = `<span class="hpill warn">${icon('alert')}${tt('Budget reached')}</span>`;
-    else if (f.agents.some((a) => a.crash && !a.crash.withLead)) { const c = f.agents.find((a) => a.crash && !a.crash.withLead); warn = `<a class="hpill wait" href="#/floor/${f.id}/desk/${c.id}" title="${esc(tx(c.crash.text))}">${icon('alert')}<span class="ellipsis">${tt('{name} stopped unexpectedly', { name: esc(String(c.displayName).split(' - ')[0]) })}</span></a>`; }
-    else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<button class="hpill warn" data-act="start-all" title="${tt('Start every agent of this Floor')}">${icon('alert')}${tt('Squad not running')}</button>`;
-    else if (f.waitingFor) warn = `<button class="hpill wait" data-act="waiting-for" title="${esc(f.waitingFor.docs ? tt('Not approved yet: {docs}', { docs: f.waitingFor.docs.join(', ') }) : tt('Open what the squad waits for'))}">${icon('alert')}<span class="ellipsis">${esc(tx(f.waitingFor.text))}</span></button>`;
-    else if (f.budget?.level === 'warn') warn = `<span class="hpill warn">${icon('alert')}${tt('Budget {pct} %', { pct: Math.round(f.budget.pct) })}</span>`;
+    if (f.budget?.level === 'over') warn = `<span class="hchip bad">${icon('alert')}${tt('Budget reached')}</span>`;
+    else if (f.agents.some((a) => a.crash && !a.crash.withLead)) { const c = f.agents.find((a) => a.crash && !a.crash.withLead); warn = `<a class="hchip bad" href="#/floor/${f.id}/desk/${c.id}" title="${esc(tx(c.crash.text))}">${icon('alert')}<span class="ellipsis">${tt('{name} stopped unexpectedly', { name: esc(String(c.displayName).split(' - ')[0]) })}</span></a>`; }
+    else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<span class="hchip warn">${icon('pause')}${tt('Squad not running')}</span><button class="small gold" data-act="start-all" title="${tt('Start every agent of this Floor')}">${tt('Start squad')}</button>`;
+    else if (f.waitingFor) warn = `<button class="hchip wait" data-act="waiting-for" title="${esc(f.waitingFor.docs ? tt('Not approved yet: {docs}', { docs: f.waitingFor.docs.join(', ') }) : tt('Open what the squad waits for'))}">${icon('alert')}<span class="ellipsis">${esc(tx(f.waitingFor.text))}</span></button>`;
+    else if (f.budget?.level === 'warn') warn = `<span class="hchip warn">${icon('coin')}${tt('Budget {pct} %', { pct: Math.round(f.budget.pct) })}</span>`;
   }
+  const status = warn || apChip(f) ? `<span class="sep"></span><span class="hstatus">${warn}${apChip(f)}</span>` : '';
   return `<div class="bar"><a class="iconBtn" href="#/" title="${tt('Lobby')}" aria-label="${tt('Back to the Lobby')}">${icon('building')}</a><span class="lamp ${f.lamp}"></span>
-    <b class="brand ellipsis">${f.number} · ${esc(f.name)}</b>${progress}<span class="sep"></span><span class="meta">${tt('<b>{n}</b>/{total} active', { n: active, total: f.agents.length })}</span>
-    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="${tt('Floor menu')}" aria-label="${tt('Floor menu')}">${icon('more')}</button>`}${menu}</div>${warn}${apChip(f)}${attPill}`;
+    <b class="brand ellipsis">${f.number} · ${esc(f.name)}</b>${progress}<span class="sep"></span><span class="meta">${tt('<b>{n}</b>/{total} active', { n: active, total: f.agents.length })}</span>${status}
+    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="${tt('Floor menu')}" aria-label="${tt('Floor menu')}">${icon('more')}</button>`}${menu}</div>${attPill}`;
 }
 
 // the Floor's Autopilot level; when a critical item waits it says so (opens the Floor settings)
@@ -309,7 +312,7 @@ function apChip(f) {
   const ap = f.autopilot;
   if (!ap || f.independent || f.missing) return '';
   const name = AP_NAME[ap.level] || ap.level[0].toUpperCase() + ap.level.slice(1);
-  return `<button class="hpill ap ${ap.level}${ap.critical ? ' crit' : ''}" data-act="floor-settings" title="${esc(ap.level === 'off' ? tt('Autopilot is off: every question waits for you') : tt('Autopilot {name}: non-critical questions are decided after {min} min', { name, min: Math.round(ap.timeoutSec / 60) }))}">${tt('Autopilot: {level}', { level: name })}${ap.critical ? ` · ${ap.critical === 1 ? tt('{n} critical waits for you', { n: 1 }) : tt('{n} critical wait for you', { n: ap.critical })}` : ''}</button>`;
+  return `<button class="hchip ap ${ap.level}${ap.critical ? ' crit' : ''}" data-act="floor-settings" title="${esc(ap.level === 'off' ? tt('Autopilot is off: every question waits for you') : tt('Autopilot {name}: non-critical questions are decided after {min} min', { name, min: Math.round(ap.timeoutSec / 60) }))}">${icon(ap.critical ? 'alert' : 'spark')}${tt('Autopilot: {level}', { level: name })}${ap.critical ? ` · ${ap.critical === 1 ? tt('{n} critical waits for you', { n: 1 }) : tt('{n} critical wait for you', { n: ap.critical })}` : ''}</button>`;
 }
 
 function floorMenuHtml(f) {
@@ -331,23 +334,38 @@ const WORST = (m) => {
   items.sort((x, y) => (rank[L[y[0]]] || 0) - (rank[L[x[0]]] || 0) || y[2] - x[2]);
   return { level: L.overall || 'ok', text: items[0][1] };
 };
-function dockHtml(b, route, f) {
-  const btn = (act, ic, tip, extra = '', label = '') => `<button class="dk" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(ic)}${label ? `<span>${label}</span>` : ''}</button>`;
+// labelled buttons in groups (View · Team · System); on a phone four and More (ui/dock.js)
+function dockItems(b, route, f) {
   const w = WORST(b.meter), voice = voiceOn(), floor = route.mode !== 'lobby' && f && !f.missing;
   const out = [];
-  if (!floor) out.push(btn('setup-squad', 'spark', tt('Set up Squad'), '', tt('Set up Squad')), '<span class="dsep"></span>');
-  if (!floor) out.push(`<span class="ovSeg" role="group" aria-label="${tt('Overview')}">${[['building', tt('Building')], ['office', tt('Office')], ['list', tt('List')]].map(([v, l]) => `<button class="dk ov" data-act="overview" data-v="${v}" aria-pressed="${ctx.overview === v}">${l}</button>`).join('')}</span>`, '<span class="dsep"></span>');
-  if (floor && state.floor?.board) out.push(btn('board', 'board', tt('Board')));
-  if (floor && f.workflow === 'squad-sprint') out.push(btn('performance', 'chart', tt('Performance and cost projection')));
-  if (floor) out.push(btn('log', 'log', tt('Squad Log: timeline and conversation')));
-  if (floor && !f.independent) out.push(btn('audit', 'audit', tt('Audit: process and token efficiency')));
-  out.push(btn('cost', 'coin', floor ? tt('Cost of this Floor') : tt('Cost of all Floors'), '', money(floor ? f.cost.today : b.costToday)));
-  out.push(`<button class="dk ${w.level}" data-act="meter" data-tip="${tt('Server meter: CPU, RAM, swap and disk')}" aria-label="${tt('Server meter, {value}', { value: esc(w.text) })}">${icon('server')}<i class="sdot ${w.level}"></i><span>${esc(w.text)}</span></button>`);
-  out.push('<span class="dsep"></span>');
-  if (floor && !f.independent) out.push(btn('add-agent', 'user-plus', tt('Add agent')));
-  out.push(btn('voice', voice ? 'vol' : 'mute', voice ? tt('Lead voice: on') : tt('Lead voice: off'), `aria-pressed="${voice}"`));
-  out.push(`<button class="dk" data-pop="legendPop" data-tip="${tt('Legend and controls')}" aria-label="${tt('Legend and controls')}" aria-expanded="false">${icon('info')}</button>`);
-  return out.join('');
+  if (!floor) {
+    out.push({ id: 'setup', group: 'view', prio: 1, act: 'setup-squad', icon: 'spark', label: tt('Set up Squad'), tip: tt('Set up Squad') });
+    out.push({ id: 'overview', group: 'view', prio: 0, html: `<span class="ovSeg" role="group" aria-label="${tt('Overview')}">${[['building', tt('Building')], ['office', tt('Office')], ['list', tt('List')]].map(([v, l]) => `<button class="dk ov" data-act="overview" data-v="${v}" aria-pressed="${ctx.overview === v}">${l}</button>`).join('')}</span>` });
+  }
+  if (floor && state.floor?.board) out.push({ id: 'board', group: 'view', prio: 1, act: 'board', icon: 'board', label: tt('Board'), tip: tt('Board') });
+  if (floor && f.workflow === 'squad-sprint') out.push({ id: 'performance', group: 'view', prio: 7, act: 'performance', icon: 'chart', label: tt('Stats'), tip: tt('Performance and cost projection') });
+  if (floor) out.push({ id: 'log', group: 'view', prio: 2, act: 'log', icon: 'log', label: tt('Log'), tip: tt('Squad Log: timeline and conversation') });
+  if (floor && !f.independent) out.push({ id: 'audit', group: 'view', prio: 8, act: 'audit', icon: 'audit', label: tt('Audit'), tip: tt('Audit: process and token efficiency') });
+  if (floor && !f.independent) out.push({ id: 'add-agent', group: 'team', prio: 3, act: 'add-agent', icon: 'user-plus', label: tt('Add agent'), tip: tt('Add agent') });
+  out.push({ id: 'voice', group: 'team', prio: 6, act: 'voice', icon: voice ? 'vol' : 'mute', label: tt('Voice'), tip: voice ? tt('Lead voice: on') : tt('Lead voice: off'), pressed: voice });
+  out.push({ id: 'cost', group: 'system', prio: 4, act: 'cost', icon: 'coin', label: money(floor ? f.cost.today : b.costToday), value: true, tip: floor ? tt('Cost of this Floor') : tt('Cost of all Floors') });
+  out.push({ id: 'meter', group: 'system', prio: 5, act: 'meter', icon: 'server', label: w.text, value: true, level: w.level, tip: tt('Server meter: CPU, RAM, swap and disk'), aria: tt('Server meter, {value}', { value: w.text }) });
+  out.push({ id: 'legend', group: 'system', prio: 9, pop: 'legendPop', icon: 'info', label: tt('Help'), tip: tt('Legend and controls') });
+  return out;
+}
+let dockMore = [];
+function dockHtml(b, route, f) {
+  const layout = dockLayout(dockItems(b, route, f), { phone: isPhone() });
+  dockMore = layout.more;
+  return renderDock(layout);
+}
+// labels show from 1024 px; when they do not fit beside the panel the dock drops to icons
+function fitDock() {
+  const dock = $('dock');
+  if (dock.hidden || isPhone()) return dock.classList.remove('compact');
+  dock.classList.remove('compact');
+  const side = $('side').hidden ? null : $('side').getBoundingClientRect(), room = (side && side.width ? side.left : innerWidth) - 32;
+  if (dock.offsetWidth > room) dock.classList.add('compact');
 }
 
 const LEGEND = `<div class="lgGrid"><span><i class="st working">${tt('working')}</i></span><span><i class="st waiting">${tt('needs you')}</i></span><span><i class="st idle">${tt('idle')}</i></span><span><i class="st stopped">${tt('stopped')}</i></span><span><i class="st standby">${tt('not started')}</i></span></div>
@@ -377,6 +395,7 @@ function render() {
 
   $('dock').hidden = !!ctx.editing;
   patch($('dock'), dockHtml(b, route, f));
+  fitDock();
   // a meeting starts at the table: the lead opens it in one short line
   if (f?.meeting && f.meeting.since !== lastMeeting[f.id]) {
     if (lastMeeting[f.id] !== undefined) playLine({ floorId: f.id, agentId: f.meeting.agents[0], kind: 'meeting', text: tt("{label}. Let's start.", { label: tx(f.meeting.label) }) });
@@ -483,7 +502,7 @@ function announceAttention(list, route) {
 const attPopHtml = (list) => `<div class="cardHead"><h3>${tt('Needs you')}</h3><span class="count bad">${needsYou(list).length}</span></div>${attentionIndexHtml([...needsYou(list), ...list.filter((a) => a.muted)])}`;
 
 // ---------- popovers (menu, Floor menu, attention, legend) ----------
-const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop'];
+const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop', 'morePop'];
 function closePopovers() {
   for (const id of POPS) $(id).hidden = true;
   document.querySelectorAll('[data-pop]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
@@ -496,6 +515,7 @@ function openPopover(id, anchor) {
   if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
   if (id === 'attPop' && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch { /* unsupported */ } }
   if (id === 'attPop') { el._html = null; patch(el, attPopHtml(state.building.attention)); }
+  if (id === 'morePop') { el._html = null; patch(el, moreHtml(dockMore)); }
   if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');
