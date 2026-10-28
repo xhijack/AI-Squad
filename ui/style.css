@@ -67,10 +67,15 @@ label.inline { display: flex; gap: var(--sp-2); align-items: center; margin: var
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, .45); } 50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); } }
 b.ok { color: var(--success); }
 .warnText { color: var(--warning); font-weight: 600; }
-/* one status chip per agent */
-.st { font-style: normal; font-size: var(--fs-xs); font-weight: 700; padding: var(--sp-half) var(--sp-2); border-radius: var(--r-pill); white-space: nowrap; background: var(--chip); color: var(--text-muted); }
-.st.standby { background: transparent; color: var(--text-muted); border: 1px dashed var(--border-strong); padding: 1px var(--sp-2); }
-.st.working { background: var(--success-soft); color: var(--success-ink); } .st.waiting { background: var(--danger); color: var(--on-danger); } .st.idle { background: var(--warning-soft); color: var(--warning-ink); } .st.stopped { background: var(--chip); color: var(--text-muted); }
+/* one status pill per agent (1.2.0): icon + text in the state colour, a border of at least 3:1 (ui/status.js) */
+.st { font-style: normal; font-size: var(--fs-xs); font-weight: 700; padding: var(--sp-half) var(--sp-2); border-radius: var(--r-pill); white-space: nowrap; display: inline-flex; align-items: center; gap: var(--sp-1); line-height: 1.4; border: 1px solid var(--neutral); background: var(--neutral-soft); color: var(--neutral-ink); flex: none; }
+.st .sti { width: 12px; height: 12px; }
+.st.working { background: var(--success-soft); color: var(--success-ink); border-color: var(--success); }
+.st.waiting { background: var(--danger); color: var(--on-danger); border-color: var(--danger); }
+.st.idle { background: var(--warning-soft); color: var(--warning-ink); border-color: var(--warning-border); }
+.st.stopped { background: var(--neutral-soft); color: var(--neutral-ink); border-color: var(--neutral); }
+.st.crashed { background: var(--crashed-soft); color: var(--crashed); border-color: var(--crashed); }
+.st.standby { background: transparent; color: var(--text-muted); border: 1px dashed var(--neutral); }
 
 /* ---------- floating cards ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-3); }
@@ -213,11 +218,12 @@ ul.feed.events b { color: var(--text); }
 .deskHead .avatar { width: 48px; height: 48px; font-size: var(--fs-lg); }
 .deskHead h2 { font-weight: 800; font-size: var(--fs-xl); line-height: 1.25; }
 .deskSub { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); align-items: center; color: var(--text-muted); font-size: var(--fs-sm); margin-top: var(--sp-1); }
-.deskState { color: var(--text); font-size: var(--fs-sm); margin-top: var(--sp-1); display: flex; gap: var(--sp-2); align-items: baseline; }
-.deskState .dot { flex: none; transform: translateY(-1px); }
+.deskState { color: var(--text); font-size: var(--fs-sm); margin-top: var(--sp-2); display: flex; gap: var(--sp-2); align-items: flex-start; }
 .chip.model { font-family: var(--mono); font-weight: 500; color: var(--text); background: var(--neutral-soft); padding: var(--sp-half) var(--sp-2); }
 .chip.model.warn { color: var(--warning-ink); background: var(--warning-soft); }
+.deskActions .btn, .deskActions button, .phoneOnly, .notice button { white-space: nowrap; }
 .deskActions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
+.notice .grow { flex: 1 1 180px; }
 .notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-muted); font-size: var(--fs-sm); }
 details.advanced summary { min-height: var(--hit-min); display: flex; align-items: center; gap: var(--sp-1); list-style: none; }
 details.advanced summary::-webkit-details-marker { display: none; }
@@ -626,7 +632,7 @@ body.immersive #hud, body.immersive #dock, body.immersive #elevator { display: n
 .taskBar { height: 6px; border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; margin: var(--sp-2) 0 var(--sp-half); }
 .taskBar i { display: block; height: 100%; background: var(--success); transition: width var(--dur-slow); }
 .taskOut { font-size: var(--fs-xs); max-height: 9.5em; overflow: auto; margin: var(--sp-2) 0; padding: var(--sp-2) var(--sp-2); border-radius: var(--r-md); background: color-mix(in srgb, currentColor 6%, transparent); white-space: pre-wrap; }
-.arow.taskStall .act { color: var(--warning); }
+.arow.taskStall .act { color: var(--warning-ink); }
 /* linked repositories (Phase 3.4) */
 .nlabel .r { font-size: var(--fs-xs); opacity: .8; margin-top: 1px; }
 .repoRow { margin: var(--sp-2) 0; }

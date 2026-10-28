@@ -31,6 +31,7 @@ import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { makePatcher } from './patch.js';
 import { dockLayout, dockHtml as renderDock, moreHtml } from './dock.js';
+import { STATES, statusPill } from './status.js';
 import { claim } from './notified.js';
 
 translateDom();                                       // the static parts of index.html
@@ -368,7 +369,7 @@ function fitDock() {
   if (dock.offsetWidth > room) dock.classList.add('compact');
 }
 
-const LEGEND = `<div class="lgGrid"><span><i class="st working">${tt('working')}</i></span><span><i class="st waiting">${tt('needs you')}</i></span><span><i class="st idle">${tt('idle')}</i></span><span><i class="st stopped">${tt('stopped')}</i></span><span><i class="st standby">${tt('not started')}</i></span></div>
+const LEGEND = `<div class="lgGrid">${STATES.map((k) => `<span>${statusPill(k)}</span>`).join('')}</div>
   <ul class="lgList"><li>${tt('<b>Click a character</b> to look through its eyes')}</li><li>${tt('<b>Click a name chip</b> for the desk')}</li><li>${tt('<b>Click a monitor</b> for the screen view')}</li>
   <li>${tt('<b>Drag</b> to move around, <b>scroll</b> to zoom')}</li><li>${tt('<b>Esc</b> goes back one level')}</li></ul>`;
 

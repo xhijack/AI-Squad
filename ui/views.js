@@ -6,6 +6,7 @@ import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from '
 import { t as tt, tx } from './i18n.js';
 import { isAsk, askFormHtml } from './askform.js';
 import { primaryAction, deskActionsHtml } from './desk-actions.js';
+import { statusOf, statusPill, statusIcon, activityLine } from './status.js';
 
 const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
@@ -159,21 +160,16 @@ export function lobbySections(b) {
 }
 
 // ---------- Floor ----------
-const ROLE_SHORT = (a) => [a.lead ? tt('Lead') : '', a.title, a.model].filter(Boolean).join(' · ');
-const STATE_SHORT = { working: tt('working'), waiting: tt('needs you'), idle: tt('idle'), stopped: tt('stopped') };
-// one row per agent: colour dot, name, role, one status chip, what it is doing
+// the subtitle: role · model, without the role when it only repeats the name ("Project Manager" · "Project Manager")
+const sameWords = (x, y) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === String(y || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+export const roleLine = (a) => [sameWords(String(a.displayName).split(' - ')[0], a.title) ? '' : a.title, a.model].filter(Boolean).join(' · ');
+// one row per agent: colour dot, name (+ Lead), role · model, the last activity in plain words, one status pill
 export function agentRow(floorId, a, selected) {
-  const act = a.standby ? tx(a.activity) : a.crash && !a.crash.withLead ? tx(a.crash.text) : a.stopNote ? `${tx(a.stopNote)}${a.lastTs ? ` · ${ago(a.lastTs)}` : ''}`
-    : a.state === 'stopped' ? (a.independent ? tx(a.activity) || tt('not running') : a.lastTs ? tt('stopped · last seen {ago}', { ago: ago(a.lastTs) }) : tt('stopped'))
-    : a.task ? taskLine(a.task)
-    : a.services?.length ? serviceLine(a.services[0])
-    : a.state === 'idle' ? (a.lastTs ? tt('idle {ago}', { ago: ago(a.lastTs).replace(' ago', '') }) : tt('idle')) : tx(a.activity) || STATE_TEXT[a.state];
-  // a running command: its last output lines as the tooltip, the row marked while it stalls
-  const tip = a.task?.lines?.length ? ` title="${esc(a.task.lines.join('\n'))}"` : '';
-  return `<div class="arow${selected ? ' sel' : ''}${a.task?.stall ? ' taskStall' : ''}" data-href="#/floor/${floorId}/desk/${a.id}" role="button" tabindex="0"${tip}>
-    <i class="adot" style="--c:${esc(a.appearance?.shirt || '#3d82d6')}"></i>
-    <span class="grow"><span class="nm"><b>${esc(String(a.displayName).split(' - ')[0])}</b> <span class="role">${esc(ROLE_SHORT(a))}</span></span><span class="act">${esc(act)}</span></span>
-    ${a.standby ? `<span class="st standby">${tt('not started')}</span>` : a.crash && !a.crash.withLead ? `<span class="st crashed">${tt('crashed')}</span>` : `<span class="st ${a.state}">${STATE_SHORT[a.state]}</span>`}</div>`;
+  const line = a.task ? { text: taskLine(a.task), full: a.task.lines?.join('\n') || '' } : a.services?.length && statusOf(a) !== 'crashed' ? { text: serviceLine(a.services[0]), full: a.services[0].command || '' } : activityLine(a);
+  return `<div class="arow${selected ? ' sel' : ''}${a.task?.stall ? ' taskStall' : ''}" data-href="#/floor/${floorId}/desk/${a.id}" role="button" tabindex="0"${line.full ? ` title="${esc(line.full)}"` : ''}>
+    <i class="adot" style="--c:${esc(a.appearance?.shirt || 'var(--info)')}"></i>
+    <span class="grow"><span class="nm"><b>${esc(String(a.displayName).split(' - ')[0])}</b>${a.lead ? ` <span class="badge lead">${tt('Lead')}</span>` : ''} <span class="role">${esc(roleLine(a))}</span></span><span class="act">${esc(line.text)}</span></span>
+    ${statusPill(a)}</div>`;
 }
 
 function feedHtml(feed) {
@@ -267,9 +263,12 @@ export function floorSections(f, deskAgentId = null) {
 
 // ---------- Desk ----------
 // the status line under the agent's name: state, then what it is doing (a standby text says it all)
-const deskState = (d) => (d.standby ? tx(d.activity).replace(/^./, (c) => c.toUpperCase())
-  : d.crash && !d.crash.withLead ? tx(d.crash.text) : d.stopNote ? tx(d.stopNote).replace(/^./, (c) => c.toUpperCase())
-  : `${stateText(d)}${d.activity && d.state !== 'stopped' && !d.waitingReply ? ` · ${tx(d.activity)}` : ''}`);
+// the pill says the state; the text beside it says why or what (a standby text without its "not started:" lead-in)
+const upper = (x) => String(x || '').replace(/^./, (c) => c.toUpperCase());
+const deskState = (d) => (d.standby ? upper(tx(d.activity).replace(/^[^:]{0,24}:\s*/, ''))
+  : d.crash && !d.crash.withLead ? tx(d.crash.text) : d.stopNote ? upper(tx(d.stopNote))
+  : d.waitingReply ? stateText(d) : d.activity && d.state !== 'stopped' ? upper(tx(d.activity)) : d.lastTs ? tt('last seen {ago}', { ago: ago(d.lastTs) }) : '');
+const deskStatus = (d) => `<div class="deskState">${statusPill(d)}<span class="grow">${esc(deskState(d))}</span></div>`;
 const SKILL_STATE = { project: ['ok', tt('in project')], user: ['ok', tt('in user skills')], bundled: ['info', tt('from plugin')], missing: ['warn', tt('not installed')] };
 function skillsHtml(d) {
   const list = d.skills || [];
@@ -285,7 +284,7 @@ function independentDeskSections(floor, d, routeScreen) {
   const dialog = (floor.attentionItems || []).filter((a) => a.agentId === d.id && (d.dialog || a.kind === 'reply' || a.kind === 'finished'));
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis">${esc(d.displayName)}</h2>
       <div class="deskSub">${esc(d.title)}${d.models?.observed ? modelChip(d.models.observed, tt('Last reply from this model')) : ''}</div>
-      <div class="deskState"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div></div>
+      ${deskStatus(d)}</div></div>
       <div class="deskActions"><button class="gold" data-act="adopt-agent" data-agent="${d.id}">${tt('Adopt into a squad')}</button>
       <a class="btn ghost" href="#/floor/${floor.id}/desk/${d.id}${routeScreen ? '' : '/screen'}">${routeScreen ? tt('Leave screen') : tt('Look at screen')}</a></div>`;
   const overview = `${head}
@@ -338,7 +337,7 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
   const primary = primaryAction(d, dialog);
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis">${esc(d.displayName)}</h2>
       <div class="deskSub">${esc(e.title || '')}${modelChip(mr.configured || '?', tt('Configured model'))}${mr.observed && mr.observed !== mr.configured ? modelChip(mr.observed, tt('Last reply from this model'), mr.mismatch) : ''}</div>
-      <div class="deskState"><i class="dot ${d.standby ? 'standby' : d.state}"></i> ${esc(deskState(d))}</div></div></div>
+      ${deskStatus(d)}</div></div>
       ${deskActionsHtml(d, primary, { floorId: floor.id, screen: routeScreen })}`;
   const crashed = d.crash && !d.crash.withLead;
   const crash = crashed ? `<div class="att crash" style="margin-top:var(--sp-3)"><div class="where">${tt('Stopped unexpectedly')}</div><div class="q">${esc(tx(d.crash.text))}</div>
