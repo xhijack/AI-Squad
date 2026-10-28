@@ -6,7 +6,8 @@ import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from '
 import { t as tt, tx } from './i18n.js';
 import { isAsk, askFormHtml } from './askform.js';
 import { primaryAction, deskActionsHtml } from './desk-actions.js';
-import { statusOf, statusPill, statusIcon, activityLine } from './status.js';
+import { statusOf, statusPill, activityLine } from './status.js';
+import { feedHtml } from './feed.js';
 
 const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
@@ -170,12 +171,6 @@ export function agentRow(floorId, a, selected) {
     <i class="adot" style="--c:${esc(a.appearance?.shirt || 'var(--info)')}"></i>
     <span class="grow"><span class="nm"><b>${esc(String(a.displayName).split(' - ')[0])}</b>${a.lead ? ` <span class="badge lead">${tt('Lead')}</span>` : ''} <span class="role">${esc(roleLine(a))}</span></span><span class="act">${esc(line.text)}</span></span>
     ${statusPill(a)}</div>`;
-}
-
-function feedHtml(feed) {
-  if (!feed.length) return `<div class="empty">${tt('No activity yet. Start an agent and give it a task.')}</div>`;
-  const hm = (ts) => new Date(ts).toTimeString().slice(0, 5);
-  return `<ul class="feed">${feed.map((e) => `<li title="${esc(e.detail || '')}"><span class="t">${hm(e.ts)}</span><span class="k ${e.kind}"></span><span class="grow ellipsis"><b>${esc(String(e.agentName).split(' - ')[0])}</b> ${esc(tx(e.title))}${e.detail && e.kind !== 'think' ? ` <span class="d">· ${esc(e.detail.split('\n')[0])}</span>` : ''}</span></li>`).join('')}</ul>`;
 }
 
 function messagesHtml(msgs, team) {

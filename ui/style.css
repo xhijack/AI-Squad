@@ -166,10 +166,23 @@ button.hchip:hover:not(:disabled), a.hchip:hover { filter: brightness(.97); }
 .setupBtn small { display: block; font-weight: 500; opacity: .9; font-size: var(--fs-xs); }
 
 /* activity feed and messages: one line per event, monospace like a log */
-.feed { list-style: none; margin: 0; padding: 0; font: var(--fs-xs)/1.5 var(--mono); }
+.feed { list-style: none; margin: 0; padding: 0; font-size: var(--fs-sm); line-height: 1.45; }
+/* activity feed (1.2.0): groups per agent, time first in tabular figures, rows that expand */
+.fgroup + .fgroup { margin-top: var(--sp-3); }
+.fwho { font-size: var(--fs-xs); font-weight: 800; color: var(--accent-text); margin: 0 0 var(--sp-1); }
+.feed li.frow2 { display: block; padding: 0; border-bottom: 0; }
+.fbtn { display: flex; width: 100%; gap: var(--sp-2); align-items: baseline; min-height: 32px; padding: var(--sp-1) var(--sp-1); border: 0; border-radius: var(--r-sm); background: none; font-weight: 400; font-size: var(--fs-sm); text-align: left; justify-content: flex-start; }
+.fbtn:hover:not(:disabled) { background: var(--hover); border: 0; }
+.fbtn .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow2.open .fbtn .grow { white-space: normal; }
+.fbtn .t { font-variant-numeric: tabular-nums; }
+.fbtn .d::before { content: '· '; }
+.fbtn .k { align-self: auto; transform: translateY(-1px); }
+.fmore { margin: 0 0 var(--sp-2) 52px; padding: var(--sp-2); background: var(--surface-muted); border-radius: var(--r-sm); white-space: pre-wrap; word-break: break-word; font-size: var(--fs-xs); max-height: 240px; overflow: auto; }
 .feed li { padding: var(--sp-1) 0; border-bottom: 1px solid var(--border); display: flex; gap: var(--sp-2); align-items: baseline; }
 .feed .t { color: var(--text-muted); flex: none; }
-.feed .k { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); align-self: center; }
+.feed .k.say { background: var(--info); }
+.feed .k { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); align-self: center; }
 .feed .k.write { background: var(--success); } .feed .k.test { background: var(--violet); } .feed .k.talk, .feed .k.task { background: var(--accent); } .feed .k.error { background: var(--danger); } .feed .k.git { background: var(--info); }
 .feed b { font-weight: 700; color: var(--accent); }
 .feed .d { color: var(--text-muted); }

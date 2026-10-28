@@ -32,6 +32,7 @@ import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { makePatcher } from './patch.js';
 import { dockLayout, dockHtml as renderDock, moreHtml } from './dock.js';
 import { STATES, statusPill } from './status.js';
+import { feedOpen } from './feed.js';
 import { claim } from './notified.js';
 
 translateDom();                                       // the static parts of index.html
@@ -658,6 +659,14 @@ document.addEventListener('click', async (e) => {
   const act = e.target.closest('[data-act]');
   // a message opens large on click, but links in it still work and selecting text does not open it
   if (act?.dataset.act === 'convo' && act.tagName !== 'BUTTON' && (e.target.closest('a[href]') || String(getSelection?.() || '').trim())) return;
+  // a feed row expands in place: no server call, focus stays on the row
+  if (act?.dataset.act === 'feed-toggle') {
+    const k = act.dataset.key;
+    if (!feedOpen.delete(k)) feedOpen.add(k);
+    layoutPanels(lastSections = sectionsFor());
+    document.querySelector(`[data-act="feed-toggle"][data-key="${CSS.escape(k)}"]`)?.focus();
+    return;
+  }
   if (act && act.tagName !== 'FORM') {
     const fn = actions[act.dataset.act];
     if (!fn) return;
