@@ -12,7 +12,7 @@ import { askFormHtml, readAskForm } from './askform.js';
 
 let C = null;            // { list, i, portrait, dlg }
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources'), price: t('Price approval'), handoff: t('Handoff'), erpnext: 'ERPNext', contract: t('Contract'), legal: t('Legal'), canary: t('Canary') };
+const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources'), price: t('Price approval'), handoff: t('Handoff'), erpnext: 'ERPNext', contract: t('Contract'), legal: t('Legal'), canary: t('Canary'), target: t('Target behind'), 'target-plan': t('Target behind: plan to approve') };
 
 function agentOf(item) {
   const f = ctx.state.building?.floors.find((x) => x.id === item.floorId);

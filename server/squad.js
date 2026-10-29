@@ -1207,16 +1207,21 @@ export function enableRoutines(floorId, now = Date.now()) {
   invalidate();
   return { routines: cadenceLib.list(floorId, root, now) };
 }
+// a routine with the agent that runs it (its role resolved to one agent of the Space)
+const withAgent = (team, list) => list.map((r) => { const a = routineAgent(team, r); return { ...r, agentId: a?.id || null, agentName: a?.displayName || null }; });
 export function routinesOf(floorId, now = Date.now()) {
   const entry = building.floorEntry(floorId);
-  return { routines: cadenceLib.list(floorId, entry.path, now) };
+  return { routines: withAgent(floors.readFloor(entry.path).team, cadenceLib.list(floorId, entry.path, now)) };
+}
+export function spaceAgents(floorId) {
+  try { return floors.readFloor(building.floorEntry(floorId).path).team.agents.map((a) => ({ id: a.id, displayName: a.displayName, role: a.role?.template || '', lead: !!a.lead })); } catch { return []; }
 }
 // every Space's routines (Admin → Cadence); Owner-only Spaces are taken out for others by access.redact
 export function cadenceOverview(now = Date.now()) {
   const spaces = [];
   for (const f of building.loadBuilding().floors) {
     let cfg; try { cfg = floors.readFloor(f.path); } catch { continue; }
-    spaces.push({ id: f.id, number: f.number, name: cfg.floor.name, routines: cadenceLib.list(f.id, f.path, now), agents: cfg.team.agents.map((a) => ({ id: a.id, displayName: a.displayName, role: a.role?.template || '' })) });
+    spaces.push({ id: f.id, number: f.number, name: cfg.floor.name, routines: withAgent(cfg.team, cadenceLib.list(f.id, f.path, now)), agents: spaceAgents(f.id) });
   }
   return { spaces };
 }

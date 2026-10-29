@@ -5,6 +5,11 @@ export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const money = (n) => `$${(+n || 0).toFixed(2)}`;
 export const gb = (b) => `${(b / 2 ** 30).toFixed(1)} GB`;
+// a time ahead or just past, on the wall clock: "Thu 22:30" (today: "22:30")
+export function when(ts) {
+  const d = new Date(ts), hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return new Date().toDateString() === d.toDateString() ? hm : `${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} ${hm}`;
+}
 
 export function ago(ts) {
   if (!ts) return t('never');

@@ -53,7 +53,7 @@ export class ListScene {
         <button class="lvStat" data-owner><b class="${c.attention ? 'bad' : ''}">${c.attention || 0}</b><span>${tt('waiting for you')}</span></button>
         <button class="lvStat" data-queue><b>${c.queued || 0}</b><span>${tt('queued')}</span></button>
         <button class="lvStat" data-server><b>${c.limits ? `${c.limits.running}/${c.limits.maxAgents}` : '–'}</b><span>${res.mem?.available != null ? tt('agents · {gb} GB free', { gb: (res.mem.available / 2 ** 30).toFixed(1) }) : tt('agents')}</span></button>
-        ${c.targets?.total ? `<button class="lvStat" data-targets><b class="${c.targets.behind ? 'bad' : ''}">${c.targets.met}/${c.targets.total}</b><span>${c.targets.behind ? tt('targets met · {n} behind', { n: c.targets.behind }) : tt('targets met')}</span></button>` : ''}
+        ${c.targets?.total ? `<button class="lvStat" data-targets><b class="${c.targets.behind ? 'bad' : ''}">${c.targets.met}/${c.targets.total}</b><span>${c.targets.behind ? (c.targets.acting ? tt('targets met · {n} behind · {a} acting', { n: c.targets.behind, a: c.targets.acting }) : tt('targets met · {n} behind', { n: c.targets.behind })) : tt('targets met')}</span></button>` : ''}
       </div>
       ${group(tt('Departments'), deps)}${group(tt('Projects'), projects)}${group(tt('On their own'), ind)}
       ${this.floors.length ? '' : `<div class="empty">${tt('No Spaces yet. Set up a Squad or create a Floor first.')}</div>`}`;

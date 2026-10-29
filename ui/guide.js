@@ -74,6 +74,10 @@ function stepHtml() {
   return planHtml();
 }
 
+// what a target behind its goal raises, and the mode's default (1.5)
+const BEHIND = { off: t('nothing'), notify: t('a notice'), suggest: t('a plan to approve'), act: t('the agents act') };
+const BEHIND_OF = { automatic: 'act', supervised: 'suggest', manual: 'notify' };
+const EVERY = (e) => { const [k, d] = String(e).split(':'); return k === 'weekly' ? t('weekly, {day}', { day: d }) : k === 'monthly' ? t('monthly, day {day}', { day: d }) : k === 'weekdays' ? t('weekdays') : t('daily'); };
 function planHtml() {
   if (s.result) return resultHtml();
   const p = s.plan;
@@ -83,15 +87,17 @@ function planHtml() {
     <label>${t('Summary')}<textarea name="summary" rows="3" maxlength="700">${esc(e.summary ?? p.summary ?? '')}</textarea></label>
     ${p.spaces.map((sp) => { const x = e.spaces?.[sp.division] || {}; return `<div class="card" data-space="${esc(sp.division)}"><div class="row wrap cgHead"><label class="inline" style="margin:0"><input type="checkbox" data-skip ${(x.skip ?? sp.skip) ? '' : 'checked'}> <b>${esc(DIVISION[sp.division]?.[0] || sp.division)}</b>${sp.exists ? ` <span class="note">${t('(already there)')}</span>` : ''}</label><input data-name value="${esc(x.name ?? sp.name)}" maxlength="60" class="grow" aria-label="${t('Space name')}"><select data-mode>${Object.entries(MODE).map(([k, v]) => `<option value="${k}" ${(x.mode || sp.mode) === k ? 'selected' : ''}>${esc(v[0])}</option>`).join('')}</select></div>
       <div class="note">${t('Blueprint {name}', { name: esc(sp.blueprint) })}${sp.access === 'owner' ? ` · ${t('Owner only')}` : ''}${sp.shift ? ` · ${t('at night')}` : ''}${sp.budget ? ` · ${t('{usd} USD per month', { usd: sp.budget })}` : ''}</div>
-      <div class="grid2" style="margin-top:8px"><div><b class="note">${t('Starting targets')}</b>${sp.kpis.map((k) => `<label class="cgRow"><span class="grow">${esc(tx(k.name))}${k.why ? ` <span class="note">(${esc(k.why)})</span>` : ''}</span><input data-kpi="${esc(k.id)}" type="number" step="any" min="0" value="${esc(x.kpis?.[k.id] ?? k.target ?? '')}" placeholder="${t('no goal')}" style="width:110px"> <span class="note">${esc(k.unit)}</span></label>`).join('')}</div>
-      <div><b class="note">${t('What the squad needs from you')}</b>${sp.materials.map((m, i) => { const id = m.id === 'custom' ? `custom-${i}` : m.id; return `<label class="cgRow"><span class="grow">${esc(m.label || MATERIAL[m.id] || m.id)}${m.why ? ` <span class="note">(${esc(m.why)})</span>` : ''}</span><select data-material="${esc(id)}">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(x.materials?.[id] || m.status) === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`; }).join('')}</div></div></div>`; }).join('')}
+      <div class="grid2" style="margin-top:8px"><div><b class="note">${t('Starting targets')}</b>${sp.kpis.map((k) => `<label class="cgRow"><span class="grow">${esc(tx(k.name))}${k.why ? ` <span class="note">(${esc(k.why)})</span>` : ''}</span><input data-kpi="${esc(k.id)}" type="number" step="any" min="0" value="${esc(x.kpis?.[k.id] ?? k.target ?? '')}" placeholder="${t('no goal')}" style="width:110px"> <span class="note">${esc(k.unit)}</span></label>
+        <label class="cgRow cgBehind"><span class="grow note">${t('when behind')}</span><select data-behind="${esc(k.id)}" aria-label="${t('When {name} is behind', { name: esc(tx(k.name)) })}">${Object.entries(BEHIND).map(([m, l]) => `<option value="${m}" ${(x.behind?.[k.id] || k.onBehind || 'notify') === m ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`).join('')}</div>
+      <div><b class="note">${t('What the squad needs from you')}</b>${sp.materials.map((m, i) => { const id = m.id === 'custom' ? `custom-${i}` : m.id; return `<label class="cgRow"><span class="grow">${esc(m.label || MATERIAL[m.id] || m.id)}${m.why ? ` <span class="note">(${esc(m.why)})</span>` : ''}</span><select data-material="${esc(id)}">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(x.materials?.[id] || m.status) === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`; }).join('')}</div></div>
+      ${sp.routines?.length ? `<div style="margin-top:8px"><b class="note">${t('Routines (made off; you turn them on after the build)')}</b>${sp.routines.map((r) => `<label class="cgRow inline"><input type="checkbox" data-routine="${esc(r.id)}" ${(x.routines?.[r.id] ?? r.on) ? 'checked' : ''}> <span class="grow">${esc(tx(r.title))} <span class="note">· ${EVERY(r.every)} ${t('at')} ${esc(r.at)} · ${esc(r.agent)}</span></span></label>`).join('')}</div>` : ''}</div>`; }).join('')}
     ${p.later?.length ? `<p class="note">${t('Later, no squad yet in this version: {list}.', { list: p.later.map((d) => esc(DIVISION[d]?.[0] || d)).join(', ') })}</p>` : ''}
-    <p class="note">${t('Build creates a folder and a git repository per Space under the squads folder, with its agents, targets and the materials list; the plan goes to the Company Brain where every agent reads it. Nothing starts running by itself: open a Space and start its lead when you are ready.')}</p>`;
+    <p class="note">${t('Build creates a folder and a git repository per Space under the squads folder, with its agents, targets and the materials list; the plan goes to the Company Brain where every agent reads it. Nothing starts running by itself: open a Space and start its lead when you are ready.')} ${t('Routines are made off: after the build, turn them on per Space here or in Admin → Cadence.')}</p>`;
 }
 function resultHtml() {
   const r = s.result;
   return `<p class="note">${t('Done. Your company is set up; open a Space and start its lead: it asks you for the materials that are missing first.')}</p>
-    <ul class="list">${r.built.map((x) => `<li class="row">${x.error ? `<b class="grow">${esc(DIVISION[x.division]?.[0] || x.division)}</b><span class="badText">${esc(x.error)}</span>` : `<b class="grow">${x.number} · ${esc(x.name)}</b><a class="small" href="#/floor/${esc(x.id)}" data-open>${t('Open')}</a>`}</li>`).join('')}</ul>
+    <ul class="list">${r.built.map((x) => `<li class="row">${x.error ? `<b class="grow">${esc(DIVISION[x.division]?.[0] || x.division)}</b><span class="badText">${esc(x.error)}</span>` : `<b class="grow">${x.number} · ${esc(x.name)}</b>${x.routines ? `<button type="button" class="small" data-enable="${esc(x.id)}">${t('Turn on routines ({n})', { n: x.routines })}</button>` : ''}<a class="small" href="#/floor/${esc(x.id)}" data-open>${t('Open')}</a>`}</li>`).join('')}</ul>
     <p class="note">${t('The plan is in the Company Brain: {file}. Run the guide again from the Lobby to add a division or change the goals.', { file: `<code>${esc(r.planFile)}</code>` })}</p>`;
 }
 
@@ -118,6 +124,15 @@ function draw(error = '') {
     draw();
   }));
   body.querySelector('[data-suggest]')?.addEventListener('click', () => { collect(); s.a.divisions = [...(s.st.suggest?.[s.a.business.type] || [])]; draw(); });
+  body.querySelectorAll('[data-space] [data-mode]').forEach((sel) => sel.addEventListener('change', () => {
+    const card = sel.closest('[data-space]');
+    card.querySelectorAll('[data-behind]').forEach((b) => { b.value = BEHIND_OF[sel.value]; });
+    card.querySelectorAll('[data-routine]').forEach((c) => { c.checked = sel.value !== 'manual'; });
+  }));
+  body.querySelectorAll('[data-enable]').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { await api('POST', `/api/floors/${b.dataset.enable}/cadence/enable`, {}); b.textContent = t('Routines on'); } catch (e) { b.disabled = false; toast(e.message, 5000); }
+  }));
   bindSegs(body, (name, v) => { if (name.startsWith('mode:')) s.a.modes[name.slice(5)] = v; if (name === 'machines') s.a.capacity.machines = v; if (name === 'hours') s.a.capacity.hours = v; });
   (body.querySelector('input[name=name]') || body.querySelector('input[name=budget]'))?.focus();
 }
@@ -135,7 +150,10 @@ function collect() {
       const d = el.dataset.space, kpis = {}, materials = {};
       el.querySelectorAll('[data-kpi]').forEach((i) => { kpis[i.dataset.kpi] = i.value; });
       el.querySelectorAll('[data-material]').forEach((i) => { materials[i.dataset.material] = i.value; });
-      e.spaces[d] = { skip: !el.querySelector('[data-skip]').checked, name: el.querySelector('[data-name]').value, mode: el.querySelector('[data-mode]').value, kpis, materials };
+      const behind = {}, routines = {};
+      el.querySelectorAll('[data-behind]').forEach((i) => { behind[i.dataset.behind] = i.value; });
+      el.querySelectorAll('[data-routine]').forEach((i) => { routines[i.dataset.routine] = i.checked; });
+      e.spaces[d] = { skip: !el.querySelector('[data-skip]').checked, name: el.querySelector('[data-name]').value, mode: el.querySelector('[data-mode]').value, kpis, materials, behind, routines };
     });
     s.edits = e;
   }
@@ -153,7 +171,7 @@ async function next() {
   try {
     if (id === 'plan') {
       const e = s.edits;
-      const body = { summary: e.summary, spaces: Object.entries(e.spaces || {}).map(([division, x]) => ({ division, skip: x.skip, name: x.name, mode: x.mode, kpis: Object.entries(x.kpis).map(([k, target]) => ({ id: k, target: target === '' ? null : +target })), materials: Object.entries(x.materials).map(([k, status]) => ({ id: k, status })) })) };
+      const body = { summary: e.summary, spaces: Object.entries(e.spaces || {}).map(([division, x]) => ({ division, skip: x.skip, name: x.name, mode: x.mode, kpis: Object.entries(x.kpis).map(([k, target]) => ({ id: k, target: target === '' ? null : +target, ...(x.behind?.[k] ? { onBehind: x.behind[k] } : {}) })), routines: Object.entries(x.routines || {}).map(([id, on]) => ({ id, on })), materials: Object.entries(x.materials).map(([k, status]) => ({ id: k, status })) })) };
       s.result = await api('POST', '/api/guide/build', body);
       s.busy = false; toast(t('Company set up')); return draw();
     }

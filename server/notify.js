@@ -67,7 +67,7 @@ const TEXT = {
     lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', targets: 'Target: {met} dari {n} tercapai, {behind} tertinggal, {unset} belum punya angka.', behindLine: '{space} · {name}: {value} dari {target} {unit}', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
     status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.',
     routines: 'Rutinitas hari ini: {done} selesai, {failed} gagal, {skipped} dilewati.', triggered: 'Target yang memicu pekerjaan:', triggeredLine: '{space} · {name}: {what}',
-    what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agent langsung bekerja' },
+    what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agen langsung bekerja' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 

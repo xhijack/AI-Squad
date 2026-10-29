@@ -271,7 +271,7 @@ const routes = [
   ['POST', /^\/api\/guide\/plan$/, (p, b) => guide.plan({ useClaude: b.useClaude !== false }), { pin: true }],
   ['POST', /^\/api\/guide\/build$/, async (p, b) => { const r = await guide.build(b); squad.invalidate(); return r; }, { pin: true, history: () => ({ label: 'Company Guide: built' }) }],
   // targets (1.3): per Space, the cockpit across Spaces, a webhook for outside systems
-  ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); for (const s of o.spaces) { s.acting = behind.counts(s.id).acting; if (req.user?.role === 'owner') s.hook = hookOf(s.id); } o.acting = o.spaces.reduce((n, s) => n + s.acting, 0); return o; }, {}],
+  ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); for (const s of o.spaces) { s.acting = behind.counts(s.id).acting; s.triggers = behind.history(s.id, 8); s.agents = squad.spaceAgents(s.id); if (req.user?.role === 'owner') s.hook = hookOf(s.id); } o.acting = o.spaces.reduce((n, s) => n + s.acting, 0); return o; }, {}],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/check$/, ([id]) => squad.targetCheck(id), { pin: true }],
   ['POST', /^\/api\/kpi\/hook\/([0-9a-f]{32})$/, ([tok], b) => {
     const f = kpi.floorOfToken(tok); if (!f) throw new HttpError(401, 'Unknown token');

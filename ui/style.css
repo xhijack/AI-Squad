@@ -762,6 +762,12 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .spark { color: var(--text-muted); margin-left: var(--sp-2); }
 .badText { color: var(--danger-ink); }
 .kadd { margin-top: var(--sp-2); } .kadd summary { cursor: pointer; }
+/* cadence and targets that act (1.5): a routine's on/off, its task, the rule of a target, the Desk's next routine */
+.adminRow .toggle { display: inline-flex; align-items: center; margin: 0; } .adminRow .toggle input { width: 18px; height: 18px; margin: 0; }
+.kbehind, .ktriggers, .ctask { margin-top: var(--sp-1); } .kbehind summary, .ktriggers summary, .ctask summary { cursor: pointer; }
+.note.pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--sp-1) 0; }
+.cgBehind { margin-top: 0; padding-left: var(--sp-3); }
+.nextRoutine { margin-top: var(--sp-1); }
 /* the Company Guide's plan page (1.4): a target or a material per row, the field at the right */
 .cgRow { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0; font-weight: 500; }
 .cgRow > span.grow { flex: 1; min-width: 0; }

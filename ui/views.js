@@ -2,14 +2,14 @@
 // Panel content for the three places: Lobby, Floor, Desk. Each view returns sections
 // { id, title, card: top | main | tabs, html, head?, count? }; app.js lays them out as floating cards in the right
 // panel (desktop) or as tabs of the bottom sheet (phone).
-import { esc, money, ago, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
+import { esc, money, ago, when, avatar, STATE_TEXT, stateText, drafts, mdLite } from './lib.js';
 import { t as tt, tx } from './i18n.js';
 import { isAsk, askFormHtml } from './askform.js';
 import { primaryAction, deskActionsHtml } from './desk-actions.js';
 import { statusOf, statusPill, activityLine } from './status.js';
 import { feedHtml } from './feed.js';
 
-const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary') };
+const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary'), target: tt('Target behind'), 'target-plan': tt('Target behind: plan to approve') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
 const SYSTEM_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'crash', 'scope']);
 
@@ -92,7 +92,7 @@ function cardsHtml(items, { showFloor = true, onDesk = false } = {}) {
     } else if (a.answerable && isAsk(a)) {
       body = askFormHtml(a);                                                     // several questions or multi-select
     } else if (a.answerable && a.options?.length) {
-      const lab = (o) => esc(['price', 'handoff', 'contract', 'canary'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
+      const lab = (o) => esc(['price', 'handoff', 'contract', 'canary', 'target-plan'].includes(a.kind) ? tx(o.label) : o.label);       // the server's own labels are translated
       body = `<div class="opts">${a.options.map((o) => o.free
         ? `<form class="free" data-act="answer-free" data-id="${a.id}" data-n="${o.n}"><input name="text" placeholder="${lab(o)}" aria-label="${tt('Your answer')}" required><button class="gold">${tt('Send')}</button></form>`
         : `<button class="${o.recommended || a.autopilot?.recommended === o.n ? 'gold' : ''}" data-act="answer" data-id="${a.id}" data-n="${o.n}">${o.n}. ${lab(o)}</button>`).join('')}</div>`;
@@ -104,7 +104,7 @@ function cardsHtml(items, { showFloor = true, onDesk = false } = {}) {
     const links = [];
     if (a.floorId && a.agentId && !onDesk) links.push(`<a href="#/floor/${a.floorId}/desk/${a.agentId}">${tt('Open desk')}</a>`);
     else if (a.floorId) links.push(`<a href="#/floor/${a.floorId}">${tt('Open Floor')}</a>`);
-    if (a.kind === 'stall' || a.kind === 'merge' || a.kind === 'erpnext' || a.kind === 'legal' || (a.kind === 'handoff' && a.mode === 'question')) links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${['erpnext', 'legal'].includes(a.kind) ? tt('OK') : tt('Dismiss')}</button>`);
+    if (a.kind === 'stall' || a.kind === 'merge' || a.kind === 'erpnext' || a.kind === 'legal' || a.kind === 'target' || (a.kind === 'handoff' && a.mode === 'question')) links.push(`<button class="small ghost" data-act="dismiss" data-id="${a.id}">${['erpnext', 'legal', 'target'].includes(a.kind) ? tt('OK') : tt('Dismiss')}</button>`);
     body = apNote(a) + body;
     // a click on the message opens it large (the conversation view)
     const text = a.kind === 'reply' || a.kind === 'finished' ? `<div class="replyMsg md" data-act="convo" data-id="${a.id}" data-scroll="reply-${a.id}"${a.kind === 'finished' ? ' data-top' : ''} tabindex="0" title="${tt('Open large')}" aria-label="${tt('Message from {name}, open large', { name: esc(a.agentName || tt('the agent')) })}">${mdLite(a.text)}</div>` : `<div class="q" data-act="convo" data-id="${a.id}" title="${tt('Open large')}">${esc(a.kind === 'taskdone' && a.task ? taskDoneText(a.task) : SYSTEM_KINDS.has(a.kind) ? tx(a.text) : a.text)}</div>`;
@@ -355,7 +355,7 @@ function deskSectionsInner(floor, d, { locked = false, screen: routeScreen = fal
   const primary = primaryAction(d, dialog);
   const head = `<div class="deskHead">${avatar(d)}<div class="grow" style="min-width:0"><h2 class="ellipsis">${esc(d.displayName)}</h2>
       <div class="deskSub">${esc(e.title || '')}${modelChip(mr.configured || '?', tt('Configured model'))}${mr.observed && mr.observed !== mr.configured ? modelChip(mr.observed, tt('Last reply from this model'), mr.mismatch) : ''}</div>
-      ${deskStatus(d)}</div></div>
+      ${deskStatus(d)}${d.nextRoutine ? `<div class="note nextRoutine">${tt('Next routine: {title} · {time}', { title: esc(d.nextRoutine.title), time: when(d.nextRoutine.at) })}</div>` : ''}</div></div>
       ${deskActionsHtml(d, primary, { floorId: floor.id, screen: routeScreen })}`;
   const crashed = d.crash && !d.crash.withLead;
   const crash = crashed ? `<div class="att crash" style="margin-top:var(--sp-3)"><div class="where">${tt('Stopped unexpectedly')}</div><div class="q">${esc(tx(d.crash.text))}</div>

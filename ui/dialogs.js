@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Floor and agent dialogs: add / edit agent (overrides), Floor settings, template update / keep / detach.
-import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, segValue, diffHtml } from './lib.js';
+import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, segValue, diffHtml, when } from './lib.js';
+import { everyText } from './admin-cadence.js';
 import { memberHtml, readMember, gitHtml, readGit } from './forms.js';
 import { openWizard } from './wizard.js';
 import { openTemplates } from './templates.js';
@@ -90,6 +91,7 @@ async function floorSettings() {
     <div class="grid2"><div><label>${tt('Daily standup at (local time)')}</label><input name="standupTime" type="time" value="${esc(c.standup?.time || '09:30')}"></div>
       <label class="inline" style="align-self:end"><input type="checkbox" name="standupMeeting" ${c.standup?.meeting !== false ? 'checked' : ''}> ${tt('The team meets at the table for it')}</label></div>
     <p class="note">${tt('Made from the Squad Log (done, doing, blocked by per agent), no model call. It shows in the Standup tab.')}</p>
+    <h3 style="margin-top:var(--sp-5)">${tt('Routines')}</h3><div id="dCadence" class="note">${tt('Loading…')}</div>
     <h3 style="margin-top:var(--sp-5)">${tt('Voice (this Floor\'s default)')}</h3>
     <p class="note">${tt('How this Floor\'s agents speak unless an agent sets its own (Desk → Profile → Voice). Auto picks Indonesian or English from the words of each line.')}</p>
     ${voiceControlsHtml(c.voice?.lang || 'auto', c.voice?.settings || null)}
@@ -112,6 +114,7 @@ async function floorSettings() {
   bindVoiceControls(body);
   body.querySelector('[data-vpreview]').onclick = () => { const c = readVoiceControls(body); previewVoice({ lang: c.lang, settings: c.settings }, body.querySelector('#dVErr')); };
   loadMerges(f.id, body.querySelector('#dMerges'));
+  loadCadence(f.id, body.querySelector('#dCadence'));
   loadRepos(f.id, body.querySelector('#dRepos'), f.agents);
   const servers = body.querySelector('#dServers');
   servers.onclick = (e) => e.target.closest('[data-rmserver]')?.closest('.serverRow').remove();
@@ -133,6 +136,16 @@ async function floorSettings() {
       closeModal(); toast(tt('Floor saved')); ctx.refresh();
     } catch (e) { fail(e); }
   };
+}
+
+// the Space's routines (1.5): what runs by itself and when; managed in Admin → Cadence
+async function loadCadence(floorId, el) {
+  try {
+    const { routines } = await api('GET', `/api/floors/${floorId}/cadence`);
+    el.innerHTML = `${routines.length ? `<ul class="list">${routines.map((r) => `<li><b>${esc(tx(r.title))}</b> · ${everyText(r.every)} ${tt('at')} ${esc(r.at)} · ${esc(r.agentName || r.agent)} · ${r.enabled ? (r.next ? tt('Next: {time}', { time: when(r.next) }) : tt('On')) : tt('Off')}</li>`).join('')}</ul>` : `<p>${tt('No routines yet for this Space.')}</p>`}
+      <button type="button" class="small" data-cadence>${tt('Manage routines')}</button>`;
+    el.querySelector('[data-cadence]').onclick = () => { closeModal(); ctx.actions.admin?.({ dataset: { tab: 'cadence' } }); };
+  } catch (e) { el.textContent = e.message; }
 }
 
 const RESULT_TEXT = { merged: tt('merged'), refused: tt('refused'), failed: tt('failed'), noop: tt('nothing to merge'), busy: tt('busy') };

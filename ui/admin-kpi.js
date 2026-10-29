@@ -10,6 +10,11 @@ const TONE = { met: 'live', behind: 'bad', unset: '', unknown: '' };
 const PERIOD = { day: t('today'), week: t('this week'), month: t('this month'), total: t('in total') };
 const SOURCE = { manual: t('entered by a person'), erpnext: 'ERPNext', csv: 'CSV', webhook: t('webhook') };
 const EVERY = { hour: t('every hour'), day: t('every day'), week: t('every week') };
+// what a target behind its goal raises (1.5)
+const MODE = { off: t('nothing'), notify: t('a notice'), suggest: t('a plan to approve'), act: t('the agents act') };
+const ACTION = { notice: t('notice'), drafting: t('plan asked'), approved: t('approved'), started: t('started'), dismissed: t('dismissed') };
+const agentOpts = (agents = [], v = '') => `<option value="" ${!v ? 'selected' : ''}>${t('the lead')}</option>${agents.map((a) => `<option value="${esc(a.id)}" ${a.id === v || a.role === v ? 'selected' : ''}>${esc(a.displayName)}</option>`).join('')}`;
+const agentName = (agents = [], v = '') => (v ? agents.find((a) => a.id === v || a.role === v)?.displayName || v : t('the lead'));
 const fmt = (v, unit) => (v == null ? '–' : `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}${unit ? ` ${esc(unit)}` : ''}`);
 const opts = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
 
@@ -27,7 +32,7 @@ export function targetsHtml(x, d, me) {
   const o = x || { spaces: [], total: 0, met: 0, behind: 0, unset: 0, unknown: 0 };
   const bySpace = Object.fromEntries(o.spaces.map((s) => [s.id, s]));
   return `<p class="note">${t('Targets are the numbers a Space works against: the agents read them in docs/squad/KPI.md and plan against the ones that are behind. You set the goal; the value comes from a person, from ERPNext, from a CSV file in the repository, or from an outside system through the Space\'s webhook. Every measurement is in the Squad Log.')}</p>
-    <div class="kpis"><div><span>${t('Targets')}</span><b>${o.total}</b></div><div><span>${t('Met')}</span><b>${o.met}</b></div><div><span>${t('Behind')}</span><b class="${o.behind ? 'badText' : ''}">${o.behind}</b></div><div><span>${t('No goal yet')}</span><b>${o.unset}</b></div><div><span>${t('No value yet')}</span><b>${o.unknown}</b></div></div>
+    <div class="kpis"><div><span>${t('Targets')}</span><b>${o.total}</b></div><div><span>${t('Met')}</span><b>${o.met}</b></div><div><span>${t('Behind')}</span><b class="${o.behind ? 'badText' : ''}">${o.behind}</b></div><div><span>${t('Acting')}</span><b>${o.acting || 0}</b></div><div><span>${t('No goal yet')}</span><b>${o.unset}</b></div><div><span>${t('No value yet')}</span><b>${o.unknown}</b></div></div>
     ${spaces.map((sp) => {
       const s = bySpace[sp.id] || { kpis: [] };
       return `<div class="section" data-kspace="${esc(sp.id)}"><div class="sectionHead"><h3 class="grow">${sp.number} · ${esc(sp.name)}</h3>${s.kpis.length ? `<span class="note">${t('{met} met · {behind} behind', { met: s.met || 0, behind: s.behind || 0 })}</span>` : ''}</div>
@@ -35,11 +40,20 @@ export function targetsHtml(x, d, me) {
         ${s.kpis.length ? `<div class="adminList">${s.kpis.map((k) => `<div class="adminRow" data-kpi="${esc(k.id)}"><div class="row"><span class="badge ${TONE[k.status.state]}">${STATE[k.status.state]}${k.status.pct != null ? ` ${k.status.pct} %` : ''}</span><b class="grow">${esc(tx(k.name))}</b>
             <span class="kval">${fmt(k.stale ? null : k.latest?.value, k.unit)}</span><span class="note">/ ${k.target == null ? t('no goal') : fmt(k.target, k.unit)}</span>${spark(k.series)}</div>
           <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : ''}${['erpnext', 'csv'].includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
+          <div class="note whenBehind">${t('When behind:')} <b>${MODE[k.onBehind?.mode || 'off']}</b>${k.onBehind && k.onBehind.mode !== 'off' && k.onBehind.mode !== 'notify' ? ` · ${esc(agentName(s.agents, k.onBehind.agent))}` : ''}${k.onBehind?.task ? ` · ${esc(k.onBehind.task.slice(0, 80))}` : ''}</div>
+          ${owner ? `<details class="kbehind"><summary class="note">${t('Change what happens when it is behind')}</summary><form class="grid4" data-kbehind>
+            <label>${t('When behind')}<select name="mode">${opts(MODE, k.onBehind?.mode || 'off')}</select></label>
+            <label>${t('Agent')}<select name="agent">${agentOpts(s.agents, k.onBehind?.agent)}</select></label>
+            <label>${t('Cooldown (hours)')}<input name="cooldown" type="number" min="1" max="720" value="${k.onBehind?.cooldown || 24}"></label>
+            <label style="grid-column: span 4">${t('Task for the agent')}<input name="task" value="${esc(k.onBehind?.task || '')}" placeholder="${t('e.g. Write two extra posts with a lead form')}"></label>
+            <div class="row" style="grid-column: span 4"><span class="note grow">${t('A notice tells you; a plan comes to you for Approve or Dismiss; "act" starts the task by itself only in a Space with Autopilot full, otherwise it asks.')}</span><button class="small gold">${t('Save')}</button></div>
+          </form></details>` : ''}
           <div class="row wrap">
             ${['manual', 'webhook'].includes(k.source.kind) ? `<form class="row" data-kvalue><input name="value" type="number" step="any" placeholder="${t('Value now')}" required style="width:120px"><input name="note" placeholder="${t('Note (optional)')}" style="width:160px"><button class="small">${t('Enter')}</button></form>` : `<button class="small" data-kmeasure>${t('Measure now')}</button>`}
             <span class="spacer"></span>
             ${owner ? `<form class="row" data-kgoal><input name="target" type="number" step="any" placeholder="${t('Goal value')}" value="${k.target ?? ''}" style="width:110px"><button class="small gold">${t('Set goal')}</button></form><button class="small ghost danger" data-kremove>${t('Remove')}</button>` : ''}
           </div></div>`).join('')}</div>` : `<div class="note">${t('No targets yet for this Space.')}</div>`}
+        ${s.triggers?.length ? `<details class="ktriggers"><summary class="note">${t('Triggers ({n})', { n: s.triggers.length })}</summary><ul class="list">${s.triggers.map((h) => `<li class="note">${ago(h.ts)} · <b>${esc(tx(h.name || h.kpi))}</b> · ${ACTION[h.action] || esc(h.action)}${h.value != null ? ` · ${fmt(h.value)} / ${fmt(h.target)}` : ''}${h.by ? ` · ${esc(h.by)}` : ''}${h.fallback ? ` · <span class="warnText">${esc(tx(h.fallback))}</span>` : ''}</li>`).join('')}</ul></details>` : ''}
         ${owner ? `<details class="kadd"><summary class="note">${t('Add a target')}</summary>
           <form class="grid4" data-kadd>
             <label>${t('Name')}<input name="name" required placeholder="${t('e.g. Leads from the site')}"></label>
@@ -72,6 +86,7 @@ export function bindTargets(body, again) {
     const v = (n) => f.elements[n]?.value ?? '';
     try {
       if (f.dataset.kvalue !== undefined) { e.preventDefault(); await api('POST', `/api/floors/${sp}/kpis/${id}/values`, { value: +v('value'), note: v('note') }); return again(t('Value entered')); }
+      if (f.dataset.kbehind !== undefined) { e.preventDefault(); await api('PATCH', `/api/floors/${sp}/kpis/${id}`, { onBehind: { mode: v('mode'), agent: v('agent'), task: v('task'), cooldown: +v('cooldown') || 24 } }); return again(t('Saved')); }
       if (f.dataset.kgoal !== undefined) { e.preventDefault(); await api('PATCH', `/api/floors/${sp}/kpis/${id}`, { target: v('target') === '' ? null : +v('target') }); return again(t('Goal set')); }
       if (f.dataset.kadd !== undefined) {
         e.preventDefault();

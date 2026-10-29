@@ -10,8 +10,9 @@ import { handoffsHtml, erpnextHtml, bindErp } from './admin-erp.js';
 import { legalHtml, tieringHtml, bindLegal } from './admin-legal.js';
 import { trustHtml, bindTrust } from './admin-trust.js';
 import { targetsHtml, bindTargets } from './admin-kpi.js';
+import { cadenceHtml, bindCadence } from './admin-cadence.js';
 
-const TABS = [['spaces', t('Spaces')], ['targets', t('Targets')], ['dispatcher', t('Dispatcher')], ['agents', t('Agents')], ['skills', t('Skills')], ['company', t('Company Brain')], ['handoffs', t('Handoffs')], ['erpnext', 'ERPNext'], ['legal', t('Legal')], ['machines', t('Machines')], ['notify', t('Notifications')], ['improve', t('Improvements')], ['changes', t('Changes')]];
+const TABS = [['spaces', t('Spaces')], ['targets', t('Targets')], ['cadence', t('Cadence')], ['dispatcher', t('Dispatcher')], ['agents', t('Agents')], ['skills', t('Skills')], ['company', t('Company Brain')], ['handoffs', t('Handoffs')], ['erpnext', 'ERPNext'], ['legal', t('Legal')], ['machines', t('Machines')], ['notify', t('Notifications')], ['improve', t('Improvements')], ['changes', t('Changes')]];
 const KIND = { project: t('Project'), department: t('Department') };
 const ACCESS = { team: t('Team'), owner: t('Owner only') };
 const MEMORY = { claude: t('This machine (Claude Code)'), repo: t('In the Space (committed)') };
@@ -126,11 +127,11 @@ function dispatcherHtml(x) {
 }
 
 async function openAdmin(tab = 'spaces') {
-  const [d, roles, disp, extra] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles'), tab === 'dispatcher' ? api('GET', '/api/dispatcher') : tab === 'notify' ? api('GET', '/api/notify') : tab === 'machines' ? api('GET', '/api/nodes') : tab === 'handoffs' ? api('GET', '/api/handoffs') : tab === 'erpnext' ? api('GET', '/api/erpnext') : tab === 'improve' ? api('GET', '/api/insights') : tab === 'legal' ? api('GET', '/api/legal') : tab === 'targets' ? api('GET', '/api/kpis') : null,
+  const [d, roles, disp, extra] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles'), tab === 'dispatcher' ? api('GET', '/api/dispatcher') : tab === 'notify' ? api('GET', '/api/notify') : tab === 'machines' ? api('GET', '/api/nodes') : tab === 'handoffs' ? api('GET', '/api/handoffs') : tab === 'erpnext' ? api('GET', '/api/erpnext') : tab === 'improve' ? api('GET', '/api/insights') : tab === 'legal' ? api('GET', '/api/legal') : tab === 'targets' ? api('GET', '/api/kpis') : tab === 'cadence' ? api('GET', '/api/cadence') : null,
     tab === 'dispatcher' ? api('GET', '/api/tiering').catch(() => null) : null]);
   const modal = openModal(`<div class="adminRoot"><div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
     <div class="mBody"><div class="tabs adminTabs" role="tablist">${TABS.map(([id, label]) => `<button role="tab" data-atab="${id}" aria-selected="${id === tab}">${esc(label)}</button>`).join('')}</div>
-    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp) + tieringHtml(extra), legal: () => legalHtml(disp), targets: (x) => targetsHtml(disp, x, ctx.state.me), notify: () => notifyHtml(disp), machines: () => machinesHtml(disp), handoffs: () => handoffsHtml(disp), erpnext: (x) => erpnextHtml(disp, x), improve: () => trustHtml(disp) + improvementsHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
+    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp) + tieringHtml(extra), legal: () => legalHtml(disp), targets: (x) => targetsHtml(disp, x, ctx.state.me), cadence: () => cadenceHtml(disp, ctx.state.me), notify: () => notifyHtml(disp), machines: () => machinesHtml(disp), handoffs: () => handoffsHtml(disp), erpnext: (x) => erpnextHtml(disp, x), improve: () => trustHtml(disp) + improvementsHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
   modal.closest('dialog').classList.add('xwide');
   const body = modal.querySelector('.adminRoot');          // new on every render: its listeners go with it
   body.querySelectorAll('[data-close]').forEach((x) => x.onclick = () => closeModal());
@@ -206,6 +207,7 @@ async function openAdmin(tab = 'spaces') {
   bindLegal(body, again);
   bindTrust(body, again);
   bindTargets(body, again);
+  bindCadence(body, again);
   body.addEventListener('change', async (e) => {
     if (!e.target.dataset.prio) return;
     try { await api('PATCH', `/api/dispatcher/queue/${e.target.dataset.prio}`, { priority: e.target.value }); await again(t('Priority changed')); } catch (err) { toast(err.message, 5000); }
