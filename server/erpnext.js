@@ -96,6 +96,15 @@ export async function testAll() {
   return out;
 }
 
+// which key reads for a Space on the server's behalf (targets, 1.3; integrations, 1.6): the Owner's key reads
+// everything (payroll, invoices), and what it reads is seen by the whole team, so a team Space uses its own role's key
+// (or the sales, then delivery key); only an Owner-only Space uses the Owner's key. space: { access, erpnext }
+export function measureRole(space = {}) {
+  if (space?.access === 'owner' && credential('owner')) return 'owner';
+  for (const r of [space?.erpnext, 'sales', 'delivery']) if (AGENT_ROLES.includes(r) && credential(r)) return r;
+  throw bad(space?.access === 'owner' ? 'No ERPNext key: set one in Admin → ERPNext' : 'A team Space measures ERPNext targets with the sales or delivery key, not the Owner\'s: set one in Admin → ERPNext');
+}
+
 // ---------- agent sessions ----------
 // the MCP configuration every session shares: no secrets in it, Claude Code expands the variables at start
 export function mcpFile() {

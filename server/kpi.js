@@ -185,14 +185,10 @@ export function periodStart(period, now = Date.now()) {
 const frappeTs = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60e3).toISOString().slice(0, 19).replace('T', ' ');
 
 // ---------- measuring ----------
-// which ERPNext key measures a Space's targets: the Owner's key reads everything (payroll, invoices), and a
-// target's value is seen by the whole team and committed in KPI.md, so a team Space measures with its own
-// role's key (or the sales, then delivery key); only an Owner-only Space measures with the Owner's key
+// which ERPNext key measures a Space's targets: its own role's key, the Owner's only in an Owner-only Space (erpnext.js)
 export function erpRole(root) {
   const fl = readJson(path.join(root, '.claude', 'aisquad', 'floor.json'), {}) || {};
-  if (fl.access === 'owner' && erp.credential('owner')) return 'owner';
-  for (const r of [fl.erpnext, 'sales', 'delivery']) if (erp.AGENT_ROLES.includes(r) && erp.credential(r)) return r;
-  throw bad(fl.access === 'owner' ? 'No ERPNext key: set one in Admin → ERPNext' : 'A team Space measures ERPNext targets with the sales or delivery key, not the Owner\'s: set one in Admin → ERPNext');
+  return erp.measureRole(fl);
 }
 const PAGE = 1000, MAX_ROWS = 50000;
 export async function measureOne(root, k, now = Date.now()) {

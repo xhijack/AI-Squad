@@ -42,6 +42,7 @@ import * as cadence from './cadence.js';
 import * as behind from './behind.js';
 import * as guide from './guide.js';
 import * as promote from './promote.js';
+import * as integ from './integrations.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -301,6 +302,10 @@ const routes = [
   ['PATCH', /^\/api\/tiering$/, (p, b) => tiering.saveSettings(b), { pin: true, history: () => ({ label: 'Model tiering' }) }],
   ['GET', /^\/api\/handoffs$/, (p, b, req) => squad.handoffsOverview(req.user), { pin: true }],
   ['POST', /^\/api\/handoffs\/scan$/, () => squad.handoffTick(), { pin: true }],
+  // integrations (1.6): the MCP servers the Building knows (masked), Test connection, the Owner's kind and read-only marks
+  ['GET', /^\/api\/integrations$/, () => integ.list(), { pin: true }],
+  ['POST', /^\/api\/integrations\/test$/, (p, b) => integ.test(String(b.id || '')), { pin: true }],
+  ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly }), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],
   ['PATCH', /^\/api\/erpnext$/, (p, b) => erp.saveSettings(b), { pin: true, history: () => ({ label: 'ERPNext settings' }) }],
   ['PUT', /^\/api\/erpnext\/keys\/(sales|delivery|owner)$/, async ([role], b) => ({ keys: await erp.setKey(role, b.key, b.secret, { check: b.check !== false }) }), { pin: true }],

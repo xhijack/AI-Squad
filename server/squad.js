@@ -52,6 +52,7 @@ import * as trust from './trust.js';
 import * as insightLib from './insight.js';
 import * as history from './history.js';
 import * as kpiLib from './kpi.js';
+import * as integ from './integrations.js';
 import * as guideLib from './guide.js';
 import * as cadenceLib from './cadence.js';
 import * as behind from './behind.js';
@@ -850,6 +851,7 @@ Object.assign(hb.deps, {
   ownerItem: async (h) => { if (h.kind === 'quotation') await erp.prepareApproval(h); invalidate(); },
 });
 erp.deps.invalidate = () => invalidate();
+integ.deps.log = (floorId, ev) => { if (realFloor(floorId) || floorId === ind.FLOOR_ID) logEvent(floorId, ev); };   // integration.tested (1.6)
 Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate(),
   measured: (floorId, root, id, now) => { if (realFloor(floorId)) targetCheck(floorId, { only: id, now }).catch((e) => console.error('[kpi]', floorId, id, e.message)); } });
 Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });

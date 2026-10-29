@@ -23,6 +23,7 @@ const OWNER_ROUTES = [
   /^GET \/api\/(notify|insights)$/,
   /^(GET|POST) \/api\/nodes$/,
   /^(GET|PATCH) \/api\/erpnext$/,
+  /^(GET|POST|PATCH|PUT|DELETE) \/api\/integrations(\/|$)/,                  // integrations (1.6): the Owner's servers and keys
   /^GET \/api\/legal(\/contract)?$/,
   /^(GET|PATCH) \/api\/tiering$/,
   /^(GET|POST) \/api\/promote(\/preview)?$/,
