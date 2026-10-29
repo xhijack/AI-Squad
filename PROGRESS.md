@@ -995,6 +995,46 @@ Closes the two "Not yet" items PROGRESS gave to this sprint: a target below its 
 - **Regression test** (`test/home.test.js`). It starts the job runner with a relative home and a fake Claude given by relative path, with a different folder per Space. Each job ends with its result and nothing lands in the Space's folder. It also checks the deny rules. Without the fix it fails ("ended without a result").
 - `npm test`: 493 tests, 492 pass, 1 skipped (the Chrome test, which skips itself while swap is high).
 
+## Phase 5, Sprint 16: targets from integrations (MCP), 1.6.0 (29 Oct 2026)
+
+Closes the Sprint 13 "Not yet": targets from other integrations (`mcp:<integration>`). A target can now read its number from an MCP server the Building already knows, deterministically, without a model.
+
+- **MCP client** (`server/mcp.js`, no dependencies): JSON-RPC 2.0 over streamable HTTP (POST; JSON or SSE replies; the `Mcp-Session-Id` and `MCP-Protocol-Version` headers; a DELETE at the end) and over stdio (the command, its args and env, one JSON message per line; log lines on stdout skipped).
+  - `initialize` (protocol 2025-06-18, accepting 2025-03-26 and 2024-11-05 back) → `notifications/initialized` → `tools/list` (paged) or one `tools/call`. Nothing else: no prompts or resources, and no capabilities offered; a server's own requests are refused, except `ping`.
+  - Connect 10 s, call 30 s, replies over 1 MB refused, one call at a time per server. A stdio server runs in its own process group, which is killed after every call (SIGTERM, then SIGKILL after 1.5 s), so no server is left running.
+- **Integrations registry** (`server/integrations.js`, Admin → Integrations, the Owner's): servers from Claude Code's user scope (`~/.claude.json` `mcpServers`), each Space's `.mcp.json` and the ERPNext MCP (`~/.aisquad/erpnext/mcp.json`). Each shows its transport, where it comes from and which Spaces may use it.
+  - **Test connection**: the tools with their input schemas, and `integration.tested` in the Squad Log of the Spaces that may use the server, or Floor 1's when none may.
+  - **Kinds and read-only marks**: the Owner sets what the server measures (guessed from the name until then) and ticks the read-only tools. `readOnlyHint` only pre-ticks; nothing is read-only until saved. Marks and the last test are in `~/.aisquad/integrations.json` (0600); a tool that disappears loses its mark at the next test.
+  - **Secrets**: header, env, argument and URL query values that are secrets are masked. `${VAR}` and `${VAR:-default}` are resolved at call time only, from the server's environment; the ERPNext MCP uses the Space's ERPNext key. A stdio server gets PATH, HOME, USER, LANG, LC_ALL, TMPDIR and TZ plus its own env, never the server's other variables. Error texts go through the log's secret redaction. A Space's stdio server starts in the Space's folder, as in Claude Code (relative commands work).
+  - **Not usable as a target source**: OAuth-only servers ("needs sign-in in Claude Code": a 401 with `WWW-Authenticate` and no credentials, or `oauth` in the config) and old SSE-transport servers, each with the reason.
+  - **Scope** (the ERPNext key rule): an Owner-only Space uses the Owner's servers, its own `.mcp.json` and ERPNext with the owner key; a team Space uses its own `.mcp.json` and ERPNext with its role's key, never the Owner's personal servers. `erp.measureRole` now holds the key rule for both targets and integrations.
+- **The `mcp` target source**: `{ kind: 'mcp', server, tool, args, pick }` in `kpi.json` (`server/pick.js`).
+  - `pick`: a JSON path into `structuredContent` (or the first text parsed as JSON), `count` of a list, `sum` of a field across a list, or a regular expression with exactly one capture group on the text.
+  - `args`: a JSON object (a literal secret is refused, since `kpi.json` is committed). `{{from}}`/`{{to}}` become the period's first and last local day.
+  - Saving checks that the server is known here, that this Space may use it and that the tool is read-only, in plain words; every measurement checks this again.
+  - Measured on the hourly tick, at a new period and with *Measure now*. Results reach `kpi.measured`/`kpi.failed` (with `server` and `tool`, never the arguments), `KPI.md` (source `mcp <name>`), the cockpit and the when-behind rules.
+  - **Try** (`POST /api/floors/<id>/kpis/try`, the Owner's): one call, with the arguments as sent, the raw result (clipped at 20 KB) and the number or why not.
+- **UI**:
+  - Admin → Integrations: each server with masked config, its Spaces, kind, Test connection, the tools with read-only boxes and their input schemas.
+  - Admin → Targets: the source picker gets "from an integration" (server → read-only tool → a form from the input schema with date-range fields pre-filled with `{{from}}`/`{{to}}` → how to read the number → Try → Add). A manual target with a Blueprint hint says which kind of integration would measure it.
+  - 59 Indonesian strings.
+- **Blueprints and the Company Guide**: a Blueprint target may carry `requires: mcp:<kind>` and a hint (tool pattern, arguments, how to read the number). Digital Marketing v5: *Posts published* from a social scheduler, *Organic traffic* from analytics.
+  - The plan says per target *Measured from: <integration>* when the planned Space may use a server of that kind with a matching read-only tool; Build then wires the target to it (arguments trimmed to the tool's schema, measured hourly).
+  - Otherwise the plan says *Enter by hand (connect <kind> to measure it)*, or names the Owner's personal server that a team Space cannot use, or the server whose tool still has to be marked. The target stays manual and keeps its hint.
+- Tests, all without network and with fake MCP servers (`test/fixtures/fake-mcp-http.js` with JSON and SSE replies and a session id; `fake-mcp-stdio.cjs`):
+  - `mcp.test.js`: handshake, paging, call, SSE parsing, server and HTTP errors, sign-in, unknown version, timeouts, oversized replies, refused sampling, killed child processes (also one that ignores SIGTERM), missing commands, one call at a time.
+  - `integrations.test.js`: the merge of the three sources with masking, the scope rule, `${VAR}`, Test connection and its log, marks, the Owner-only API.
+  - `kpi-mcp.test.js`: pick, arguments and periods, the read-only gate and scope in plain words, Try, the tick with the log fields, KPI.md, failures and the when-behind notice.
+  - `guide-mcp.test.js`: the Blueprint hint, match, the plan lines, Build wiring and measuring.
+- `npm test`: 515 tests, 514 pass, 1 skipped (the Chrome typing test, which skips itself while swap is above 80 %); then one more for the fix below: 516, 515 pass, 1 skipped.
+- Dogfood on a playground Building (port 8196, fake Claude, a fixed meminfo, a local fake social scheduler MCP on 8197):
+  - A Marketing Space from the Blueprint, the scheduler in its `.mcp.json`, and a user-scope server with a literal bearer token (shown as `••••1706` and found nowhere on disk outside `~/.claude.json`).
+  - Test connection (2 tools; `integration.tested` in the Space's log, and the personal server's test under Floor 1), `posts_this_week` marked read-only, Try (2 posts for 2026-10-26..2026-11-01).
+  - Refused: the team Space using the personal server, and `delete_post`.
+  - *Posts published* switched to the integration with goal 5 → measured 2, behind (40 %) → the notice "Posts published this week: 2 of 5 posts, behind". `kpi.measured` and `kpi.behind` in the Squad Log, `mcp scheduler` in KPI.md.
+- Screenshots `playground/reference/sprint16-*.png` at 1440 and 390 are **pending**: swap stood at 96–99 % for the whole sprint, so Chrome was not run (the UI views were rendered to strings in Node as a smoke check instead).
+- Not yet: OAuth servers as a target source (they need the browser sign-in Claude Code keeps), the old SSE transport, MCP resources as a source, Finance and Support Blueprints with integration hints, editing an existing target's integration source in place (remove and add it again).
+
 ## How to run
 
 ```
