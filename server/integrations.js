@@ -31,16 +31,17 @@ export const deps = { log: () => {} };
 
 // ---------- the three sources ----------
 const transportOf = (raw) => (raw.type === 'sse' ? 'sse' : raw.type === 'stdio' || (!raw.type && raw.command) ? 'stdio' : raw.url ? 'http' : 'unknown');
-function entry(name, raw, source, floorId = '') {
+function entry(name, raw, source, floorId = '', cwd = '') {
   if (!NAME.test(name) || !raw || typeof raw !== 'object') return null;
   const strs = (o) => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([, v]) => typeof v === 'string' || typeof v === 'number').map(([k, v]) => [k, String(v)]));
   return {
     id: source === 'erpnext' ? 'erpnext' : source === 'user' ? `user:${name}` : `space:${floorId}:${name}`, name, source, ...(floorId ? { floorId } : {}),
     transport: transportOf(raw), url: typeof raw.url === 'string' ? raw.url : '', command: typeof raw.command === 'string' ? raw.command : '',
-    args: Array.isArray(raw.args) ? raw.args.map(String) : [], headers: strs(raw.headers), env: strs(raw.env), oauth: !!raw.oauth,
+    args: Array.isArray(raw.args) ? raw.args.map(String) : [], headers: strs(raw.headers), env: strs(raw.env), oauth: !!raw.oauth, ...(cwd ? { cwd } : {}),
   };
 }
-const serversIn = (file, source, floorId) => { const j = readJson(file, null); const s = j?.mcpServers && typeof j.mcpServers === 'object' ? j.mcpServers : {}; return Object.entries(s).map(([n, raw]) => entry(n, raw, source, floorId)).filter(Boolean); };
+// a Space's stdio servers start in the Space's folder, as Claude Code starts them (relative commands and args)
+const serversIn = (file, source, floorId, cwd) => { const j = readJson(file, null); const s = j?.mcpServers && typeof j.mcpServers === 'object' ? j.mcpServers : {}; return Object.entries(s).map(([n, raw]) => entry(n, raw, source, floorId, cwd)).filter(Boolean); };
 const floorJson = (root) => readJson(path.join(root, '.claude', 'aisquad', 'floor.json'), {}) || {};
 // the Spaces with what the scope rule needs
 export function spaces() {
@@ -50,7 +51,7 @@ export const spaceOfRoot = (root) => spaces().find((s) => path.resolve(s.path) =
 const erpFile = () => path.join(config.home, 'erpnext', 'mcp.json');
 export function registry() {
   const out = [...serversIn(claudeJson(), 'user')];
-  for (const s of spaces()) out.push(...serversIn(path.join(s.path, '.mcp.json'), 'space', s.id));
+  for (const s of spaces()) out.push(...serversIn(path.join(s.path, '.mcp.json'), 'space', s.id, s.path));
   if (fs.existsSync(erpFile())) { const e = serversIn(erpFile(), 'erpnext')[0]; if (e) out.push(e); }
   return out;
 }
@@ -188,7 +189,7 @@ export function resolve(e, extra = {}, procEnv = process.env) {
   if (e.transport === 'http') return { transport: 'http', url: x(e.url), headers: map(e.headers) };
   if (e.transport === 'stdio') {
     const base = Object.fromEntries(BASE_ENV.filter((k) => procEnv[k] !== undefined).map((k) => [k, procEnv[k]]));
-    return { transport: 'stdio', command: x(e.command), args: e.args.map(x), env: { ...base, ...map(e.env) } };
+    return { transport: 'stdio', command: x(e.command), args: e.args.map(x), env: { ...base, ...map(e.env) }, ...(e.cwd ? { cwd: e.cwd } : {}) };
   }
   return { transport: e.transport };
 }

@@ -103,6 +103,17 @@ test('${VAR} is resolved at call time only, from the environment; a stdio server
   assert.deepEqual(d.env, { PATH: '/bin', HOME: '/h', FAKE_MCP_TOKEN: 's3cret', FAKE_MCP_MODE: 'ok', DB_PASSWORD: 'hunter2hunter2' }, 'none of the server\'s own secrets');
   assert.equal(integ.expand('${A:-dflt}/${B}', { B: 'b' }, 'x'), 'dflt/b');
   assert.equal(integ.resolve(by.helpdesk, {}, { HELPDESK_TOKEN: 'h1' }).headers.Authorization, 'Bearer h1');
+  assert.equal(by.stats.cwd, undefined, 'a user-scope server starts where the server runs');
+});
+
+test('a Space\'s stdio server starts in the Space\'s folder, so a relative command works', async () => {
+  const dir = path.join(root, 'Ops');
+  fs.mkdirSync(path.join(dir, 'tools'), { recursive: true });
+  fs.copyFileSync(STDIO, path.join(dir, 'tools', 'mcp.cjs'));
+  const ops = space('Ops', { mcp: { local: { command: process.execPath, args: ['tools/mcp.cjs'] } } });
+  const e = integ.find(`space:${ops.id}:local`);
+  assert.equal(e.cwd, dir);
+  assert.equal((await integ.test(e.id)).tested.ok, true);
 });
 
 test('Test connection: the tools with their schemas, the Squad Log; sign-in and SSE servers say why; failures masked', async () => {
