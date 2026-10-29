@@ -2084,5 +2084,10 @@
  "Integrations": "Integrasi",
  "Needs sign-in in Claude Code (OAuth in a browser): it cannot be used as a target source": "Perlu masuk di Claude Code (OAuth di browser): tidak bisa dipakai sebagai sumber target",
  "Uses the old SSE transport: the server reads only streamable HTTP and stdio servers": "Memakai transport SSE lama: server hanya membaca server streamable HTTP dan stdio",
- "Neither a URL nor a command: not an MCP server definition the server can use": "Tidak ada URL maupun perintah: bukan definisi server MCP yang bisa dipakai server"
+ "Neither a URL nor a command: not an MCP server definition the server can use": "Tidak ada URL maupun perintah: bukan definisi server MCP yang bisa dipakai server",
+ "Measured from: {name}": "Diukur dari: {name}",
+ "Enter by hand for now: {name} can measure it once you mark its tool read-only (Admin → Integrations) and pick it in Admin → Targets": "Isi manual dulu: {name} bisa mengukurnya setelah kamu menandai tool-nya read-only (Admin → Integrasi) dan memilihnya di Admin → Target",
+ "Enter by hand: {name} is your personal integration; a team Space needs a {kind} server in its own .mcp.json": "Isi manual: {name} adalah integrasi pribadimu; Space tim butuh server {kind} di .mcp.json miliknya sendiri",
+ "Enter by hand (connect {kind} to measure it)": "Isi manual (hubungkan {kind} untuk mengukurnya)",
+ "Connect {kind} to measure it (Admin → Integrations), then add it from an integration.": "Hubungkan {kind} untuk mengukurnya (Admin → Integrasi), lalu tambahkan dari integrasi."
 }

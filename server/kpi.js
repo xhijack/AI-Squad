@@ -66,6 +66,8 @@ export function cleanOnBehind(o = {}, existing = null) {
   if (!(Number.isFinite(cd) && cd >= 1 && cd <= 720)) throw bad('Cooldown: hours between two triggers, 1 to 720');
   return { mode: ON_BEHIND.includes(o.mode) ? o.mode : o.mode === undefined ? e.mode : 'off', agent: kebab(o.agent ?? e.agent ?? '', 60), task: String(o.task ?? e.task ?? '').trim().slice(0, 2000), cooldown: Math.round(cd) };
 }
+// a Blueprint's hint (1.6): the kind of integration that would measure the target (`mcp:social-scheduler`)
+export const REQUIRES = /^mcp:[a-z][a-z-]{1,39}$/;
 const MAX_EVERY = { day: 'hour', week: 'day', month: 'week', total: 'week' };   // measuring less often than the period would leave it unknown most of the time
 export function cleanKpi(k = {}, existing = null) {
   const name = oneLine(k.name ?? existing?.name ?? '', 80);
@@ -84,6 +86,7 @@ export function cleanKpi(k = {}, existing = null) {
     source: k.source !== undefined ? cleanSource(k.source) : existing?.source || { kind: 'manual' },
     note: oneLine(k.note ?? existing?.note ?? '', 200),
     onBehind: cleanOnBehind(k.onBehind, existing?.onBehind),
+    ...(REQUIRES.test(k.requires ?? existing?.requires ?? '') ? { requires: k.requires ?? existing.requires } : {}),
   };
 }
 const rawDefs = (root) => { const j = readJson(defFile(root), null); return Array.isArray(j?.kpis) ? j.kpis.filter((k) => k && typeof k === 'object') : []; };

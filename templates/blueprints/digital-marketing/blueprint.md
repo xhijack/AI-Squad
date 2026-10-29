@@ -1,7 +1,7 @@
 ---
 id: digital-marketing
 title: Digital Marketing
-version: 4
+version: 5
 category: marketing
 description: A marketing team that turns a brief, brand rules and a channel plan into content, social posts, SEO and campaigns, and reports results against KPIs.
 keywords: [marketing, digital marketing, seo, content, blog, social, "social media", instagram, tiktok, linkedin, facebook, ads, advertising, campaign, brand, branding, awareness, traffic, newsletter, email marketing, influencer, launch, growth, audience, followers, copywriting]
@@ -20,9 +20,9 @@ sourceDocs:
   - { path: docs/BRAND.md, title: Brand, purpose: "Voice, visual rules, words to use and to avoid", owner: marketing-strategist, readers: all }
   - { path: docs/CHANNELS.md, title: Channels, purpose: "Channel plan and content calendar", owner: marketing-strategist, readers: all }
 kpis:
-  - { id: organic-traffic, name: Organic traffic, unit: sessions, direction: up, period: month, source: { kind: manual }, note: "GA4 organic sessions; a CSV or GA4 integration can feed it" }
+  - { id: organic-traffic, name: Organic traffic, unit: sessions, direction: up, period: month, source: { kind: manual }, requires: "mcp:analytics", note: "GA4 organic sessions; a CSV or GA4 integration can feed it" }
   - { id: leads, name: Leads from the site, unit: leads, direction: up, period: month, source: { kind: manual } }
-  - { id: posts, name: Posts published, unit: posts, direction: up, period: week, source: { kind: manual } }
+  - { id: posts, name: Posts published, unit: posts, direction: up, period: week, source: { kind: manual }, requires: "mcp:social-scheduler", mcp: { tool: "post", args: { from: "{{from}}", to: "{{to}}", status: published }, pick: { type: count, path: posts } } }
   - { id: engagement, name: Engagement rate, unit: "%", direction: up, period: week, source: { kind: manual } }
 cadence:
   - { id: daily-content-draft, title: Daily content draft, agent: content-writer, every: daily, at: "22:30", budget: 1, task: "Draft the next piece of the content calendar in docs/CHANNELS.md as a DRAFT in content/drafts/ (or content/social/<channel>/), in the brand voice of docs/BRAND.md. Update its row in docs/BOARD.md. Publish nothing." }

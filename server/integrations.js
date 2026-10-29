@@ -133,6 +133,28 @@ export function view(e) {
   };
 }
 export const list = () => ({ servers: registry().map(view), kinds: KINDS, files: { user: claudeJson(), erpnext: erpFile() } });
+const kindOf = (e) => { const k = marksOf(e.id).kind; return KINDS.includes(k) ? k : guessKind(e.name); };
+
+// ---------- the Blueprints' `requires: mcp:<kind>` ----------
+// what would measure a target that needs an integration of this kind, in a Space ({ id, access }; a planned Space has
+// no id yet): { measure: { server, name, tool, args, pick } } when a server the Space may use has a read-only tool
+// (the hint's tool pattern; arguments kept to those the tool takes) and the hint says how to read it; { available: name }
+// when a server the Space may use could, once the Owner marks or picks its tool; { personal: name } when only the
+// Owner's own server has it (a team Space cannot use it); {} when nothing here does
+export function match(kind, space, hint = null) {
+  let re = null; try { re = hint?.tool ? new RegExp(String(hint.tool), 'i') : null; } catch { /* a bad pattern matches any tool */ }
+  const of = registry().filter((e) => kindOf(e) === kind && !blocker(e)), mine = of.filter((x) => usableBy(x, space));
+  for (const e of hint?.pick ? mine : []) {
+    const m = marksOf(e.id), tool = (m.readOnly || []).find((n) => !re || re.test(n));
+    if (!tool) continue;
+    const props = (m.tested?.tools || []).find((t) => t.name === tool)?.inputSchema?.properties;
+    const args = Object.fromEntries(Object.entries(hint.args && typeof hint.args === 'object' ? hint.args : {}).filter(([k]) => !props || k in props));
+    return { measure: { server: e.id, name: e.name, tool, args, pick: hint.pick } };
+  }
+  if (mine.length) return { available: mine[0].name };
+  const p = of.find((e) => e.source === 'user');
+  return p ? { personal: p.name } : {};
+}
 
 // ---------- who may use what ----------
 const erpRoleOf = (space) => { try { return erp.measureRole(space); } catch { return null; } };

@@ -7,6 +7,7 @@
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs } from './lib.js';
 import { ctx } from './ctx.js';
 import { t, tx, LANG, setLang } from './i18n.js';
+import { KIND } from './admin-int.js';
 
 const STEPS = ['language', 'business', 'goals', 'have', 'divisions', 'modes', 'capacity', 'plan'];
 const STEP_TITLE = { language: t('Language'), business: t('Your business'), goals: t('Your goals'), have: t('What you have'), divisions: t('Divisions'), modes: t('How much runs by itself'), capacity: t('Machine and budget'), plan: t('The plan') };
@@ -78,6 +79,15 @@ function stepHtml() {
 const BEHIND = { off: t('nothing'), notify: t('a notice'), suggest: t('a plan to approve'), act: t('the agents act') };
 const BEHIND_OF = { automatic: 'act', supervised: 'suggest', manual: 'notify' };
 const EVERY = (e) => { const [k, d] = String(e).split(':'); return k === 'weekly' ? t('weekly, {day}', { day: d }) : k === 'monthly' ? t('monthly, day {day}', { day: d }) : k === 'weekdays' ? t('weekdays') : t('daily'); };
+// where a target's number will come from (1.6): an integration here, or what to connect
+function measuredHtml(k) {
+  if (!k.requires) return '';
+  const kind = esc(KIND[k.requires] || k.requires);
+  return `<div class="note cgMeasure">${k.measure ? t('Measured from: {name}', { name: esc(k.measure.name) })
+    : k.available ? t('Enter by hand for now: {name} can measure it once you mark its tool read-only (Admin → Integrations) and pick it in Admin → Targets', { name: esc(k.available) })
+    : k.personal ? t('Enter by hand: {name} is your personal integration; a team Space needs a {kind} server in its own .mcp.json', { name: esc(k.personal), kind })
+    : t('Enter by hand (connect {kind} to measure it)', { kind })}</div>`;
+}
 function planHtml() {
   if (s.result) return resultHtml();
   const p = s.plan;
@@ -88,6 +98,7 @@ function planHtml() {
     ${p.spaces.map((sp) => { const x = e.spaces?.[sp.division] || {}; return `<div class="card" data-space="${esc(sp.division)}"><div class="row wrap cgHead"><label class="inline" style="margin:0"><input type="checkbox" data-skip ${(x.skip ?? sp.skip) ? '' : 'checked'}> <b>${esc(DIVISION[sp.division]?.[0] || sp.division)}</b>${sp.exists ? ` <span class="note">${t('(already there)')}</span>` : ''}</label><input data-name value="${esc(x.name ?? sp.name)}" maxlength="60" class="grow" aria-label="${t('Space name')}"><select data-mode>${Object.entries(MODE).map(([k, v]) => `<option value="${k}" ${(x.mode || sp.mode) === k ? 'selected' : ''}>${esc(v[0])}</option>`).join('')}</select></div>
       <div class="note">${t('Blueprint {name}', { name: esc(sp.blueprint) })}${sp.access === 'owner' ? ` · ${t('Owner only')}` : ''}${sp.shift ? ` · ${t('at night')}` : ''}${sp.budget ? ` · ${t('{usd} USD per month', { usd: sp.budget })}` : ''}</div>
       <div class="grid2" style="margin-top:8px"><div><b class="note">${t('Starting targets')}</b>${sp.kpis.map((k) => `<label class="cgRow"><span class="grow">${esc(tx(k.name))}${k.why ? ` <span class="note">(${esc(k.why)})</span>` : ''}</span><input data-kpi="${esc(k.id)}" type="number" step="any" min="0" value="${esc(x.kpis?.[k.id] ?? k.target ?? '')}" placeholder="${t('no goal')}" style="width:110px"> <span class="note">${esc(k.unit)}</span></label>
+        ${measuredHtml(k)}
         <label class="cgRow cgBehind"><span class="grow note">${t('when behind')}</span><select data-behind="${esc(k.id)}" aria-label="${t('When {name} is behind', { name: esc(tx(k.name)) })}">${Object.entries(BEHIND).map(([m, l]) => `<option value="${m}" ${(x.behind?.[k.id] || k.onBehind || 'notify') === m ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`).join('')}</div>
       <div><b class="note">${t('What the squad needs from you')}</b>${sp.materials.map((m, i) => { const id = m.id === 'custom' ? `custom-${i}` : m.id; return `<label class="cgRow"><span class="grow">${esc(m.label || MATERIAL[m.id] || m.id)}${m.why ? ` <span class="note">(${esc(m.why)})</span>` : ''}</span><select data-material="${esc(id)}">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${(x.materials?.[id] || m.status) === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`; }).join('')}</div></div>
       ${sp.routines?.length ? `<div style="margin-top:8px"><b class="note">${t('Routines (made off; you turn them on after the build)')}</b>${sp.routines.map((r) => `<label class="cgRow inline"><input type="checkbox" data-routine="${esc(r.id)}" ${(x.routines?.[r.id] ?? r.on) ? 'checked' : ''}> <span class="grow">${esc(tx(r.title))} <span class="note">· ${EVERY(r.every)} ${t('at')} ${esc(r.at)} · ${esc(r.agent)}</span></span></label>`).join('')}</div>` : ''}</div>`; }).join('')}

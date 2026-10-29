@@ -17,6 +17,7 @@ import * as company from './company.js';
 import * as floors from './floors.js';
 import * as setup from './setup.js';
 import * as kpi from './kpi.js';
+import * as integ from './integrations.js';
 import * as cadence from './cadence.js';
 import { membersFor, defaultPicks, runClaude } from './recommend.js';
 import { readJson, writeJson, writeText, kebab, clip, oneLine, bad } from './util.js';
@@ -133,6 +134,13 @@ const withMode = (sp, hours, bp) => {
   sp.routines = routinesFor(bp, hours, sp.mode);
   for (const k of sp.kpis) k.onBehind = BEHIND[sp.mode];
 };
+// a target the Blueprint would measure from an integration (1.6): the integration here that does it, or what to
+// connect; the target stays manual until then
+function measuredBy(k, space) {
+  if (!kpi.REQUIRES.test(k.requires || '')) return {};
+  const kind = k.requires.slice(4);
+  try { return { requires: kind, ...integ.match(kind, space, k.mcp || null) }; } catch { return { requires: kind }; }
+}
 // the budget per Space: the monthly budget over the Spaces this build makes
 const splitBudget = (p) => { const n = p.spaces.filter((s) => !s.skip).length; const each = p.capacity.budget && n ? Math.round((p.capacity.budget / n) * 100) / 100 : 0; for (const s of p.spaces) s.budget = s.skip ? 0 : each; };
 export function draftPlan(a, built = load().built) {
@@ -146,7 +154,7 @@ export function draftPlan(a, built = load().built) {
     spaces.push({
       division, blueprint: bp.id, name: spaceName, mode, autopilot: AUTOPILOT[mode], access: bp.space.access || 'team', shift: shiftFor(a.capacity.hours, mode), budget: 0,
       ...(existingSpace(division, spaceName, built) ? { exists: true, skip: true } : {}),   // run again: a Space that is already there is not built twice
-      kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode] })),
+      kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode], ...measuredBy(k, { id: '', access: bp.space.access || 'team' }) })),
       routines: routinesFor(bp, a.capacity.hours, mode),
       materials: materialsFor(division, a),
     });
@@ -296,6 +304,8 @@ async function buildAll(st, p, create) {
       const root = r.path;
       floors.updateFloorConfig(root, { shift: sp.shift || { enabled: false } });
       for (const k of sp.kpis) { try { kpi.updateKpi(root, k.id, { ...(k.target != null ? { target: k.target } : {}), ...(k.onBehind ? { onBehind: { mode: k.onBehind } } : {}) }); } catch { /* not seeded */ } }
+      // measured from the integration the plan named; it stays manual when that is not possible any more
+      for (const k of sp.kpis.filter((x) => x.measure)) { try { kpi.updateKpi(root, k.id, { every: 'hour', source: { kind: 'mcp', server: k.measure.server, tool: k.measure.tool, args: k.measure.args, pick: k.measure.pick } }); } catch { /* the integration changed */ } }
       // the routines: the Blueprint seeded them off; the planned time, the unticked ones removed; nothing runs yet
       const planned = new Map((sp.routines || []).map((x) => [x.id, x]));
       for (const x of cadence.readDefs(root)) { const want = planned.get(x.id); try { if (want && !want.on) cadence.remove(root, x.id); else if (want) cadence.update(root, x.id, { at: want.at, enabled: false }); } catch { /* hand-edited */ } }

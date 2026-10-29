@@ -6,6 +6,7 @@
 // the tool's input schema), how the number is read, and Try before saving.
 import { esc, api, toast, ago } from './lib.js';
 import { t, tx } from './i18n.js';
+import { KIND } from './admin-int.js';
 
 const STATE = { met: t('Met'), behind: t('Behind'), unset: t('No goal yet'), unknown: t('No value yet') };
 const TONE = { met: 'live', behind: 'bad', unset: '', unknown: '' };
@@ -86,6 +87,7 @@ export function targetsHtml(x, d, me, integ = null) {
         ${s.kpis.length ? `<div class="adminList">${s.kpis.map((k) => `<div class="adminRow" data-kpi="${esc(k.id)}"><div class="row"><span class="badge ${TONE[k.status.state]}">${STATE[k.status.state]}${k.status.pct != null ? ` ${k.status.pct} %` : ''}</span><b class="grow">${esc(tx(k.name))}</b>
             <span class="kval">${fmt(k.stale ? null : k.latest?.value, k.unit)}</span><span class="note">/ ${k.target == null ? t('no goal') : fmt(k.target, k.unit)}</span>${spark(k.series)}</div>
           <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : k.source.kind === 'mcp' ? ` (${esc(nameOf(k.source.server))} · <span class="mono">${esc(k.source.tool)}</span>)` : ''}${MEASURED.includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
+          ${k.requires && k.source.kind !== 'mcp' ? `<div class="note">${t('Connect {kind} to measure it (Admin → Integrations), then add it from an integration.', { kind: esc(KIND[k.requires.slice(4)] || k.requires) })}</div>` : ''}
           <div class="note whenBehind">${t('When behind:')} <b>${MODE[k.onBehind?.mode || 'off']}</b>${k.onBehind && k.onBehind.mode !== 'off' && k.onBehind.mode !== 'notify' ? ` · ${esc(agentName(s.agents, k.onBehind.agent))}` : ''}${k.onBehind?.task ? ` · ${esc(k.onBehind.task.slice(0, 80))}` : ''}</div>
           ${owner ? `<details class="kbehind"><summary class="note">${t('Change what happens when it is behind')}</summary><form class="grid4" data-kbehind>
             <label>${t('When behind')}<select name="mode">${opts(MODE, k.onBehind?.mode || 'off')}</select></label>

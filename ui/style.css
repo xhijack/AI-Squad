@@ -771,6 +771,7 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 /* the Company Guide's plan page (1.4): a target or a material per row, the field at the right */
 .cgRow { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0; font-weight: 500; }
 .cgRow > span.grow { flex: 1; min-width: 0; }
+.cgMeasure { margin: 0 0 var(--sp-1); }
 .cgRow input, .cgRow select { width: auto; flex: 0 0 auto; margin: 0; }
 .cgHead select { width: auto; margin: 0; }
 .steps.wrap { flex-wrap: wrap; }
