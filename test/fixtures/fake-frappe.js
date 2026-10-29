@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // A tiny ERPNext for tests: token auth (API key:secret per user), /api/resource lists with fields, filters
-// (=, >, <) and order, single documents, frappe.client.submit (only users in `submitters`), and get_logged_user.
+// (=, >, <, in) and order, single documents, frappe.client.submit (only users in `submitters`), and get_logged_user.
 import http from 'node:http';
 
 // documents are stamped from `now` on, one minute apart, in local time like an ERPNext server (never a fixed date:
@@ -11,7 +11,7 @@ export function fakeFrappe({ users = {}, submitters = [], now = Date.now() } = {
   let clock = now;
   const stamp = () => { clock += 60e3; return new Date(clock - new Date(clock).getTimezoneOffset() * 60e3).toISOString().replace('T', ' ').slice(0, 19); };
   const userOf = (h) => { const m = String(h || '').match(/^token ([^:]+):(.+)$/); return m && users[m[1]]?.secret === m[2] ? users[m[1]].user : null; };
-  const pass = (d, [f, op, v]) => (op === '=' ? d[f] === v : op === '>' ? String(d[f]) > String(v) : op === '<' ? String(d[f]) < String(v) : op === '>=' ? String(d[f]) >= String(v) : op === '<=' ? String(d[f]) <= String(v) : true);
+  const pass = (d, [f, op, v]) => (op === '=' ? d[f] === v : op === 'in' ? [].concat(v).includes(d[f]) : op === '>' ? String(d[f]) > String(v) : op === '<' ? String(d[f]) < String(v) : op === '>=' ? String(d[f]) >= String(v) : op === '<=' ? String(d[f]) <= String(v) : true);
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
@@ -44,7 +44,7 @@ export function fakeFrappe({ users = {}, submitters = [], now = Date.now() } = {
       return send(404, { exc_type: 'NotFound' });
     });
   });
-  const add = (doctype, d) => { const t = stamp(); const doc = { doctype, docstatus: 0, creation: t, modified: t, modified_by: 'Administrator', ...d }; docs[doctype].push(doc); return doc; };
+  const add = (doctype, d) => { const t = stamp(); const doc = { doctype, docstatus: 0, creation: t, modified: t, modified_by: 'Administrator', ...d }; (docs[doctype] ||= []).push(doc); return doc; };
   const edit = (doctype, name, patch) => Object.assign(docs[doctype].find((x) => x.name === name), patch, { modified: stamp() });
   return { server, docs, calls, add, edit, listen: () => new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(`http://127.0.0.1:${server.address().port}`))) };
 }

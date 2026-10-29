@@ -2089,5 +2089,8 @@
  "Enter by hand for now: {name} can measure it once you mark its tool read-only (Admin → Integrations) and pick it in Admin → Targets": "Isi manual dulu: {name} bisa mengukurnya setelah kamu menandai tool-nya read-only (Admin → Integrasi) dan memilihnya di Admin → Target",
  "Enter by hand: {name} is your personal integration; a team Space needs a {kind} server in its own .mcp.json": "Isi manual: {name} adalah integrasi pribadimu; Space tim butuh server {kind} di .mcp.json miliknya sendiri",
  "Enter by hand (connect {kind} to measure it)": "Isi manual (hubungkan {kind} untuk mengukurnya)",
- "Connect {kind} to measure it (Admin → Integrations), then add it from an integration.": "Hubungkan {kind} untuk mengukurnya (Admin → Integrasi), lalu tambahkan dari integrasi."
+ "Connect {kind} to measure it (Admin → Integrations), then add it from an integration.": "Hubungkan {kind} untuk mengukurnya (Admin → Integrasi), lalu tambahkan dari integrasi.",
+ "Finance: read only (Accounts User, read). Only an Owner-only Space with the Finance key uses it; its agents can create, change or submit nothing.": "Keuangan: hanya baca (Accounts User, baca). Hanya Space khusus Owner dengan kunci Keuangan yang memakainya; agennya tidak bisa membuat, mengubah atau submit apa pun.",
+ "Finance key (read only, Owner-only Spaces)": "Kunci Keuangan (hanya baca, Space khusus Owner)",
+ "Counts only": "Hanya jumlah"
 }

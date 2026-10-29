@@ -37,7 +37,8 @@ export function parseBlueprint(text, fallbackId = '') {
     kpis: Array.isArray(data.kpis) ? data.kpis.filter((k) => k && k.name) : [],
     // routines (1.5): created disabled in a new Space; the Owner turns them on in Admin → Cadence
     cadence: Array.isArray(data.cadence) ? data.cadence.filter((r) => r && r.title && r.task) : [],
-    space: (({ kind, access, shift }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
+    // ERPNext key and Telegram (1.7): Finance reads with the finance key and sends only counts
+    space: (({ kind, access, shift, erpnext, telegram }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}), ...(erpnext ? { erpnext } : {}), ...(telegram ? { telegram } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
   };
 }
 

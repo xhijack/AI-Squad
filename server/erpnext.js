@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // ERPNext and the Sales pilot (0.19). The AI Squad talks to one ERPNext site (Sopwer: office.sopwer.id) in two ways:
 //   - Agents use it through Frappe Assistant Core (FAC), an MCP server inside ERPNext, with the API key of an ERPNext
-//     user made for their role: "sales" (Lead, Opportunity, Quotation as drafts) or "delivery" (Project, Task).
+//     user made for their role: "sales" (Lead, Opportunity, Quotation as drafts), "delivery" (Project, Task) or
+//     "finance" (1.7: Accounts User, read only; only an Owner-only Space gets it, and its tools are read-only too).
 //     A Space chooses which (floor.json `erpnext`). The keys are write-only here and reach a session only as
 //     environment variables (never in a repository, an argument list or a browser); FAC applies that user's ERPNext
 //     permissions to every call, and destructive tools are denied on top.
@@ -19,8 +20,8 @@ import * as auth from './auth.js';
 import * as hb from './handoff.js';
 import { readJson, writeJson, writeText, bad, notFound, HttpError, oneLine, clip } from './util.js';
 
-export const ROLES = ['sales', 'delivery', 'owner'];
-export const AGENT_ROLES = ['sales', 'delivery'];
+export const ROLES = ['sales', 'delivery', 'finance', 'owner'];
+export const AGENT_ROLES = ['sales', 'delivery', 'finance'];
 export const MCP_PATH = '/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp';
 export const SERVER = 'erpnext';                     // the MCP server's name in sessions: tools are mcp__erpnext__*
 // FAC tools an agent may use without asking; the denied ones never (deleting, submitting or cancelling documents,
@@ -28,6 +29,9 @@ export const SERVER = 'erpnext';                     // the MCP server's name in
 export const ALLOW = ['list_documents', 'get_document', 'search_documents', 'search', 'fetch', 'get_doctype_info', 'create_document', 'update_document',
   'generate_report', 'report_list', 'report_requirements', 'get_pending_approvals', 'get_crm_activity', 'add_crm_activity'].map((t) => `mcp__${SERVER}__${t}`);
 export const DENY = ['delete_document', 'document_action', 'run_workflow', 'send_email', 'send_crm_email', 'reply_to_helpdesk_ticket', 'run_python_code', 'run_database_query'].map((t) => `mcp__${SERVER}__${t}`);
+// the finance key reads only: nothing is created or changed, even where the ERPNext user could (1.7)
+const WRITES = ['create_document', 'update_document', 'add_crm_activity'].map((t) => `mcp__${SERVER}__${t}`);
+export const toolsFor = (role) => (role === 'finance' ? { allow: ALLOW.filter((t) => !WRITES.includes(t)), deny: [...DENY, ...WRITES] } : { allow: ALLOW, deny: DENY });
 export const DEFAULTS = { enabled: false, url: '', pollMin: 5, sales: { floorId: '', agentId: '' }, delivery: { floorId: '', agentId: '' } };
 
 const target = (t = {}) => ({ floorId: String(t?.floorId || '').replace(/[^\w-]/g, '').slice(0, 60), agentId: String(t?.agentId || '').replace(/[^\w-]/g, '').slice(0, 60) });
@@ -99,9 +103,11 @@ export async function testAll() {
 // which key reads for a Space on the server's behalf (targets, 1.3; integrations, 1.6): the Owner's key reads
 // everything (payroll, invoices), and what it reads is seen by the whole team, so a team Space uses its own role's key
 // (or the sales, then delivery key); only an Owner-only Space uses the Owner's key. space: { access, erpnext }
+// The finance key (1.7) is read-only and reads for its Owner-only Space first; a team Space never uses it.
 export function measureRole(space = {}) {
+  if (space?.access === 'owner' && space?.erpnext === 'finance' && credential('finance')) return 'finance';
   if (space?.access === 'owner' && credential('owner')) return 'owner';
-  for (const r of [space?.erpnext, 'sales', 'delivery']) if (AGENT_ROLES.includes(r) && credential(r)) return r;
+  for (const r of [space?.erpnext, 'sales', 'delivery']) if (['sales', 'delivery'].includes(r) && credential(r)) return r;
   throw bad(space?.access === 'owner' ? 'No ERPNext key: set one in Admin → ERPNext' : 'A team Space measures ERPNext targets with the sales or delivery key, not the Owner\'s: set one in Admin → ERPNext');
 }
 
@@ -116,14 +122,15 @@ export function mcpFile() {
 // what a session of a Space gets: arguments, allowed and denied tools, and the (secret) environment; null when off
 export function sessionFor(floor = {}) {
   const role = floor?.erpnext;
-  if (!AGENT_ROLES.includes(role)) return null;
+  if (!AGENT_ROLES.includes(role) || (role === 'finance' && floor?.access !== 'owner')) return null;
   const s = settings(), c = credential(role);
   if (!s.url || !c) return null;
-  return { role, args: ['--mcp-config', mcpFile()], allow: ALLOW, deny: DENY, env: { AISQUAD_ERP_URL: s.url, AISQUAD_ERP_KEY: c.key, AISQUAD_ERP_SECRET: c.secret } };
+  return { role, args: ['--mcp-config', mcpFile()], ...toolsFor(role), env: { AISQUAD_ERP_URL: s.url, AISQUAD_ERP_KEY: c.key, AISQUAD_ERP_SECRET: c.secret } };
 }
 // a line for the agent file (server/context.js)
 export function contextLine(role) {
   if (!AGENT_ROLES.includes(role)) return '';
+  if (role === 'finance') return 'ERPNext holds the books: the `erpnext` tools (Frappe Assistant Core) read with the permissions of the read-only Finance user (Accounts User, read). You read only: nothing is created, changed, submitted, cancelled, paid or e-mailed from here. Amounts, customers and salaries stay in this Space.';
   return role === 'sales'
     ? 'ERPNext is your CRM: the `erpnext` tools (Frappe Assistant Core) work with the permissions of the Sales user. Leads, Opportunities and Quotations are created and kept there; contact data stays there. A Quotation stays a draft: you never submit it (not with update_document either). When a draft is ready, hand it to the Owner for the price approval (a package with `to: owner`, `kind: quotation`, `erpnext: Quotation/<name>` and how you priced it, without amounts: the Owner reads them from ERPNext).'
     : 'ERPNext holds the projects: the `erpnext` tools (Frappe Assistant Core) work with the permissions of the Delivery user. Create the Project and its Tasks there for won work; prices are not for this Space.';

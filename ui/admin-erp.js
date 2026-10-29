@@ -11,6 +11,7 @@ const KIND = { task: t('Task'), lead: t('Lead'), opportunity: t('Opportunity'), 
 const ROLE_TEXT = {
   sales: t('Sales: Lead, Opportunity, Quotation (create and edit, no Submit). Agents of Spaces with the Sales role use it.'),
   delivery: t('Delivery: Project and Task. Agents of Spaces with the Delivery role use it.'),
+  finance: t('Finance: read only (Accounts User, read). Only an Owner-only Space with the Finance key uses it; its agents can create, change or submit nothing.'),
   owner: t('Owner: may submit Quotations. Only this server uses it, after you approve a price; no agent ever gets it.'),
 };
 const tone = (s) => (['done', 'approved', 'answered'].includes(s) ? 'live' : ['held', 'approval', 'question', 'clarify'].includes(s) ? 'update' : '');
@@ -51,7 +52,7 @@ export function erpnextHtml(x, d) {
     </form>
     <div class="section"><div class="sectionHead"><h3 class="grow">${t('Keys per role')}</h3></div>
       <p class="note">${t('In ERPNext, make one user per role, give it only the roles it needs, and generate its API key and secret (User → API Access). Keys are stored on this machine only and never shown again.')}</p>
-      <div class="adminList">${['sales', 'delivery', 'owner'].map((r) => { const k = x.keys[r]; return `<div class="adminRow" data-erprole="${r}"><div class="row"><b class="grow">${esc({ sales: t('Sales'), delivery: t('Delivery'), owner: t('Owner') }[r])}</b>
+      <div class="adminList">${['sales', 'delivery', 'finance', 'owner'].map((r) => { const k = x.keys[r]; return `<div class="adminRow" data-erprole="${r}"><div class="row"><b class="grow">${esc({ sales: t('Sales'), delivery: t('Delivery'), finance: t('Finance'), owner: t('Owner') }[r])}</b>
         <span class="note">${k.set ? `${t('set ····{last4}', { last4: esc(k.last4) })}${k.user ? ` · ${esc(k.user)}` : ''}` : t('not set')}</span></div>
         <div class="note">${ROLE_TEXT[r]}</div>
         <div class="row wrap"><input name="key" placeholder="${t('API key')}" autocomplete="off" class="grow"><input name="secret" type="password" placeholder="${t('API secret')}" autocomplete="off" class="grow">

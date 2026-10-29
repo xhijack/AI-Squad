@@ -30,6 +30,7 @@ ERPNext Quotation "Ordered" ──watcher──▶ delivery Space (agent creates
    |---|---|---|
    | `ai.sales@…` | Sales | Lead, Opportunity, Quotation: read, write, create (**no Submit, Cancel or Delete**); Customer, Item, Item Price, Price List: read |
    | `ai.delivery@…` | Delivery | Project, Task: read, write, create; Customer, Quotation, Sales Order: read |
+   | `ai.finance@…` | Finance (1.7) | **Read only**: the standard *Accounts User* role with *Read* and *Report* only (Role Permission Manager: untick Write, Create, Submit, Cancel, Delete, Email, Print and Export on every Accounts DocType it has); Sales Invoice, Purchase Invoice, Payment Entry, Journal Entry, GL Entry, Bank Transaction, Account, Budget: read |
    | you (or `ai.owner@…`) | Owner (optional) | Quotation: Submit (used only by the server, after your approval) |
 
    **Required:** the Sales user must not have Submit on Quotation. The standard *Sales User* role has it: give the
@@ -60,6 +61,25 @@ How a session gets the key: `~/.aisquad/erpnext/mcp.json` (no secrets in it) poi
 `Authorization: token ${AISQUAD_ERP_KEY}:${AISQUAD_ERP_SECRET}`; Claude Code fills in the variables when it starts.
 A background job gets them in its environment; a Desk session through a mode 600 file that the shell reads and
 deletes before it starts Claude Code. They never appear in an argument list, a repository, a log or the browser.
+
+## The finance key (1.7)
+
+The Finance Space (Blueprint *Finance*, Owner-only) reads the books with its own key, never with the Owner's:
+
+- **In ERPNext**: a user `ai.finance@…` with the *Accounts User* role restricted to Read and Report (a copy of the
+  role, e.g. *AI Finance Read*, is the safest: untick everything but Read and Report). The user must not be able to
+  write, submit, cancel, pay or e-mail anything. Salary slips: give it *Read* on Salary Slip only if you want payroll
+  totals in the close; they stay in the Finance Space.
+- **In The AI Squad**: Admin → ERPNext → *Finance* key; Admin → Spaces → the Finance Space → *ERPNext: Finance key*
+  (the Blueprint sets it). Only an Owner-only Space can have it: a team Space is put back to *No*.
+- **What agents get**: the `erpnext` tools for reading only. `create_document`, `update_document` and
+  `add_crm_activity` are denied on top of the usual list, so even a finance user with too many rights cannot write
+  through an agent. The role files deny them as well.
+- **Targets**: the Finance Space measures with the finance key (*Overdue receivables*: the sum of
+  `outstanding_amount` of submitted Sales Invoices whose status is Overdue; *Unreconciled bank lines*: the count of
+  submitted Bank Transactions with status Unreconciled). Without a finance key the Owner's key reads for it.
+- **Telegram**: the Finance Space sends counts only (Admin → Spaces → Telegram: *Counts only*): no amounts, names,
+  customers or answer buttons leave the app.
 
 ## 3. The price approval
 
@@ -92,7 +112,7 @@ package between Spaces and the share of handoffs done without a round of questio
 ## Files
 
 ```
-~/.aisquad/secrets.json             erpnext.{sales,delivery,owner}: key, secret, ERPNext user (mode 600)
+~/.aisquad/secrets.json             erpnext.{sales,delivery,finance,owner}: key, secret, ERPNext user (mode 600)
 ~/.aisquad/erpnext/mcp.json         the MCP configuration sessions share (variables only)
 ~/.aisquad/erpnext.json             the watcher: where the pipeline was, Leads and orders handed over, approvals, alerts
 ~/.aisquad/handoffs.json            every package between Spaces (the last 500)

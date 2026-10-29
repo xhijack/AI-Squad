@@ -17,7 +17,8 @@ const TABS = [['spaces', t('Spaces')], ['targets', t('Targets')], ['cadence', t(
 const KIND = { project: t('Project'), department: t('Department') };
 const ACCESS = { team: t('Team'), owner: t('Owner only') };
 const MEMORY = { claude: t('This machine (Claude Code)'), repo: t('In the Space (committed)') };
-const ERP = { off: t('No'), sales: t('Sales key'), delivery: t('Delivery key') };
+const ERP = { off: t('No'), sales: t('Sales key'), delivery: t('Delivery key'), finance: t('Finance key (read only, Owner-only Spaces)') };
+const TELEGRAM = { full: t('Messages'), counts: t('Counts only') };
 const DAYS = [t('Sun'), t('Mon'), t('Tue'), t('Wed'), t('Thu'), t('Fri'), t('Sat')];
 const opts = (map, v) => Object.entries(map).map(([k, label]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(label)}</option>`).join('');
 const when = (ts) => new Date(ts).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -34,6 +35,7 @@ function spacesHtml(d) {
         <label>${t('Memory')}<select name="memory">${opts(MEMORY, s.memory)}</select></label>
         <label>${t('Agents at once')}<input name="maxAgents" type="number" min="1" max="20" value="${s.maxAgents}"></label>
         <label>ERPNext<select name="erpnext">${opts(ERP, s.erpnext || 'off')}</select></label>
+        <label>Telegram<select name="telegram">${opts(TELEGRAM, s.telegram || 'full')}</select></label>
         ${d.machines?.length ? `<label>${t('Background jobs run on')}<select name="node">${opts({ auto: t('Any machine with room'), head: t('This machine only'), ...Object.fromEntries(d.machines.map((m) => [m, m])) }, s.node || 'auto')}</select></label>` : ''}
       </div>
       <div class="row wrap shiftRow"><label class="inline"><input type="checkbox" name="shiftOn" ${s.shift.enabled ? 'checked' : ''}> ${t('Shift')}</label>
@@ -152,7 +154,7 @@ async function openAdmin(tab = 'spaces') {
       if (f.dataset.space) {
         const days = [...f.querySelectorAll('[name=day]:checked')].map((x) => +x.value);
         await api('PATCH', `/api/floors/${f.dataset.space}`, { kind: f.elements.kind.value, access: f.elements.access.value, memory: f.elements.memory.value,
-          shift: { enabled: f.elements.shiftOn.checked, from: f.elements.from.value, to: f.elements.to.value, days }, recovery: { maxAgents: +f.elements.maxAgents.value }, erpnext: f.elements.erpnext.value, ...(f.elements.node ? { node: f.elements.node.value } : {}) });
+          shift: { enabled: f.elements.shiftOn.checked, from: f.elements.from.value, to: f.elements.to.value, days }, recovery: { maxAgents: +f.elements.maxAgents.value }, erpnext: f.elements.erpnext.value, telegram: f.elements.telegram.value, ...(f.elements.node ? { node: f.elements.node.value } : {}) });
         return again(t('Space saved'));
       }
       if (f.dataset.agent) {

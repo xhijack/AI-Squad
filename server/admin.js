@@ -18,7 +18,7 @@ export function overview() {
     if (!fs.existsSync(e.path)) { spaces.push({ id: e.id, number: e.number, path: e.path, missing: true }); continue; }
     let cfg; try { cfg = floors.readFloor(e.path); } catch { spaces.push({ id: e.id, number: e.number, path: e.path, missing: true }); continue; }
     const f = cfg.floor;
-    spaces.push({ id: e.id, number: e.number, path: e.path, name: f.name, workflow: f.workflow, kind: f.kind, access: f.access, memory: f.memory, shift: f.shift, node: f.node, erpnext: f.erpnext || 'off',
+    spaces.push({ id: e.id, number: e.number, path: e.path, name: f.name, workflow: f.workflow, kind: f.kind, access: f.access, memory: f.memory, shift: f.shift, node: f.node, erpnext: f.erpnext || 'off', telegram: f.telegram || 'full',
       maxAgents: f.recovery.maxAgents, agents: cfg.team.agents.length, blueprint: f.blueprint?.id || '' });
     for (const a of cfg.team.agents) {
       let eff = null; try { eff = floors.effectiveOf(e.path, a); } catch { /* broken template */ }

@@ -35,9 +35,9 @@ const proj = path.join(root, 'projects', 'sales');
 let floorId = '', agentId = '';
 
 test('a Space: kind, access, memory, shift, node and ERPNext role, cleaned with safe defaults', () => {
-  assert.deepEqual(space.cleanSpace({}), { kind: 'project', access: 'team', memory: 'claude', shift: space.DEFAULT_SHIFT, node: 'auto', erpnext: 'off' });
+  assert.deepEqual(space.cleanSpace({}), { kind: 'project', access: 'team', memory: 'claude', shift: space.DEFAULT_SHIFT, node: 'auto', erpnext: 'off', telegram: 'full' });
   const s = space.cleanSpace({ kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [5, 1, 1, 9], from: '22:00', to: '05:00' }, node: 'box-2', erpnext: 'sales' });
-  assert.deepEqual(s, { kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [1, 5], from: '22:00', to: '05:00' }, node: 'box-2', erpnext: 'sales' });
+  assert.deepEqual(s, { kind: 'department', access: 'owner', memory: 'repo', shift: { enabled: true, days: [1, 5], from: '22:00', to: '05:00' }, node: 'box-2', erpnext: 'sales', telegram: 'full' });
   assert.equal(space.cleanSpace({ erpnext: 'owner' }).erpnext, 'off', 'the owner key is never for agents');
   assert.equal(space.cleanSpace({ kind: 'x', access: 'root', node: '../etc' }).kind, 'project');
 });

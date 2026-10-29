@@ -111,7 +111,7 @@ export function cleanFloor(f = {}, prev = {}) {
     // the Floor's default voice language and settings (each agent may set its own; server/voice.js)
     ...(pick('voice') ? { voice: { lang: voiceLib.cleanLang(pick('voice').lang), settings: voiceLib.cleanVoice(pick('voice').settings || {}) } } : {}),
     // the Space: kind, access, where its auto memory lives, its shift and machine (server/space.js)
-    ...space.cleanSpace({ kind: pick('kind'), access: pick('access'), memory: pick('memory'), shift: pick('shift'), node: pick('node'), erpnext: pick('erpnext') }),
+    ...space.cleanSpace({ kind: pick('kind'), access: pick('access'), memory: pick('memory'), shift: pick('shift'), node: pick('node'), erpnext: pick('erpnext'), telegram: pick('telegram') }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
     // the servers DevOps may reach with ssh (1.0.1, server/permits.js; checked in updateFloorConfig)
     ...(pick('servers')?.length ? { servers: pick('servers') } : {}),

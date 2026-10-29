@@ -7,6 +7,7 @@
 //     same role checks. Hard-stop items (money, legal, production, secrets, irreversible) need a 4-digit code.
 //   - Messages carry a redacted summary only: no secrets, no personal data, no contract text. Details stay in the UI.
 //   - Pairing: a one-time code from the UI (PIN), sent to the bot as /start CODE. Other chats are ignored.
+//   - A Space with `telegram: counts` (Finance, 1.7) sends only counts: no text, names, amounts or buttons but Open.
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { config } from './config.js';
@@ -57,7 +58,8 @@ const TEXT = {
     status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.',
     askMany: 'Several questions (or several choices): answer them in The AI Squad.',
     routines: 'Routines today: {done} done, {failed} failed, {skipped} skipped.', triggered: 'Targets that raised work:', triggeredLine: '{space} · {name}: {what}',
-    what_notify: 'a notice', what_suggest: 'a plan to approve', what_act: 'the agents act on it' },
+    what_notify: 'a notice', what_suggest: 'a plan to approve', what_act: 'the agents act on it',
+    countsOnly: '{n} item(s) from an Owner-only Space wait for you in The AI Squad (details only in the app).' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
     help: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/help daftar ini',
     reply: 'Ketik balasanmu untuk {agent}.', confirm: 'Hard stop ({reasons}). Ketik {code} dalam 5 menit untuk mengonfirmasi "{choice}". Ketikan lain membatalkan.', cancelled: 'Dibatalkan: tidak ada yang dikirim.',
@@ -67,7 +69,8 @@ const TEXT = {
     lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', targets: 'Target: {met} dari {n} tercapai, {behind} tertinggal, {unset} belum punya angka.', behindLine: '{space} · {name}: {value} dari {target} {unit}', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
     status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.',
     routines: 'Rutinitas hari ini: {done} selesai, {failed} gagal, {skipped} dilewati.', triggered: 'Target yang memicu pekerjaan:', triggeredLine: '{space} · {name}: {what}',
-    what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agen langsung bekerja' },
+    what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agen langsung bekerja',
+    countsOnly: '{n} hal dari Space khusus Owner menunggumu di The AI Squad (detail hanya di aplikasi).' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
@@ -127,8 +130,18 @@ const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting f
 
 // a person may see this item: Owner-only Spaces only for the Owner
 const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOnly && !access.ownerFloors().has(item.floorId)));
+// the Spaces whose items travel as counts only (1.7)
+export function countsOnly() {
+  const ids = new Set();
+  for (const f of building.loadBuilding().floors) { try { if (floors.readFloor(f.path).floor.telegram === 'counts') ids.add(f.id); } catch { /* missing */ } }
+  return ids;
+}
 
-export function messageFor(item, tok, s = settings()) {
+export function messageFor(item, tok, s = settings(), counts = countsOnly()) {
+  if (item.floorId && counts.has(item.floorId)) {                // the kind and the Space; what it is stays in the app
+    const open = s.publicUrl ? [[{ text: say('openBtn', {}, s.lang), url: `${s.publicUrl}/#/floor/${item.floorId}` }]] : [];
+    return { text: `[${KIND[item.kind] || item.kind}] ${item.floorName || item.floorId}\n${say('countsOnly', { n: 1 }, s.lang)}`, buttons: open };
+  }
   const where = [item.floorName || item.floorId, item.agentName].filter(Boolean).join(' · ');
   // a price approval: only its first line (customer, total) travels; the lines and the note are opened in the app
   const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(['price', 'contract'].includes(item.kind) ? String(item.text).split('\n')[0] : item.text, 600)];
@@ -156,7 +169,8 @@ export function messageFor(item, tok, s = settings()) {
 
 // the morning digest for one person: what still waits, and what happened in the last day
 export function digestFor(user, { items = deps.items(), now = Date.now(), lang = settings().lang } = {}) {
-  const mine = items.filter((i) => visible(i, user));
+  const counts = countsOnly();
+  const all = items.filter((i) => visible(i, user)), mine = all.filter((i) => !counts.has(i.floorId)), hidden = all.length - mine.length;
   const from = now - 24 * 3600e3;
   let done = 0, failed = 0, cost = 0, stops = 0, chats = 0;
   const rt = { done: 0, failed: 0, skipped: 0 }, triggered = [];
@@ -165,7 +179,7 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
     for (const e of squadLog.read(f.id, { from, to: now, type: 'job.ended,dispatch.idle-stopped,chat.reply,cadence.done,cadence.skipped,kpi.behind' })) {
       if (e.type === 'cadence.done') { if (e.data.status === 'done') rt.done++; else rt.failed++; continue; }
       if (e.type === 'cadence.skipped') { rt.skipped++; continue; }
-      if (e.type === 'kpi.behind') { triggered.push({ floorId: f.id, name: e.data.name, mode: e.data.mode }); continue; }
+      if (e.type === 'kpi.behind') { if (!counts.has(f.id)) triggered.push({ floorId: f.id, name: e.data.name, mode: e.data.mode }); continue; }
       if (e.type === 'job.ended') { if (e.data.status === 'done') done++; else if (e.data.status === 'failed') failed++; cost += +e.data.cost || 0; }
       else if (e.type === 'dispatch.idle-stopped') stops++;
       else chats++;
@@ -173,8 +187,8 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
   }
   const day = new Date(now).toISOString().slice(0, 10);
   const lines = [say('digestTitle', { day }, lang), ''];
-  if (!mine.length) lines.push(say('nothingOpen', {}, lang));
-  else lines.push(say('open', { n: mine.length }, lang), ...mine.slice(0, 10).map((i) => `- ${[i.floorName, i.agentName].filter(Boolean).join(' · ')}: ${short(i.text, 90)}`));
+  if (!all.length) lines.push(say('nothingOpen', {}, lang));
+  else lines.push(say('open', { n: all.length }, lang), ...mine.slice(0, 10).map((i) => `- ${[i.floorName, i.agentName].filter(Boolean).join(' · ')}: ${short(i.text, 90)}`), ...(hidden ? [`- ${say('countsOnly', { n: hidden }, lang)}`] : []));
   lines.push('', say('lastDay', { done, failed, cost: cost.toFixed(2), stops, chats }, lang));
   // cadence and targets that act (1.5): the routines of the last day, and the targets that raised work
   if (rt.done + rt.failed + rt.skipped) lines.push(say('routines', rt, lang));
@@ -188,7 +202,7 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
     if (spaces.length) {
       const sum = (k) => spaces.reduce((n, s) => n + s[k], 0);
       lines.push('', say('targets', { met: sum('met'), n: spaces.reduce((n, s) => n + s.kpis.length, 0), behind: sum('behind'), unset: sum('unset') }, lang));
-      for (const s of spaces) for (const k of s.kpis.filter((x) => x.status.state === 'behind').slice(0, 5)) lines.push(`- ${say('behindLine', { space: s.name, name: k.name, value: k.latest?.value ?? '–', target: k.target, unit: k.unit || '' }, lang).trim()}`);
+      for (const s of spaces.filter((x) => !counts.has(x.id))) for (const k of s.kpis.filter((x) => x.status.state === 'behind').slice(0, 5)) lines.push(`- ${say('behindLine', { space: s.name, name: k.name, value: k.latest?.value ?? '–', target: k.target, unit: k.unit || '' }, lang).trim()}`);
     }
   } catch { /* no targets */ }
   const fresh = insightsCount(from);
@@ -212,6 +226,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const open = new Set(items.map((i) => i.id));
   st.hourly = st.hourly.filter((t) => now - t < 3600e3);
   const quiet = inQuiet(s.quiet, now);
+  const counts = countsOnly();
   for (const item of items) {
     if (st.sent[item.id]) continue;
     // the same message for the same agent within half an hour is one message, whatever its id (1.0.3)
@@ -229,7 +244,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
     for (const c of st.chats) {
       const user = userOf(c.userId);
       if (!visible(item, user)) continue;
-      const m = messageFor(item, user.role === 'viewer' ? null : tok, s);
+      const m = messageFor(item, user.role === 'viewer' || counts.has(item.floorId) ? null : tok, s, counts);
       try { const r = await send(c.chatId, m.text, m.buttons, fetchFn); msgs.push({ chatId: c.chatId, messageId: r.message_id }); st.hourly.push(now); out.sent++; }
       catch (e) { st.lastError = `${new Date(now).toISOString()} ${e.message}`; }
     }
@@ -272,9 +287,9 @@ const asUser = (user, fn) => access.actorStore.run({ user }, fn);
 export const deps = { answer: (...a) => squad.answerAttention(...a), chat: (...a) => squad.sendChat(...a), items: () => squad.attentionItems() };
 function findAgents(q, user) {
   const s = String(q || '').trim().toLowerCase();
-  const out = [];
+  const out = [], counts = countsOnly();
   for (const f of building.loadBuilding().floors) {
-    if (!visible({ floorId: f.id }, user)) continue;
+    if (!visible({ floorId: f.id }, user) || counts.has(f.id)) continue;      // a counts-only Space: no chat from Telegram
     let cfg; try { cfg = floors.readFloor(f.path); } catch { continue; }
     for (const a of cfg.team.agents) if (a.id === s || a.displayName.toLowerCase().includes(s)) out.push({ floorId: f.id, space: cfg.floor.name, agentId: a.id, name: a.displayName });
   }

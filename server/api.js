@@ -309,8 +309,8 @@ const routes = [
   ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly }), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],
   ['PATCH', /^\/api\/erpnext$/, (p, b) => erp.saveSettings(b), { pin: true, history: () => ({ label: 'ERPNext settings' }) }],
-  ['PUT', /^\/api\/erpnext\/keys\/(sales|delivery|owner)$/, async ([role], b) => ({ keys: await erp.setKey(role, b.key, b.secret, { check: b.check !== false }) }), { pin: true }],
-  ['DELETE', /^\/api\/erpnext\/keys\/(sales|delivery|owner)$/, ([role]) => ({ keys: erp.clearKey(role) }), { pin: true }],
+  ['PUT', /^\/api\/erpnext\/keys\/(sales|delivery|finance|owner)$/, async ([role], b) => ({ keys: await erp.setKey(role, b.key, b.secret, { check: b.check !== false }) }), { pin: true }],
+  ['DELETE', /^\/api\/erpnext\/keys\/(sales|delivery|finance|owner)$/, ([role]) => ({ keys: erp.clearKey(role) }), { pin: true }],
   ['POST', /^\/api\/erpnext\/test$/, () => erp.testAll(), { pin: true }],
   ['POST', /^\/api\/erpnext\/sync$/, () => erp.sync(), { pin: true }],
   // the Notification Gateway (0.15): Telegram token (write-only), settings, pairing, chats, test, digest
