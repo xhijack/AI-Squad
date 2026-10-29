@@ -37,10 +37,15 @@ const until = async (fn, ms = 20000) => { const t0 = Date.now(); while (Date.now
 const g = (cwd, ...a) => execFileSync('git', ['-C', cwd, '-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { encoding: 'utf8' }).trim();
 squad.setResourceReader(() => ({ mem: { available: 6 * 2 ** 30, total: 8 * 2 ** 30 }, cpus: 4, load: [.2, .2, .2] }));
 
+// a worker reports its machine in each heartbeat: a fixed /proc/meminfo, never this host's memory (a loaded host
+// leaves the worker no free slot and the job stays on the Head)
+const fakeProc = path.join(root, 'proc');
+fs.mkdirSync(fakeProc, { recursive: true });
+fs.writeFileSync(path.join(fakeProc, 'meminfo'), `MemTotal: ${8 * 2 ** 20} kB\nMemAvailable: ${6 * 2 ** 20} kB\nSwapTotal: ${8 * 2 ** 20} kB\nSwapFree: ${7 * 2 ** 20} kB\n`);
 function startWorker(name, token, mode) {
   const home = path.join(root, `w-${name}`);
   const k = spawn(process.execPath, [path.join(here, '..', 'bin', 'aisquad.js'), 'node', '--head', base, '--name', name, '--token', token], {
-    env: { ...process.env, AISQUAD_HOME: home, CLAUDE_BIN: FAKE, FAKE_CLAUDE_MODE: mode, FAKE_CLAUDE_LOG: path.join(home, 'fake.log'), AISQUAD_NO_HOOKS: '1', AISQUAD_NO_SYSTEMD: '1' }, stdio: 'ignore' });
+    env: { ...process.env, AISQUAD_HOME: home, CLAUDE_BIN: FAKE, FAKE_CLAUDE_MODE: mode, FAKE_CLAUDE_LOG: path.join(home, 'fake.log'), AISQUAD_NO_HOOKS: '1', AISQUAD_NO_SYSTEMD: '1', AISQUAD_PROC: fakeProc }, stdio: 'ignore' });
   kids.push(k);
   return { k, home };
 }
