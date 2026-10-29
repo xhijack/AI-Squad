@@ -15,6 +15,7 @@ import * as floors from '../server/floors.js';
 import * as building from '../server/building.js';
 import * as guide from '../server/guide.js';
 import * as kpi from '../server/kpi.js';
+import * as cadence from '../server/cadence.js';
 import * as context from '../server/context.js';
 import * as squadLog from '../server/log.js';
 
@@ -50,6 +51,28 @@ test('answers are cleaned; the plan is deterministic without Claude Code', () =>
   assert.match(guide.materialsMarkdown(mkt), /\| Brand rules .* \| missing: interview the owner/);
 });
 
+test('the plan has a rhythm (1.5): the Blueprint routines in the owner\'s hours, and what a target behind raises per mode', () => {
+  const p = guide.draftPlan(guide.cleanAnswers(answers));                 // night hours
+  const of = (d) => p.spaces.find((s) => s.division === d);
+  assert.deepEqual(of('marketing').routines.map((r) => [r.id, r.at, r.on]), [['daily-content-draft', '22:30', true], ['weekly-report', '23:00', true]]);
+  assert.deepEqual(of('sales').routines.map((r) => [r.id, r.every, r.at]), [['follow-up-list', 'weekdays', '22:30']], 'moved into the night shift');
+  assert.deepEqual(of('legal').routines.map((r) => r.on), [false], 'a manual squad: unticked');
+  assert.deepEqual(['marketing', 'sales', 'legal'].map((d) => of(d).kpis[0]?.onBehind), ['act', 'suggest', 'notify'], 'manual -> notify, supervised -> suggest, automatic -> act');
+  assert.ok(of('sales').kpis.every((k) => k.onBehind === 'suggest'));
+  const day = guide.draftPlan(guide.cleanAnswers({ ...answers, capacity: { ...answers.capacity, hours: 'day' } }));
+  assert.deepEqual(day.spaces.find((s) => s.division === 'marketing').routines.map((r) => r.at), ['08:30', '09:00'], 'a day squad does not work at night');
+  assert.deepEqual(day.spaces.find((s) => s.division === 'engineering').routines.map((r) => r.at), ['09:00', '10:00'], 'times in the day stay');
+  // the owner unticks a routine and a target's trigger; a new mode resets both to what the mode means
+  const edited = guide.cleanPlan({ spaces: [{ division: 'marketing', routines: [{ id: 'weekly-report', on: false }], kpis: [{ id: 'engagement', onBehind: 'off' }] }, { division: 'legal', mode: 'supervised' }] }, p);
+  assert.deepEqual(edited.spaces.find((s) => s.division === 'marketing').routines.map((r) => r.on), [true, false]);
+  assert.equal(edited.spaces.find((s) => s.division === 'marketing').kpis.find((k) => k.id === 'engagement').onBehind, 'off');
+  assert.deepEqual(edited.spaces.find((s) => s.division === 'legal').routines.map((r) => r.on), [true]);
+  const md = guide.planMarkdown(edited);
+  assert.match(md, /## Rhythm/);
+  assert.match(md, /\*\*DTamu Marketing\*\* \(when a target is behind: the agents act on it\)\n- Daily content draft: every day at 22:30, by the content-writer\n\n/);
+  assert.match(md, /\*\*DTamu Sales\*\* \(when a target is behind: a plan for the owner to approve\)\n- Follow-up list from ERPNext: every weekday at 22:30, by the sales-manager/);
+});
+
 test('the Owner answers step by step; the language is saved; others are kept out', async () => {
   assert.equal((await call('GET', '/api/guide')).body.step, 0);
   assert.equal((await call('PUT', '/api/guide', { answers: { language: 'id' }, step: 1 })).status, 200);
@@ -81,13 +104,18 @@ test('Claude Code sharpens the plan when it answers, the defaults stand when it 
 });
 
 test('Build makes the Spaces with targets, shift, budget, materials; the plan reaches the Company Brain and the agents', async () => {
-  const r = (await call('POST', '/api/guide/build', { spaces: [{ division: 'engineering', skip: true }, { division: 'marketing', name: 'DTamu Marketing Squad', kpis: [{ id: 'posts', target: 5 }], materials: [{ id: 'brand', status: 'have' }] }, { division: 'legal', mode: 'supervised' }] })).body;
+  const r = (await call('POST', '/api/guide/build', { spaces: [{ division: 'engineering', skip: true }, { division: 'marketing', name: 'DTamu Marketing Squad', kpis: [{ id: 'posts', target: 5 }, { id: 'engagement', onBehind: 'off' }], routines: [{ id: 'weekly-report', on: false }], materials: [{ id: 'brand', status: 'have' }] }, { division: 'legal', mode: 'supervised' }] })).body;
   assert.deepEqual(r.built.map((x) => [x.division, !!x.id, x.error || null]), [['product', true, null], ['marketing', true, null], ['sales', true, null], ['legal', true, null]], 'engineering was skipped');
   const mkt = r.built.find((x) => x.division === 'marketing');
   assert.equal(mkt.name, 'DTamu Marketing Squad');
   const f = floors.readFloor(mkt.path);
   assert.deepEqual([f.floor.autopilot, f.floor.budget, f.floor.shift.enabled, f.floor.shift.from], ['full', { usd: 25, period: 'month' }, true, '22:00'], 'the budget is split over the Spaces built');
   assert.deepEqual(kpi.readDefs(mkt.path).map((k) => [k.id, k.target]), [['organic-traffic', null], ['leads', 50], ['posts', 5], ['engagement', null]], 'the owner\'s edit on the plan page');
+  // the rhythm (1.5): the routines written off (one "Turn on routines" per Space), the triggers per target
+  assert.deepEqual(cadence.readDefs(mkt.path).map((x) => [x.id, x.at, x.enabled]), [['daily-content-draft', '22:30', false]], 'the unticked routine is not there');
+  assert.equal(mkt.routines, 1);
+  assert.deepEqual(kpi.readDefs(mkt.path).map((k) => k.onBehind.mode), ['act', 'act', 'act', 'off']);
+  assert.deepEqual(kpi.readDefs(r.built.find((x) => x.division === 'sales').path).map((k) => k.onBehind.mode), ['suggest', 'suggest', 'suggest']);
   const materials = fs.readFileSync(path.join(mkt.path, 'docs', 'squad', 'MATERIALS.md'), 'utf8');
   assert.match(materials, /\| Brand rules .* \| available: ask the owner where it is \|/);
   assert.match(fs.readFileSync(path.join(mkt.path, kpi.FILE), 'utf8'), /\| Leads from the site \| – \| 50 leads/);

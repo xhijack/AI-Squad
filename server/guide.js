@@ -17,6 +17,7 @@ import * as company from './company.js';
 import * as floors from './floors.js';
 import * as setup from './setup.js';
 import * as kpi from './kpi.js';
+import * as cadence from './cadence.js';
 import { membersFor, defaultPicks, runClaude } from './recommend.js';
 import { readJson, writeJson, writeText, kebab, clip, oneLine, bad } from './util.js';
 
@@ -42,6 +43,7 @@ export const SUGGEST = {
   other: ['marketing', 'sales', 'legal'],
 };
 const AUTOPILOT = { automatic: 'full', supervised: 'balanced', manual: 'off' };
+const BEHIND = { automatic: 'act', supervised: 'suggest', manual: 'notify' };       // what a target behind its goal raises (1.5)
 export const STEPS = ['language', 'business', 'goals', 'have', 'divisions', 'modes', 'capacity', 'plan'];
 // what every division needs from the owner; `have` answers mark what is there, the rest is missing or later
 const MATERIALS = {
@@ -121,6 +123,16 @@ function existingSpace(division, spaceName, built) {
 }
 // the owner's hours beat the Blueprint's; a manual squad has no automated work to time, so no shift for it
 const shiftFor = (hours, mode) => (hours === 'night' && mode !== 'manual' ? { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '22:00', to: '05:00' } : null);
+// the rhythm (1.5): the Blueprint's routines, moved into the owner's hours (a night squad works 22:00-05:00, a day
+// squad not at night); a manual squad gets them unticked, since nothing runs by itself there
+const NIGHT_AT = ['22:30', '23:00', '23:30', '00:00', '00:30'], DAY_AT = ['08:30', '09:00', '09:30', '10:00', '10:30'];
+const atNight = (at) => at >= '22:00' || at < '05:00';
+const routineAt = (at, hours, i) => (hours === 'night' && !atNight(at) ? NIGHT_AT[i % 5] : hours === 'day' && atNight(at) ? DAY_AT[i % 5] : at);
+const routinesFor = (bp, hours, mode) => (bp.cadence || []).map((r, i) => ({ id: kebab(r.id || r.title, 40), title: String(r.title), agent: String(r.agent || ''), every: String(r.every || 'daily'), at: routineAt(String(r.at || '09:00'), hours, i), on: mode !== 'manual' }));
+const withMode = (sp, hours, bp) => {
+  sp.routines = routinesFor(bp, hours, sp.mode);
+  for (const k of sp.kpis) k.onBehind = BEHIND[sp.mode];
+};
 // the budget per Space: the monthly budget over the Spaces this build makes
 const splitBudget = (p) => { const n = p.spaces.filter((s) => !s.skip).length; const each = p.capacity.budget && n ? Math.round((p.capacity.budget / n) * 100) / 100 : 0; for (const s of p.spaces) s.budget = s.skip ? 0 : each; };
 export function draftPlan(a, built = load().built) {
@@ -134,7 +146,8 @@ export function draftPlan(a, built = load().built) {
     spaces.push({
       division, blueprint: bp.id, name: spaceName, mode, autopilot: AUTOPILOT[mode], access: bp.space.access || 'team', shift: shiftFor(a.capacity.hours, mode), budget: 0,
       ...(existingSpace(division, spaceName, built) ? { exists: true, skip: true } : {}),   // run again: a Space that is already there is not built twice
-      kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a) })),
+      kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode] })),
+      routines: routinesFor(bp, a.capacity.hours, mode),
       materials: materialsFor(division, a),
     });
   }
@@ -192,9 +205,17 @@ export function cleanPlan(input, base) {
     const sp = p.spaces.find((s) => s.division === e.division);
     if (!sp) continue;
     if (e.name !== undefined) sp.name = clip(oneLine(e.name, 60) || sp.name, 60);
-    if (MODES.includes(e.mode)) { sp.mode = e.mode; sp.autopilot = AUTOPILOT[e.mode]; sp.shift = shiftFor(p.capacity?.hours, e.mode); }
+    if (MODES.includes(e.mode) && e.mode !== sp.mode) {
+      sp.mode = e.mode; sp.autopilot = AUTOPILOT[e.mode]; sp.shift = shiftFor(p.capacity?.hours, e.mode);
+      try { withMode(sp, p.capacity?.hours, blueprints.getBlueprint(sp.blueprint)); } catch { /* the Blueprint is gone: keep the rest */ }
+    }
     if (e.skip !== undefined) sp.skip = !!e.skip;
-    for (const k of Array.isArray(e.kpis) ? e.kpis : []) { const x = sp.kpis.find((y) => y.id === k.id); if (x && k.target !== undefined) x.target = num(k.target); }
+    for (const k of Array.isArray(e.kpis) ? e.kpis : []) {
+      const x = sp.kpis.find((y) => y.id === k.id);
+      if (x && k.target !== undefined) x.target = num(k.target);
+      if (x && kpi.ON_BEHIND.includes(k.onBehind)) x.onBehind = k.onBehind;                          // 'off': the owner unticked it
+    }
+    for (const r of Array.isArray(e.routines) ? e.routines : []) { const x = (sp.routines || []).find((y) => y.id === r.id); if (x && r.on !== undefined) x.on = !!r.on; }
     for (const m of Array.isArray(e.materials) ? e.materials : []) { const x = sp.materials.find((y, i) => (y.id === 'custom' ? `custom-${i}` : y.id) === m.id); if (x && ['have', 'missing', 'later'].includes(m.status)) x.status = m.status; }
   }
   if (input?.summary !== undefined) p.summary = oneLine(input.summary, 700);
@@ -215,6 +236,9 @@ const LABEL = {
 const STATUS_TEXT = { have: 'available: ask the owner where it is', missing: 'missing: interview the owner and draft it for approval', later: 'later: not needed for the first weeks' };
 const MODE_TEXT = { automatic: 'automatic: routine work runs and ships by itself; money, legal, production, secrets and deleting data still wait for the owner', supervised: 'supervised: the squad prepares, the owner approves what goes out', manual: 'manual: the squad drafts only; the owner decides everything' };
 const cell = (s) => String(s ?? '').replace(/\|/g, '/');
+const BEHIND_TEXT = { notify: 'a notice to the owner', suggest: 'a plan for the owner to approve', act: 'the agents act on it', off: 'nothing' };
+// a routine in plain words: "Daily content draft: every day at 22:30, by the marketing-strategist"
+export const rhythmLines = (sp) => (sp.routines || []).filter((r) => r.on).map((r) => `${cell(r.title)}: ${cadence.everyText(r.every)} at ${r.at}, by the ${cell(r.agent)}`);
 // the plan as every agent reads it; `built` (from guide.json) keeps the Spaces an earlier run made in the table
 export function planMarkdown(p, built = {}) {
   const g = p.goals;
@@ -223,9 +247,9 @@ export function planMarkdown(p, built = {}) {
   for (const s of p.spaces) {                                   // a Space built before is shown as it was built, not as the new answers would make it
     if (s.skip && !s.exists) continue;
     const b = s.exists && registered(built[s.division]) ? built[s.division] : null;
-    rows.push(b ? { division: s.division, name: b.name, mode: b.mode, targets: b.targets || '' } : { division: s.division, name: s.name, mode: s.mode, targets: s.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; ') });
+    rows.push(b ? { division: s.division, name: b.name, mode: b.mode, targets: b.targets || '', rhythm: b.rhythm || [], behind: b.behind || '' } : { division: s.division, name: s.name, mode: s.mode, targets: s.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; '), rhythm: rhythmLines(s), behind: BEHIND[s.mode] });
   }
-  for (const [division, b] of Object.entries(built)) if (!rows.some((r) => r.division === division) && registered(b)) rows.push({ division, name: b.name, mode: b.mode, targets: b.targets || '' });
+  for (const [division, b] of Object.entries(built)) if (!rows.some((r) => r.division === division) && registered(b)) rows.push({ division, name: b.name, mode: b.mode, targets: b.targets || '', rhythm: b.rhythm || [], behind: b.behind || '' });
   const modes = [...new Set(rows.map((r) => r.mode))];
   return ['# Company plan', '', '<!-- GENERATED by The AI Squad\'s Company Guide: the owner answers the guide again to change it. -->', '',
     `**${cell(p.company.name)}** (${p.company.type})${p.company.description ? `: ${cell(p.company.description)}` : ''}`, '',
@@ -235,6 +259,8 @@ export function planMarkdown(p, built = {}) {
     '## Divisions', '', '| Division | Space | Mode | Starting targets |', '|---|---|---|---|',
     ...rows.map((r) => `| ${TITLE[r.division] || r.division} | ${cell(r.name)} | ${r.mode} | ${r.targets} |`),
     ...(p.later.length ? ['', `Later (no squad yet): ${p.later.map((d) => TITLE[d] || d).join(', ')}.`] : []), '',
+    '## Rhythm', '', 'The routines each Space runs by itself, once the owner turns them on (Admin → Cadence). When a target is behind its goal the Space raises it: a notice, a recovery plan for the owner to approve, or the work itself.', '',
+    ...rows.flatMap((r) => [`**${cell(r.name)}** (when a target is behind: ${BEHIND_TEXT[r.behind] || 'nothing'})`, ...(r.rhythm?.length ? r.rhythm.map((l) => `- ${l}`) : ['- no routines']), '']),
     '## What runs by itself and what waits for the owner', '', ...modes.map((m) => `- ${MODE_TEXT[m] || m}`), '',
     'Hard stops in every Space: spending money, contracts and legal commitments, production deploys, secrets, deleting data, and anything irreversible.', ''].join('\n');
 }
@@ -269,13 +295,16 @@ async function buildAll(st, p, create) {
       const r = await create({ blueprint: bp.id, name: sp.name, goal: `${p.company.name}: ${TITLE[sp.division]}. ${p.summary || p.company.description || ''}`.trim(), team, autopilot: sp.autopilot, budget: sp.budget ? { usd: sp.budget, period: 'month' } : undefined, installSkills: true });
       const root = r.path;
       floors.updateFloorConfig(root, { shift: sp.shift || { enabled: false } });
-      for (const k of sp.kpis) if (k.target != null) { try { kpi.updateKpi(root, k.id, { target: k.target }); } catch { /* not seeded */ } }
+      for (const k of sp.kpis) { try { kpi.updateKpi(root, k.id, { ...(k.target != null ? { target: k.target } : {}), ...(k.onBehind ? { onBehind: { mode: k.onBehind } } : {}) }); } catch { /* not seeded */ } }
+      // the routines: the Blueprint seeded them off; the planned time, the unticked ones removed; nothing runs yet
+      const planned = new Map((sp.routines || []).map((x) => [x.id, x]));
+      for (const x of cadence.readDefs(root)) { const want = planned.get(x.id); try { if (want && !want.on) cadence.remove(root, x.id); else if (want) cadence.update(root, x.id, { at: want.at, enabled: false }); } catch { /* hand-edited */ } }
       writeText(path.join(root, 'docs', 'squad', 'MATERIALS.md'), materialsMarkdown(sp));
       kpi.render(root, r.id);
       floors.generate(root);
-      out.push({ division: sp.division, id: r.id, number: r.number, name: sp.name, path: root, lead: r.lead });
-      st.built[sp.division] = { id: r.id, name: sp.name, mode: sp.mode, targets: sp.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; ') };
-      deps.log(r.id, { type: 'guide.built', data: { division: sp.division, blueprint: bp.id, mode: sp.mode, targets: sp.kpis.filter((k) => k.target != null).length } });
+      out.push({ division: sp.division, id: r.id, number: r.number, name: sp.name, path: root, lead: r.lead, routines: cadence.readDefs(root).length });
+      st.built[sp.division] = { id: r.id, name: sp.name, mode: sp.mode, targets: sp.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; '), rhythm: rhythmLines(sp), behind: BEHIND[sp.mode] };
+      deps.log(r.id, { type: 'guide.built', data: { division: sp.division, blueprint: bp.id, mode: sp.mode, targets: sp.kpis.filter((k) => k.target != null).length, routines: (sp.routines || []).filter((x) => x.on).length } });
     } catch (e) { out.push({ division: sp.division, name: sp.name, error: e.message }); }
   }
   writeText(path.join(dir, 'PLAN.md'), planMarkdown(p, st.built));
