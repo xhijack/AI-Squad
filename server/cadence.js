@@ -178,11 +178,6 @@ export function list(floorId, root, now = Date.now()) {
     return { ...r, next: r.enabled ? nextSlot(r, now) : null, last: run.last || null, pending: run.pending || null, running: run.running || null, history: (run.history || []).slice(-10) };
   });
 }
-// the next routine of one agent (the Desk), from a list() and the agent's id and role
-export function nextFor(items, agent) {
-  const mine = items.filter((r) => r.enabled && r.next && (r.agent === agent.id || r.agent === agent.role));
-  return mine.sort((a, b) => a.next - b.next)[0] || null;
-}
 const EVERY_TEXT = { daily: 'every day', weekdays: 'every weekday' };
 export function everyText(every) {
   const e = parseEvery(every);

@@ -17,7 +17,7 @@ import { meter } from './meter.js';
 import { migrate } from './schema.js';
 import * as backup from './backup.js';
 import * as jobs from './jobs.js';
-import { logJobEnded, dispatchTick, chatTick, handoffTick, kpiTick } from './squad.js';
+import { logJobEnded, dispatchTick, chatTick, handoffTick, kpiTick, cadenceTick } from './squad.js';
 import * as notify from './notify.js';
 import * as inbox from './inbox.js';
 
@@ -70,6 +70,8 @@ setInterval(() => { handoffTick().then((r) => { for (const x of r.sent) console.
 // targets (1.3): ERPNext and CSV targets measured on their interval
 setTimeout(() => { kpiTick().catch((e) => console.error('[kpi]', e.message)); }, 20000).unref();
 setInterval(() => { kpiTick().then((r) => { for (const x of r) console.log(`[kpi] ${x.floorId}/${x.kpi}: ${x.error ? `failed: ${x.error}` : x.value}`); }, (e) => console.error('[kpi]', e.message)); }, 3600e3).unref();
+// cadence (1.5): routines start in their window, through the dispatcher; a missed window is skipped, never stacked
+setInterval(() => { cadenceTick().then((r) => { for (const x of r) console.log(`[cadence] ${x.floorId}/${x.routine}: ${x.error ? `failed: ${x.error}` : x.skipped ? `skipped: ${x.skipped}` : x.waiting ? `queued: ${x.waiting}` : 'started'}`); }, (e) => console.error('[cadence]', e.message)); }, 60000).unref();
 // the dispatcher: starts queued work when there is room, stops agents that sit idle
 setInterval(() => {
   dispatchTick().then((r) => { for (const x of r.started) console.log(`[dispatch] started ${x.floorId}/${x.agentId} (${x.action})`); for (const x of r.stopped) console.log(`[dispatch] idle stop ${x.floorId}/${x.agentId}`); for (const f of r.failed) console.error(`[dispatch] ${f.item.floorId}/${f.item.agentId}: ${f.error}`); }, (e) => console.error('[dispatch]', e.message));

@@ -38,6 +38,7 @@ import * as erp from './erpnext.js';
 import * as tiering from './tiering.js';
 import * as trust from './trust.js';
 import * as kpi from './kpi.js';
+import * as cadence from './cadence.js';
 import * as guide from './guide.js';
 import * as promote from './promote.js';
 
@@ -282,6 +283,15 @@ const routes = [
   ['DELETE', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k]) => { const r = kpi.removeKpi(building.floorEntry(id).path, k); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target removed', floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/values$/, ([id, k], b, req) => kpi.record(id, building.floorEntry(id).path, k, b.value, { source: 'manual', by: req.user?.name || 'Owner', note: b.note }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/measure$/, ([id, k], b, req) => kpi.measure(id, building.floorEntry(id).path, k, { by: req.user?.name || '' }), { pin: true }],
+  // cadence (1.5): routines per Space; the Owner defines them, Members run and toggle them, Viewers read
+  ['GET', /^\/api\/cadence$/, () => squad.cadenceOverview(), {}],
+  ['GET', /^\/api\/floors\/([\w-]+)\/cadence$/, ([id]) => squad.routinesOf(id), {}],
+  ['POST', /^\/api\/floors\/([\w-]+)\/cadence$/, ([id], b) => { const r = cadence.add(building.floorEntry(id).path, b); if (r.enabled) cadence.markEnabled(id, r.id); squad.invalidate(); return r; }, { pin: true, history: ([id]) => ({ label: 'Routine added', floorId: id }) }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/cadence\/enable$/, ([id]) => squad.enableRoutines(id), { pin: true, history: ([id]) => ({ label: 'Routines turned on', floorId: id }) }],
+  ['PATCH', /^\/api\/floors\/([\w-]+)\/cadence\/([\w-]+)$/, ([id, r], b) => { const { enabled, ...rest } = b || {}; cadence.update(building.floorEntry(id).path, r, rest); return enabled === undefined ? cadence.list(id, building.floorEntry(id).path).find((x) => x.id === r) : squad.setRoutineEnabled(id, r, enabled); }, { pin: true, history: ([id]) => ({ label: 'Routine changed', floorId: id }) }],
+  ['DELETE', /^\/api\/floors\/([\w-]+)\/cadence\/([\w-]+)$/, ([id, r]) => { const out = cadence.remove(building.floorEntry(id).path, r); squad.invalidate(); return out; }, { pin: true, history: ([id]) => ({ label: 'Routine removed', floorId: id }) }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/cadence\/([\w-]+)\/toggle$/, ([id, r], b) => squad.setRoutineEnabled(id, r, b?.enabled === true), { pin: true, history: ([id], b) => ({ label: b?.enabled === true ? 'Routine turned on' : 'Routine turned off', floorId: id }) }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/cadence\/([\w-]+)\/run$/, ([id, r]) => squad.runRoutineNow(id, r), { pin: true }],
   // contracts in Legal Spaces and model tiering (0.20): the Owner's
   ['GET', /^\/api\/legal$/, () => squad.legalOverview(), { pin: true }],
   ['GET', /^\/api\/legal\/contract$/, (p, b, req) => squad.contractText(new URL(req.url, 'http://x').searchParams.get('key') || ''), { pin: true }],

@@ -102,6 +102,4 @@ test('the file: add, update, remove, at most 20, hand edits kept, Blueprint seed
   const first = items.find((r) => r.id === a.id);
   assert.equal(first.last.status, 'skipped');
   assert.equal(first.next, at(2026, 10, 29, 23, 0));
-  assert.equal(cadence.nextFor(items, { id: 'mira', role: 'content-writer' }).id, a.id);
-  assert.equal(cadence.nextFor(items, { id: 'mira', role: 'seo-specialist' }), null);
 });

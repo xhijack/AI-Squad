@@ -25,6 +25,7 @@ export const TYPES = {
   'handoff.sent': 'communication', 'handoff.received': 'communication', 'handoff.held': 'communication', 'handoff.rejected': 'communication', 'handoff.invalid': 'communication',
   'erpnext.lead': 'work', 'erpnext.won': 'work', 'erpnext.approval': 'work', 'erpnext.approved': 'work', 'erpnext.sent-back': 'work', 'erpnext.alert': 'work',
   'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work', 'kpi.measured': 'work', 'kpi.failed': 'work', 'guide.built': 'lifecycle',
+  'cadence.started': 'work', 'cadence.skipped': 'work', 'cadence.done': 'work', 'kpi.behind': 'work', 'kpi.action': 'work',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
   'permission.asked': 'communication', 'chat.message': 'communication', 'chat.reply': 'communication', 'permission.answered': 'communication', 'permission.denied': 'communication', 'report.delivered': 'communication',
@@ -107,6 +108,11 @@ function summarize(e) {
     case 'erpnext.sent-back': return `the owner sent ${d.quotation} back to ${who}`;
     case 'kpi.measured': return `target ${d.name}: ${d.value}${d.unit ? ` ${d.unit}` : ''} (${d.state}${d.target != null ? `, goal ${d.target}` : ''}, ${d.source})`;
     case 'kpi.failed': return `target ${d.name}: not measured from ${d.source}: ${d.error}`;
+    case 'cadence.started': return `routine "${d.title}" started${e.agent ? ` for ${e.agent}` : ''}${d.manual ? ' (run now)' : ''}`;
+    case 'cadence.skipped': return `routine "${d.title}" skipped${t(d.reason)}`;
+    case 'cadence.done': return `routine "${d.title}" ${d.status === 'done' ? 'done' : d.status} in ${Math.round((d.ms || 0) / 1000)} s, $${(+d.cost || 0).toFixed(2)}`;
+    case 'kpi.behind': return `target ${d.name}: ${d.value}${d.unit ? ` ${d.unit}` : ''} of ${d.target}, behind (${d.mode})`;
+    case 'kpi.action': return `target ${d.name}: ${d.action}${d.by ? ` by ${d.by}` : ''}${d.job ? ` (job ${d.job})` : ''}`;
     case 'guide.built': return `built by the Company Guide: ${d.division} (${d.blueprint}, ${d.mode}, ${d.targets} targets with a goal)`;
     case 'legal.reverted': return `${d.file} is a DRAFT again: ${d.reason}`;
     case 'legal.approved': return `the owner approved the contract ${d.file}`;

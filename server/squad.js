@@ -53,6 +53,7 @@ import * as insightLib from './insight.js';
 import * as history from './history.js';
 import * as kpiLib from './kpi.js';
 import * as guideLib from './guide.js';
+import * as cadenceLib from './cadence.js';
 import { execFileSync, execFile } from 'node:child_process';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
@@ -683,7 +684,13 @@ export function deskDetail(floorId, agentId) {
     jobs: jobsLib.listJobs({ floorId, agentId, limit: 6 }).map(({ prompt, ...j }) => j),             // its background jobs
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
     attach: tm.attachCommand(l.session),
+    nextRoutine: nextRoutineOf(entry, cfg, agentId),
   };
+}
+// the Desk's "Next routine: <title> · <time>" (1.5)
+function nextRoutineOf(entry, cfg, agentId) {
+  const r = cadenceLib.list(entry.id, entry.path).filter((x) => x.enabled && x.next && routineAgent(cfg.team, x)?.id === agentId).sort((a, b) => a.next - b.next)[0];
+  return r ? { id: r.id, title: r.title, at: r.next } : null;
 }
 
 export function attentionItems() { return buildingSnapshot().attention; }
@@ -766,7 +773,7 @@ export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DE
   if (guard) return admit({ floorId, agentId, action: 'job', task: prompt, title, priority, via: 'owner', opts: { budgetUsd, permissionMode, kind, resume } });
   return launchJob(floorId, agentId, prompt, { budgetUsd, permissionMode, via, kind, title, resume });
 }
-function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD, routine = false } = {}) {
+function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD, routine = false, cadence = null } = {}) {
   const { entry, cfg, agent } = locate(floorId, agentId);
   const b = building.loadBuilding();
   const remote = node && node !== nodesLib.HEAD;
@@ -789,7 +796,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
     disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
     extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
-  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : null };
+  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : cadence ? { cadence } : null };
   let job;
   if (remote) {
     // the Head keeps the record; the worker gets what it needs to run it in its own clone of the repository
@@ -803,6 +810,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   } else job = runnerFor('headless').start(spec);
   logEvent(floorId, { type: 'job.started', agent: agentId, model: eff.model, data: { job: job.id, kind, title: job.title, budgetUsd: job.budgetUsd, permissionMode, via, ...(remote ? { node } : {}) } });
   if (chat) chatLib.setState(chat.key, { awaiting: { msgId: chat.msgId, since: Date.now(), mode: 'job', job: job.id } });
+  if (cadence) routineStarted(floorId, agentId, cadence, job);
   invalidate();
   return job;
 }
@@ -810,6 +818,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
 export function logJobEnded(job) {
   if (!job.floorId) return;
   if (job.meta?.chat) chatAnswered(job);
+  if (job.meta?.cadence) routineEnded(job);
   // tools denied without a prompt ("dontAsk"): the Audit counts them; the command only as its first words
   for (const d of job.denials || []) logEvent(job.floorId, { type: 'permission.denied', agent: job.agentId || null, data: { job: job.id, tool: d.tool, command: d.command.split(/\s+/).slice(0, 3).join(' ') } });
   hb.scan({ floorId: job.floorId }).then((r) => { if (r.length) invalidate(); }, (e) => console.error('[handoff]', e.message));   // its packages go now
@@ -1095,6 +1104,116 @@ export async function dispatchTick(now = Date.now(), { res } = {}) {
   }
   if (r.started.length || r.failed.length || stopped.length) invalidate();
   return { started: r.started, failed: r.failed, stopped };
+}
+
+// ---------- cadence (1.5): routine work per Space, see server/cadence.js ----------
+// the agent of a routine: the agent with that id, else the Space's agent with that role (the lead first)
+export function routineAgent(team, r) {
+  return team.agents.find((a) => a.id === r.agent) || team.agents.filter((a) => a.role?.template === r.agent).sort((a, b) => !!b.lead - !!a.lead)[0] || null;
+}
+export const routinePrompt = (r, spaceName) => `${r.task}\n\n(This is the routine "${r.title}" of ${spaceName}, ${cadenceLib.everyText(r.every)} at ${r.at}. It runs by itself: follow the Space's rules and gates, publish or send nothing without the owner's approval, never invent a number (targets are in docs/squad/KPI.md), and end with a short summary of what you did and what needs the owner.)`;
+// why a routine cannot run at all right now (before it reaches the queue); '' when it can
+function routineBlock(entry, cfg, r) {
+  if (!routineAgent(cfg.team, r)) return `no agent with the role or id "${r.agent}" in this Space`;
+  if (wd.budgetStatus(cfg.floor.budget, costFor(entry.id, entry.path)).level === 'over') return 'the Space reached its budget';
+  return '';
+}
+function routineSkipped(floorId, r, slot, reason, now = Date.now()) {
+  cadenceLib.skipped(floorId, r.id, slot, reason, now);
+  logEvent(floorId, { type: 'cadence.skipped', data: { routine: r.id, title: r.title, slot: slot ? new Date(slot).toISOString() : null, reason } });
+}
+// a run of a routine: through the dispatcher, as automated work (the owner's "Run now" is the owner's own work)
+async function startRoutine(entry, cfg, r, slot, { manual = false, now = Date.now() } = {}) {
+  const why = routineBlock(entry, cfg, r);
+  if (why) { if (manual) throw bad(`Cannot run "${r.title}": ${why}`); routineSkipped(entry.id, r, slot, why, now); return { skipped: why }; }
+  const agent = routineAgent(cfg.team, r);
+  cadenceLib.setRun(entry.id, r.id, (cur) => ({ ...cur, lastSlot: manual ? cur.lastSlot : Math.max(cur.lastSlot || 0, slot) }));
+  const res = await admit({ floorId: entry.id, agentId: agent.id, action: 'job', task: routinePrompt(r, cfg.floor.name), title: `Routine: ${r.title}`, priority: manual ? 'P0' : 'P2', via: manual ? 'owner' : 'cadence',
+    opts: { kind: 'routine', budgetUsd: r.budget || jobsLib.DEFAULT_BUDGET_USD, permissionMode: 'acceptEdits', headOnly: true, cadence: { routine: r.id, slot, ...(manual ? { manual: true } : {}) } } });
+  if (res.waiting) cadenceLib.setRun(entry.id, r.id, (cur) => ({ ...cur, pending: { queue: res.dispatch.id, slot, until: manual ? now + cadenceLib.WINDOW_MS : slot + cadenceLib.windowOf(r, slot), reason: res.dispatch.reason } }));
+  return res;
+}
+function routineStarted(floorId, agentId, c, job) {
+  const r = cadenceLib.readDefs(building.floorEntry(floorId).path).find((x) => x.id === c.routine);
+  cadenceLib.setRun(floorId, c.routine, (cur) => ({ ...cur, pending: null, running: { job: job.id, slot: c.slot, startedAt: Date.now(), ...(c.manual ? { manual: true } : {}) } }));
+  logEvent(floorId, { type: 'cadence.started', agent: agentId, data: { routine: c.routine, title: r?.title || c.routine, job: job.id, manual: !!c.manual, waitedMs: c.slot ? Math.max(0, Date.now() - c.slot) : 0 } });
+}
+function routineEnded(job) {
+  const c = job.meta.cadence, ms = (job.endedAt || Date.now()) - job.startedAt;
+  cadenceLib.finish(job.floorId, c.routine, { status: job.status, cost: job.cost || 0, ms, job: job.id, manual: !!c.manual });
+  logEvent(job.floorId, { type: 'cadence.done', agent: job.agentId || null, data: { routine: c.routine, title: String(job.title || '').replace(/^Routine: /, ''), job: job.id, status: job.status, cost: job.cost || 0, ms } });
+}
+// every minute: start what is due, skip what missed its window, drop a queued run whose window passed
+export async function cadenceTick(now = Date.now()) {
+  const out = [];
+  const queue = new Map(dispatcher.load().map((q) => [q.id, q]));
+  for (const entry of building.loadBuilding().floors) {
+    let cfg; try { cfg = floors.readFloor(entry.path); } catch { continue; }
+    const runs = cadenceLib.loadRuns(entry.id).routines;
+    for (const r of cadenceLib.readDefs(entry.path)) {
+      let run = runs[r.id] || {};
+      if (run.pending && !queue.has(run.pending.queue) && !run.running) {          // removed from the queue by a person
+        routineSkipped(entry.id, r, run.pending.slot, 'removed from the queue', now); out.push({ floorId: entry.id, routine: r.id, skipped: 'removed from the queue' }); run = cadenceLib.runOf(entry.id, r.id);
+      } else if (cadenceLib.expired(run, now)) {
+        try { dispatcher.remove(run.pending.queue); } catch { /* started meanwhile */ }
+        const reason = `could not start in its window (${run.pending.reason || 'waiting for a free slot'})`;
+        routineSkipped(entry.id, r, run.pending.slot, reason, now); out.push({ floorId: entry.id, routine: r.id, skipped: reason }); run = cadenceLib.runOf(entry.id, r.id);
+      }
+      if (run.running && jobsLib.readJob(run.running.job)?.status !== 'running' && now - (run.running.startedAt || 0) > 60e3) {   // its end was missed (a restart)
+        const j = jobsLib.readJob(run.running.job);
+        cadenceLib.finish(entry.id, r.id, { status: j?.status || 'lost', cost: j?.cost || 0, job: run.running.job }, now); run = cadenceLib.runOf(entry.id, r.id);
+      }
+      const d = cadenceLib.decide(r, run, now);
+      if (d.action === 'skip') { routineSkipped(entry.id, r, d.slot, d.reason, now); out.push({ floorId: entry.id, routine: r.id, skipped: d.reason }); }
+      if (d.action !== 'run') continue;
+      try { const res = await startRoutine(entry, cfg, r, d.slot, { now }); out.push({ floorId: entry.id, routine: r.id, ...(res.skipped ? { skipped: res.skipped } : res.waiting ? { waiting: res.dispatch.reason } : { started: res.job?.id || true }) }); }
+      catch (e) { out.push({ floorId: entry.id, routine: r.id, error: e.message }); }
+    }
+  }
+  if (out.length) invalidate();
+  return out;
+}
+// a person's "Run now" (Members too): the owner's own work, so the shift does not hold it; never a second run
+export async function runRoutineNow(floorId, id, now = Date.now()) {
+  const entry = building.floorEntry(floorId);
+  const cfg = floors.readFloor(entry.path);
+  const r = cadenceLib.readDefs(entry.path).find((x) => x.id === id);
+  if (!r) throw notFound('Routine not found');
+  const run = cadenceLib.runOf(floorId, id);
+  if (run.running) throw new HttpError(409, `"${r.title}" is running`);
+  if (run.pending) throw new HttpError(409, `"${r.title}" is already waiting in the queue`);
+  const res = await startRoutine(entry, cfg, r, now, { manual: true, now });
+  invalidate();
+  return { ok: true, ...(res.waiting ? { waiting: true, dispatch: res.dispatch } : { job: res.job?.id || res.id || null }) };
+}
+export function setRoutineEnabled(floorId, id, on, now = Date.now()) {
+  const root = building.floorEntry(floorId).path;
+  const was = cadenceLib.readDefs(root).find((x) => x.id === id);
+  const r = cadenceLib.update(root, id, { enabled: !!on });
+  if (r.enabled && !was?.enabled) cadenceLib.markEnabled(floorId, id, now);       // slots before now never count
+  invalidate();
+  return r;
+}
+export function enableRoutines(floorId, now = Date.now()) {
+  const root = building.floorEntry(floorId).path;
+  const before = new Set(cadenceLib.readDefs(root).filter((r) => r.enabled).map((r) => r.id));
+  const list = cadenceLib.enableAll(root, true);
+  for (const r of list) if (!before.has(r.id)) cadenceLib.markEnabled(floorId, r.id, now);
+  invalidate();
+  return { routines: cadenceLib.list(floorId, root, now) };
+}
+export function routinesOf(floorId, now = Date.now()) {
+  const entry = building.floorEntry(floorId);
+  return { routines: cadenceLib.list(floorId, entry.path, now) };
+}
+// every Space's routines (Admin → Cadence); Owner-only Spaces are taken out for others by access.redact
+export function cadenceOverview(now = Date.now()) {
+  const spaces = [];
+  for (const f of building.loadBuilding().floors) {
+    let cfg; try { cfg = floors.readFloor(f.path); } catch { continue; }
+    spaces.push({ id: f.id, number: f.number, name: cfg.floor.name, routines: cadenceLib.list(f.id, f.path, now), agents: cfg.team.agents.map((a) => ({ id: a.id, displayName: a.displayName, role: a.role?.template || '' })) });
+  }
+  return { spaces };
 }
 
 // things other modules follow without a cycle of imports (0.15: the Notification Gateway forwards chat answers)

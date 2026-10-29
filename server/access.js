@@ -26,6 +26,7 @@ const OWNER_ROUTES = [
   /^(GET|PATCH) \/api\/tiering$/,
   /^(GET|POST) \/api\/promote(\/preview)?$/,
   /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/kpis(\/[\w-]+)?$/,
+  /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/cadence(\/[\w-]+)?$/,          // routines are the Owner's; run and toggle are Members'
   /^(PUT|DELETE) \/api\/erpnext\/keys\//,
   /^POST \/api\/erpnext\/(test|sync)$/,
   /^(PATCH|DELETE) \/api\/nodes\/[\w-]+$/,
@@ -87,6 +88,7 @@ export function redact(pathname, out, user) {
   if (pathname === '/api/history') return { ...out, changes: out.changes.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/jobs') return { ...out, jobs: out.jobs.filter((j) => !hide.has(j.floorId)) };
   if (pathname === '/api/kpis') { const spaces = out.spaces.filter(keep); const sum = (k) => spaces.reduce((n, s) => n + s[k], 0); return { ...out, spaces, total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset'), unknown: sum('unknown') }; }
+  if (pathname === '/api/cadence') return { ...out, spaces: out.spaces.filter(keep) };
   if (pathname === '/api/dispatcher') return { ...out, queue: out.queue.filter((q) => !hide.has(q.floorId)) };
   if (/^\/api\/(history|jobs)\/[\w-]+$/.test(pathname) && hide.has(out.floorId)) return null;
   return out;
