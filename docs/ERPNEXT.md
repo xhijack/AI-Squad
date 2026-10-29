@@ -81,6 +81,15 @@ The Finance Space (Blueprint *Finance*, Owner-only) reads the books with its own
 - **Telegram**: the Finance Space sends counts only (Admin → Spaces → Telegram: *Counts only*): no amounts, names,
   customers or answer buttons leave the app.
 
+## Support tickets in ERPNext (1.7)
+
+The Support Space's *Open tickets* and *Tickets resolved* count ERPNext **Issues** (status Open, Replied or On Hold;
+Resolved or Closed this week). A team Space measures with its own key: set the Support Space to *ERPNext: Delivery
+key* (Admin → Spaces) and give the Delivery user *Read* on Issue (and *Write* if its agents should update tickets;
+replying to a customer stays denied). With the Helpdesk app, change the targets' DocType to `HD Ticket` in Admin →
+Targets → Edit. A help desk outside ERPNext (Zendesk, Freshdesk, Crisp) is connected as an integration and measures
+*First response time* and *Customer satisfaction* (`requires: mcp:helpdesk`).
+
 ## 3. The price approval
 
 A Quotation is never submitted by an agent. The Sales agent hands the draft to you with a package
