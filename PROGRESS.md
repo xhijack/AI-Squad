@@ -937,6 +937,24 @@ A polish pass on the 1.1.0 audit (Lobby, DTamu Floor, Desk at 1440 and 390), sam
 - Tests: `guide.test.js` (cleaning, the deterministic plan and its documents, step-by-step answers with the language saved and others kept out, Claude's touch and the fallback, Build with edits, skipped Space, targets, shift, budget, materials, the Company Brain plan, the agents' context lines, the log, running again).
 - Not yet: the guide on Telegram, Finance and Support squads, cadence (Sprint 15) and integrations (Sprint 16) in the plan.
 
+## Hotfix 1.4.1: the seven red tests (29 Oct 2026)
+
+`npm test` had 7 failures that were already there on development 1.2.0 and on sprint-13 before the merge. None of them came from a deliberate behaviour change, so no assertion was weakened or rewritten. One cause per fix:
+
+- **kpi** (`ERPNext and CSV targets are measured…`), a date baked into the test. The fake ERPNext stamped every document at a fixed `2026-10-27 01:00 UTC`. Once the test switched the target to a daily period, today's leads read 0 from 28 Oct on. The fake now stamps from the current time, in local time as ERPNext does. It passes under UTC, Los Angeles and UTC+14. (`a2b25f7`, test)
+- **resume** (2 tests), host memory leaking in through the code.
+  - `autoResumeTick` checked memory pressure with the reading it was given. `admit()` then read the host's memory again to count free slots. So on a loaded machine the resume was queued ("the last free slot is kept for the owner") although the tick had already decided there was room.
+  - `admit()` now takes an optional reading and the tick passes its own. The tick's default reading goes through the injectable resource reader.
+  - The test pins a full machine as the host reading, so it fails whenever the two readings differ again. (`a187743`, code)
+- **sprint** (2 next-sprint tests), host memory leaking in through the test. Starting the next sprint goes through `admit()`, and the test never pinned the machine. On a loaded host the lead's restart was rightly queued. The test now sets a fixed resource reader, as the dispatcher and nodes tests do. (`89a405a`, test)
+- **nodes** (2 worker tests), host memory leaking in through the worker processes.
+  - The workers reported this machine's `/proc/meminfo` in their heartbeats.
+  - The Head gives a worker a slot only above 2 GB kept free plus one session, about 3.5 GB available, so on a loaded host the job never reached the worker.
+  - The workers now read a fixed meminfo through `AISQUAD_PROC`. With 3 GB in that fake meminfo, exactly these two tests fail again.
+  - They passed when run alone on a quieter moment, which is why they looked flaky. (`ec6d6a4`, test)
+- No git identity, default-branch or hook leak and no too-short sleep turned out to be involved.
+- `npm test`: 464 of 464, twice in a row.
+
 ## How to run
 
 ```
