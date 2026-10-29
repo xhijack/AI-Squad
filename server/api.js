@@ -280,6 +280,7 @@ const routes = [
     return kpi.record(f.id, f.path, b.kpi, b.value, { source: 'webhook', note: typeof b.note === 'string' ? b.note : '' });
   }, { hook: true }],
   ['GET', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b, req) => ({ kpis: kpi.list(id, building.floorEntry(id).path), ...squad.targetTriggers(id), ...(req.user?.role === 'owner' ? { hook: hookOf(id) } : {}) }), {}],
+  ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/try$/, ([id], b) => kpi.trySource(building.floorEntry(id).path, b || {}), { pin: true }],   // the Owner's (access.js)
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/hook$/, ([id]) => { building.floorEntry(id); return { hook: `/api/kpi/hook/${kpi.token(id, { rotate: true })}` }; }, { pin: true, history: ([id]) => ({ label: 'Webhook address renewed', floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b) => { const r = kpi.addKpi(building.floorEntry(id).path, b); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target added', floorId: id }) }],
   ['PATCH', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k], b) => { const r = kpi.updateKpi(building.floorEntry(id).path, k, b); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target changed', floorId: id }) }],

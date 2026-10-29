@@ -6,7 +6,8 @@
 // A target: id, name, unit, target (null until the Owner sets one), direction (up: more is better, down: less),
 // period (day, week, month, total: the value counts from the period's start), source and how often it is measured.
 // Sources: manual (a person enters it), erpnext (count or sum of documents), csv (a file in the repository),
-// webhook (an outside system posts it to /api/kpi/hook/<token>). Other machines' integrations come with 1.3.
+// webhook (an outside system posts it to /api/kpi/hook/<token>), mcp (1.6: a read-only tool of an integration's MCP
+// server, server/integrations.js; its result read into one number by server/pick.js).
 // Every measurement goes to the Squad Log (kpi.measured); the status (met, behind, unset, unknown) is computed.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,11 +15,14 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import * as building from './building.js';
 import * as erp from './erpnext.js';
+import * as integ from './integrations.js';
+import * as pick from './pick.js';
 import { readJson, writeJson, writeText, readText, kebab, bad, notFound, oneLine } from './util.js';
 
 export const DIRECTIONS = ['up', 'down'];
 export const PERIODS = ['day', 'week', 'month', 'total'];
-export const SOURCES = ['manual', 'erpnext', 'csv', 'webhook'];
+export const SOURCES = ['manual', 'erpnext', 'csv', 'webhook', 'mcp'];
+export const MEASURED = ['erpnext', 'csv', 'mcp'];                      // the server measures these on their interval
 export const ON_BEHIND = ['off', 'notify', 'suggest', 'act'];          // what a target behind its goal raises (1.5, server/behind.js)
 export const EVERY = { hour: 3600e3, day: 864e5, week: 7 * 864e5 };
 export const FILE = 'docs/squad/KPI.md';
@@ -44,6 +48,12 @@ export function cleanSource(s = {}) {
     const p = String(s.path || '').trim().replace(/\\/g, '/');
     if (!p || p.startsWith('/') || p.includes('..') || !/\.csv$/i.test(p)) throw bad('CSV source: a .csv file inside the repository, e.g. docs/kpi/traffic.csv');
     return { kind, path: p, column: String(s.column || 'value').slice(0, 60), dateColumn: String(s.dateColumn || 'date').slice(0, 60), aggregate: s.aggregate === 'sum' ? 'sum' : 'last' };
+  }
+  if (kind === 'mcp') {
+    const server = String(s.server || '').trim(), tool = String(s.tool || '').trim();
+    if (!integ.ID.test(server)) throw bad('Integration source: the integration, e.g. user:postiz (Admin → Integrations)');
+    if (!/^[\w./-]{1,128}$/.test(tool)) throw bad('Integration source: the tool to call, e.g. posts_this_week');
+    return { kind, server, tool, args: pick.cleanArgs(s.args), pick: pick.cleanPick(s.pick) };
   }
   return { kind };
 }
@@ -85,6 +95,7 @@ export function addKpi(root, input) {
   const kpis = readDefs(root);
   const k = cleanKpi(input);
   if (kpis.some((x) => x.id === k.id)) throw bad(`There is already a target "${k.id}"`);
+  checkSource(root, k.source);
   if (kpis.length >= 30) throw bad('At most 30 targets per Space');
   writeDefs(root, [...kpis, k]);
   return k;
@@ -94,9 +105,12 @@ export function updateKpi(root, id, patch) {
   const i = kpis.findIndex((x) => x.id === id);
   if (i < 0) throw notFound('Target not found');
   kpis[i] = cleanKpi(patch, kpis[i]);
+  if (patch?.source !== undefined) checkSource(root, kpis[i].source);
   writeDefs(root, kpis);
   return kpis[i];
 }
+// a source from an integration must be usable here and now: known, read-only, allowed for this Space (plain words)
+function checkSource(root, s) { if (s.kind === 'mcp') integ.checkUse(integ.spaceOfRoot(root), s); }
 export function removeKpi(root, id) {
   const kpis = readDefs(root);
   if (!kpis.some((x) => x.id === id)) throw notFound('Target not found');
@@ -143,7 +157,7 @@ export function record(floorId, root, id, value, { source = 'manual', by = '', n
   delete vals.errors[id];
   saveVals(floorId, vals);
   const st = statusOf(k, v);
-  deps.log(floorId, { type: 'kpi.measured', data: { kpi: id, name: k.name, value: v, unit: k.unit, target: k.target, period: k.period, source, state: st.state, ...(by ? { by } : {}) } });
+  deps.log(floorId, { type: 'kpi.measured', data: { kpi: id, name: k.name, value: v, unit: k.unit, target: k.target, period: k.period, source, ...mcpFields(k, source), state: st.state, ...(by ? { by } : {}) } });
   render(root, floorId);
   deps.invalidate();
   deps.measured(floorId, root, id, now);                 // a target behind its goal may raise work (1.5)
@@ -151,8 +165,10 @@ export function record(floorId, root, id, value, { source = 'manual', by = '', n
 }
 function failed(floorId, k, error, now) {
   try { const vals = loadVals(floorId, { strict: true }); vals.errors[k.id] = { ts: now, error: oneLine(error, 200) }; saveVals(floorId, vals); } catch { /* the file itself is the problem */ }
-  deps.log(floorId, { type: 'kpi.failed', data: { kpi: k.id, name: k.name, source: k.source.kind, error: oneLine(error, 200) } });
+  deps.log(floorId, { type: 'kpi.failed', data: { kpi: k.id, name: k.name, source: k.source.kind, ...mcpFields(k, k.source.kind), error: oneLine(error, 200) } });
 }
+// which integration and tool measured it (the arguments stay out of the log)
+const mcpFields = (k, source) => (source === 'mcp' && k.source.kind === 'mcp' ? { server: k.source.server, tool: k.source.tool } : {});
 // the Space's webhook token (made on first use, shown to the Owner); a new one when the old one leaked
 export function token(floorId, { rotate = false } = {}) {
   const vals = loadVals(floorId, { strict: true });
@@ -181,6 +197,16 @@ export function periodStart(period, now = Date.now()) {
   if (period === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   if (period === 'month') d.setDate(1);
   return d.getTime();
+}
+// the period's first and last day as local dates, for a tool that takes a date range ({{from}} and {{to}}); a total
+// runs from 1970 to today
+const ymd = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+export function periodRange(period, now = Date.now()) {
+  if (period === 'total') return { from: '1970-01-01', to: ymd(now) };
+  const from = periodStart(period, now), end = new Date(from);
+  if (period === 'week') end.setDate(end.getDate() + 6);
+  if (period === 'month') end.setMonth(end.getMonth() + 1, 0);
+  return { from: ymd(from), to: ymd(end.getTime()) };
 }
 const frappeTs = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60e3).toISOString().slice(0, 19).replace('T', ' ');
 
@@ -218,7 +244,23 @@ export async function measureOne(root, k, now = Date.now()) {
     if (!list.length) throw bad(`${s.path} has no rows`);
     return list.at(-1).v;
   }
+  if (s.kind === 'mcp') {
+    const r = await integ.call(integ.spaceOfRoot(root), s, pick.fillArgs(s.args, periodRange(k.period, now)));
+    return pick.pickValue(r, s.pick);
+  }
   throw bad(`A ${s.kind} target is not measured by the server: enter its value`);
+}
+// Try (Admin → Targets, 1.6): one call with a source from an integration before it is saved: the arguments as sent,
+// the raw result (clipped) and the number it picks, or why not
+export async function trySource(root, input = {}, now = Date.now()) {
+  const s = cleanSource(input.source);
+  if (s.kind !== 'mcp') throw bad('Try works for a source from an integration');
+  const args = pick.fillArgs(s.args, periodRange(PERIODS.includes(input.period) ? input.period : 'month', now));
+  const r = await integ.call(integ.spaceOfRoot(root), s, args);
+  const raw = JSON.stringify(r, null, 2) || '';
+  let value = null, error = '';
+  try { value = pick.pickValue(r, s.pick); } catch (e) { error = e.message; }
+  return { args, raw: raw.length > 20000 ? `${raw.slice(0, 20000)}\n…` : raw, ...(error ? { error } : { value }) };
 }
 export function parseCsv(text) {
   const lines = String(text).split(/\r?\n/).filter((l) => l.trim());
@@ -232,13 +274,13 @@ export async function measure(floorId, root, id, { now = Date.now(), by = '' } =
   try { v = await measureOne(root, k, now); } catch (e) { failed(floorId, k, e.message, now); throw e; }
   return record(floorId, root, id, v, { source: k.source.kind, by, now });
 }
-// the hourly tick: every erpnext and csv target whose interval passed, or whose last measurement is from
+// the hourly tick: every erpnext, csv and mcp target whose interval passed, or whose last measurement is from
 // the previous period (a monthly target measured daily is measured again on the 1st, not a day later)
 export async function tick(now = Date.now()) {
   const out = [];
   for (const f of building.loadBuilding().floors) {
     for (const k of readDefs(f.path)) {
-      if (!['erpnext', 'csv'].includes(k.source.kind)) continue;
+      if (!MEASURED.includes(k.source.kind)) continue;
       const last = latestOf(f.id, k);
       if (last && now - last.ts < (EVERY[k.every] || EVERY.day) - 60e3 && (k.period === 'total' || last.ts >= periodStart(k.period, now))) continue;
       try { const r = await measure(f.id, f.path, k.id, { now }); out.push({ floorId: f.id, kpi: k.id, value: r.value, state: r.status.state }); }
@@ -280,7 +322,7 @@ export function render(root, floorId, now = Date.now()) {
   const f = path.join(root, FILE);
   if (!kpis.length) { if (fs.existsSync(f) && (readText(f) || '').includes('GENERATED by The AI Squad')) fs.rmSync(f); return ''; }
   const cell = (s) => String(s).replace(/\|/g, '/');
-  const rows = kpis.map((k) => `| ${cell(k.name)}${k.note ? ` (${cell(k.note)})` : ''} | ${k.stale ? '–' : cell(fmt(k.latest?.value, k.unit))} | ${k.target === null ? 'not set' : cell(fmt(k.target, k.unit))} (${k.direction === 'down' ? 'at most' : 'at least'}, ${PERIOD_TEXT[k.period]}) | ${k.status.state}${k.status.pct != null ? ` (${k.status.pct} %)` : ''}${k.error ? ' · last measurement failed' : ''} | ${k.source.kind} | ${k.latest ? new Date(k.latest.ts).toISOString().slice(0, 16).replace('T', ' ') : 'never'} |`);
+  const rows = kpis.map((k) => `| ${cell(k.name)}${k.note ? ` (${cell(k.note)})` : ''} | ${k.stale ? '–' : cell(fmt(k.latest?.value, k.unit))} | ${k.target === null ? 'not set' : cell(fmt(k.target, k.unit))} (${k.direction === 'down' ? 'at most' : 'at least'}, ${PERIOD_TEXT[k.period]}) | ${k.status.state}${k.status.pct != null ? ` (${k.status.pct} %)` : ''}${k.error ? ' · last measurement failed' : ''} | ${k.source.kind === 'mcp' ? `mcp ${cell(k.source.server.split(':').at(-1))}` : k.source.kind} | ${k.latest ? new Date(k.latest.ts).toISOString().slice(0, 16).replace('T', ' ') : 'never'} |`);
   const text = ['# Targets', '', '<!-- GENERATED by The AI Squad from .claude/aisquad/kpi.json: the owner sets targets in Admin → Targets; do not edit this file. -->', '',
     'The numbers this Space works against. Plan the week against the targets that are behind, report progress on them, and never invent a value: a manual target is entered by a person in the app.', '',
     '| Target | Now | Goal | Status | Source | Measured |', '|---|---|---|---|---|---|', ...rows, ''].join('\n');
