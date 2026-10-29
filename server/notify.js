@@ -55,7 +55,9 @@ const TEXT = {
     sent: 'Sent to {agent}.', queued: 'Queued ({reason}); {agent} answers when there is room.', digestTitle: 'Summary for {day}', nothingOpen: 'Nothing waits for you.', open: 'Waiting for you ({n}):',
     lastDay: 'Last 24 hours: {done} background jobs done, {failed} failed, ${cost} spent; {stops} idle agents stopped; {chats} chat answers.', targets: 'Targets: {met} of {n} met, {behind} behind, {unset} without a goal.', behindLine: '{space} · {name}: {value} of {target} {unit}', suggestions: '{n} new improvement suggestions in Admin → Improvements.',
     status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.',
-    askMany: 'Several questions (or several choices): answer them in The AI Squad.' },
+    askMany: 'Several questions (or several choices): answer them in The AI Squad.',
+    routines: 'Routines today: {done} done, {failed} failed, {skipped} skipped.', triggered: 'Targets that raised work:', triggeredLine: '{space} · {name}: {what}',
+    what_notify: 'a notice', what_suggest: 'a plan to approve', what_act: 'the agents act on it' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
     help: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/help daftar ini',
     reply: 'Ketik balasanmu untuk {agent}.', confirm: 'Hard stop ({reasons}). Ketik {code} dalam 5 menit untuk mengonfirmasi "{choice}". Ketikan lain membatalkan.', cancelled: 'Dibatalkan: tidak ada yang dikirim.',
@@ -63,7 +65,9 @@ const TEXT = {
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
     sent: 'Terkirim ke {agent}.', queued: 'Masuk antrean ({reason}); {agent} menjawab saat ada slot.', digestTitle: 'Ringkasan {day}', nothingOpen: 'Tidak ada yang menunggumu.', open: 'Menunggumu ({n}):',
     lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', targets: 'Target: {met} dari {n} tercapai, {behind} tertinggal, {unset} belum punya angka.', behindLine: '{space} · {name}: {value} dari {target} {unit}', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
-    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.' },
+    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.',
+    routines: 'Rutinitas hari ini: {done} selesai, {failed} gagal, {skipped} dilewati.', triggered: 'Target yang memicu pekerjaan:', triggeredLine: '{space} · {name}: {what}',
+    what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agent langsung bekerja' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
@@ -119,7 +123,7 @@ export function inQuiet(q, now = Date.now()) {
 const isCritical = (item) => !!item.hardStop?.length || !!item.autopilot?.critical || (['question', 'permission', 'reply'].includes(item.kind) && autopilot.classify(item.text, { level: 'full' }).reasons.some((r) => r !== 'unclear'));
 const reasonsOf = (item) => [...new Set([...(item.hardStop || []), ...(item.autopilot?.reasons || []), ...autopilot.classify(item.text, { level: 'full' }).reasons])].filter((r) => r !== 'unclear');
 const short = (s, n) => { const t = redact(String(s || '').replace(/\s+/g, ' ').trim()); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal', canary: 'Canary' };
+const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', target: 'Target behind', 'target-plan': 'Target behind: plan to approve', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal', canary: 'Canary' };
 
 // a person may see this item: Owner-only Spaces only for the Owner
 const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOnly && !access.ownerFloors().has(item.floorId)));
@@ -143,7 +147,7 @@ export function messageFor(item, tok, s = settings()) {
     const row = [];
     if (['question', 'permission', 'reply', 'finished', 'decided', 'price', 'contract'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
     if (item.kind === 'crash') buttons.push([{ text: 'Resume', data: `a:${tok}:1` }, { text: 'Start fresh', data: `a:${tok}:2` }]);
-    if (!['question', 'permission', 'price', 'contract'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
+    if (!['question', 'permission', 'price', 'contract', 'target-plan'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
     if (s.publicUrl) row.push({ text: say('openBtn', {}, s.lang), url: item.floorId ? `${s.publicUrl}/#/floor/${item.floorId}${item.agentId ? `/agent/${item.agentId}` : ''}` : `${s.publicUrl}/` });
     buttons.push(row);
   }
@@ -155,9 +159,13 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
   const mine = items.filter((i) => visible(i, user));
   const from = now - 24 * 3600e3;
   let done = 0, failed = 0, cost = 0, stops = 0, chats = 0;
+  const rt = { done: 0, failed: 0, skipped: 0 }, triggered = [];
   for (const f of building.loadBuilding().floors) {
     if (!visible({ floorId: f.id }, user)) continue;
-    for (const e of squadLog.read(f.id, { from, to: now, type: 'job.ended,dispatch.idle-stopped,chat.reply' })) {
+    for (const e of squadLog.read(f.id, { from, to: now, type: 'job.ended,dispatch.idle-stopped,chat.reply,cadence.done,cadence.skipped,kpi.behind' })) {
+      if (e.type === 'cadence.done') { if (e.data.status === 'done') rt.done++; else rt.failed++; continue; }
+      if (e.type === 'cadence.skipped') { rt.skipped++; continue; }
+      if (e.type === 'kpi.behind') { triggered.push({ floorId: f.id, name: e.data.name, mode: e.data.mode }); continue; }
       if (e.type === 'job.ended') { if (e.data.status === 'done') done++; else if (e.data.status === 'failed') failed++; cost += +e.data.cost || 0; }
       else if (e.type === 'dispatch.idle-stopped') stops++;
       else chats++;
@@ -168,6 +176,12 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
   if (!mine.length) lines.push(say('nothingOpen', {}, lang));
   else lines.push(say('open', { n: mine.length }, lang), ...mine.slice(0, 10).map((i) => `- ${[i.floorName, i.agentName].filter(Boolean).join(' · ')}: ${short(i.text, 90)}`));
   lines.push('', say('lastDay', { done, failed, cost: cost.toFixed(2), stops, chats }, lang));
+  // cadence and targets that act (1.5): the routines of the last day, and the targets that raised work
+  if (rt.done + rt.failed + rt.skipped) lines.push(say('routines', rt, lang));
+  if (triggered.length) {
+    const names = new Map(building.loadBuilding().floors.map((f) => { let n = f.id; try { n = floors.readFloor(f.path).floor.name; } catch { /* missing */ } return [f.id, n]; }));
+    lines.push(say('triggered', {}, lang), ...triggered.slice(-8).map((t) => `- ${say('triggeredLine', { space: names.get(t.floorId), name: t.name, what: say(`what_${t.mode}`, {}, lang) }, lang)}`));
+  }
   // the targets (1.3): the counts, and every target that is behind
   try {
     const o = kpi.overview(now), spaces = o.spaces.filter((s) => visible({ floorId: s.id }, user));
@@ -204,7 +218,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
     const same = contentKey(item);
     if (st.sentText[same] && now - st.sentText[same] < SAME_MS) { st.sent[item.id] = { ts: now, duplicate: true, msgs: [] }; continue; }
     if (item.notice && now < (item.notifyAt || 0)) continue;                                // a stall notice: only once it has lasted 15 min
-    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal'].includes(item.kind);
+    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal', 'target-plan'].includes(item.kind);   // a recovery plan waits for Approve / Dismiss (1.5)
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
     if (quiet && item.kind !== 'resource') continue;                                         // after the quiet hours
     if (st.hourly.length >= s.maxPerHour) break;

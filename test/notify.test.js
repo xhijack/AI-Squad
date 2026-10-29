@@ -13,6 +13,7 @@ import * as building from '../server/building.js';
 import * as floors from '../server/floors.js';
 import { loadPin } from '../server/pin.js';
 import * as access from '../server/access.js';
+import * as squadLog from '../server/log.js';
 
 const root = scratch();
 // a fake Bot API: records every call, answers like Telegram
@@ -213,4 +214,29 @@ test('the digest: what still waits, the last day, in the chosen language', async
   assert.equal(r.digest, 3, 'one per paired chat');
   assert.equal((await notify.notifyTick(morning + 60e3)).digest, 0);
   assert.ok(sent().slice(n).some((c) => /^Summary for 2026-10-28/.test(c.body.text)));
+});
+
+test('cadence and targets that act (1.5): a recovery plan arrives with Approve / Dismiss; the digest counts routines and triggered targets', async () => {
+  const plan = { id: 'target:sales:leads:1:plan', kind: 'target-plan', floorId: building.loadBuilding().floors.find((f) => f.path.endsWith('sales')).id, floorName: 'Sales', agentId: 'rudi', agentName: 'Rudi - Researcher',
+    text: 'Leads this week: 4 of 12 leads, behind\n\nRecovery plan:\n1. Call the ten warmest leads.', options: [{ n: 1, label: 'Approve' }, { n: 2, label: 'Dismiss' }] };
+  items = [plan];
+  const day = new Date(2026, 9, 28, 11, 0).getTime();
+  assert.equal((await notify.notifyTick(day)).sent > 0, true, 'at once, not in the digest');
+  const m = sent().find((c) => /^\[Target behind: plan to approve\] Sales · Rudi - Researcher/.test(c.body.text)).body;
+  const kb = m.reply_markup.inline_keyboard;
+  assert.deepEqual(kb[0].map((b) => b.text), ['1. Approve', '2. Dismiss']);
+  assert.ok(!kb.flat().some((b) => b.text === 'Reply' || b.text === 'Dismiss'), 'no free reply, no second Dismiss');
+  await notify.handleUpdate(press(555, kb[0][0].callback_data), { now: day });
+  assert.deepEqual(answered.at(-1), { id: plan.id, option: 1, text: '', where: { floorId: plan.floorId, agentId: 'rudi', kind: 'target-plan' } });
+  // the digest
+  const fid = plan.floorId, at = day - 3600e3;
+  squadLog.append(fid, { type: 'cadence.done', ts: at, data: { routine: 'follow-up-list', title: 'Follow-up list', status: 'done', cost: 0.2, ms: 9000 } });
+  squadLog.append(fid, { type: 'cadence.done', ts: at, data: { routine: 'follow-up-list', title: 'Follow-up list', status: 'failed', cost: 0.1, ms: 3000 } });
+  squadLog.append(fid, { type: 'cadence.skipped', ts: at, data: { routine: 'weekly', title: 'Weekly', reason: 'outside the Space\'s shift' } });
+  squadLog.append(fid, { type: 'kpi.behind', ts: at, data: { kpi: 'leads', name: 'Leads', value: 4, target: 12, mode: 'suggest' } });
+  const owner = users.identify(ownerPin, ownerPin);
+  const d = notify.digestFor(owner, { items: [], now: day, lang: 'en' });
+  assert.match(d, /Routines today: 1 done, 1 failed, 1 skipped\./);
+  assert.match(d, /Targets that raised work:\n- Sales · Leads: a plan to approve/);
+  assert.match(notify.digestFor(owner, { items: [], now: day, lang: 'id' }), /Rutinitas hari ini: 1 selesai, 1 gagal, 1 dilewati\.\nTarget yang memicu pekerjaan:\n- Sales · Leads: rencana untuk disetujui/);
 });
