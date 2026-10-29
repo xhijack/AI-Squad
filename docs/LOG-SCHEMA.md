@@ -54,7 +54,6 @@ The first scan of a Floor only records a baseline (the current board and files a
 
 ## Event types
 
-
 ### Lifecycle (`lifecycle`)
 
 **`agent.started`**: The AI Squad started the agent. `data.model` / `data.effort` are the configured values it was started with; the observed model is in each `usage.turn`.
@@ -81,7 +80,6 @@ The first scan of a Floor only records a baseline (the current board and files a
 {"v":1,"id":"fe44695a349a","ts":"2026-10-26T02:03:00.000Z","floor":"pos","sprint":1,"module":null,"agent":"rina-pm","role":"project-manager","session":null,"model":"claude-sonnet-5-5","type":"agent.model","summary":"rina-pm runs claude-sonnet-5-5, configured haiku","data":{"configured":"haiku","observed":"claude-sonnet-5-5"}}
 ```
 
-
 **`node.lost`** (0.18, lifecycle): a worker machine went silent (45 s without a heartbeat) or was removed while
 running this agent's background job. The job is marked failed (`lost: ...`) and queued again; `queued` is the new queue item.
 
@@ -95,15 +93,21 @@ slot; `queue` is true when work was waiting. Resume continues the session.
 ### Work (`work`)
 
 **`kpi.measured`** (1.3): a target of the Space got a value: `kpi` (its id), `name`, `value`, `unit`, `target` (the goal, or
-null), `period`, `source` (manual, erpnext, csv, webhook), `state` (met, behind, unset, unknown), `by` for a value a person
-entered.
+null), `period`, `source` (manual, erpnext, csv, webhook, mcp), `state` (met, behind, unset, unknown), `by` for a value a person
+entered. A target from an integration (1.6, `source: mcp`) also has `server` (the integration's id: `user:<name>`,
+`space:<space>:<name>` or `erpnext`) and `tool`; the call's arguments are never logged.
 
 ```json
 {"v":1,"id":"6f2b1c9e0a47","ts":"2026-10-27T15:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.measured","summary":"target Leads from the site: 31 leads (behind, goal 50, manual)","data":{"kpi":"leads","name":"Leads from the site","value":31,"unit":"leads","target":50,"period":"month","source":"manual","state":"behind","by":"Ramdani"}}
 ```
 
-**`kpi.failed`** (1.3): the server could not measure an ERPNext or CSV target: `kpi`, `name`, `source`, `error` (one line).
-The last value stays, marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
+**`kpi.failed`** (1.3): the server could not measure an ERPNext, CSV or integration target: `kpi`, `name`, `source`, `error`
+(one line, secrets removed); for `source: mcp` (1.6) also `server` and `tool`, never the arguments. The last value stays,
+marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
+
+```json
+{"v":1,"id":"0c4e9a7d2b18","ts":"2026-10-29T08:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.failed","summary":"target Posts published: not measured from mcp space:dtamu-marketing:scheduler posts_this_week: scheduler: The server answered with an error: quota exceeded","data":{"kpi":"posts","name":"Posts published","source":"mcp","server":"space:dtamu-marketing:scheduler","tool":"posts_this_week","error":"scheduler: The server answered with an error: quota exceeded"}}
+```
 
 **`guide.built`** (1.2, lifecycle): the Company Guide built this Space: `division`, `blueprint`, `mode` (automatic, supervised,
 manual), `targets` (how many targets got a goal), `routines` (1.5: how many routines the plan kept; they are made off).
@@ -133,7 +137,6 @@ reason; `dismissed`: the owner dismissed the plan, the target stays quiet for th
 ```
 
 **`cadence.done`** (1.5): a routine's run ended: `routine`, `title`, `job`, `status` (done, failed, stopped), `cost` (USD), `ms`.
-
 
 **`legal.reverted`**, **`legal.approved`**, **`legal.changes`** (0.20): a contract in a Legal Space was put back to DRAFT
 (`reason`: marked APPROVED without the owner's approval, or changed after it), the owner approved it (`by`,
@@ -250,7 +253,6 @@ Desk) or the part of The AI Squad that started it.
 {"v":1,"id":"7c2d1e0f4a65","ts":"2026-10-26T02:21:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"claude-sonnet-5-5","type":"job.ended","summary":"budi-dev's background job done ($0.04)","data":{"job":"j-20261026-a1b2c3d4","kind":"task","status":"done","cost":0.0421,"turns":2,"ms":121000}}
 ```
 
-
 **`dispatch.queued`** (0.13): a start could not run now and waits in the dispatcher's queue. `action` is `start`,
 `resume`, `job` or `sprint`; `priority` P0 to P3; `reason` why it waits; `via` who asked (`owner`, `auto-resume`,
 `next-sprint`, `autopilot`).
@@ -309,7 +311,6 @@ lead, opportunity, quotation, project, clarify, answer or done; `replyTo` the pa
 {"v":1,"id":"perm:pos/budi-dev:1761444000000:a","ts":"2026-10-26T02:23:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"permission.answered","summary":"budi-dev got permission after 2 min","data":{"tool":"Bash","waitMs":95000}}
 ```
 
-
 **`chat.message`** (0.14): a person sent an agent a direct message (Desk → Chat). `context` is `space` or
 `general`; `delivery` is `typed` (into the running Desk session), `job` (a background job answers) or `queued`;
 `text` is the first 200 characters. **`chat.reply`**: the agent's answer reached the chat (`status`).
@@ -329,6 +330,14 @@ Since 0.14, an event caused by a person other than the Owner (a member's start, 
 {"v":1,"id":"tool:toolu_01D","ts":"2026-10-26T02:24:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"tool.call","summary":"budi-dev Bash npm test FAILED (5 s)","data":{"tool":"Bash","target":"npm test","ms":5400,"ok":false,"error":"2 failing"}}
 ```
 
+**`integration.tested`** (1.6): the Owner pressed *Test connection* on an integration (Admin → Integrations): `server`
+(its id), `name`, `source` (user, space, erpnext), `transport` (http, stdio, sse), `ok`, `tools` (how many it lists), `error`
+(one line, secrets removed) when it failed. Logged in every Space that may use the server, or under Floor 1
+(`independents`) when none may. No URL, header, environment value or argument is logged.
+
+```json
+{"v":1,"id":"9a1f3c0e6d52","ts":"2026-10-29T07:57:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"integration.tested","summary":"integration scheduler (http) tested: 2 tools","data":{"server":"space:dtamu-marketing:scheduler","name":"scheduler","source":"space","transport":"http","ok":true,"tools":2}}
+```
 
 ### Usage (`usage`)
 
@@ -337,7 +346,6 @@ Since 0.14, an event caused by a person other than the Owner (a member's start, 
 ```json
 {"v":1,"id":"use:msg_01E","ts":"2026-10-26T02:25:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"usage.turn","summary":"budi-dev turn: 43312 in, 840 out, $0.0009","data":{"input":12,"output":840,"cacheRead":41000,"cacheWrite":2300,"cost":0.000898}}
 ```
-
 
 ### Idle and stalls (`idle`)
 
@@ -358,7 +366,6 @@ Since 0.14, an event caused by a person other than the Owner (a member's start, 
 ```json
 {"v":1,"id":"4a477381040b","ts":"2026-10-26T02:28:00.000Z","floor":"pos","sprint":1,"module":null,"agent":"budi-dev","role":null,"session":null,"model":null,"type":"watchdog.alert","summary":"watchdog stall: Budi has assigned work but has been idle for 12 min","data":{"kind":"stall","text":"Budi has assigned work but has been idle for 12 min"}}
 ```
-
 
 ### Audit (`audit`)
 

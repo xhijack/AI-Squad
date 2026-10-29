@@ -302,6 +302,32 @@ Admin → Machines also has the **Move to another machine** steps (backup, copy,
 
 Admin → ERPNext shows the pipeline: Leads handed over, prices approved, orders, and the median time from Lead to draft and to approved Quotation.
 
+### Integrations (1.6)
+
+**Admin → Integrations** (the Owner's) lists the MCP servers this Building knows. AI Squad reads them from where they already are and never changes them:
+
+- **your user scope in Claude Code** (`~/.claude.json`, `mcpServers`; added with `claude mcp add --scope user …`): your own servers,
+- **each Space's `.mcp.json`** (committed in its repository): that Space's servers,
+- **the ERPNext MCP** that AI Squad writes for the agents (`~/.aisquad/erpnext/mcp.json`).
+
+Each server shows its transport (stdio, http, sse), where it comes from and which Spaces may use it. **Test connection** starts the MCP handshake, lists the tools with their input schemas and records `integration.tested` (ok or the error, the number of tools) in the Squad Log of the Spaces that may use it (Floor 1's when none may). You set what the server **measures** (social scheduler, analytics, ads, help desk, database, CRM, ERP, other; guessed from the name until you choose) and tick the tools that are **read-only**. Only ticked tools may feed a target, and nothing is ticked by default: a tool the server itself calls read-only (`readOnlyHint`) is pre-ticked, but it counts only once you save. The marks and the last test are machine-local (`~/.aisquad/integrations.json`, 0600).
+
+- **Secrets stay where they are.** Header, environment and argument values that are secrets are shown masked (`••••1706`); `${VAR}` references are shown as they are and resolved on this machine only when a call is made, from the server's environment (the ERPNext MCP: from the Space's ERPNext key). A stdio server gets a minimal environment (PATH, HOME, …) plus its own `env`, never the server's other variables. Nothing secret reaches a repository, the Squad Log, `KPI.md` or the browser.
+- **Who may use what** (the ERPNext key rule): an Owner-only Space uses your own servers, its `.mcp.json` and ERPNext with the owner key; a team Space uses only its own `.mcp.json` and ERPNext with its role's key, never your personal servers. To measure a team Space's target from a service, add the server to that Space's `.mcp.json` (with `${VAR}` for its key).
+- **Not usable** as a target source: servers that need a sign-in in a browser (OAuth in Claude Code; listed as *Needs sign-in in Claude Code*) and servers on the old SSE transport.
+- The server's own MCP client (`server/mcp.js`, no dependencies) speaks JSON-RPC over streamable HTTP (JSON or SSE replies, the session id) and stdio. It does the handshake, then `tools/list` or one `tools/call`, nothing else: no prompts, no resources, no sampling, no other tool. It waits 10 s to connect and 30 s for a call, refuses replies over 1 MB, makes one call at a time per server, and always kills a stdio server (its whole process group) when the call ends.
+- API (the Owner's, with the PIN): `GET /api/integrations`, `POST /api/integrations/test` `{id}`, `PATCH /api/integrations/marks` `{id, kind, readOnly}`.
+
+### Targets from an integration (1.6)
+
+A target can take its number from a read-only tool of an integration: Admin → Targets → *Add a target* → Source **from an integration** → the server (those this Space may use, with a read-only tool) → the tool (read-only ones only) → its arguments (a field per argument from the tool's input schema, plus optional JSON) → how to read the number → **Try** → Add.
+
+- **Arguments** are saved with the target in `kpi.json` (committed), so a literal secret is refused there. `{{from}}` and `{{to}}` become the first and last day of the target's period as local dates (a week runs Monday to Sunday; a total from 1970-01-01 to today). Fields named like a date range (`from`, `to`, `start_date`, …) get them filled in.
+- **How to read the number**: *the value at a path* (`total`, `data.items[0].count`) in the result's `structuredContent`, or in its first text parsed as JSON; *the number of items in a list* at a path; *a field added up across a list*; *a number in the text* with a regular expression that has one capture group (`(\d+) posts`). When it cannot be read the error says why (`The value at data.total is not there, not a number`, `The tool answered with an error: …`).
+- **Try** makes one call with the arguments as they would be sent now, and shows the number and the raw result.
+- It is **measured like ERPNext and CSV targets**: on its interval by the hourly tick, again when a new period starts, and with *Measure now*. Results go the usual way: `kpi.measured` (with `server` and `tool`, never the arguments), `kpi.failed` with the reason, `docs/squad/KPI.md` (source `mcp <server>`), the cockpit, and the target's *When behind* rule. Each call checks again that the server is known here, that this Space may use it and that the tool is still marked read-only.
+- **Blueprints** may hint at the integration that would measure a target (`requires: mcp:<kind>`, optionally with the tool, arguments and how to read it): Marketing's *Posts published* from a social scheduler (`posts…` tool, `{{from}}`/`{{to}}`, the number of posts) and *Organic traffic* from analytics. The **Company Guide**'s plan says per target *Measured from: <integration>* when a server the new Space may use has a matching read-only tool (Build then wires the target to it), and otherwise *Enter by hand (connect <kind> to measure it)*; when only your personal server has it, the plan says a team Space needs one in its own `.mcp.json`. Admin → Targets repeats the hint on a manual target until it is connected.
+
 ### Cadence (1.5)
 
 A Space can work on a rhythm without anyone giving it a task: **routines**. Each one has a title, an agent (a role such as `marketing-strategist`, which resolves to the Space's agent with that role, the lead first; or an agent id), when it runs (every day, every weekday, weekly on a day, monthly on a day of the month; the 31st means the last day of a short month), a time on this machine's clock, the task, and optionally a budget per run (default $2, at most $50). At most 20 per Space, in `.claude/aisquad/cadence.json` (committed; changes in Admin → Changes). When each one last ran, what waits and what runs is in `~/.aisquad/cadence/<space>.json` (0600).
@@ -581,6 +607,7 @@ Floors missing on the new machine are cloned from their remote (`--no-clone` to 
 ~/.aisquad/handoffs.json                   packages between Spaces (the last 500)
 ~/.aisquad/erpnext.json                    the ERPNext watcher: pipeline cursors, approvals, alerts
 ~/.aisquad/erpnext/mcp.json                the MCP configuration for ERPNext (variables only, no secrets)
+~/.aisquad/integrations.json               integrations (1.6): each server's kind, read-only tools and last test (0600)
 <repo>/docs/squad/handoffs/                outbox/ (agents write), sent/ (copies), inbox/ (delivered)
 ~/.aisquad/legal.json                      fingerprints of the contracts the Owner approved, revisions, alerts
 <repo>/contracts/                          a Legal Space's contracts (STATUS: DRAFT / READY FOR REVIEW / APPROVED)
