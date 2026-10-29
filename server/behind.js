@@ -8,6 +8,7 @@
 // It fires after a measurement that leaves the target behind, at most once per period and once per cooldown; never
 // for a target without a goal or with a stale value. The state lives on this machine: ~/.aisquad/kpi/<floor>.triggers.json
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { config } from './config.js';
 import { readJson, writeJson } from './util.js';
 import { periodStart } from './kpi.js';
@@ -56,7 +57,10 @@ export function modeFor(rule, { canAct = false, budgetOver = false } = {}) {
   return { mode: 'act' };
 }
 // a stable id per target and period: the same notice is never sent twice (1.0.3)
-export const noticeId = (floorId, kpiId, period) => `target:${floorId}:${kpiId}:${period}`;
+// (hashed like every Attention id, so it travels in /api/attention/<id>/answer)
+const hash = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
+export const noticeId = (floorId, kpiId, period) => hash('target', floorId, kpiId, period);
+export const planId = (floorId, kpiId, period) => hash('target-plan', floorId, kpiId, period);
 
 // ---------- the words ----------
 const PERIOD_TEXT = { day: 'today', week: 'this week', month: 'this month', total: 'in total' };

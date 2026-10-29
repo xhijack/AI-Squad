@@ -968,7 +968,7 @@ Closes the two "Not yet" items PROGRESS gave to this sprint: a target below its 
   - Roles: the Owner defines; Members toggle and Run now (their own work: the shift does not hold it; refused while a run waits or runs); Viewers read; Owner-only Spaces hidden.
 - **Targets that act** (`server/behind.js`): a rule per target in `kpi.json` (`onBehind: { mode: off | notify | suggest | act, agent, task, cooldown }`; Blueprint-seeded targets notify, others are off).
   - It fires after a measurement leaves the target behind: at most once per period and per cooldown, not while its earlier notice, plan or task is open, never without a goal or with a stale value. Trigger state and history in `~/.aisquad/kpi/<space>.triggers.json` (0600).
-  - notify: one muted notice under Notices with a stable id per target and period (`target:<space>:<kpi>:<period start>`), OK closes it.
+  - notify: one muted notice under Notices with a stable id per target and period (a hash of the target and the period start, like every Attention id), OK closes it.
   - suggest: the rule's agent (empty: the lead) drafts a recovery plan in a read-only run (`--permission-mode plan`, $0.50); the card has Approve (starts it as a task with the plan) and Dismiss (quiet for the rest of the period). If the draft fails, the card says so and Approve starts the task as it is.
   - act: starts the task at once as automated work only when the Space acts by itself, which this sprint defines as Autopilot **full**, not Legal and not Owner-only (`trust.allowsActions`), and its budget is not reached; otherwise it falls back to suggest and the card says why.
   - The task text carries the value, the goal, the period, the trend of the last measurements and points to `docs/squad/KPI.md`.

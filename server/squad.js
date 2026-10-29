@@ -1279,7 +1279,7 @@ function targetItems(entry, floor, out) {
     const base = { floorId: entry.id, floorNumber: entry.number, floorName: floor.name, kpi: kpiId, answerable: true, ts: t.firedAt, ...(owner ? { ownerOnly: true } : {}) };
     if (t.status === 'notice') { out.push({ ...base, id: behind.noticeId(entry.id, kpiId, t.period), kind: 'target', notice: true, muted: true, notifyAt: t.firedAt, text: t.text, options: [] }); continue; }
     const plan = t.plan ? `\n\nRecovery plan:\n${t.plan}` : `\n\nNo plan was drafted${t.planError ? ` (${t.planError})` : ''}: Approve starts the target's task as it is.`;
-    out.push({ ...base, id: `${behind.noticeId(entry.id, kpiId, t.period)}:plan`, kind: 'target-plan', agentId: t.agentId || null, text: `${t.text}${t.fallback ? ` (asked instead of acting: ${t.fallback})` : ''}${plan}`,
+    out.push({ ...base, id: behind.planId(entry.id, kpiId, t.period), kind: 'target-plan', agentId: t.agentId || null, text: `${t.text}${t.fallback ? ` (asked instead of acting: ${t.fallback})` : ''}${plan}`,
       options: [{ n: 1, label: 'Approve' }, { n: 2, label: 'Dismiss' }] });
   }
 }

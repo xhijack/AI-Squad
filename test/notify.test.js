@@ -217,7 +217,7 @@ test('the digest: what still waits, the last day, in the chosen language', async
 });
 
 test('cadence and targets that act (1.5): a recovery plan arrives with Approve / Dismiss; the digest counts routines and triggered targets', async () => {
-  const plan = { id: 'target:sales:leads:1:plan', kind: 'target-plan', floorId: building.loadBuilding().floors.find((f) => f.path.endsWith('sales')).id, floorName: 'Sales', agentId: 'rudi', agentName: 'Rudi - Researcher',
+  const plan = { id: '5e1c0a9b7d2f', kind: 'target-plan', floorId: building.loadBuilding().floors.find((f) => f.path.endsWith('sales')).id, floorName: 'Sales', agentId: 'rudi', agentName: 'Rudi - Researcher',
     text: 'Leads this week: 4 of 12 leads, behind\n\nRecovery plan:\n1. Call the ten warmest leads.', options: [{ n: 1, label: 'Approve' }, { n: 2, label: 'Dismiss' }] };
   items = [plan];
   const day = new Date(2026, 9, 28, 11, 0).getTime();

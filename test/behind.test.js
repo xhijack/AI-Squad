@@ -70,7 +70,10 @@ test('when it fires: behind with a goal and a fresh value; once per period and p
   assert.equal(behind.shouldFire(k, it, late, mon).why, 'cooldown');
   assert.equal(behind.shouldFire(k, it, late, mon + 24 * H).fire, true, 'the next week, after the cooldown');
   // stable id per target and period
-  assert.equal(behind.noticeId('mkt', 'leads', week), `target:mkt:leads:${week}`);
+  assert.match(behind.noticeId('mkt', 'leads', week), /^[0-9a-f]{12}$/, 'an id the answer route takes');
+  assert.equal(behind.noticeId('mkt', 'leads', week), behind.noticeId('mkt', 'leads', week));
+  assert.notEqual(behind.noticeId('mkt', 'leads', week), behind.noticeId('mkt', 'leads', week + 7 * 864e5), 'a new period, a new notice');
+  assert.notEqual(behind.noticeId('mkt', 'leads', week), behind.planId('mkt', 'leads', week));
 });
 
 test('act needs a Space that may act by itself and money left, else it asks (suggest)', () => {
@@ -148,7 +151,9 @@ test('suggest: the rule\'s agent drafts a plan (read-only run); Approve starts i
   const c = card('target-plan');
   assert.deepEqual(c.options.map((o) => o.label), ['Approve', 'Dismiss']);
   assert.match(c.text, /^Leads this week: 3 of 12 leads, behind\n\nRecovery plan:\nDone: Target behind in DTamu Marketing/);
-  const r = await squad.answerAttention(c.id, 1);
+  const http1 = await call('POST', `/api/attention/${c.id}/answer`, { option: 1, floorId: fid, kind: c.kind });   // as the app and Telegram do
+  assert.equal(http1.status, 200, JSON.stringify(http1.body));
+  const r = http1.body;
   assert.ok(r.job, JSON.stringify(r));
   const task = jobs.readJob(r.job);
   assert.deepEqual([task.agentId, task.permissionMode, task.via], [writer, 'acceptEdits', 'kpi']);
