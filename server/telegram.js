@@ -32,6 +32,9 @@ export const getMe = (token, o) => call(token, 'getMe', {}, o);
 export const sendMessage = (token, chatId, text, { buttons = [], fetchFn } = {}) =>
   call(token, 'sendMessage', { chat_id: chatId, text: clip(text), disable_web_page_preview: true, ...(keyboard(buttons) ? { reply_markup: keyboard(buttons) } : {}) }, { fetchFn });
 export const answerCallback = (token, id, text = '', o) => call(token, 'answerCallbackQuery', { callback_query_id: id, text: String(text).slice(0, 190) }, o);
+// a message's text and buttons changed in place (the guide's toggles, 1.7)
+export const editMessage = (token, chatId, messageId, text, { buttons = [], fetchFn } = {}) =>
+  call(token, 'editMessageText', { chat_id: chatId, message_id: messageId, text: clip(text), disable_web_page_preview: true, reply_markup: keyboard(buttons) || { inline_keyboard: [] } }, { fetchFn });
 export const clearButtons = (token, chatId, messageId, o) => call(token, 'editMessageReplyMarkup', { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }, o);
 // long poll: waits up to `timeout` seconds for updates after `offset`
 export const getUpdates = (token, offset, { timeout = 25, fetchFn } = {}) =>

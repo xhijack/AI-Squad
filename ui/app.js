@@ -782,6 +782,12 @@ if (location.hash === '#/new-floor') {
   const open = () => (state.building ? actions['new-floor']() : setTimeout(open, 300));
   setTimeout(open, 300);
 }
+// #/guide (the link in the Company Guide's Telegram message, 1.7) opens the guide over the Lobby
+if (location.hash === '#/guide') {
+  history.replaceState(null, '', '#/');
+  let tries = 0; const open = () => (state.building && ctx.state.me ? ctx.state.me.role === 'owner' && actions.guide?.() : tries++ < 20 && setTimeout(open, 300));
+  setTimeout(open, 300);
+}
 state.route = parseRoute();
 refresh();
 // the Company Guide (1.4): an owner's empty Building opens it once; after the language reload it comes back

@@ -25,6 +25,8 @@ import * as dispatcher from './dispatcher.js';
 import { redact } from './redact.js';
 import * as insight from './insight.js';
 import * as kpi from './kpi.js';
+import * as guide from './guide.js';
+import * as guideTg from './guide-tg.js';
 
 export const IMMEDIATE = ['question', 'permission', 'reply', 'crash', 'resource', 'scope', 'backup'];
 export const DEFAULTS = { enabled: false, lang: 'en', quiet: { enabled: true, from: '22:00', to: '07:00' }, digestAt: '07:30', maxPerHour: 20, immediate: IMMEDIATE, publicUrl: '' };
@@ -50,6 +52,7 @@ export const settings = () => cleanNotify(building.loadBuilding().prefs.notify);
 const TEXT = {
   en: { paired: 'Paired with The AI Squad as {name} ({role}). You get questions and alerts here. /help lists the commands.', badCode: 'That pairing code is wrong or expired. Make a new one in Admin → Notifications.',
     help: 'Commands:\n/status what the squad is doing\n/chat <agent> talk to an agent directly (then just type)\n/end stop chatting\n/digest the summary now\n/help this list',
+    helpOwner: 'Commands:\n/status what the squad is doing\n/chat <agent> talk to an agent directly (then just type)\n/end stop chatting\n/digest the summary now\n/guide set up the company (the company guide)\n/help this list',
     reply: 'Type your reply to {agent}.', confirm: 'Hard stop ({reasons}). Type {code} within 5 minutes to confirm "{choice}". Anything else cancels.', cancelled: 'Cancelled: nothing was sent.',
     done: 'Done: {choice}', gone: 'Already answered or no longer open.', noRole: 'Your role ({role}) can only read.', expired: 'This button has expired. Open The AI Squad.',
     chatOn: 'Chatting with {agent} in {space}. Type your message; /end stops.', chatOff: 'Chat ended.', noAgent: 'No agent called "{q}". Try its name or id.', many: 'Several agents match: {list}',
@@ -62,6 +65,7 @@ const TEXT = {
     countsOnly: '{n} item(s) from an Owner-only Space wait for you in The AI Squad (details only in the app).' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
     help: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/help daftar ini',
+    helpOwner: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/guide siapkan perusahaan (panduan perusahaan)\n/help daftar ini',
     reply: 'Ketik balasanmu untuk {agent}.', confirm: 'Hard stop ({reasons}). Ketik {code} dalam 5 menit untuk mengonfirmasi "{choice}". Ketikan lain membatalkan.', cancelled: 'Dibatalkan: tidak ada yang dikirim.',
     done: 'Selesai: {choice}', gone: 'Sudah dijawab atau tidak terbuka lagi.', noRole: 'Peranmu ({role}) hanya bisa membaca.', expired: 'Tombol ini sudah kedaluwarsa. Buka The AI Squad.',
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
@@ -284,7 +288,19 @@ export async function sendDigestNow(user, { fetchFn } = {}) {
 // ---------- what comes in ----------
 const asUser = (user, fn) => access.actorStore.run({ user }, fn);
 // what an action from Telegram calls: the same functions as the browser (tests swap them)
-export const deps = { answer: (...a) => squad.answerAttention(...a), chat: (...a) => squad.sendChat(...a), items: () => squad.attentionItems() };
+export const deps = { answer: (...a) => squad.answerAttention(...a), chat: (...a) => squad.sendChat(...a), items: () => squad.attentionItems(), guidePlan: (o) => guide.plan(o) };
+// what the Company Guide on Telegram (server/guide-tg.js) may do in this chat
+function guideIo(chatId, { fetchFn, now = Date.now(), callbackId = null } = {}) {
+  return {
+    send: (text, buttons) => send(chatId, text, buttons, fetchFn),
+    edit: (messageId, text, buttons) => tg.editMessage(botToken(), chatId, messageId, text, { buttons, fetchFn }).catch(() => send(chatId, text, buttons, fetchFn)),
+    ack: (text) => (callbackId ? tg.answerCallback(botToken(), callbackId, text, { fetchFn }).catch(() => null) : null),
+    get pending() { const p = loadState().pending[chatId]; return p?.mode === 'guide' && p.exp >= now ? p : null; },
+    setPending: (p) => update((s) => { if (p) s.pending[chatId] = { ...p, exp: now + TOKEN_MS }; else if (s.pending[chatId]?.mode === 'guide') delete s.pending[chatId]; }),
+    publicUrl: settings().publicUrl,
+    plan: (o) => deps.guidePlan(o),
+  };
+}
 function findAgents(q, user) {
   const s = String(q || '').trim().toLowerCase();
   const out = [], counts = countsOnly();
@@ -319,7 +335,9 @@ export async function handleUpdate(u, { fetchFn, now = Date.now() } = {}) {
   const user = userOf(chat.userId);
   if (!user) return null;
   const pend = st.pending[chatId];
-  if (/^\/help/.test(text) || /^\/start/.test(text)) return reply(chatId, 'help');
+  if (/^\/guide(@\w+)?$/.test(text)) return guideTg.start(guideIo(chatId, { fetchFn, now }), user);       // the Company Guide (1.7)
+  if (pend?.mode === 'guide' && pend.exp >= now && /^\/cancel/.test(text)) return guideTg.press(guideIo(chatId, { fetchFn, now }), user, 'g:x');
+  if (/^\/help/.test(text) || /^\/start/.test(text)) return reply(chatId, user.role === 'owner' ? 'helpOwner' : 'help');
   if (/^\/status/.test(text)) {
     const b = squad.buildingSnapshot();
     const agents = b.floors.filter((f) => visible({ floorId: f.id }, user)).flatMap((f) => f.agents);
@@ -338,6 +356,7 @@ export async function handleUpdate(u, { fetchFn, now = Date.now() } = {}) {
     return reply(chatId, 'chatOn', { agent: h.name, space: h.space });
   }
   if (!pend || pend.exp < now) { if (pend) update((s) => { delete s.pending[chatId]; }); return reply(chatId, 'help'); }
+  if (pend.mode === 'guide') return guideTg.text(guideIo(chatId, { fetchFn, now }), user, text);
   if (pend.mode === 'confirm') {
     update((s) => { delete s.pending[chatId]; });
     if (text !== pend.code) return reply(chatId, 'cancelled');
@@ -385,6 +404,7 @@ async function handleCallback(q, { fetchFn, now, lang }) {
   const ack = (text) => tg.answerCallback(botToken(), q.id, text, { fetchFn }).catch(() => null);
   if (!chat) return ack('');
   const user = userOf(chat.userId);
+  if (String(q.data || '').startsWith('g:')) return user ? guideTg.press(guideIo(chatId, { fetchFn, now, callbackId: q.id }), user, q.data, q.message?.message_id) : ack('');
   const [act, tok, n] = String(q.data || '').split(':');
   const t = st.tokens[tok];
   if (!user || !t || t.exp < now) return ack(say('expired', {}, lang));

@@ -35,6 +35,30 @@ only the Owner's chats.
   sends; anything else cancels.
 - When the question is answered somewhere else, the buttons disappear.
 - `/status`, `/chat <agent>` (then type; the agent's answer comes back), `/end`, `/digest`, `/help`.
+- `/guide` (the Owner only, 1.7): the Company Guide, see below.
+
+## The Company Guide on Telegram (1.7)
+
+`/guide` in the Owner's chat runs the same interview as *Set up the company* in the app, one question per message:
+
+- choices are buttons; where several fit (goals, what you have, divisions) the buttons are toggles and **Done**
+  saves them (*Use the suggestion* for the divisions); a name, a sentence or a number is typed (`50`, `30.000.000`);
+- **« Back** goes to the previous question with its answer shown, **Cancel** (or `/cancel`) stops; the answers are
+  saved after every question, so `/guide` later offers *Continue* or *From the start*;
+- the answers are the same file as the app's (`~/.aisquad/guide.json`): what you answered in the app is shown as
+  *Now:* on Telegram, and the app's guide, when it is open, follows what you answer on Telegram;
+- the language is your answer to the first question, else the Building's;
+- at the end the bot sends the plan in plain words (the Spaces with their mode, targets, routines and what they need
+  from you; what waits for you) and a link to `#/guide`. **Build happens only in the app**: it creates repositories
+  and Spaces, which needs the PIN and a careful look.
+
+Members and Viewers who send `/guide` get a polite "this is the Owner's".
+
+## Spaces that send counts only (1.7)
+
+A Space with *Telegram: Counts only* (Admin → Spaces; the Finance Blueprint sets it) sends no text, names, amounts
+or answer buttons: a question from it arrives as "[Question] Finance · 1 item(s) from an Owner-only Space wait for
+you" with only **Open**; the digest counts its items and leaves its targets out; `/chat` does not reach its agents.
 
 ## Privacy
 

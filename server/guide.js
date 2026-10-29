@@ -93,7 +93,7 @@ const save = (st, via = '') => writeJson(file(), { ...st, updatedAt: Date.now(),
 // the state the UI shows: where the owner is, the answers so far, the plan, whether it was built
 export function state() {
   const st = load();
-  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, suggestIf: SUGGEST_IF, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, via: st.via || '' };
+  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, suggestIf: SUGGEST_IF, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, planAt: st.planAt || 0, via: st.via || '' };
 }
 export function answer(partial, step, { via = 'web' } = {}) {
   const st = load();
@@ -213,7 +213,7 @@ export async function plan({ useClaude = true, via = 'web' } = {}) {
       }
     } catch { /* the defaults stand */ }
   }
-  st.plan = p; st.step = STEPS.length - 1;
+  st.plan = p; st.step = STEPS.length - 1; st.planAt = Date.now();
   save(st, via);
   return p;
 }

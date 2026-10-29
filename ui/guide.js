@@ -31,13 +31,30 @@ let s = null;   // { st (server state), step, a (answers being edited), busy, pl
 const blank = () => ({ language: LANG, business: { type: '', name: '', description: '' }, goals: { picks: [], leads: '', revenue: '', launch: '' }, have: [], divisions: [], modes: {}, capacity: { machines: 'this', hours: 'day', budget: '' } });
 const merge = (a, b) => ({ ...a, ...(b || {}), business: { ...a.business, ...(b?.business || {}) }, goals: { ...a.goals, ...(b?.goals || {}) }, capacity: { ...a.capacity, ...(b?.capacity || {}) }, modes: { ...(b?.modes || {}) } });
 
+// where the guide opens: the saved step; after a build the divisions again, unless a plan was made since (on Telegram)
+function fromState(st) {
+  s = { st, step: Math.min(st.step || 0, STEPS.length - 1), a: merge(blank(), st.answers), busy: false, plan: st.plan, edits: {}, result: null };
+  if (st.done && !(st.plan && st.planAt > Date.parse(st.builtAt || 0))) { s.step = Math.min(s.step, STEPS.indexOf('divisions')); s.plan = null; }   // built before: pick the divisions again, the plan is made fresh (what exists is skipped)
+  if (s.step === STEPS.length - 1 && !s.plan) s.step = STEPS.length - 2;
+}
+// the same interview runs on Telegram (1.7): while the guide is open, what the owner answers there shows here
+let watch = null;
+function watchTelegram() {
+  clearInterval(watch);
+  watch = setInterval(async () => {
+    if (!document.getElementById('cgForm')) { clearInterval(watch); return; }
+    if (s.busy || s.result) return;
+    try {
+      const st = await api('GET', '/api/guide');
+      if (st.updatedAt !== s.st.updatedAt && st.via === 'telegram') { fromState(st); draw(); toast(t('Updated from Telegram')); }
+    } catch { /* next time */ }
+  }, 4000);
+}
 ctx.actions.guide = async () => {
   try {
-    const st = await api('GET', '/api/guide');
-    s = { st, step: Math.min(st.step || 0, STEPS.length - 1), a: merge(blank(), st.answers), busy: false, plan: st.plan, edits: {}, result: null };
-    if (st.done) { s.step = Math.min(s.step, STEPS.indexOf('divisions')); s.plan = null; }   // built before: pick the divisions again, the plan is made fresh (what exists is skipped)
-    if (s.step === STEPS.length - 1 && !s.plan) s.step = STEPS.length - 2;
+    fromState(await api('GET', '/api/guide'));
     draw();
+    watchTelegram();
   } catch (e) { toast(e.message, 5000); }
 };
 // after the language reload, or the first time an owner opens an empty Building: open once
