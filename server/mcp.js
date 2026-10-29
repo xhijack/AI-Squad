@@ -9,6 +9,7 @@
 // ${VAR} already resolved (server/integrations.js does that, at call time only).
 import { spawn } from 'node:child_process';
 import { HttpError } from './util.js';
+import { scrub } from './mask.js';
 
 export const VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];     // newest first: what we ask for
 export const LIMITS = { connectMs: 10e3, callMs: 30e3, maxBytes: 1 << 20, killMs: 1500 };
@@ -152,8 +153,13 @@ function stdioTransport(def, lim) {
 }
 
 // ---------- a session: connect, use, always close ----------
-// fn(session) with session.listTools() and session.callTool(name, args); returns fn's result
+// fn(session) with session.listTools() and session.callTool(name, args); returns fn's result. An error never carries
+// the definition's URL or keys out of here (a server or fetch may echo them, 1.6.1)
 export async function withSession(def, fn, opts = {}) {
+  try { return await session(def, fn, opts); }
+  catch (e) { if (e && typeof e.message === 'string') e.message = scrub(e.message, def); throw e; }
+}
+async function session(def, fn, opts) {
   const lim = { ...LIMITS, ...opts };
   if (!['http', 'stdio'].includes(def?.transport)) throw fail(def?.transport === 'sse' ? 'The old SSE transport is not supported: the server reads only streamable HTTP and stdio servers' : 'Unknown transport', 'transport');
   const tr = def.transport === 'http' ? httpTransport(def, lim) : stdioTransport(def, lim);

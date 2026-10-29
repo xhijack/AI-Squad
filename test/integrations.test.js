@@ -169,3 +169,40 @@ test('the API is the Owner\'s alone, with the PIN', async () => {
   const mk = await call('PATCH', '/api/integrations/marks', { id: 'user:stats', readOnly: [] });
   assert.deepEqual(mk.body.readOnly, []);
 });
+
+test('1.6.1: a key in a server\'s URL never shows: the list, a failed test, a call\'s error and result, the stored state, the Squad Log', async () => {
+  const KEY = '9f86d081884c7d659a2feaa0c55ad015a1b2';
+  const E = fakeMcpHttp();
+  const eurl = await E.listen();
+  after(() => E.close());
+  const social = space('Social', { mcp: { postiz: { type: 'http', url: `${eurl}/${KEY}?team=marketing` } } });
+  const id = `space:${social.id}:postiz`;
+  const l = await call('GET', '/api/integrations');
+  assert.ok(!JSON.stringify(l.body).includes(KEY), 'not in the list endpoint');
+  assert.match(l.body.servers.find((s) => s.id === id).url, /\/mcp\/••••a1b2\?team=marketing$/);
+  assert.equal((await integ.test(id)).tested.ok, true);
+  integ.setMarks(id, { readOnly: ['posts_this_week'] });
+  const sp = integ.spaces().find((s) => s.id === social.id);
+  E.state.mode = 'echo-result';
+  const r = await integ.call(sp, { server: id, tool: 'posts_this_week' }, {});
+  assert.match(r.content[0].text, /^Called \/mcp\/••••a1b2\?team=marketing with no auth: 4 posts$/, 'a result that echoes the key');
+  E.state.mode = 'echo';
+  await assert.rejects(integ.call(sp, { server: id, tool: 'posts_this_week' }, {}), (e) => /No MCP endpoint at .*••••a1b2/.test(e.message) && !e.message.includes(KEY));
+  const t = await integ.test(id);
+  assert.match(t.tested.error, /HTTP 404: No MCP endpoint at http:\/\/127\.0\.0\.1:\d+\/mcp\/••••a1b2\?team=marketing/);
+  assert.ok(!JSON.stringify(t).includes(KEY));
+  assert.ok(!fs.readFileSync(path.join(config.home, 'integrations.json'), 'utf8').includes(KEY), 'not in the stored state');
+  assert.ok(!JSON.stringify(squadLog.read(social.id, {})).includes(KEY), 'not in the Squad Log');
+});
+
+test('1.6.1: a test result stored before the fix is masked on the way out', async () => {
+  const KEY = '9f86d081884c7d659a2feaa0c55ad015a1b2';
+  const id = integ.registry().find((e) => e.url.includes(KEY)).id;
+  const f = path.join(config.home, 'integrations.json');
+  const st = JSON.parse(fs.readFileSync(f, 'utf8'));
+  st.servers[id].tested.error = `HTTP 404 at http://x/mcp/${KEY}`;
+  fs.writeFileSync(f, JSON.stringify(st));
+  const l = await call('GET', '/api/integrations');
+  assert.ok(!JSON.stringify(l.body).includes(KEY));
+  assert.match(l.body.servers.find((s) => s.id === id).tested.error, /\/mcp\/••••a1b2/);
+});

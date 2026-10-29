@@ -2,7 +2,7 @@
 // A fake MCP server over streamable HTTP for the tests (no network beyond 127.0.0.1): a session id from initialize
 // that every later request must carry, JSON or SSE replies (reply: 'json' | 'sse'), a bearer token when `token` is
 // set (401 with WWW-Authenticate otherwise, like an OAuth server), and the same tools as the stdio fake.
-// mode: ok | hang | big | error | version | 500. calls: every JSON-RPC message it received, with its headers.
+// mode: ok | hang | big | error | version | 500 | echo (errors that repeat the request's URL, like some servers do). calls: every JSON-RPC message it received, with its headers.
 import http from 'node:http';
 
 export function fakeMcpHttp({ reply = 'json', token = '', mode = 'ok', posts = 4 } = {}) {
@@ -15,6 +15,7 @@ export function fakeMcpHttp({ reply = 'json', token = '', mode = 'ok', posts = 4
     req.on('end', () => {
       if (token && req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401, { 'www-authenticate': 'Bearer resource_metadata="x"' }); return res.end(); }
       if (req.method === 'DELETE') { sessions.delete(req.headers['mcp-session-id']); state.deleted++; res.writeHead(200); return res.end(); }
+      if (state.mode === 'echo') { res.writeHead(404, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: `No MCP endpoint at http://${req.headers.host}${req.url}` } })); }
       if (state.mode === '500') { res.writeHead(500, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: { message: 'boom' } })); }
       const m = JSON.parse(body || '{}');
       calls.push({ method: m.method, params: m.params, session: req.headers['mcp-session-id'] || '', version: req.headers['mcp-protocol-version'] || '', accept: req.headers.accept || '' });
@@ -30,6 +31,7 @@ export function fakeMcpHttp({ reply = 'json', token = '', mode = 'ok', posts = 4
         if (state.mode === 'hang') return;                                            // never answers
         if (state.mode === 'error') error = { code: -32000, message: 'quota exceeded' };
         else if (state.mode === 'big') result = { content: [{ type: 'text', text: 'y'.repeat(3 << 20) }] };
+        else if (state.mode === 'echo-result') result = { content: [{ type: 'text', text: `Called ${req.url} with ${req.headers.authorization || 'no auth'}: 4 posts` }] };
         else { const a = m.params.arguments || {}; result = { content: [{ type: 'text', text: `Published ${state.posts} posts between ${a.from} and ${a.to}` }], structuredContent: { total: state.posts, posts: Array.from({ length: state.posts }, (_, i) => ({ id: i + 1, reach: (i + 1) * 100 })) } }; }
       } else error = { code: -32601, message: 'Method not found' };
       const msg = { jsonrpc: '2.0', id: m.id, ...(error ? { error } : { result }) };

@@ -17,7 +17,8 @@ import { config } from './config.js';
 import * as building from './building.js';
 import * as erp from './erpnext.js';
 import * as mcp from './mcp.js';
-import { redact, sensitiveName } from './redact.js';
+import { redact } from './redact.js';
+import { maskValue, maskUrl, maskArgs, scrub, scrubDeep } from './mask.js';
 import { readJson, writeJson, bad, notFound, oneLine } from './util.js';
 
 export const KINDS = ['social-scheduler', 'analytics', 'ads', 'helpdesk', 'database', 'crm', 'erp', 'other'];
@@ -90,31 +91,8 @@ export function setMarks(id, { kind, readOnly } = {}) {
   return view(find(id));
 }
 
-// ---------- masking (what the browser sees) ----------
-const REF = /\$\{[^}]*\}/g;
-export function maskValue(v, name = '') {
-  const s = String(v ?? '');
-  const lit = s.replace(REF, '').replace(/^(Bearer|Basic|token)\s+/i, '').replace(/[\s:]/g, '');
-  if (!lit) return s;                                                     // only ${VAR} references: nothing secret here
-  const secret = sensitiveName(name) || /^(authorization|x-api-key|api-?key)$/i.test(name) || redact(s, { pii: false }) !== s || (lit.length >= 24 && /^[\w.~+/=-]+$/.test(lit) && /\d/.test(lit) && /[a-z]/i.test(lit));
-  return secret ? `••••${lit.length >= 12 ? lit.slice(-4) : ''}` : s;
-}
-export function maskUrl(u) {
-  try {
-    const url = new URL(String(u).replace(REF, (m) => `__REF${Buffer.from(m).toString('hex')}__`));
-    if (url.password) url.password = '••••';
-    for (const [k, v] of [...url.searchParams]) url.searchParams.set(k, maskValue(v, k));
-    return decodeURI(url.toString()).replace(/__REF([0-9a-f]+)__/g, (m, h) => Buffer.from(h, 'hex').toString());
-  } catch { return maskValue(u, 'url'); }
-}
-export function maskArgs(args = []) {
-  return args.map((a, i) => {
-    const kv = String(a).match(/^(--?[\w.-]+|[A-Za-z_][\w.-]*)=(.*)$/);
-    if (kv) return `${kv[1]}=${maskValue(kv[2], kv[1].replace(/^-+/, ''))}`;
-    const prev = i ? String(args[i - 1]) : '';
-    return maskValue(a, /^--?[\w.-]+$/.test(prev) ? prev.replace(/^-+/, '') : '');
-  });
-}
+// ---------- masking (what the browser sees): server/mask.js ----------
+export { maskValue, maskUrl, maskArgs } from './mask.js';
 const SOURCE_TEXT = { user: 'Claude Code, your user scope (~/.claude.json)', space: 'the Space\'s .mcp.json', erpnext: 'AI Squad (ERPNext)' };
 // why a server cannot feed a target, or '' when it can (with read-only tools)
 export function blocker(e, marks = marksOf(e.id)) {
@@ -123,13 +101,15 @@ export function blocker(e, marks = marksOf(e.id)) {
   if (e.oauth || marks.tested?.needsSignIn) return 'Needs sign-in in Claude Code (OAuth in a browser): it cannot be used as a target source';
   return '';
 }
+// a test stored by 1.6.0 may hold an error that echoed the URL: masked again on the way out (1.6.1)
+const testedView = (t, e) => (t ? { ...t, ...(t.error ? { error: scrub(t.error, e) } : {}) } : null);
 export function view(e) {
   const m = marksOf(e.id);
   return {
     id: e.id, name: e.name, source: e.source, sourceText: SOURCE_TEXT[e.source], ...(e.floorId ? { floorId: e.floorId } : {}), transport: e.transport,
     ...(e.url ? { url: maskUrl(e.url) } : {}), ...(e.command ? { command: maskValue(e.command, 'command'), args: maskArgs(e.args) } : {}),
     headers: Object.fromEntries(Object.entries(e.headers).map(([k, v]) => [k, maskValue(v, k)])), env: Object.fromEntries(Object.entries(e.env).map(([k, v]) => [k, maskValue(v, k)])),
-    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], marked: !!m.markedAt, tested: m.tested || null,
+    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], marked: !!m.markedAt, tested: testedView(m.tested, e),
     blocked: blocker(e, m), usableBy: spaces().filter((s) => usableBy(e, s)).map((s) => s.id),
   };
 }
@@ -201,7 +181,7 @@ function erpEnv(space) {
   return { AISQUAD_ERP_URL: erp.settings().url, AISQUAD_ERP_KEY: c.key, AISQUAD_ERP_SECRET: c.secret };
 }
 const defFor = (e, space) => resolve(e, e.source === 'erpnext' ? erpEnv(space) : {});
-const clean = (msg) => oneLine(redact(String(msg || ''), { pii: false }), 300);
+const clean = (msg, def = {}) => oneLine(scrub(redact(String(msg || ''), { pii: false }), def), 300);
 
 // ---------- Test connection ----------
 const schemaOf = (s) => { const j = JSON.stringify(s || {}); return j.length <= 8000 ? s : { type: 'object', note: 'schema too large to keep' }; };
@@ -212,10 +192,12 @@ export async function test(id, { now = Date.now(), opts } = {}) {
   let tested;
   if (why) tested = { at: now, ok: false, error: why, tools: [] };
   else {
+    let def = { url: e.url, headers: e.headers, env: e.env, args: e.args };          // the literal keys, before resolving
     try {
-      const r = await mcp.listTools(id, defFor(e, null), opts);
-      tested = { at: now, ok: true, version: r.info.version, serverName: oneLine(r.info.server?.name || '', 60), tools: r.tools.slice(0, 200).map((t) => ({ ...t, inputSchema: schemaOf(t.inputSchema) })) };
-    } catch (err) { tested = { at: now, ok: false, error: clean(err.message), code: err.code || '', needsSignIn: err.code === 'auth' && /sign-in/.test(err.message), tools: [] }; }
+      def = defFor(e, null);
+      const r = await mcp.listTools(id, def, opts);
+      tested = { at: now, ok: true, version: r.info.version, serverName: oneLine(scrub(r.info.server?.name || '', def), 60), tools: r.tools.slice(0, 200).map((t) => scrubDeep({ ...t, inputSchema: schemaOf(t.inputSchema) }, def)) };
+    } catch (err) { tested = { at: now, ok: false, error: clean(err.message, def), code: err.code || '', needsSignIn: err.code === 'auth' && /sign-in/.test(err.message), tools: [] }; }
   }
   const st = loadState();
   const cur = st.servers[id] || {};
@@ -244,6 +226,7 @@ export function checkUse(space, source) {
 // one tools/call for a target (or its Try): the result as the server gave it
 export async function call(space, source, args, opts) {
   const e = checkUse(space, source);
-  try { return await mcp.callTool(e.id, defFor(e, space), source.tool, args, opts); }
-  catch (err) { throw bad(`${e.name}: ${clean(err.message)}`); }
+  let def = { url: e.url, headers: e.headers, env: e.env, args: e.args };
+  try { def = defFor(e, space); return scrubDeep(await mcp.callTool(e.id, def, source.tool, args, opts), def); }   // a result that echoes a key: masked too
+  catch (err) { throw bad(`${e.name}: ${clean(err.message, def)}`); }
 }
