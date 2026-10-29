@@ -25,6 +25,8 @@ const TEAM = [
 ];
 const proj = path.join(root, 'shop');
 after(() => { try { execFileSync('tmux', ['-L', config.tmuxSocket, 'kill-server'], { stdio: 'ignore' }); } catch { /* none */ } });
+squad.setResourceReader(() => ({ mem: { available: 6 * 2 ** 30, total: 8 * 2 ** 30 }, cpus: 4, load: [.2, .2, .2] }));   // not this machine's memory
+after(() => squad.setResourceReader(null));
 
 test('choosing Squad Sprint scaffolds the pack, team ids and hooks', async () => {
   await floors.createFloor({ name: 'Shop', directory: { mode: 'new', path: proj }, workflow: 'squad-sprint', git: { qualityGate: 'npm test -- --run' }, team: TEAM });
