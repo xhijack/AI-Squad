@@ -9,7 +9,13 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // version of this checkout; /aisquad compares it with the running server to restart it after an update
 export const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch { return '0.0.0'; } })();
 
-export const config = {
+// Paths are made absolute once, against the folder the server was started from (1.5.1): jobs and agents run in their
+// Space's folder, where a relative AISQUAD_HOME pointed somewhere else and every job ended "without a result".
+// A bare claude binary name stays as it is: it is looked up on PATH.
+const PATHS = { home: path.resolve, claudeHome: path.resolve, procDir: path.resolve, claudeBin: (p) => (p.includes('/') ? path.resolve(p) : p) };
+const absolute = (over) => { for (const [k, fn] of Object.entries(PATHS)) if (over[k]) over[k] = fn(String(over[k])); return over; };
+
+export const config = absolute({
   home: process.env.AISQUAD_HOME || path.join(os.homedir(), '.aisquad'),
   claudeHome: process.env.CLAUDE_HOME || path.join(os.homedir(), '.claude'),
   tmuxSocket: process.env.AISQUAD_TMUX_SOCKET || '',     // empty = default tmux server
@@ -20,9 +26,9 @@ export const config = {
   useHooks: process.env.AISQUAD_NO_HOOKS !== '1',             // start agents with our plugin hooks (--plugin-dir)
   serverUrl: process.env.AISQUAD_URL || `http://127.0.0.1:${process.env.AISQUAD_PORT || 8097}`,       // systemd-run --user --scope when available
   defaultRoles: path.join(ROOT, 'templates', 'roles'),
-};
+});
 
-export function configure(over) { Object.assign(config, over); }
+export function configure(over) { Object.assign(config, absolute({ ...over })); }
 
 export const paths = {
   building: () => path.join(config.home, 'building.json'),
