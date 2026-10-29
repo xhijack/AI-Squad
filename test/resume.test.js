@@ -22,6 +22,9 @@ configure({ claudeBin: FAKE, useSystemd: false, useHooks: false });
 let journal = '';
 recovery.setJournalRunner(() => journal);
 after(() => recovery.setJournalRunner(null));
+// never this machine's memory; a full machine here proves the auto-resume tick admits with the reading it was given
+squad.setResourceReader(() => ({ mem: { available: 0 }, swap: { total: 8 * GB, used: 7 * GB } }));
+after(() => squad.setResourceReader(null));
 
 const { createSquad } = await import('../server/setup.js');
 const building = await import('../server/building.js');

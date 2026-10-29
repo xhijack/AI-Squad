@@ -1040,10 +1040,10 @@ async function execItem(it, ctx = null) {
 }
 // every start goes through here: now when there is room (and nothing more urgent waits), else into the queue.
 // -> what the start returned, or { ok, waiting: true, dispatch: { id, position, priority, reason } }
-export async function admit(item, { force = false } = {}) {
+export async function admit(item, { force = false, res } = {}) {
   const it = { priority: 'P2', via: 'aisquad', ...item };
   if (force || !needsSlot(it)) return execItem(it);
-  const ctx = dispatchContext();
+  const ctx = dispatchContext(Date.now(), res ? { res } : {});
   const probe = { ...it, id: 'probe', createdAt: Date.now(), attempts: 0 };
   const p = dispatcher.plan([...dispatcher.load(), probe], ctx);
   if (p.start.some((x) => x.id === 'probe')) return execItem(it, ctx);
@@ -1322,7 +1322,8 @@ function leadDecisions(floorId, root) {
 }
 
 // Floor setting "Auto-resume after a crash": at most 2 per agent per hour, never while memory is under pressure
-export async function autoResumeTick(now = Date.now(), { res = wd.readResources() } = {}) {
+// one reading of the machine decides both: memory pressure and the free slots
+export async function autoResumeTick(now = Date.now(), { res = readRes() } = {}) {
   const done = [];
   snapCache.at = 0;
   for (const f of buildingSnapshot().floors.filter((x) => !x.independent && !x.missing)) {
@@ -1338,7 +1339,7 @@ export async function autoResumeTick(now = Date.now(), { res = wd.readResources(
       if (!ok.ok) continue;
       r.autoResumes[key] = [...(r.autoResumes[key] || []).filter((t) => now - t < recovery.AUTO_RESUME.windowMs), now];
       saveRuntime(r);
-      try { const r = await admit({ floorId: f.id, agentId: a.id, action: 'resume', priority: 'P1', via: 'auto-resume' }); done.push({ floorId: f.id, agentId: a.id, ...(r.waiting ? { waiting: r.dispatch.reason } : {}) }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
+      try { const r = await admit({ floorId: f.id, agentId: a.id, action: 'resume', priority: 'P1', via: 'auto-resume' }, { res }); done.push({ floorId: f.id, agentId: a.id, ...(r.waiting ? { waiting: r.dispatch.reason } : {}) }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
     }
   }
   return done;
