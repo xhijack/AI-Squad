@@ -39,6 +39,7 @@ import * as tiering from './tiering.js';
 import * as trust from './trust.js';
 import * as kpi from './kpi.js';
 import * as cadence from './cadence.js';
+import * as behind from './behind.js';
 import * as guide from './guide.js';
 import * as promote from './promote.js';
 
@@ -270,13 +271,14 @@ const routes = [
   ['POST', /^\/api\/guide\/plan$/, (p, b) => guide.plan({ useClaude: b.useClaude !== false }), { pin: true }],
   ['POST', /^\/api\/guide\/build$/, async (p, b) => { const r = await guide.build(b); squad.invalidate(); return r; }, { pin: true, history: () => ({ label: 'Company Guide: built' }) }],
   // targets (1.3): per Space, the cockpit across Spaces, a webhook for outside systems
-  ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); if (req.user?.role === 'owner') for (const s of o.spaces) s.hook = hookOf(s.id); return o; }, {}],
+  ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); for (const s of o.spaces) { s.acting = behind.counts(s.id).acting; if (req.user?.role === 'owner') s.hook = hookOf(s.id); } o.acting = o.spaces.reduce((n, s) => n + s.acting, 0); return o; }, {}],
+  ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/check$/, ([id]) => squad.targetCheck(id), { pin: true }],
   ['POST', /^\/api\/kpi\/hook\/([0-9a-f]{32})$/, ([tok], b) => {
     const f = kpi.floorOfToken(tok); if (!f) throw new HttpError(401, 'Unknown token');
     if (!b || typeof b !== 'object' || Array.isArray(b) || typeof b.kpi !== 'string') throw new HttpError(400, 'A JSON object: {"kpi": "<id>", "value": 12}');
     return kpi.record(f.id, f.path, b.kpi, b.value, { source: 'webhook', note: typeof b.note === 'string' ? b.note : '' });
   }, { hook: true }],
-  ['GET', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b, req) => ({ kpis: kpi.list(id, building.floorEntry(id).path), ...(req.user?.role === 'owner' ? { hook: hookOf(id) } : {}) }), {}],
+  ['GET', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b, req) => ({ kpis: kpi.list(id, building.floorEntry(id).path), ...squad.targetTriggers(id), ...(req.user?.role === 'owner' ? { hook: hookOf(id) } : {}) }), {}],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/hook$/, ([id]) => { building.floorEntry(id); return { hook: `/api/kpi/hook/${kpi.token(id, { rotate: true })}` }; }, { pin: true, history: ([id]) => ({ label: 'Webhook address renewed', floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b) => { const r = kpi.addKpi(building.floorEntry(id).path, b); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target added', floorId: id }) }],
   ['PATCH', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k], b) => { const r = kpi.updateKpi(building.floorEntry(id).path, k, b); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target changed', floorId: id }) }],

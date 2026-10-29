@@ -54,6 +54,7 @@ import * as history from './history.js';
 import * as kpiLib from './kpi.js';
 import * as guideLib from './guide.js';
 import * as cadenceLib from './cadence.js';
+import * as behind from './behind.js';
 import { execFileSync, execFile } from 'node:child_process';
 import * as quotaLib from './quota.js';
 import * as space from './space.js';
@@ -415,6 +416,7 @@ function floorAttention(entry, floor, lives, cost) {
     text: `Sprint ${sc.sprint}: the lead changed the scope mode from ${sc.changed.from} to ${sc.changed.to}${sc.changed.reason ? ` (${sc.changed.reason})` : ''}.`,
     options: [{ n: 1, label: `Accept ${sc.changed.to}` }, { n: 2, label: `Back to ${sc.changed.from}` }], answerable: true, ts: sc.changed.ts,
     autopilot: { level: floor.autopilot, critical: true, reasons: ['scope'], recommended: null, auto: false, autoAt: null } });
+  targetItems(entry, floor, out);
   if (floor.autopilot !== 'off') autopilotItems(entry, floor, out);
   return out;
 }
@@ -525,7 +527,7 @@ export function buildingSnapshot() {
   const independent = independentState(b);
   attention.push(...independent.attention);
   const floorsOut = [independent.summary, ...states.map(summary)].sort((x, y) => x.number - y.number);
-  let targets = null; try { const o = kpiLib.overview(); targets = { total: o.total, met: o.met, behind: o.behind, unset: o.unset }; } catch { /* none */ }   // the cockpit's counts (1.3)
+  let targets = null; try { const o = kpiLib.overview(); targets = { total: o.total, met: o.met, behind: o.behind, unset: o.unset, acting: o.spaces.reduce((n, sp) => n + behind.counts(sp.id).acting, 0) }; } catch { /* none */ }   // the cockpit's counts (1.3)
   let guide = { done: false, firstRun: false }; try { const g = guideLib.load(); guide = { done: !!g.done, firstRun: !g.done && !b.floors.length, language: b.prefs.language || null }; } catch { /* none */ }   // the Company Guide (1.4)
   const value = {
     name: b.name, now: Date.now(), floors: floorsOut, attention, detected, targets, guide,
@@ -773,7 +775,7 @@ export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DE
   if (guard) return admit({ floorId, agentId, action: 'job', task: prompt, title, priority, via: 'owner', opts: { budgetUsd, permissionMode, kind, resume } });
   return launchJob(floorId, agentId, prompt, { budgetUsd, permissionMode, via, kind, title, resume });
 }
-function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD, routine = false, cadence = null } = {}) {
+function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD, routine = false, cadence = null, target = null } = {}) {
   const { entry, cfg, agent } = locate(floorId, agentId);
   const b = building.loadBuilding();
   const remote = node && node !== nodesLib.HEAD;
@@ -796,7 +798,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
     disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
     extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
-  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : cadence ? { cadence } : null };
+  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : cadence ? { cadence } : target ? { target } : null };
   let job;
   if (remote) {
     // the Head keeps the record; the worker gets what it needs to run it in its own clone of the repository
@@ -811,6 +813,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   logEvent(floorId, { type: 'job.started', agent: agentId, model: eff.model, data: { job: job.id, kind, title: job.title, budgetUsd: job.budgetUsd, permissionMode, via, ...(remote ? { node } : {}) } });
   if (chat) chatLib.setState(chat.key, { awaiting: { msgId: chat.msgId, since: Date.now(), mode: 'job', job: job.id } });
   if (cadence) routineStarted(floorId, agentId, cadence, job);
+  if (target) behind.set(floorId, target.kpi, (t) => (t ? { ...t, job: job.id } : t));
   invalidate();
   return job;
 }
@@ -819,6 +822,7 @@ export function logJobEnded(job) {
   if (!job.floorId) return;
   if (job.meta?.chat) chatAnswered(job);
   if (job.meta?.cadence) routineEnded(job);
+  if (job.meta?.target) targetJobEnded(job);
   // tools denied without a prompt ("dontAsk"): the Audit counts them; the command only as its first words
   for (const d of job.denials || []) logEvent(job.floorId, { type: 'permission.denied', agent: job.agentId || null, data: { job: job.id, tool: d.tool, command: d.command.split(/\s+/).slice(0, 3).join(' ') } });
   hb.scan({ floorId: job.floorId }).then((r) => { if (r.length) invalidate(); }, (e) => console.error('[handoff]', e.message));   // its packages go now
@@ -846,7 +850,8 @@ Object.assign(hb.deps, {
   ownerItem: async (h) => { if (h.kind === 'quotation') await erp.prepareApproval(h); invalidate(); },
 });
 erp.deps.invalidate = () => invalidate();
-Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate() });
+Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate(),
+  measured: (floorId, root, id, now) => { if (realFloor(floorId)) targetCheck(floorId, { only: id, now }).catch((e) => console.error('[kpi]', floorId, id, e.message)); } });
 Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });
 Object.assign(legal.deps, {
   spaces: spacesForHandoff,
@@ -1215,6 +1220,90 @@ export function cadenceOverview(now = Date.now()) {
   }
   return { spaces };
 }
+
+// ---------- targets that act (1.5): see server/behind.js ----------
+// the agent of a rule: its role or agent id, else the Space's lead
+function ruleAgent(team, rule) {
+  return (rule.agent && routineAgent(team, { agent: rule.agent })) || team.agents.find((a) => a.lead) || team.agents.find((a) => sprint.roleKind(a) === 'lead') || team.agents[0] || null;
+}
+// after a measurement (only: that target) or from a person: every target that is behind and whose rule fires
+export async function targetCheck(floorId, { only = '', now = Date.now() } = {}) {
+  const entry = building.floorEntry(floorId);
+  const cfg = floors.readFloor(entry.path);
+  const out = [];
+  for (const item of kpiLib.list(floorId, entry.path, now)) {
+    if (only && item.id !== only) continue;
+    const d = behind.shouldFire(item, item, behind.stateOf(floorId, item.id), now);
+    if (!d.fire) continue;
+    const m = behind.modeFor(item.onBehind, { canAct: trust.allowsActions(cfg.floor), budgetOver: wd.budgetStatus(cfg.floor.budget, costFor(entry.id, entry.path)).level === 'over' });
+    const agent = ruleAgent(cfg.team, item.onBehind);
+    const base = { period: d.period, firedAt: now, rule: item.onBehind.mode, mode: m.mode, agentId: agent?.id || '', value: item.latest?.value ?? null, target: item.target, text: behind.noticeText(item, item), ...(m.fallback ? { fallback: m.fallback } : {}) };
+    logEvent(floorId, { type: 'kpi.behind', agent: agent?.id || null, data: { kpi: item.id, name: item.name, value: base.value, unit: item.unit, target: item.target, period: item.period, mode: m.mode, ...(m.fallback ? { fallback: m.fallback } : {}) } });
+    if (m.mode === 'notify' || !agent) {
+      behind.set(floorId, item.id, () => ({ ...base, mode: 'notify', status: 'notice' }), { name: item.name, mode: 'notify', action: 'notice', value: base.value, target: item.target }, now);
+    } else if (m.mode === 'suggest') {
+      behind.set(floorId, item.id, () => ({ ...base, status: 'drafting' }), { name: item.name, mode: 'suggest', action: 'drafting', value: base.value, target: item.target, ...(m.fallback ? { fallback: m.fallback } : {}) }, now);
+      await admit({ floorId, agentId: agent.id, action: 'job', task: behind.planPrompt(item, item, item.onBehind, cfg.floor.name), title: `Recovery plan: ${item.name}`, priority: 'P2', via: 'kpi',
+        opts: { kind: 'plan', permissionMode: 'plan', budgetUsd: 0.5, headOnly: true, target: { kpi: item.id, period: d.period, step: 'plan' } } });
+    } else {
+      behind.set(floorId, item.id, () => ({ ...base, status: 'acting' }), { name: item.name, mode: 'act', action: 'started', value: base.value, target: item.target }, now);
+      logEvent(floorId, { type: 'kpi.action', agent: agent.id, data: { kpi: item.id, name: item.name, action: 'started', auto: true } });
+      await admit({ floorId, agentId: agent.id, action: 'job', task: behind.taskText(item, item, item.onBehind, cfg.floor.name), title: `Target behind: ${item.name}`, priority: 'P2', via: 'kpi',
+        opts: { kind: 'task', permissionMode: 'acceptEdits', headOnly: true, target: { kpi: item.id, period: d.period, step: 'task' } } });
+    }
+    out.push({ kpi: item.id, mode: m.mode, ...(m.fallback ? { fallback: m.fallback } : {}) });
+  }
+  if (out.length) invalidate();
+  return out;
+}
+// a draft plan is ready (an approval card), or the task ended (the trigger closes)
+function targetJobEnded(job) {
+  const t = job.meta.target;
+  behind.set(job.floorId, t.kpi, (cur) => {
+    if (!cur || cur.period !== t.period) return cur;
+    if (t.step === 'plan') return { ...cur, status: 'suggested', plan: job.status === 'done' ? String(job.result || '').trim().slice(0, 4000) : '', planError: job.status === 'done' ? '' : job.error || job.status, job: '' };
+    return { ...cur, status: 'closed', job: job.id, result: job.status };
+  });
+  invalidate();
+}
+// the cards: a notice (muted, like a stall) and an approval card for a drafted plan
+function targetItems(entry, floor, out) {
+  const owner = floor.access === 'owner';
+  for (const [kpiId, t] of Object.entries(behind.load(entry.id).targets)) {
+    if (!t || !['notice', 'suggested'].includes(t.status)) continue;
+    const base = { floorId: entry.id, floorNumber: entry.number, floorName: floor.name, kpi: kpiId, answerable: true, ts: t.firedAt, ...(owner ? { ownerOnly: true } : {}) };
+    if (t.status === 'notice') { out.push({ ...base, id: behind.noticeId(entry.id, kpiId, t.period), kind: 'target', notice: true, muted: true, notifyAt: t.firedAt, text: t.text, options: [] }); continue; }
+    const plan = t.plan ? `\n\nRecovery plan:\n${t.plan}` : `\n\nNo plan was drafted${t.planError ? ` (${t.planError})` : ''}: Approve starts the target's task as it is.`;
+    out.push({ ...base, id: `${behind.noticeId(entry.id, kpiId, t.period)}:plan`, kind: 'target-plan', agentId: t.agentId || null, text: `${t.text}${t.fallback ? ` (asked instead of acting: ${t.fallback})` : ''}${plan}`,
+      options: [{ n: 1, label: 'Approve' }, { n: 2, label: 'Dismiss' }] });
+  }
+}
+// OK on a notice; Approve (1) or Dismiss (2, or no option) on a plan
+async function answerTarget(item, option) {
+  const who = currentActor()?.name || 'Owner';
+  if (item.kind === 'target') { behind.set(item.floorId, item.kpi, (t) => (t ? { ...t, status: 'seen' } : t)); invalidate(); return { ok: true }; }
+  const entry = building.floorEntry(item.floorId);
+  const cfg = floors.readFloor(entry.path);
+  const t = behind.stateOf(item.floorId, item.kpi);
+  if (!t || t.status !== 'suggested') throw new HttpError(409, 'Already answered');
+  const k = kpiLib.list(item.floorId, entry.path).find((x) => x.id === item.kpi);
+  if (Number(option) !== 1 || !k) {
+    behind.set(item.floorId, item.kpi, (cur) => ({ ...cur, status: 'dismissed' }), { name: k?.name || item.kpi, mode: 'suggest', action: 'dismissed', by: who });
+    logEvent(item.floorId, { type: 'kpi.action', data: { kpi: item.kpi, name: k?.name || item.kpi, action: 'dismissed', by: who } });
+    invalidate();
+    return { ok: true };
+  }
+  const agent = cfg.team.agents.find((a) => a.id === t.agentId) || ruleAgent(cfg.team, k.onBehind);
+  if (!agent) throw bad('This Space has no agent to do it');
+  behind.set(item.floorId, item.kpi, (cur) => ({ ...cur, status: 'acting', approvedBy: who }), { name: k.name, mode: 'suggest', action: 'approved', by: who });
+  logEvent(item.floorId, { type: 'kpi.action', agent: agent.id, data: { kpi: k.id, name: k.name, action: 'approved', by: who } });
+  const r = await admit({ floorId: item.floorId, agentId: agent.id, action: 'job', task: behind.taskText(k, k, k.onBehind, cfg.floor.name, t.plan), title: `Target behind: ${k.name}`, priority: 'P1', via: 'kpi',
+    opts: { kind: 'task', permissionMode: 'acceptEdits', headOnly: true, target: { kpi: k.id, period: t.period, step: 'task' } } });
+  logEvent(item.floorId, { type: 'kpi.action', agent: agent.id, data: { kpi: k.id, name: k.name, action: 'started', by: who, ...(r.job ? { job: r.job.id } : {}), ...(r.waiting ? { queued: r.dispatch.reason } : {}) } });
+  invalidate();
+  return { ok: true, ...(r.waiting ? { waiting: true, dispatch: r.dispatch } : { job: r.job?.id || null }) };
+}
+export const targetTriggers = (floorId) => ({ triggers: behind.history(floorId), open: behind.load(floorId).targets });
 
 // things other modules follow without a cycle of imports (0.15: the Notification Gateway forwards chat answers)
 export const bus = new EventEmitter();
@@ -1603,6 +1692,7 @@ export async function answerAttention(id, option, text = '', { force = false, fl
     return { ok: true };
   }
   // Dismiss sticks: the stall's key (its task, or the agent's last activity / assignment) stays dismissed; the work stays
+  if (item.kind === 'target' || item.kind === 'target-plan') return answerTarget(item, option);
   if (item.kind === 'stall') { const r = loadRuntime(); r.dismissedStalls = [...r.dismissedStalls.filter((k) => k !== item.stallKey), item.stallKey].slice(-300); saveRuntime(r); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
   if (item.questions && Array.isArray(answers)) return answerAsk(item, answers);

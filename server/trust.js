@@ -112,3 +112,7 @@ export const canaryText = (it) => {
     f ? `${it.metric?.name || 'measure'}: ${it.metric?.before} before, ${f.after} in the week after: ${f.improved ? 'better' : 'not better'}.` : 'It could not be measured.',
     'Keep it, or roll it back (Admin → Changes keeps the record).'].join('\n');
 };
+
+// may a Space start work by itself (1.5: a target behind its goal in "act" mode)? Only at the top of its own ladder:
+// Autopilot full (the Company Guide's "automatic"), never a Legal Space and never an Owner-only one
+export const allowsActions = (floor = {}) => floor.autopilot === 'full' && floor.blueprint?.id !== 'legal' && floor.access !== 'owner';

@@ -6,6 +6,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import * as building from './building.js';
 import * as floors from './floors.js';
 import * as kpi from './kpi.js';
+import * as behind from './behind.js';
 import { roleAtLeast } from './users.js';
 
 // the person behind the current request (history and the Squad Log record it)
@@ -73,7 +74,7 @@ export function hiddenPath(pathname, user) {
 function visibleTargets(hide) {
   const spaces = kpi.overview().spaces.filter((s) => !hide.has(s.id));
   const sum = (k) => spaces.reduce((n, s) => n + s[k], 0);
-  return { total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset') };
+  return { total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset'), acting: spaces.reduce((n, s) => n + behind.counts(s.id).acting, 0) };
 }
 // what a list shows to someone who is not the Owner
 export function redact(pathname, out, user) {
@@ -87,7 +88,7 @@ export function redact(pathname, out, user) {
   if (pathname === '/api/admin') return { ...out, spaces: out.spaces.filter(keep), agents: out.agents.filter((a) => !hide.has(a.floorId)), history: out.history.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/history') return { ...out, changes: out.changes.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/jobs') return { ...out, jobs: out.jobs.filter((j) => !hide.has(j.floorId)) };
-  if (pathname === '/api/kpis') { const spaces = out.spaces.filter(keep); const sum = (k) => spaces.reduce((n, s) => n + s[k], 0); return { ...out, spaces, total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset'), unknown: sum('unknown') }; }
+  if (pathname === '/api/kpis') { const spaces = out.spaces.filter(keep); const sum = (k) => spaces.reduce((n, s) => n + s[k], 0); return { ...out, spaces, total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset'), unknown: sum('unknown'), acting: sum('acting') }; }
   if (pathname === '/api/cadence') return { ...out, spaces: out.spaces.filter(keep) };
   if (pathname === '/api/dispatcher') return { ...out, queue: out.queue.filter((q) => !hide.has(q.floorId)) };
   if (/^\/api\/(history|jobs)\/[\w-]+$/.test(pathname) && hide.has(out.floorId)) return null;

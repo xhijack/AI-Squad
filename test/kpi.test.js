@@ -138,7 +138,7 @@ test('ERPNext and CSV targets are measured by the server on their interval', asy
   const sp = o.spaces.find((s) => s.id === M.id);
   assert.deepEqual([o.total, sp.met, sp.behind, sp.unset, sp.unknown], [7, 1, 4, 1, 1]);
   const b = (await call('GET', '/api/building')).body;
-  assert.deepEqual(b.targets, { total: 7, met: 1, behind: 4, unset: 1 });
+  assert.deepEqual(b.targets, { total: 7, met: 1, behind: 4, unset: 1, acting: 0 });
   const digest = notify.digestFor({ id: 'owner', name: 'Owner', role: 'owner' }, { items: [] });
   assert.match(digest, /Targets: 1 of 7 met, 4 behind, 1 without a goal\./);
   assert.match(digest, /DTamu Marketing · Leads in ERPNext: 2 of 5 leads/);
@@ -150,7 +150,7 @@ test('Owner-only Spaces are left out of the cockpit for others; the Space\'s KPI
   const o = (await call('GET', '/api/kpis', null, member.pin)).body;
   assert.equal(o.spaces.length, 0); assert.equal(o.total, 0);
   assert.equal((await call('GET', `/api/floors/${M.id}/kpis`, null, member.pin)).status, 404);
-  assert.deepEqual((await call('GET', '/api/building', null, member.pin)).body.targets, { total: 0, met: 0, behind: 0, unset: 0 }, 'not even the counts');
+  assert.deepEqual((await call('GET', '/api/building', null, member.pin)).body.targets, { total: 0, met: 0, behind: 0, unset: 0, acting: 0 }, 'not even the counts');
   assert.equal((await call('GET', '/api/building')).body.targets.total, 7);
   await call('PATCH', `/api/floors/${M.id}`, { access: 'team' });
   // a values file that is not JSON: nothing is wiped, the Owner is told

@@ -19,13 +19,14 @@ import { readJson, writeJson, writeText, readText, kebab, bad, notFound, oneLine
 export const DIRECTIONS = ['up', 'down'];
 export const PERIODS = ['day', 'week', 'month', 'total'];
 export const SOURCES = ['manual', 'erpnext', 'csv', 'webhook'];
+export const ON_BEHIND = ['off', 'notify', 'suggest', 'act'];          // what a target behind its goal raises (1.5, server/behind.js)
 export const EVERY = { hour: 3600e3, day: 864e5, week: 7 * 864e5 };
 export const FILE = 'docs/squad/KPI.md';
 const KEEP = 400;
 const defFile = (root) => path.join(root, '.claude', 'aisquad', 'kpi.json');
 const valFile = (floorId) => path.join(config.home, 'kpi', `${floorId}.json`);
 
-export const deps = { log: () => {}, invalidate: () => {} };
+export const deps = { log: () => {}, invalidate: () => {}, measured: () => {} };
 
 // ---------- definitions ----------
 export function cleanSource(s = {}) {
@@ -46,6 +47,15 @@ export function cleanSource(s = {}) {
   }
   return { kind };
 }
+// the rule for a target behind its goal (1.5): mode, the agent (a role or agent id; empty: the lead), the task, the
+// cooldown in hours between two triggers
+export function cleanOnBehind(o = {}, existing = null) {
+  const e = existing || { mode: 'off', agent: '', task: '', cooldown: 24 };
+  if (!o || typeof o !== 'object') return e;
+  const cd = o.cooldown === undefined ? e.cooldown : Number(o.cooldown);
+  if (!(Number.isFinite(cd) && cd >= 1 && cd <= 720)) throw bad('Cooldown: hours between two triggers, 1 to 720');
+  return { mode: ON_BEHIND.includes(o.mode) ? o.mode : o.mode === undefined ? e.mode : 'off', agent: kebab(o.agent ?? e.agent ?? '', 60), task: String(o.task ?? e.task ?? '').trim().slice(0, 2000), cooldown: Math.round(cd) };
+}
 const MAX_EVERY = { day: 'hour', week: 'day', month: 'week', total: 'week' };   // measuring less often than the period would leave it unknown most of the time
 export function cleanKpi(k = {}, existing = null) {
   const name = oneLine(k.name ?? existing?.name ?? '', 80);
@@ -63,6 +73,7 @@ export function cleanKpi(k = {}, existing = null) {
     period, every,
     source: k.source !== undefined ? cleanSource(k.source) : existing?.source || { kind: 'manual' },
     note: oneLine(k.note ?? existing?.note ?? '', 200),
+    onBehind: cleanOnBehind(k.onBehind, existing?.onBehind),
   };
 }
 const rawDefs = (root) => { const j = readJson(defFile(root), null); return Array.isArray(j?.kpis) ? j.kpis.filter((k) => k && typeof k === 'object') : []; };
@@ -92,12 +103,12 @@ export function removeKpi(root, id) {
   writeDefs(root, kpis.filter((x) => x.id !== id));
   return { ok: true };
 }
-// a Blueprint's starting targets (no target values yet: the Owner sets them); existing ids are kept
+// a Blueprint's starting targets (no target values yet: the Owner sets them; a notice when behind); existing ids are kept
 export function seed(root, list = []) {
   if (!list.length) return [];
   const have = new Set(readDefs(root).map((k) => k.id));
   const add = [];
-  for (const k of list) { try { const c = cleanKpi({ ...k, target: null }); if (!have.has(c.id)) { add.push(c); have.add(c.id); } } catch { /* a bad seed is skipped */ } }
+  for (const k of list) { try { const c = cleanKpi({ ...k, target: null, onBehind: { mode: 'notify', ...(k.onBehind || {}) } }); if (!have.has(c.id)) { add.push(c); have.add(c.id); } } catch { /* a bad seed is skipped */ } }
   if (add.length) writeDefs(root, [...readDefs(root), ...add]);
   return add;
 }
@@ -135,6 +146,7 @@ export function record(floorId, root, id, value, { source = 'manual', by = '', n
   deps.log(floorId, { type: 'kpi.measured', data: { kpi: id, name: k.name, value: v, unit: k.unit, target: k.target, period: k.period, source, state: st.state, ...(by ? { by } : {}) } });
   render(root, floorId);
   deps.invalidate();
+  deps.measured(floorId, root, id, now);                 // a target behind its goal may raise work (1.5)
   return { kpi: k, value: v, at: now, status: st };
 }
 function failed(floorId, k, error, now) {
