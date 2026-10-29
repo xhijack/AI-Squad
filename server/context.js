@@ -37,11 +37,11 @@ export function sessionContext(root, floor, prefs = {}) {
     addDirs: has ? ['--add-dir', dir] : [],
     deny: [...identityDenyRules(), ...(has ? company.denyRules(dir, { owner }) : [])],
     settings: space.sessionSettings(root, sp),
-    lines: contextLines(sp, has ? dir : '', owner),
+    lines: contextLines(sp, has ? dir : '', owner, { targets: fs.existsSync(path.join(root, '.claude', 'aisquad', 'kpi.json')) }),
   };
 }
 
-export function contextLines(sp, dir, owner) {
+export function contextLines(sp, dir, owner, { targets = false } = {}) {
   return [
     `This Space is a ${sp.kind}${owner ? ' for the Owner only' : ''}. Your identity is your role; what you learn about this ${sp.kind === 'department' ? 'department\'s clients' : 'client or project'} stays in this Space (its documents, \`docs/squad/LEARNINGS.md\`${sp.memory === 'repo' ? ', its memory in `.claude/aisquad/memory/`' : ''}).`,
     'People may message you directly (Desk → Chat): answer them in your reply. The lead finds a list of those messages in `docs/squad/DIRECT.md`.',
@@ -50,5 +50,6 @@ export function contextLines(sp, dir, owner) {
     ...(!owner && dir ? [`Legal, finance and pricing are not for this Space: ask the lead or the owner instead of looking for them.`] : []),
     'Work for another Space goes as a handoff package: a Markdown file in `docs/squad/handoffs/outbox/` with a header (`to:` the Space, `kind:`, `title:`), see the space-handoff skill; the server delivers it and wakes the receiver. Work handed to this Space arrives in `docs/squad/handoffs/inbox/`.',
     ...(erp.sessionFor(sp) ? [erp.contextLine(sp.erpnext)] : []),
+    ...(targets ? ['This Space works against targets the owner set: `docs/squad/KPI.md` shows each one, its value now and its status. Plan against the ones that are behind, report progress on them in your handoffs and reports, and never invent a value.'] : []),
   ];
 }

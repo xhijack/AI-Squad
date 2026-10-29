@@ -757,6 +757,11 @@ body[data-role="member"] [data-owner], body[data-role="viewer"] [data-owner] { d
 .moveSteps li { line-height: 1.5; }
 .moveSteps code { word-break: break-all; }
 .contractText { white-space: pre-wrap; font-size: var(--fs-xs); max-height: 360px; overflow: auto; background: var(--surface-muted); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-3); margin: var(--sp-2) 0 0; }
+.lvTop { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.kval { font-weight: 700; }
+.spark { color: var(--text-muted); margin-left: var(--sp-2); }
+.badText { color: var(--danger-ink); }
+.kadd { margin-top: var(--sp-2); } .kadd summary { cursor: pointer; }
 /* a question dialog with several questions or multi-select (askform.js) */
 .askForm .askQ { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); margin: var(--sp-2) 0; }
 .askForm legend { font-size: var(--fs-xs); color: var(--text-muted); padding: 0 var(--sp-1); }

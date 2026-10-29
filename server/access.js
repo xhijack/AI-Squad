@@ -5,6 +5,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as building from './building.js';
 import * as floors from './floors.js';
+import * as kpi from './kpi.js';
 import { roleAtLeast } from './users.js';
 
 // the person behind the current request (history and the Squad Log record it)
@@ -23,6 +24,7 @@ const OWNER_ROUTES = [
   /^GET \/api\/legal(\/contract)?$/,
   /^(GET|PATCH) \/api\/tiering$/,
   /^(GET|POST) \/api\/promote(\/preview)?$/,
+  /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/kpis(\/[\w-]+)?$/,
   /^(PUT|DELETE) \/api\/erpnext\/keys\//,
   /^POST \/api\/erpnext\/(test|sync)$/,
   /^(PATCH|DELETE) \/api\/nodes\/[\w-]+$/,
@@ -65,6 +67,12 @@ export function hiddenPath(pathname, user) {
   return !!m && ownerFloors().has(m[1]);
 }
 
+// the cockpit's counts without the Owner-only Spaces (1.3)
+function visibleTargets(hide) {
+  const spaces = kpi.overview().spaces.filter((s) => !hide.has(s.id));
+  const sum = (k) => spaces.reduce((n, s) => n + s[k], 0);
+  return { total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset') };
+}
 // what a list shows to someone who is not the Owner
 export function redact(pathname, out, user) {
   if (isOwner(user) || !out || typeof out !== 'object') return out;
@@ -73,10 +81,11 @@ export function redact(pathname, out, user) {
   const hide = ownerFloors();
   if (!hide.size) return out;
   const keep = (x) => !hide.has(x?.floorId) && !hide.has(x?.id);
-  if (pathname === '/api/building') return { ...out, floors: out.floors.filter((f) => !hide.has(f.id)), attention: out.attention.filter((a) => !hide.has(a.floorId)), walks: (out.walks || []).filter((w) => !hide.has(w.from) && !hide.has(w.to)) };
+  if (pathname === '/api/building') return { ...out, floors: out.floors.filter((f) => !hide.has(f.id)), attention: out.attention.filter((a) => !hide.has(a.floorId)), walks: (out.walks || []).filter((w) => !hide.has(w.from) && !hide.has(w.to)), ...(out.targets ? { targets: visibleTargets(hide) } : {}) };
   if (pathname === '/api/admin') return { ...out, spaces: out.spaces.filter(keep), agents: out.agents.filter((a) => !hide.has(a.floorId)), history: out.history.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/history') return { ...out, changes: out.changes.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/jobs') return { ...out, jobs: out.jobs.filter((j) => !hide.has(j.floorId)) };
+  if (pathname === '/api/kpis') { const spaces = out.spaces.filter(keep); const sum = (k) => spaces.reduce((n, s) => n + s[k], 0); return { ...out, spaces, total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset'), unknown: sum('unknown') }; }
   if (pathname === '/api/dispatcher') return { ...out, queue: out.queue.filter((q) => !hide.has(q.floorId)) };
   if (/^\/api\/(history|jobs)\/[\w-]+$/.test(pathname) && hide.has(out.floorId)) return null;
   return out;

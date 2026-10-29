@@ -23,6 +23,7 @@ import * as autopilot from './autopilot.js';
 import * as dispatcher from './dispatcher.js';
 import { redact } from './redact.js';
 import * as insight from './insight.js';
+import * as kpi from './kpi.js';
 
 export const IMMEDIATE = ['question', 'permission', 'reply', 'crash', 'resource', 'scope', 'backup'];
 export const DEFAULTS = { enabled: false, lang: 'en', quiet: { enabled: true, from: '22:00', to: '07:00' }, digestAt: '07:30', maxPerHour: 20, immediate: IMMEDIATE, publicUrl: '' };
@@ -52,7 +53,7 @@ const TEXT = {
     done: 'Done: {choice}', gone: 'Already answered or no longer open.', noRole: 'Your role ({role}) can only read.', expired: 'This button has expired. Open The AI Squad.',
     chatOn: 'Chatting with {agent} in {space}. Type your message; /end stops.', chatOff: 'Chat ended.', noAgent: 'No agent called "{q}". Try its name or id.', many: 'Several agents match: {list}',
     sent: 'Sent to {agent}.', queued: 'Queued ({reason}); {agent} answers when there is room.', digestTitle: 'Summary for {day}', nothingOpen: 'Nothing waits for you.', open: 'Waiting for you ({n}):',
-    lastDay: 'Last 24 hours: {done} background jobs done, {failed} failed, ${cost} spent; {stops} idle agents stopped; {chats} chat answers.', suggestions: '{n} new improvement suggestions in Admin → Improvements.',
+    lastDay: 'Last 24 hours: {done} background jobs done, {failed} failed, ${cost} spent; {stops} idle agents stopped; {chats} chat answers.', targets: 'Targets: {met} of {n} met, {behind} behind, {unset} without a goal.', behindLine: '{space} · {name}: {value} of {target} {unit}', suggestions: '{n} new improvement suggestions in Admin → Improvements.',
     status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.',
     askMany: 'Several questions (or several choices): answer them in The AI Squad.' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
@@ -61,7 +62,7 @@ const TEXT = {
     done: 'Selesai: {choice}', gone: 'Sudah dijawab atau tidak terbuka lagi.', noRole: 'Peranmu ({role}) hanya bisa membaca.', expired: 'Tombol ini sudah kedaluwarsa. Buka The AI Squad.',
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
     sent: 'Terkirim ke {agent}.', queued: 'Masuk antrean ({reason}); {agent} menjawab saat ada slot.', digestTitle: 'Ringkasan {day}', nothingOpen: 'Tidak ada yang menunggumu.', open: 'Menunggumu ({n}):',
-    lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
+    lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', targets: 'Target: {met} dari {n} tercapai, {behind} tertinggal, {unset} belum punya angka.', behindLine: '{space} · {name}: {value} dari {target} {unit}', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
     status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
@@ -167,6 +168,15 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
   if (!mine.length) lines.push(say('nothingOpen', {}, lang));
   else lines.push(say('open', { n: mine.length }, lang), ...mine.slice(0, 10).map((i) => `- ${[i.floorName, i.agentName].filter(Boolean).join(' · ')}: ${short(i.text, 90)}`));
   lines.push('', say('lastDay', { done, failed, cost: cost.toFixed(2), stops, chats }, lang));
+  // the targets (1.3): the counts, and every target that is behind
+  try {
+    const o = kpi.overview(now), spaces = o.spaces.filter((s) => visible({ floorId: s.id }, user));
+    if (spaces.length) {
+      const sum = (k) => spaces.reduce((n, s) => n + s[k], 0);
+      lines.push('', say('targets', { met: sum('met'), n: spaces.reduce((n, s) => n + s.kpis.length, 0), behind: sum('behind'), unset: sum('unset') }, lang));
+      for (const s of spaces) for (const k of s.kpis.filter((x) => x.status.state === 'behind').slice(0, 5)) lines.push(`- ${say('behindLine', { space: s.name, name: k.name, value: k.latest?.value ?? '–', target: k.target, unit: k.unit || '' }, lang).trim()}`);
+    }
+  } catch { /* no targets */ }
   const fresh = insightsCount(from);
   if (fresh && user.role === 'owner') lines.push(say('suggestions', { n: fresh }, lang));
   return lines.join('\n');

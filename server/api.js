@@ -37,6 +37,7 @@ import * as nodes from './nodes.js';
 import * as erp from './erpnext.js';
 import * as tiering from './tiering.js';
 import * as trust from './trust.js';
+import * as kpi from './kpi.js';
 import * as promote from './promote.js';
 
 const UI = path.join(ROOT, 'ui');
@@ -97,6 +98,8 @@ function serveStatic(res, pathname) {
 const floorRoot = (id) => building.floorEntry(id).path;
 
 // [method, pattern, handler(params, body, req), { pin, raw }]
+// the Space's webhook address for the Owner; none while the values file is unreadable
+const hookOf = (id) => { try { return `/api/kpi/hook/${kpi.token(id)}`; } catch { return null; } };
 const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
   ['GET', /^\/api\/version$/, () => ({ version: VERSION, root: ROOT })],
@@ -258,6 +261,20 @@ const routes = [
   ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
+  // targets (1.3): per Space, the cockpit across Spaces, a webhook for outside systems
+  ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); if (req.user?.role === 'owner') for (const s of o.spaces) s.hook = hookOf(s.id); return o; }, {}],
+  ['POST', /^\/api\/kpi\/hook\/([0-9a-f]{32})$/, ([tok], b) => {
+    const f = kpi.floorOfToken(tok); if (!f) throw new HttpError(401, 'Unknown token');
+    if (!b || typeof b !== 'object' || Array.isArray(b) || typeof b.kpi !== 'string') throw new HttpError(400, 'A JSON object: {"kpi": "<id>", "value": 12}');
+    return kpi.record(f.id, f.path, b.kpi, b.value, { source: 'webhook', note: typeof b.note === 'string' ? b.note : '' });
+  }, { hook: true }],
+  ['GET', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b, req) => ({ kpis: kpi.list(id, building.floorEntry(id).path), ...(req.user?.role === 'owner' ? { hook: hookOf(id) } : {}) }), {}],
+  ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/hook$/, ([id]) => { building.floorEntry(id); return { hook: `/api/kpi/hook/${kpi.token(id, { rotate: true })}` }; }, { pin: true, history: ([id]) => ({ label: 'Webhook address renewed', floorId: id }) }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/kpis$/, ([id], b) => { const r = kpi.addKpi(building.floorEntry(id).path, b); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target added', floorId: id }) }],
+  ['PATCH', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k], b) => { const r = kpi.updateKpi(building.floorEntry(id).path, k, b); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target changed', floorId: id }) }],
+  ['DELETE', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k]) => { const r = kpi.removeKpi(building.floorEntry(id).path, k); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target removed', floorId: id }) }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/values$/, ([id, k], b, req) => kpi.record(id, building.floorEntry(id).path, k, b.value, { source: 'manual', by: req.user?.name || 'Owner', note: b.note }), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/measure$/, ([id, k], b, req) => kpi.measure(id, building.floorEntry(id).path, k, { by: req.user?.name || '' }), { pin: true }],
   // contracts in Legal Spaces and model tiering (0.20): the Owner's
   ['GET', /^\/api\/legal$/, () => squad.legalOverview(), { pin: true }],
   ['GET', /^\/api\/legal\/contract$/, (p, b, req) => squad.contractText(new URL(req.url, 'http://x').searchParams.get('key') || ''), { pin: true }],
@@ -329,6 +346,8 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (method !== req.method) continue;
         const m = url.pathname.match(re);
         if (!m) continue;
+        // an outside system posting a target's value (1.3): the Space's token in the URL, nothing else
+        if (opts.hook) return send(res, 200, await handler(m.slice(1), await readBody(req), req));
         // a worker machine (0.18): its own token, only for its own routes
         if (opts.node) {
           const node = nodes.authNode(req.headers['x-aisquad-node']);

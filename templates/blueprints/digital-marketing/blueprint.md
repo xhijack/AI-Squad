@@ -1,7 +1,7 @@
 ---
 id: digital-marketing
 title: Digital Marketing
-version: 2
+version: 3
 category: marketing
 description: A marketing team that turns a brief, brand rules and a channel plan into content, social posts, SEO and campaigns, and reports results against KPIs.
 keywords: [marketing, digital marketing, seo, content, blog, social, "social media", instagram, tiktok, linkedin, facebook, ads, advertising, campaign, brand, branding, awareness, traffic, newsletter, email marketing, influencer, launch, growth, audience, followers, copywriting]
@@ -19,6 +19,11 @@ sourceDocs:
   - { path: docs/MARKETING-BRIEF.md, title: Marketing Brief, purpose: "Goals, audience, offer, KPIs", owner: marketing-strategist, readers: all }
   - { path: docs/BRAND.md, title: Brand, purpose: "Voice, visual rules, words to use and to avoid", owner: marketing-strategist, readers: all }
   - { path: docs/CHANNELS.md, title: Channels, purpose: "Channel plan and content calendar", owner: marketing-strategist, readers: all }
+kpis:
+  - { id: organic-traffic, name: Organic traffic, unit: sessions, direction: up, period: month, source: { kind: manual }, note: "GA4 organic sessions; a CSV or GA4 integration can feed it" }
+  - { id: leads, name: Leads from the site, unit: leads, direction: up, period: month, source: { kind: manual } }
+  - { id: posts, name: Posts published, unit: posts, direction: up, period: week, source: { kind: manual } }
+  - { id: engagement, name: Engagement rate, unit: "%", direction: up, period: week, source: { kind: manual } }
 gates: [source documents approved, brand and voice review, fact check, owner approval before publishing, KPI report]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me for the marketing brief, the brand rules and the channel plan. For anything missing, interview me and draft it in docs/ for my approval. No campaign work starts until all three are approved."
 ---

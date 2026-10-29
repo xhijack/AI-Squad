@@ -19,6 +19,7 @@ import * as autopilot from './autopilot.js';
 import * as permits from './permits.js';
 import * as voiceLib from './voice.js';
 import * as reposLib from './repos.js';
+import * as kpi from './kpi.js';
 import { cleanStandup } from './rituals.js';
 import * as space from './space.js';
 import * as context from './context.js';
@@ -224,6 +225,8 @@ export function generate(root) {
   }
   for (const f of safeReaddir(lockDir(root))) if (f.endsWith('.md') && !used.has(f)) fs.rmSync(path.join(lockDir(root), f));
   writeBrief(root, floor, team);
+  const reg = building.loadBuilding().floors.find((f) => f.path === path.resolve(root));   // a Space not registered yet (adopt, clone) keeps its KPI.md as it is
+  if (reg) try { kpi.render(root, reg.id); } catch { /* no targets */ }
   if (bp) writeStandard(root, bp, lead);
   if (sprint.hasPack(root)) { sprint.updateTeamBlock(root, team.agents); sprint.mergeSettings(root, { qualityGate: git.qualityGate }); }
 }
@@ -474,6 +477,7 @@ export async function createFloor(input) {
   if (floor.blueprint) { blueprints.applyToRepo(root, blueprints.getBlueprint(floor.blueprint.id)); blueprints.mergeTeamSettings(root); }
   if (floor.workflow === 'squad-sprint') sprint.scaffold(root, { git, agents });
   if (input.installSkills) for (const name of new Set(templates.flatMap((t) => t.skills))) if (skills.skillStatus(root, name).installable) skills.install(root, name);
+  if (Array.isArray(input.kpis) && input.kpis.length) { kpi.seed(root, input.kpis); kpi.render(root, null); }   // the Blueprint's starting targets, in the first commit
   generate(root);
   if (mode === 'new') await initialCommit(root);          // main must exist for sprints and merges
   const entry = building.registerFloor(root, { name, number });

@@ -17,7 +17,7 @@ import { meter } from './meter.js';
 import { migrate } from './schema.js';
 import * as backup from './backup.js';
 import * as jobs from './jobs.js';
-import { logJobEnded, dispatchTick, chatTick, handoffTick } from './squad.js';
+import { logJobEnded, dispatchTick, chatTick, handoffTick, kpiTick } from './squad.js';
 import * as notify from './notify.js';
 import * as inbox from './inbox.js';
 
@@ -67,6 +67,9 @@ setInterval(() => { notify.notifyTick().catch((e) => console.error('[notify]', e
 setInterval(() => { try { const r = inbox.tick(); if (r) console.log(`[insight] ${r.found} patterns, ${r.added.length} new suggestions`); } catch (e) { console.error('[insight]', e.message); } }, 60000).unref();
 // the handoff bus and the ERPNext watcher (0.19): packages out of every outbox; the pipeline every few minutes
 setInterval(() => { handoffTick().then((r) => { for (const x of r.sent) console.log(`[handoff] ${x.ok ? `${x.id} ${x.status}` : `refused: ${x.reason}`}`); if (r.erp?.error) console.error('[erpnext]', r.erp.error); }, (e) => console.error('[handoff]', e.message)); }, 20000).unref();
+// targets (1.3): ERPNext and CSV targets measured on their interval
+setTimeout(() => { kpiTick().catch((e) => console.error('[kpi]', e.message)); }, 20000).unref();
+setInterval(() => { kpiTick().then((r) => { for (const x of r) console.log(`[kpi] ${x.floorId}/${x.kpi}: ${x.error ? `failed: ${x.error}` : x.value}`); }, (e) => console.error('[kpi]', e.message)); }, 3600e3).unref();
 // the dispatcher: starts queued work when there is room, stops agents that sit idle
 setInterval(() => {
   dispatchTick().then((r) => { for (const x of r.started) console.log(`[dispatch] started ${x.floorId}/${x.agentId} (${x.action})`); for (const x of r.stopped) console.log(`[dispatch] idle stop ${x.floorId}/${x.agentId}`); for (const f of r.failed) console.error(`[dispatch] ${f.item.floorId}/${f.item.agentId}: ${f.error}`); }, (e) => console.error('[dispatch]', e.message));

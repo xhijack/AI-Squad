@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { config } from './config.js';
 import { readText, readJson, writeJson, writeText, safeReaddir, lineDiff, notFound, HttpError } from './util.js';
 
-export const SPACE_FILES = ['floor.json', 'team.json', 'git.json', 'repos.json'];
+export const SPACE_FILES = ['floor.json', 'team.json', 'git.json', 'repos.json', 'kpi.json'];
 const dir = () => path.join(config.home, 'history');
 const validId = (id) => /^h-[\w-]{8,60}$/.test(String(id));
 

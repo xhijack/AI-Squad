@@ -1,7 +1,7 @@
 ---
 id: sales-crm
 title: Sales & CRM
-version: 1
+version: 2
 category: sales
 description: A sales team that researches and qualifies leads, keeps the CRM clean, writes outreach for approval and reports the pipeline.
 keywords: [sales, crm, leads, lead generation, prospecting, prospects, outreach, outbound, cold email, pipeline, deals, b2b, customers, clients, follow up, follow-up, hubspot, salesforce, pipedrive, quotation, proposal, revenue, sdr, account]
@@ -17,6 +17,10 @@ sourceDocs:
   - { path: docs/ICP.md, title: Ideal Customer Profile, purpose: "Who we sell to: segments, pains, buying signals, disqualifiers", owner: sales-manager, readers: all }
   - { path: docs/OFFER.md, title: Offer, purpose: "Products, pricing rules, objections and answers", owner: sales-manager, readers: all }
   - { path: docs/PIPELINE.md, title: Pipeline, purpose: "Stages, exit criteria, CRM fields", owner: crm-administrator, readers: all }
+kpis:
+  - { id: new-leads, name: New leads, unit: leads, direction: up, period: month, source: { kind: erpnext, doctype: Lead, aggregate: count }, note: "counted in ERPNext when it is connected" }
+  - { id: response-time, name: First response time, unit: hours, direction: down, period: week, source: { kind: manual } }
+  - { id: won, name: Quotations ordered, unit: orders, direction: up, period: month, source: { kind: erpnext, doctype: Quotation, filters: [["status", "=", "Ordered"]], aggregate: count, dateField: modified } }
 gates: [source documents approved, data hygiene check, owner approval before any outbound message]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me for the ideal customer profile, the offer and the pipeline. For anything missing, interview me and draft it in docs/ for my approval. No prospecting starts until all three are approved."
 ---
