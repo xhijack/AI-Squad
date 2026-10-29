@@ -3,11 +3,13 @@
 // (=, >, <) and order, single documents, frappe.client.submit (only users in `submitters`), and get_logged_user.
 import http from 'node:http';
 
-export function fakeFrappe({ users = {}, submitters = [] } = {}) {
+// documents are stamped from `now` on, one minute apart, in local time like an ERPNext server (never a fixed date:
+// a target measured "this day" or "this month" must find them whatever day the tests run)
+export function fakeFrappe({ users = {}, submitters = [], now = Date.now() } = {}) {
   const docs = { Lead: [], Opportunity: [], Quotation: [] };
   const calls = [];
-  let clock = Date.parse('2026-10-27T01:00:00Z');
-  const stamp = () => { clock += 60e3; return new Date(clock).toISOString().replace('T', ' ').slice(0, 19); };
+  let clock = now;
+  const stamp = () => { clock += 60e3; return new Date(clock - new Date(clock).getTimezoneOffset() * 60e3).toISOString().replace('T', ' ').slice(0, 19); };
   const userOf = (h) => { const m = String(h || '').match(/^token ([^:]+):(.+)$/); return m && users[m[1]]?.secret === m[2] ? users[m[1]].user : null; };
   const pass = (d, [f, op, v]) => (op === '=' ? d[f] === v : op === '>' ? String(d[f]) > String(v) : op === '<' ? String(d[f]) < String(v) : op === '>=' ? String(d[f]) >= String(v) : op === '<=' ? String(d[f]) <= String(v) : true);
   const server = http.createServer((req, res) => {
