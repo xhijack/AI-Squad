@@ -30,24 +30,25 @@ building.setPrefs({ squadsDir: path.join(root, 'squads') });
 const answers = {
   language: 'id', business: { type: 'saas', name: 'DTamu', description: 'Undangan digital dan buku tamu digital' },
   goals: { picks: ['leads', 'revenue'], leads: 50, revenue: 30000000 }, have: ['website', 'repos', 'erpnext'],
-  divisions: ['product', 'engineering', 'marketing', 'sales', 'legal', 'finance'], modes: { marketing: 'automatic', sales: 'supervised' },
+  divisions: ['product', 'engineering', 'marketing', 'sales', 'legal'], modes: { marketing: 'automatic', sales: 'supervised' },
   capacity: { machines: 'this', hours: 'night', budget: 100 },
 };
 
 test('answers are cleaned; the plan is deterministic without Claude Code', () => {
   const a = guide.cleanAnswers({ ...answers, divisions: [...answers.divisions, 'bogus'], modes: { marketing: 'wild' }, capacity: { hours: 'later', budget: '-5' } });
-  assert.deepEqual(a.divisions, ['product', 'engineering', 'marketing', 'sales', 'legal', 'finance']);
+  assert.deepEqual(a.divisions, ['product', 'engineering', 'marketing', 'sales', 'legal']);
   assert.deepEqual(a.modes, { product: 'supervised', engineering: 'supervised', marketing: 'supervised', sales: 'supervised', legal: 'manual' }, 'Legal is manual unless the owner says otherwise');
   assert.deepEqual([a.capacity.hours, a.capacity.budget, a.goals.currency], ['day', null, 'IDR']);
   const p = guide.draftPlan(guide.cleanAnswers(answers));
   assert.deepEqual(p.spaces.map((s) => [s.division, s.blueprint, s.mode, s.autopilot, s.budget]), [['product', 'product', 'supervised', 'balanced', 20], ['engineering', 'software-house', 'supervised', 'balanced', 20], ['marketing', 'digital-marketing', 'automatic', 'full', 20], ['sales', 'sales-crm', 'supervised', 'balanced', 20], ['legal', 'legal', 'manual', 'off', 20]]);
-  assert.deepEqual(p.later, ['finance']);
+  assert.deepEqual(p.later, []);
   const mkt = p.spaces.find((s) => s.division === 'marketing');
   assert.deepEqual(mkt.kpis.map((k) => [k.id, k.target]), [['organic-traffic', null], ['leads', 50], ['posts', 3], ['engagement', null]], 'the leads goal becomes the target');
   assert.deepEqual(mkt.materials.map((m) => `${m.id}:${m.status}`), ['brand:missing', 'website:have', 'social-accounts:missing', 'analytics:later']);
   assert.deepEqual(mkt.shift, { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '22:00', to: '05:00' });
   assert.match(guide.planMarkdown(p), /\| Marketing \| DTamu Marketing \| automatic \| Organic traffic; Leads from the site: 50 leads; Posts published: 3 posts; Engagement rate \|/);
-  assert.match(guide.planMarkdown(p), /Later \(no squad yet\): Finance\./);
+  assert.doesNotMatch(guide.planMarkdown(p), /Later \(no squad yet\)/);
+  assert.match(guide.planMarkdown(p), /\| Legal \| DTamu Legal \(Owner only\) \| manual \|/);
   assert.match(guide.materialsMarkdown(mkt), /\| Brand rules .* \| missing: interview the owner/);
 });
 
@@ -144,7 +145,7 @@ test('Build makes the Spaces with targets, shift, budget, materials; the plan re
   assert.deepEqual(r2.built.map((x) => [x.division, !!x.id]), [['engineering', true]]);
   assert.equal(floors.readFloor(r2.built[0].path).floor.budget.usd, 100);
   const plan2 = fs.readFileSync(path.join(config.home, 'company', 'PLAN.md'), 'utf8');
-  for (const row of ['| Marketing | DTamu Marketing Squad | automatic |', '| Engineering | DTamu Engineering | supervised |', '| Legal | DTamu Legal | supervised |', '| Product |']) assert.ok(plan2.includes(row), `${row} stays in the plan`);
+  for (const row of ['| Marketing | DTamu Marketing Squad | automatic |', '| Engineering | DTamu Engineering | supervised |', '| Legal | DTamu Legal (Owner only) | supervised |', '| Product |']) assert.ok(plan2.includes(row), `${row} stays in the plan`);
   assert.deepEqual((await call('POST', '/api/guide/plan', { useClaude: false })).body.spaces.map((x) => [x.division, !!x.exists]), [['marketing', true], ['engineering', true]]);
   // the language changes: every agent file follows
   await call('PUT', '/api/guide', { answers: { language: 'en' }, step: 1 });

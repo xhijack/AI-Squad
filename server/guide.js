@@ -6,8 +6,9 @@
 // Company Brain (PLAN.md, read by every agent), each Space gets its materials list (docs/squad/MATERIALS.md) and its
 // targets. Claude Code (haiku) sharpens the plan when it is there (a summary, target numbers, materials specific to
 // the business); without it the plan is the defaults, and the guide still works. The answers and the plan live in
-// ~/.aisquad/guide.json (the owner's; never in a repository). Divisions without a Blueprint yet are listed as
-// "later", never built. The guide can be run again any time (add a division, change the goals).
+// ~/.aisquad/guide.json (the owner's; never in a repository). A division whose Blueprint is gone is listed as
+// "later", never built. The guide can be run again any time (add a division, change the goals). Since 1.7 every
+// division has a Blueprint (Finance, Owner-only; Support), and the same interview runs on Telegram (server/guide-tg.js).
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, claudeBin } from './config.js';
@@ -30,19 +31,25 @@ export const MODES = ['automatic', 'supervised', 'manual'];
 export const HOURS = ['day', 'night', 'always'];
 export const MACHINES = ['this', 'more'];
 // division -> Blueprint; the delivery division depends on the business (software or ERP implementation)
-export const DIVISIONS = { product: 'product', engineering: 'software-house', implementation: 'erp-consultant', marketing: 'digital-marketing', sales: 'sales-crm', legal: 'legal' };
-export const LATER = ['finance', 'support'];                 // no Blueprint yet: shown, never built
+export const DIVISIONS = { product: 'product', engineering: 'software-house', implementation: 'erp-consultant', marketing: 'digital-marketing', sales: 'sales-crm', legal: 'legal', finance: 'finance', support: 'support' };
+export const LATER = [];                                      // divisions without a Blueprint: shown, never built (none since 1.7)
 const TITLE = { product: 'Product', engineering: 'Engineering', implementation: 'Implementation', marketing: 'Marketing', sales: 'Sales', legal: 'Legal', finance: 'Finance', support: 'Support' };
 export const SUGGEST = {
-  saas: ['product', 'engineering', 'marketing', 'sales', 'legal'],
-  'erp-consultant': ['implementation', 'sales', 'marketing', 'legal'],
+  saas: ['product', 'engineering', 'marketing', 'sales', 'support', 'legal'],
+  'erp-consultant': ['implementation', 'sales', 'marketing', 'support', 'legal'],
   consultant: ['sales', 'marketing', 'legal'],
-  'software-house': ['engineering', 'sales', 'marketing', 'legal'],
+  'software-house': ['engineering', 'sales', 'marketing', 'support', 'legal'],
   agency: ['marketing', 'sales', 'legal'],
   clinic: ['marketing', 'sales', 'legal'],
   retail: ['marketing', 'sales', 'legal'],
   other: ['marketing', 'sales', 'legal'],
 };
+// Finance is suggested to every business that already runs ERPNext (it reads the books there)
+export const SUGGEST_IF = { finance: 'erpnext' };
+export const suggestFor = (type, have = []) => [...(SUGGEST[type] || SUGGEST.other), ...Object.entries(SUGGEST_IF).filter(([, h]) => have.includes(h)).map(([d]) => d)];
+// Legal and Finance start manual: the owner decides everything there
+const OWNER_DESKS = ['legal', 'finance'];
+export const defaultMode = (division) => (OWNER_DESKS.includes(division) ? 'manual' : 'supervised');
 const AUTOPILOT = { automatic: 'full', supervised: 'balanced', manual: 'off' };
 const BEHIND = { automatic: 'act', supervised: 'suggest', manual: 'notify' };       // what a target behind its goal raises (1.5)
 export const STEPS = ['language', 'business', 'goals', 'have', 'divisions', 'modes', 'capacity', 'plan'];
@@ -54,6 +61,8 @@ const MATERIALS = {
   marketing: [['brand', 'brand'], ['website', 'website'], ['social-accounts', 'social'], ['analytics', 'later']],
   sales: [['price-list', 'products'], ['erpnext', 'erpnext'], ['lead-sources', 'website'], ['inbox', 'later']],
   legal: [['contract-templates', 'have'], ['company-documents', 'legal']],
+  finance: [['erpnext', 'erpnext'], ['finance-key', null], ['bank-statements', null], ['finance-policy', null]],
+  support: [['ticket-source', 'tools'], ['kb-sources', 'products'], ['support-policy', null]],
 };
 const file = () => path.join(config.home, 'guide.json');
 const hasClaude = () => { const b = claudeBin(); return b.includes('/') ? fs.existsSync(b) : String(process.env.PATH || '').split(path.delimiter).some((d) => d && fs.existsSync(path.join(d, b))); };
@@ -68,7 +77,7 @@ export function cleanAnswers(a = {}) {
   const type = TYPES.includes(b.type) ? b.type : 'other';
   const divisions = pickList(a.divisions, [...Object.keys(DIVISIONS), ...LATER]);
   const modes = {};
-  for (const d of divisions) if (DIVISIONS[d]) modes[d] = MODES.includes(a.modes?.[d]) ? a.modes[d] : d === 'legal' ? 'manual' : 'supervised';
+  for (const d of divisions) if (DIVISIONS[d]) modes[d] = MODES.includes(a.modes?.[d]) ? a.modes[d] : defaultMode(d);
   return {
     language: LANGUAGES.includes(a.language) ? a.language : 'en',
     business: { type, name: oneLine(b.name || '', 60), description: oneLine(b.description || '', 300) },
@@ -79,18 +88,19 @@ export function cleanAnswers(a = {}) {
   };
 }
 export const load = () => { const j = readJson(file(), null); return j && typeof j === 'object' && !Array.isArray(j) ? { built: {}, ...j } : { answers: null, plan: null, done: false, step: 0, built: {} }; };
-const save = (st) => writeJson(file(), st, 0o600);
+// every save is stamped, so the web and Telegram (1.7) see that the other side moved on
+const save = (st, via = '') => writeJson(file(), { ...st, updatedAt: Date.now(), via }, 0o600);
 // the state the UI shows: where the owner is, the answers so far, the plan, whether it was built
 export function state() {
   const st = load();
-  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude() };
+  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, suggestIf: SUGGEST_IF, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, via: st.via || '' };
 }
-export function answer(partial, step) {
+export function answer(partial, step, { via = 'web' } = {}) {
   const st = load();
   st.answers = cleanAnswers({ ...(st.answers || {}), ...(partial || {}) });
   if (step !== undefined) st.step = Math.max(0, Math.min(STEPS.length - 1, Number(step) || 0));
   st.plan = null;                                              // the plan follows the answers
-  save(st);
+  save(st, via);
   setLanguage(st.answers.language);
   return state();
 }
@@ -111,6 +121,8 @@ const kpiGoal = (bp, k, a) => {
   if (bp === 'sales-crm') return { 'new-leads': month(a.goals.leads), 'response-time': 24, won: null }[k.id] ?? null;
   if (bp === 'software-house') return { uptime: 99.5, 'open-bugs': 5, 'stories-done': null }[k.id] ?? null;
   if (bp === 'product') return { 'feedback-handled': 5 }[k.id] ?? null;
+  if (bp === 'support') return { 'first-response': 24, csat: 90 }[k.id] ?? null;
+  if (bp === 'finance') return { 'days-to-close': 5 }[k.id] ?? null;
   return null;
 };
 const materialsFor = (division, a) => (MATERIALS[division] || []).map(([id, when]) => ({ id, status: when === 'have' ? 'have' : when === 'later' ? 'later' : when && a.have.includes(when) ? 'have' : 'missing' }));
@@ -150,9 +162,9 @@ export function draftPlan(a, built = load().built) {
   for (const division of a.divisions.filter((d) => DIVISIONS[d])) {
     let bp; try { bp = blueprints.getBlueprint(DIVISIONS[division]); } catch { later.push(division); continue; }   // a Blueprint removed from the library
     const spaceName = clip(`${name} ${TITLE[division]}`, 60);
-    const mode = a.modes[division] || (division === 'legal' ? 'manual' : 'supervised');
+    const mode = a.modes[division] || defaultMode(division);    // Finance is always the Owner's, whatever its Blueprint says
     spaces.push({
-      division, blueprint: bp.id, name: spaceName, mode, autopilot: AUTOPILOT[mode], access: bp.space.access || 'team', shift: shiftFor(a.capacity.hours, mode), budget: 0,
+      division, blueprint: bp.id, name: spaceName, mode, autopilot: AUTOPILOT[mode], access: division === 'finance' ? 'owner' : bp.space.access || 'team', shift: shiftFor(a.capacity.hours, mode), budget: 0,
       ...(existingSpace(division, spaceName, built) ? { exists: true, skip: true } : {}),   // run again: a Space that is already there is not built twice
       kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode], ...measuredBy(k, { id: '', access: bp.space.access || 'team' }) })),
       routines: routinesFor(bp, a.capacity.hours, mode),
@@ -184,7 +196,7 @@ export function claudePrompt(plan) {
   ].join('\n');
 }
 // the plan with Claude's touch when it is available; the defaults otherwise
-export async function plan({ useClaude = true } = {}) {
+export async function plan({ useClaude = true, via = 'web' } = {}) {
   const st = load();
   if (!st.answers) throw bad('Answer the guide first');
   const a = cleanAnswers(st.answers);
@@ -202,7 +214,7 @@ export async function plan({ useClaude = true } = {}) {
     } catch { /* the defaults stand */ }
   }
   st.plan = p; st.step = STEPS.length - 1;
-  save(st);
+  save(st, via);
   return p;
 }
 // the owner's edits on the plan page: names, goals, materials statuses, modes
@@ -240,6 +252,8 @@ const LABEL = {
   brand: 'Brand rules (voice, colours, logo, words to use and to avoid)', website: 'The website (address, who can change it)', 'social-accounts': 'Social media accounts (which, who posts)', analytics: 'Analytics (GA4 or similar) for the traffic target',
   'price-list': 'Price list and discount rules (Owner only: pricing/ in the Company Brain)', 'lead-sources': 'Where leads come from (forms, WhatsApp, marketplace)', inbox: 'A shared inbox or WhatsApp for lead replies',
   'contract-templates': 'Contract templates (the bilingual ones are in the Company Brain)', 'company-documents': 'Company documents (deed, NPWP, signatory)',
+  'finance-key': 'A read-only ERPNext finance key (Admin → ERPNext → Finance; docs/ERPNEXT.md)', 'bank-statements': 'Bank statements each month (placed in docs/finance/bank/; agents never log in to a bank)', 'finance-policy': 'Approval limits, who pays, the close and tax calendars, the budget',
+  'ticket-source': 'Where the tickets live (ERPNext Issues or a help desk connected as an integration)', 'kb-sources': 'What answers come from (product docs, FAQ, past replies without personal data)', 'support-policy': 'Channels, hours, SLAs per priority and what only the owner decides',
 };
 const STATUS_TEXT = { have: 'available: ask the owner where it is', missing: 'missing: interview the owner and draft it for approval', later: 'later: not needed for the first weeks' };
 const MODE_TEXT = { automatic: 'automatic: routine work runs and ships by itself; money, legal, production, secrets and deleting data still wait for the owner', supervised: 'supervised: the squad prepares, the owner approves what goes out', manual: 'manual: the squad drafts only; the owner decides everything' };
@@ -255,9 +269,9 @@ export function planMarkdown(p, built = {}) {
   for (const s of p.spaces) {                                   // a Space built before is shown as it was built, not as the new answers would make it
     if (s.skip && !s.exists) continue;
     const b = s.exists && registered(built[s.division]) ? built[s.division] : null;
-    rows.push(b ? { division: s.division, name: b.name, mode: b.mode, targets: b.targets || '', rhythm: b.rhythm || [], behind: b.behind || '' } : { division: s.division, name: s.name, mode: s.mode, targets: s.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; '), rhythm: rhythmLines(s), behind: BEHIND[s.mode] });
+    rows.push(b ? { division: s.division, name: b.name, mode: b.mode, access: b.access, targets: b.targets || '', rhythm: b.rhythm || [], behind: b.behind || '' } : { division: s.division, name: s.name, mode: s.mode, access: s.access, targets: s.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; '), rhythm: rhythmLines(s), behind: BEHIND[s.mode] });
   }
-  for (const [division, b] of Object.entries(built)) if (!rows.some((r) => r.division === division) && registered(b)) rows.push({ division, name: b.name, mode: b.mode, targets: b.targets || '', rhythm: b.rhythm || [], behind: b.behind || '' });
+  for (const [division, b] of Object.entries(built)) if (!rows.some((r) => r.division === division) && registered(b)) rows.push({ division, name: b.name, mode: b.mode, access: b.access, targets: b.targets || '', rhythm: b.rhythm || [], behind: b.behind || '' });
   const modes = [...new Set(rows.map((r) => r.mode))];
   return ['# Company plan', '', '<!-- GENERATED by The AI Squad\'s Company Guide: the owner answers the guide again to change it. -->', '',
     `**${cell(p.company.name)}** (${p.company.type})${p.company.description ? `: ${cell(p.company.description)}` : ''}`, '',
@@ -265,7 +279,7 @@ export function planMarkdown(p, built = {}) {
     ...(g.picks.length ? g.picks.map((x) => `- ${x}${x === 'revenue' && g.revenue ? `: ${g.revenue} ${g.currency} per month` : x === 'leads' && g.leads ? `: ${g.leads} per month` : x === 'launch' && g.launch ? `: ${cell(g.launch)}` : ''}`) : ['- not stated yet']), '',
     `The owner talks with the squads in ${p.company.language === 'id' ? 'Bahasa Indonesia' : 'English'}. Working hours: ${p.capacity.hours}; ${p.capacity.machines === 'more' ? 'more machines later' : 'one machine'}${p.capacity.budget ? `; API budget ${p.capacity.budget} USD per month across the Spaces` : ''}.`, '',
     '## Divisions', '', '| Division | Space | Mode | Starting targets |', '|---|---|---|---|',
-    ...rows.map((r) => `| ${TITLE[r.division] || r.division} | ${cell(r.name)} | ${r.mode} | ${r.targets} |`),
+    ...rows.map((r) => `| ${TITLE[r.division] || r.division} | ${cell(r.name)}${r.access === 'owner' ? ' (Owner only)' : ''} | ${r.mode} | ${r.targets} |`),
     ...(p.later.length ? ['', `Later (no squad yet): ${p.later.map((d) => TITLE[d] || d).join(', ')}.`] : []), '',
     '## Rhythm', '', 'The routines each Space runs by itself, once the owner turns them on (Admin → Cadence). When a target is behind its goal the Space raises it: a notice, a recovery plan for the owner to approve, or the work itself.', '',
     ...rows.flatMap((r) => [`**${cell(r.name)}** (when a target is behind: ${BEHIND_TEXT[r.behind] || 'nothing'})`, ...(r.rhythm?.length ? r.rhythm.map((l) => `- ${l}`) : ['- no routines']), '']),
@@ -302,7 +316,7 @@ async function buildAll(st, p, create) {
     try {
       const r = await create({ blueprint: bp.id, name: sp.name, goal: `${p.company.name}: ${TITLE[sp.division]}. ${p.summary || p.company.description || ''}`.trim(), team, autopilot: sp.autopilot, budget: sp.budget ? { usd: sp.budget, period: 'month' } : undefined, installSkills: true });
       const root = r.path;
-      floors.updateFloorConfig(root, { shift: sp.shift || { enabled: false } });
+      floors.updateFloorConfig(root, { shift: sp.shift || { enabled: false }, ...(sp.division === 'finance' ? { access: 'owner', erpnext: 'finance', telegram: 'counts' } : {}) });
       for (const k of sp.kpis) { try { kpi.updateKpi(root, k.id, { ...(k.target != null ? { target: k.target } : {}), ...(k.onBehind ? { onBehind: { mode: k.onBehind } } : {}) }); } catch { /* not seeded */ } }
       // measured from the integration the plan named; it stays manual when that is not possible any more
       for (const k of sp.kpis.filter((x) => x.measure)) { try { kpi.updateKpi(root, k.id, { every: 'hour', source: { kind: 'mcp', server: k.measure.server, tool: k.measure.tool, args: k.measure.args, pick: k.measure.pick } }); } catch { /* the integration changed */ } }
@@ -313,7 +327,7 @@ async function buildAll(st, p, create) {
       kpi.render(root, r.id);
       floors.generate(root);
       out.push({ division: sp.division, id: r.id, number: r.number, name: sp.name, path: root, lead: r.lead, routines: cadence.readDefs(root).length });
-      st.built[sp.division] = { id: r.id, name: sp.name, mode: sp.mode, targets: sp.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; '), rhythm: rhythmLines(sp), behind: BEHIND[sp.mode] };
+      st.built[sp.division] = { id: r.id, name: sp.name, mode: sp.mode, access: sp.access, targets: sp.kpis.map((k) => `${cell(k.name)}${k.target != null ? `: ${k.target}${k.unit ? ` ${cell(k.unit)}` : ''}` : ''}`).join('; '), rhythm: rhythmLines(sp), behind: BEHIND[sp.mode] };
       deps.log(r.id, { type: 'guide.built', data: { division: sp.division, blueprint: bp.id, mode: sp.mode, targets: sp.kpis.filter((k) => k.target != null).length, routines: (sp.routines || []).filter((x) => x.on).length } });
     } catch (e) { out.push({ division: sp.division, name: sp.name, error: e.message }); }
   }

@@ -2092,5 +2092,13 @@
  "Connect {kind} to measure it (Admin → Integrations), then add it from an integration.": "Connect {kind} to measure it (Admin → Integrations), then add it from an integration.",
  "Finance: read only (Accounts User, read). Only an Owner-only Space with the Finance key uses it; its agents can create, change or submit nothing.": "Finance: read only (Accounts User, read). Only an Owner-only Space with the Finance key uses it; its agents can create, change or submit nothing.",
  "Finance key (read only, Owner-only Spaces)": "Finance key (read only, Owner-only Spaces)",
- "Counts only": "Counts only"
+ "Counts only": "Counts only",
+ "Owner only: month-end close, cash flow, receivables drafts; reads ERPNext, never pays": "Owner only: month-end close, cash flow, receivables drafts; reads ERPNext, never pays",
+ "Tickets triaged against SLAs, replies from a knowledge base, escalations": "Tickets triaged against SLAs, replies from a knowledge base, escalations",
+ "A read-only ERPNext finance key": "A read-only ERPNext finance key",
+ "Bank statements each month": "Bank statements each month",
+ "Approval limits, who pays, the close and tax calendars, the budget": "Approval limits, who pays, the close and tax calendars, the budget",
+ "Where the tickets live (ERPNext Issues or a help desk)": "Where the tickets live (ERPNext Issues or a help desk)",
+ "What answers come from (product docs, FAQ, past replies)": "What answers come from (product docs, FAQ, past replies)",
+ "Channels, hours, SLAs and what only you decide": "Channels, hours, SLAs and what only you decide"
 }
