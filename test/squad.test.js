@@ -29,18 +29,27 @@ test('pending work with everyone idle for 10 minutes is a Floor stall', () => {
   const stall = s.attention.find((a) => a.kind === 'stall');
   assert.ok(stall, 'stall alert');
   assert.match(stall.text, /lead and all agents idle for 11 min/);
-  assert.equal(s.floors.find((f) => f.id === 'acme').lamp, 'attention');
+  assert.equal(s.floors.find((f) => f.id === 'acme').lamp, 'stopped', 'a notice, not an ask: the lamp does not turn to attention');
+  assert.deepEqual([stall.notice, stall.muted], [true, true]);
+  assert.ok(stall.notifyAt > Date.now(), 'notified only once it has lasted 15 minutes');
   const t1 = stall.ts;
   const again = fresh().attention.find((a) => a.kind === 'stall');
   assert.equal(again.ts, t1, 'first-seen time is stable');
   assert.equal(squad.watchdogStatus().alerts.filter((a) => a.kind === 'stall').length, 1);
 });
 
-test('dismissing a stall clears the work', () => {
+test('Dismiss sticks across snapshots; the stall comes back only after a new assignment, and the work stays', () => {
   const id = fresh().attention.find((a) => a.kind === 'stall').id;
   squad.answerAttention(id, 0);
-  assert.equal(fresh().attention.find((a) => a.kind === 'stall'), undefined);
-  assert.deepEqual(squad.workOf('acme'), {});
+  for (let i = 0; i < 3; i++) assert.equal(fresh().attention.find((a) => a.kind === 'stall'), undefined, `snapshot ${i}`);
+  assert.equal(squad.workOf('acme')['budi-dev'].text, 'Build the catalogue', 'dismissing a notice does not drop the work');
+  const r = JSON.parse(fs.readFileSync(paths.runtime(), 'utf8'));
+  writeWork({ ...r.work, 'acme/budi-dev': { text: 'Build the cart', assignedAt: Date.now() - 12 * 60e3, doneAt: null } });
+  fs.writeFileSync(paths.runtime(), JSON.stringify({ ...JSON.parse(fs.readFileSync(paths.runtime(), 'utf8')), dismissedStalls: r.dismissedStalls }));
+  const back = fresh().attention.find((a) => a.kind === 'stall');
+  assert.ok(back, 'a new assignment is a new condition'); assert.notEqual(back.id, id);
+  squad.answerAttention(back.id, 0);
+  writeWork({});
 });
 
 test('budget: warning at 80 %, Attention at 100 %', () => {

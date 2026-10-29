@@ -19,6 +19,9 @@ import { REAL } from './look.js';
 import { mergeStatic } from './merge.js';
 import { loadOffice, officeStamp, realRoom, realDesk, realMonitor, realDeskProps, REAL_DEVICES } from './realistic-office.js';
 import { t as tt, tx } from './i18n.js';
+import { Office3D } from './office3d.js';
+import { TAG_HTML, setTagState, applySpread } from './tags.js';
+import { easeMs, reducedMotion } from './motion.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const POV_FOV = 72;
@@ -330,8 +333,8 @@ function buildStation(agent, desk, accent) {
   human.add(rig.root, contactShadow());                                        // a soft shadow on the floor under the character
   human.scale.setScalar(STATION_SCALE);
   const st = { id: agent.id, g, human, rig, screens, ringMat, state: agent.state, data: agent, blinkAt: Math.random() * 3, phase: Math.random() * 6, accent };
-  // name chip in the agent's colour above the head, its status under it, zzz when idle (as in squad-3d)
-  st.label = label('<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div><div class="r"></div>', 'nlabel', human, 0, 1.95, 0);
+  // name tag in the agent's colour above the head with its state as an icon dot (1.2.0: one tag, no separate chip)
+  st.label = label(`${TAG_HTML}<div class="r"></div>`, 'nlabel', human, 0, 1.95, 0);
   st.label.center.set(.5, 1);
   const color = (agent.appearance && agent.appearance.shirt) || '#3d82d6';
   Object.assign(st.label.element.querySelector('.n').style, { background: color, color: inkOn(color) });
@@ -394,22 +397,25 @@ function taskProps(st, task) {
 // the line under an agent's name (shared with the Iso Pixel renderer, 0.16)
 export function agentStatus(a) {
   const taskStatus = a.task && a.state === 'working' ? tt('{label} · {n} min', { label: a.task.label, n: Math.max(1, Math.round((Date.now() - a.task.startedAt) / 60000)) }) : '';
-  return a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
+  const service = !taskStatus && a.services?.length && a.state !== 'stopped' ? tt('Running in the background: {label} · since {time}', { label: a.services[0].label, time: new Date(a.services[0].startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }) : '';
+  return a.standby ? tt('not started') : a.crash && !a.crash.withLead ? tt('stopped unexpectedly') : a.waitingReply ? tt('waiting for your reply') : taskStatus || service || (a.state === 'working' && a.activity ? shortActivity(tx(a.activity)) : STATUS_TEXT[a.state] || a.state || '');
 }
 function updateStation(st, a) {
   st.state = a.state; st.data = a;
   const el = st.label.element;
   const name = String(a.displayName || '').split(' - ')[0];
   taskProps(st, a.task && a.state === 'working' ? a.task : null);
-  const status = st.away || agentStatus(a);
-  const cls = `nlabel ${a.state || 'stopped'}${a.standby ? ' standby' : ''}${st.away ? ' away' : ''}`;
-  if (el.className !== cls) el.className = cls;
-  const n = el.querySelector('.n'), s = el.querySelector('.a');
+  const status = st.away || '';                                                  // the tag says the state; a line only while away
+  const k = setTagState(el, a);
+  const cls = `nlabel ${k}${st.away ? ' away' : ''}`;
+  const keep = ['faded', 'sel'].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join('');      // set by spreadLabels
+  if (el.className !== cls + keep) el.className = cls + keep;
+  const n = el.querySelector('.nm'), s = el.querySelector('.a');
   if (n.textContent !== name) n.textContent = name;
   if (s.textContent !== status) s.textContent = status;
   const rp = el.querySelector('.r'), repos = a.repos?.length ? `⎇ ${a.repos.join(' · ')}` : '';   // linked repositories it writes in
   if (rp.textContent !== repos) { rp.textContent = repos; rp.hidden = !repos; }
-  el.title = `${a.displayName}: ${st.away || a.activity || a.state}`;
+  el.title = `${a.displayName}: ${st.away || agentStatus(a)}`;
   st.ringMat.color.set(STATE_RING[a.state] || STATE_RING.stopped);
   st.label.visible = !!st.labelsOn;
 }
@@ -507,7 +513,7 @@ export class BuildingScene {
     this.container = container;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     // fixed isometric angle: drag pans, the wheel zooms (smoothly)
-    Object.assign(this.controls, { enableDamping: true, dampingFactor: .12, enableRotate: false, screenSpacePanning: true, minZoom: .04, maxZoom: 9, zoomSpeed: .8 });
+    Object.assign(this.controls, { enableDamping: !reducedMotion(), dampingFactor: .12, enableRotate: false, screenSpacePanning: true, minZoom: .04, maxZoom: 9, zoomSpeed: .8 });
     this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 
@@ -562,6 +568,7 @@ export class BuildingScene {
       const draw = moving || this.dirty || (this.animating && tick % 2 === 0);
       if (!draw && now - lastLogic < 500) return;
       if (draw && lastDraw && now - lastDraw < 40 && tick - this.lastDrawTick === 1) this.quality.sample((now - lastDraw) / 1000);   // Auto quality: back-to-back frames only
+      if (draw && lastDraw && this.officeOn() && tick - this.lastDrawTick === 1) this.officeSample(now - lastDraw);
       lastLogic = now;
       if (draw) { lastDraw = now; this.lastDrawTick = tick; }
       this.frame(draw);
@@ -569,9 +576,29 @@ export class BuildingScene {
     requestAnimationFrame(loop);
   }
 
+  // ---------- the Office overview in 3D (1.1.0, ui/office3d.js) ----------
+  officeOn() { return this.view.mode === 'lobby' && this.view.overview === 'office' && !this.view.eyes; }
+  // ?states=…: agent states by position, for screenshots of a look (as on the Floors)
+  officeFloors(floors = this.lastFloors || []) { return DEMO_STATES ? floors.map((f) => ({ ...f, agents: (f.agents || []).map((a, i) => (DEMO_STATES[i] ? { ...a, state: DEMO_STATES[i] } : a)) })) : floors; }
+  officeKit() {
+    return { THREE, box, mat, basic, label, buildStation, updateStation, poseDesk, buildDevice, deskHome, mergeStatic, TOP, inkOn, floorLabelHtml };
+  }
+  // the machine and the queue for the Office (Lobby, Server room, Owner's room)
+  setCompany(c) { this.company = c; if (this.office) { this.office.update(this.officeFloors(), c); this.racks = this.office.racks(); } }
+  // Auto: the Office in 3D must hold ~30 fps, else the host switches the Office to Iso Pixel (renderer.js)
+  officeSample(ms) {
+    const s = this.officeFrames ||= [];
+    s.push(ms); if (s.length > 90) s.shift();
+    if (s.length === 90 && !this.officeSlowSent) {
+      const median = [...s].sort((a, b) => a - b)[45];
+      if (median > 34) { this.officeSlowSent = true; this.handlers.onOfficeSlow?.(median); }
+    }
+  }
+
   // switching to another renderer (0.16): stop drawing and give the GPU memory and the WebGL context back
   dispose() {
     this.disposed = true;
+    this.office?.dispose();
     this.quality.disposed = true;
     removeEventListener('resize', this.onResize);
     for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) removeEventListener(ev, this.onInput);
@@ -622,6 +649,8 @@ export class BuildingScene {
     if (key === this.syncKey) return;
     this.syncKey = key;
     this.lastFloors = floors;
+    // the Office overview draws its own rooms: the Floors are not built meanwhile (memory), only the Office updated
+    if (this.officeOn() && this.office) { this.office.update(this.officeFloors(floors), this.company); this.racks = this.office.racks(); return; }   // it asks for a frame when something changed
     const seen = new Set();
     for (const f of floors) {
       seen.add(f.id);
@@ -642,6 +671,7 @@ export class BuildingScene {
     if (this.top !== top || !this.columns) this.buildColumns(top);
     this.top = top;
     this.racks = [this.lobbyRack, ...[...this.floors.values()].flatMap((o) => [...o.devices.values()].filter((d) => d.userData.rack))];
+    if (this.office) { this.office.update(this.officeFloors(floors), this.company); this.racks = this.office.racks(); }
     this.applyVisibility();
     if (!this.placed) { this.placed = true; this.snapTo(this.poseFor(this.view)); }
     this.dirty = true;
@@ -700,6 +730,19 @@ export class BuildingScene {
     this.quality.setAO(view.mode !== 'lobby');
     const wasEyes = this.view.eyes, wasPersp = this.camera === this.persp;
     this.view = view;
+    // the Office overview: built when it opens, given back when it closes (memory)
+    if (this.officeOn()) {
+      if (!this.office) {
+        this.office = new Office3D(this, this.officeKit()); this.officeFrames = [];
+        for (const o of this.floors.values()) dispose(o.g);                    // the Building's Floors give their memory back
+        this.floors.clear(); this.syncKey = null;
+      }
+      this.office.update(this.officeFloors(), this.company);
+      this.racks = this.office.racks();
+    } else if (this.office) {
+      this.office.dispose(); this.office = null;
+      this.syncKey = null; if (this.lastFloors) this.sync(this.lastFloors);       // the Floors again
+    }
     const persp = !!(view.eyes || view.screen || view.follow);
     if (persp && !wasPersp) {
       // hand over from the isometric camera: start the perspective camera where the ortho view looked from
@@ -776,17 +819,22 @@ export class BuildingScene {
 
   applyVisibility() {
     const v = this.view, focus = v.mode !== 'lobby' ? v.floorId : null;
+    const office = this.officeOn();
+    this.building.visible = !office;
+    this.office?.show(office);
+    this.sun.castShadow = !office || !!this.office?.near;                       // the Office far away: blob shadows only
     for (const [id, o] of this.floors) {
       // inside a Floor only that Floor is drawn: less clutter, less GPU on a shared machine
       o.g.visible = !focus || id === focus;
-      o.label.visible = !focus;
+      o.label.visible = !focus && !office;                                     // CSS labels do not follow a hidden parent
       for (const st of o.stations.values()) { st.labelsOn = id === focus; updateStation(st, { ...(o.data.agents || []).find((a) => a.id === st.id) }); }
       if (o.empty) o.empty.visible = id === focus;
+      if (office) for (const st of o.stations.values()) { st.label.visible = false; st.say.visible = false; }
     }
     this.lobby.visible = !focus;
     if (this.columns) this.columns.visible = !focus;
     this.roof.visible = !focus;
-    this.roofSign.visible = !focus;
+    this.roofSign.visible = !focus && !office;
     this.ground.visible = !focus;
   }
 
@@ -825,6 +873,7 @@ export class BuildingScene {
   }
 
   poseFor(v) {
+    if (v.mode === 'lobby' && v.overview === 'office' && this.office) return this.office.pose();
     if (v.mode === 'lobby') {
       const h = floorY(this.top + 1);                         // roof sign included
       return this.fitIso(corners(-FW / 2 - .3, FW / 2 + 5, 0, h, -FD / 2 - .3, FD / 2 + .3), .04);
@@ -857,7 +906,7 @@ export class BuildingScene {
     this.camera.lookAt(p.target);
     this.camAnim = null;
   }
-  flyTo(p, ms = 900) { this.camAnim = { start: performance.now(), ms, fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), fromZ: this.camera.zoom, ...p }; }
+  flyTo(p, ms = 900) { this.camAnim = { start: performance.now(), ms: Math.max(1, easeMs(ms)), fromP: this.camera.position.clone(), fromT: this.controls.target.clone(), fromZ: this.camera.zoom, ...p }; }
 
   resize() {
     this.dirty = true;
@@ -891,18 +940,20 @@ export class BuildingScene {
   setShot(floorId, shot) { const o = this.floors.get(floorId); if (o) o.shot = shot; }
   // the conversation view: ease to the agent's desk while its message is open (only on the Floor in view), back after
   focusAgent(floorId, agentId) {
+    if (this.officeOn()) return this.office.focusAgent(floorId, agentId);
     const v = this.view;
     if (v.mode === 'lobby' || v.floorId !== floorId || v.eyes || v.screen || !this.floors.get(floorId)?.stations.get(agentId)) return false;
     this.convoFocus = true;
     this.flyTo(this.poseFor({ ...v, mode: 'desk', agentId }), 700);
     return true;
   }
-  unfocus() { if (!this.convoFocus) return; this.convoFocus = false; if (!this.view.eyes) this.flyTo(this.poseFor(this.view), 600); }
+  unfocus() { if (this.officeOn()) return this.office.unfocus(); if (!this.convoFocus) return; this.convoFocus = false; if (!this.view.eyes) this.flyTo(this.poseFor(this.view), 600); }
   // voice: the mouth follows the audio level (0..1) while the agent speaks
-  setTalk(floorId, agentId, level) { const st = this.floors.get(floorId)?.stations.get(agentId); if (st) st.talkLevel = level; }
+  setTalk(floorId, agentId, level) { if (this.officeOn()) return this.office.setTalk(floorId, agentId, level); const st = this.floors.get(floorId)?.stations.get(agentId); if (st) st.talkLevel = level; }
   // speech bubble over an agent for ms milliseconds
   say(floorId, agentId, text, ms = 7000) {
     this.dirty = true;
+    if (this.officeOn()) return this.office.say(floorId, agentId, text, ms);
     const st = this.floors.get(floorId)?.stations.get(agentId);
     if (!st) return;
     st.say.element.textContent = text; st.sayUntil = performance.now() + ms;
@@ -945,6 +996,19 @@ export class BuildingScene {
     return { x: p.x, z: p.z };
   }
 
+  // name tags that overlap on screen: nudged up, the farther one faded, the selected agent's on top (ui/tags.js)
+  spreadLabels() {
+    const entries = [], cam = this.camera.position, p = new THREE.Vector3(), sel = this.view.mode === 'desk' ? this.view.agentId : null;
+    for (const [fid, o] of this.floors) {
+      if (!o.g.visible || !o.stations) continue;
+      for (const st of o.stations.values()) {
+        if (!st.label.visible) continue;
+        st.human.getWorldPosition(p);
+        entries.push({ id: `${fid}/${st.id}`, el: st.label.element, depth: p.distanceTo(cam), selected: st.id === sel });
+      }
+    }
+    if (entries.length) applySpread(entries);
+  }
   // Edit Mode: the selection ring turns red while the piece would overlap something or block a desk
   warnSelection(on) { if (this.ring) this.ring.material.color.set(on ? '#dc2626' : '#b7852a'); }
   select(floorId, sel) {
@@ -967,6 +1031,7 @@ export class BuildingScene {
       this.handlers.onPointerDown?.(e);
     });
     el.addEventListener('pointermove', (e) => {          // first person: drag to look around
+      if (this.officeOn() && !e.buttons) this.office.hover(e);                // the Office: room and agent names on hover
       const d = this.view.eyes && this.look?.drag;
       if (!d) return;
       this.look.yaw = Math.max(-1.6, Math.min(1.6, d.yaw - (e.clientX - d.x) * .004));
@@ -976,6 +1041,7 @@ export class BuildingScene {
     el.addEventListener('pointerup', (e) => {
       if (this.view.eyes) { if (this.look) this.look.drag = null; return; }
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+      if (this.officeOn()) return this.office.pick(e);
       this.ray.setFromCamera(this.ndc(e), this.camera);
       if (this.lobby.visible && this.ray.intersectObject(this.lobbyRack, true).length) return this.handlers.onPickRack?.();
       const hit = this.pick(e);
@@ -1020,7 +1086,12 @@ export class BuildingScene {
     const dt = Math.min(.1, t - (this.lastT ?? t)); this.lastT = t;
     const v = this.view;
     let walking = false, animating = false;
-    for (const [fid, o] of this.floors) {
+    if (this.officeOn() && this.office) {
+      const r = this.office.frame(t, dt); walking = r.walking; animating = r.animating;
+      const cast = !!this.office.near;
+      if (this.sun.castShadow !== cast) { this.sun.castShadow = cast; this.dirty = true; }
+    }
+    for (const [fid, o] of this.officeOn() ? [] : this.floors) {
       if (!o.g.visible) continue;
       const near = v.mode !== 'lobby' && v.floorId === fid;
       // characters away from their desks are moving obstacles for each other
@@ -1066,6 +1137,7 @@ export class BuildingScene {
     if (cp.p.distanceToSquared(cam.position) > 1e-6 || cp.t.distanceToSquared(this.controls.target) > 1e-6 || Math.abs(cp.z - cam.zoom) > 1e-4) draw = true;
     if (draw) { cp.p.copy(cam.position); cp.t.copy(this.controls.target); cp.z = cam.zoom; }
     this.labels.render(this.scene, this.camera);
+    if (draw || t - (this.spreadAt || 0) > .5) { this.spreadAt = t; this.spreadLabels(); }
     if (!draw) return;
     // the shadow map is redrawn only when something casting moved: walking (every 3rd frame), typing (twice a
     // second), a rebuilt or changed Floor, a new view

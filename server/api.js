@@ -24,6 +24,7 @@ import { runDoctor } from './doctor.js';
 import * as service from './service.js';
 import * as auth from './auth.js';
 import * as jobs from './jobs.js';
+import * as idem from './idempotency.js';
 import * as history from './history.js';
 import * as company from './company.js';
 import * as admin from './admin.js';
@@ -81,6 +82,14 @@ function serveStatic(res, pathname) {
     res.end(fs.readFileSync(file));
     return true;
   }
+  // the page carries the Building's language, so the first paint is already in it (ui/i18n.js)
+  if (rel === 'index.html') {
+    const lang = building.loadBuilding().prefs.lang;
+    const html = fs.readFileSync(file, 'utf8');
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+    res.end(['en', 'id'].includes(lang) ? html.replace('<html lang="en"', `<html lang="${lang}" data-lang="${lang}"`) : html);
+    return true;
+  }
   // the file as it is (send() would JSON-encode a .json file's Buffer)
   res.writeHead(200, { 'content-type': `${TYPES[path.extname(file)] || 'application/octet-stream'}; charset=utf-8`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
   res.end(fs.readFileSync(file));
@@ -99,6 +108,7 @@ const routes = [
   ['GET', /^\/api\/meter$/, () => meter.detail()],
   ['PATCH', /^\/api\/building$/, (p, b) => {
     if (b.name !== undefined) building.setBuildingName(b.name);
+    if (b.lang !== undefined) building.setPrefs({ lang: ['en', 'id'].includes(b.lang) ? b.lang : 'en' });      // the Building's UI language (1.2.0)
     // agents running at once on the whole machine; nightly backups
     if (b.maxAgents !== undefined) building.setPrefs({ maxAgents: Math.max(1, Math.min(40, parseInt(b.maxAgents, 10) || 6)) });
     if (b.backup !== undefined) building.setPrefs({ backup: backup.cleanSettings({ ...building.loadBuilding().prefs.backup, ...b.backup }) });
@@ -252,13 +262,13 @@ const routes = [
   ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
-  // the Company Guide (1.2): the owner's answers, the plan, the build
+  // the Company Guide (1.4): the owner's answers, the plan, the build
   ['GET', /^\/api\/guide$/, () => guide.state(), { pin: true }],
   ['PUT', /^\/api\/guide$/, (p, b) => guide.answer(b?.answers || {}, b?.step), { pin: true }],
   ['DELETE', /^\/api\/guide$/, () => guide.reset(), { pin: true }],
   ['POST', /^\/api\/guide\/plan$/, (p, b) => guide.plan({ useClaude: b.useClaude !== false }), { pin: true }],
   ['POST', /^\/api\/guide\/build$/, async (p, b) => { const r = await guide.build(b); squad.invalidate(); return r; }, { pin: true, history: () => ({ label: 'Company Guide: built' }) }],
-  // targets (1.1): per Space, the cockpit across Spaces, a webhook for outside systems
+  // targets (1.3): per Space, the cockpit across Spaces, a webhook for outside systems
   ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); if (req.user?.role === 'owner') for (const s of o.spaces) s.hook = hookOf(s.id); return o; }, {}],
   ['POST', /^\/api\/kpi\/hook\/([0-9a-f]{32})$/, ([tok], b) => {
     const f = kpi.floorOfToken(tok); if (!f) throw new HttpError(401, 'Unknown token');
@@ -309,6 +319,11 @@ const routes = [
   // direct chat with one agent (0.14): ?context=space|general
   ['GET', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat$/, ([id, a], b, req) => squad.chatThread(id, a, new URL(req.url, 'http://x').searchParams.get('context') || 'space'), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat$/, ([id, a], b, req) => squad.sendChat(id, a, b.text, { context: b.context || 'space', user: req.user }), { pin: true }],
+  // a reply denied tools in the background (1.0.1): allow narrow rules and run it again, or run it on the Desk
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat\/allow$/, ([id, a], b) => squad.chatAllowRetry(id, a, { context: b.context || 'space', msgId: String(b.msgId || ''), rules: Array.isArray(b.rules) ? b.rules : null }), { pin: true }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/chat\/desk$/, ([id, a], b) => squad.chatOnDesk(id, a, { context: b.context || 'space', msgId: String(b.msgId || '') }), { pin: true }],
+  // a background service of an agent (1.0.2): stop it
+  ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/services\/([\w-]+)\/stop$/, ([id, a, sid]) => squad.stopService(id, a, sid), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/task$/, ([id, a], b) => squad.sendTask(id, a, b.text, b.attachments), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/agents\/([\w-]+)\/work-done$/, ([id, a]) => { squad.clearWork(id, a); squad.invalidate(); return { ok: true }; }, { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/attachments$/, async ([id], b, req) => {
@@ -318,7 +333,7 @@ const routes = [
 
   ['POST', /^\/api\/independents\/rescan$/, () => squad.rescanIndependents(), { pin: true }],
   ['POST', /^\/api\/independents\/([\w-]+)\/adopt$/, ([id], b) => squad.adoptIndependent(id, b), { pin: true }],
-  ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text, { force: !!b.force, floorId: String(b.floorId || ''), agentId: String(b.agentId || ''), kind: String(b.kind || '') }), { pin: true }],
+  ['POST', /^\/api\/attention\/(\w+)\/answer$/, ([id], b) => squad.answerAttention(id, b.option, b.text, { force: !!b.force, floorId: String(b.floorId || ''), agentId: String(b.agentId || ''), kind: String(b.kind || ''), answers: Array.isArray(b.answers) ? b.answers.slice(0, 8) : null }), { pin: true }],
 ];
 
 // 127.0.0.0/8, ::1 and localhost; 0.0.0.0, :: and real addresses are not
@@ -338,7 +353,7 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (method !== req.method) continue;
         const m = url.pathname.match(re);
         if (!m) continue;
-        // an outside system posting a target's value (1.1): the Space's token in the URL, nothing else
+        // an outside system posting a target's value (1.3): the Space's token in the URL, nothing else
         if (opts.hook) return send(res, 200, await handler(m.slice(1), await readBody(req), req));
         // a worker machine (0.18): its own token, only for its own routes
         if (opts.node) {
@@ -358,12 +373,14 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
         if (body && typeof body === 'object' && body.floorId && access.hiddenPath(`/api/floors/${body.floorId}`, user)) return send(res, 404, { error: 'Floor not found' });
         // configuration is code: changes to the Building or a Space are recorded with their before and after (server/history.js)
-        let out = await access.actorStore.run({ user }, async () => {
+        // a submission sent twice (double click, two tabs) runs once: x-idempotency-key (server/idempotency.js)
+        const run = (fn) => (method === 'GET' ? fn() : idem.once(user?.id || 'owner', req.headers['x-idempotency-key'], fn));
+        let out = await run(() => access.actorStore.run({ user }, async () => {
           if (!opts.history) return handler(m.slice(1), body, req);
           const h = opts.history(m.slice(1), body);
           let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
           return history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor }, () => handler(m.slice(1), body, req));
-        });
+        }));
         if (method !== 'GET' && /^\/api\/(floors|squads|guide)/.test(url.pathname)) access.forgetOwnerFloors();   // a new or changed Space may be the Owner's
         out = access.redact(url.pathname, out, user);
         if (out === null) return send(res, 404, { error: 'Not found' });

@@ -127,6 +127,32 @@ test('a hard stop (money) needs a 4-digit code; anything else cancels', async ()
   assert.equal(answered.length, n + 1); assert.equal(lastText(), 'Done: Yes');
 });
 
+test('the same question under a new id (the screen, then the hook) is one Telegram message', async () => {
+  const q = { ...question, text: 'Which payment gateway for the shop?' };
+  items = [{ ...q, id: 'dup-a' }];
+  const n = sent().length;
+  await notify.notifyTick(T + 6000);
+  assert.equal(sent().length, n + 1);
+  items = [{ ...q, id: 'dup-b' }];
+  await notify.notifyTick(T + 9000);
+  assert.equal(sent().length, n + 1, 'not again');
+  assert.ok(notify.loadState().sent['dup-b'].duplicate);
+  items = [];
+});
+
+test('a stall notice reaches Telegram only once it has lasted 15 minutes, even when stalls are sent at once', async () => {
+  const prev = building.loadBuilding().prefs.notify;
+  building.setPrefs({ notify: notify.cleanNotify({ ...prev, immediate: [...notify.IMMEDIATE, 'stall'] }) });
+  try {
+    items = [{ id: 'st1', kind: 'stall', notice: true, muted: true, notifyAt: T + 15 * 60e3, floorId: 'pos', floorName: 'POS', agentId: 'budi', text: 'Budi - Dev: "build" has written no output for 11 min' }];
+    const n = sent().length;
+    await notify.notifyTick(T + 60e3);
+    assert.equal(sent().length, n); assert.equal(notify.loadState().sent.st1, undefined, 'not marked: it may still be sent later');
+    await notify.notifyTick(T + 16 * 60e3);
+    assert.equal(sent().length, n + 1); assert.match(lastText(), /written no output/);
+  } finally { building.setPrefs({ notify: prev }); items = []; }
+});
+
 test('reply by text, an item that moved on, a viewer who can only read, and expired buttons', async () => {
   items = [{ id: 'gone', kind: 'reply', floorId: 'pos', floorName: 'POS', agentId: 'budi', agentName: 'Budi - Dev', text: 'Should I also add the wishlist?' }];
   await notify.notifyTick(T + 4000);

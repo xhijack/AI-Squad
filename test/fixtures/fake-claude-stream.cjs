@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Fake `claude -p --output-format stream-json`: reads the prompt on stdin, prints an init event, a tool call, a text
 // reply and the result. FAKE_CLAUDE_MODE: fail (an error result, exit 1), budget (stopped at the budget), slow (waits
-// before answering), quota (a rate-limit event first), commit (writes a file in its folder and commits it), handoff (a
+// before answering), quota (a rate-limit event first), denied (a Bash call denied in "dontAsk" mode), commit (writes a file in its folder and commits it), handoff (a
 // prompt "Handoff h-..." gets a done reply in the outbox; any other prompt writes $FAKE_CLAUDE_OUTBOX as a package).
 // Args, the prompt and whether ANTHROPIC_API_KEY or an ERPNext key was set go to $FAKE_CLAUDE_LOG.
 const fs = require('fs');
@@ -30,6 +30,11 @@ process.stdin.on('end', () => {
     out({ type: 'system', subtype: 'init', session_id: sid, model: 'claude-sonnet-5-5', tools: ['Read', 'Edit'] });
     if (mode === 'quota') out({ type: 'rate_limit_event', session_id: sid, rate_limits: { five_hour: { used_percentage: 91, resets_at: 1793050000 } } });
     out({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'README.md' } }] } });
+    const denied = mode === 'denied' ? [{ tool_name: 'Bash', tool_use_id: 'tu-1', tool_input: { command: 'ssh erpnext@192.168.0.150 df -h' } }] : [];
+    if (denied.length) {
+      out({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', id: 'tu-1', name: 'Bash', input: { command: 'ssh erpnext@192.168.0.150 df -h' } }] } });
+      out({ type: 'user', session_id: sid, message: { content: [{ type: 'tool_result', tool_use_id: 'tu-1', is_error: true, content: "Permission to use Bash has been denied because Claude Code is running in don't ask mode." }] } });
+    }
     out({ type: 'assistant', session_id: sid, message: { content: [{ type: 'text', text: `Done: ${prompt.trim().slice(0, 40)}` }] } });
     if (mode === 'commit') {
       require('fs').writeFileSync(require('path').join(process.cwd(), `work-${sid}.txt`), prompt.slice(0, 200));
@@ -45,7 +50,7 @@ process.stdin.on('end', () => {
     }
     if (mode === 'fail') { out({ type: 'result', subtype: 'error_during_execution', is_error: true, result: 'Something broke', session_id: sid, total_cost_usd: 0.01, num_turns: 1 }); process.exit(1); }
     if (mode === 'budget') { out({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: '', session_id: sid, total_cost_usd: 0.5, num_turns: 3 }); process.exit(1); }
-    out({ type: 'result', subtype: 'success', is_error: false, result: `Done: ${prompt.trim().slice(0, 40)}`, session_id: sid, total_cost_usd: 0.0421, num_turns: 2, duration_ms: 1200, usage: { input_tokens: 900, output_tokens: 120 } });
+    out({ type: 'result', subtype: 'success', is_error: false, result: `Done: ${prompt.trim().slice(0, 40)}`, session_id: sid, total_cost_usd: 0.0421, num_turns: 2, duration_ms: 1200, usage: { input_tokens: 900, output_tokens: 120 }, permission_denials: denied });
     process.exit(0);
   };
   if (mode === 'slow') setTimeout(go, 30000); else go();

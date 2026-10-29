@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Targets (1.1): definitions, status, periods, manual and ERPNext and CSV and webhook values, the agents' KPI.md,
+// Targets (1.3): definitions, status, periods, manual and ERPNext and CSV and webhook values, the agents' KPI.md,
 // the cockpit across Spaces, the Blueprint seeds, the digest, who may change what.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The Company Guide (1.2): the owner's answers become a plan (with or without Claude Code), the plan builds the
+// The Company Guide (1.4): the owner's answers become a plan (with or without Claude Code), the plan builds the
 // Spaces with their targets, shifts, budgets and materials lists, the company plan reaches the Company Brain and
 // the agents, the owner's language reaches the agents; only the Owner runs the guide; it can be run again.
 import { test, after } from 'node:test';

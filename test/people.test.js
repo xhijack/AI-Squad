@@ -122,6 +122,34 @@ test('chat in General: a neutral folder with only the agent\'s identity and the 
   assert.equal((await call('POST', `/api/floors/${salesId}/agents/${sari}/chat`, { text: 'x', context: 'elsewhere' })).status, 400);
 });
 
+test('a chat reply denied tools in the background shows them; the Owner allows a narrow rule and it runs again, or it goes to the Desk', async () => {
+  process.env.FAKE_CLAUDE_MODE = 'denied';
+  const tick = () => jobs.jobsTick().forEach((j) => squad.logJobEnded(j));
+  const url = `/api/floors/${salesId}/agents/${sari}/chat`;
+  try {
+    await call('POST', url, { text: 'How full is the disk on the ERPNext server?' });
+    const reply = await until(async () => { const t = (await call('GET', url)).body; return !t.awaiting && t.messages.at(-1)?.from === 'agent' ? t.messages.at(-1) : (tick(), null); });
+    assert.deepEqual(reply.denials, [{ id: 'tu-1', tool: 'Bash', command: 'ssh erpnext@192.168.0.150 df -h', rule: 'Bash(ssh erpnext@192.168.0.150 *)' }]);
+    const ev = squadLog.read(salesId, { type: 'permission.denied' }).at(-1);
+    assert.deepEqual([ev.agent, ev.data.tool, ev.data.command], [sari, 'Bash', 'ssh erpnext@192.168.0.150 df']);
+    // only the Owner widens permissions; narrow rules only
+    const fresh = (await call('POST', '/api/users/dewi/pin', {})).body.pin;
+    assert.equal((await call('POST', `${url}/allow`, { msgId: reply.id }, fresh)).status, 403);
+    assert.match((await call('POST', `${url}/allow`, { msgId: reply.id, rules: ['Bash(git push *)'] })).body.error, /never allowed/);
+    const n = calls().length;
+    const r = await call('POST', `${url}/allow`, { msgId: reply.id });
+    assert.equal(r.status, 200, JSON.stringify(r.body)); assert.deepEqual(r.body.added, ['Bash(ssh erpnext@192.168.0.150 *)']);
+    assert.ok(JSON.parse(fs.readFileSync(path.join(sales, '.claude', 'settings.json'), 'utf8')).permissions.allow.includes('Bash(ssh erpnext@192.168.0.150 *)'));
+    await until(() => calls().length > n);
+    assert.match(calls().at(-1).prompt, /Message:\nHow full is the disk on the ERPNext server\?$/, 'the same message again');
+    assert.equal(squadLog.read(salesId, { type: 'permission.answered' }).at(-1).data.allowed[0], 'Bash(ssh erpnext@192.168.0.150 *)');
+    assert.equal((await call('POST', `${url}/allow`, { msgId: reply.id })).status, 400, 'not while it answers');
+    await until(async () => { const t = (await call('GET', url)).body; return !t.awaiting || (tick(), null); });
+    assert.equal((await call('POST', `${url}/desk`, { msgId: 'm-none' })).status, 400);
+    assert.equal((await call('POST', `${url}/allow`, { msgId: reply.id, context: 'general' })).status, 400, 'rules belong to a Space');
+  } finally { delete process.env.FAKE_CLAUDE_MODE; }
+});
+
 test('chat helpers: the job prompt keeps the last turns, the lead note is short', () => {
   const msgs = Array.from({ length: 14 }, (_, i) => ({ from: i % 2 ? 'agent' : 'person', name: 'Owner', text: `m${i}` }));
   const p = chat.jobPrompt({ name: 'Owner', text: 'now', context: 'space', messages: [...msgs, { from: 'person', text: 'now' }], spaceName: 'POS' });

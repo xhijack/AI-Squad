@@ -10,7 +10,7 @@ Dokumentasi lengkap (bahasa Inggris) ada di [README](../../README.md).
   (Sales, Marketing, Legal). Akses *Team* atau *Owner only*: Space khusus Owner tidak terlihat oleh orang lain.
 - **Blueprint** menyiapkan tim, dokumen sumber, dan aturan kerja: Software House, ERP Consultant, Sales & CRM,
   Digital Marketing (shift malam), Product, Legal (khusus Owner).
-- **Siapkan Perusahaan** (1.2): pemandu untuk pemilik yang belum tahu harus mulai dari mana. Beberapa pertanyaan
+- **Siapkan Perusahaan** (1.4): pemandu untuk pemilik yang belum tahu harus mulai dari mana. Beberapa pertanyaan
   dalam bahasamu, lalu rencana: satu Space per divisi (boleh satu saja), target awal dari tujuanmu, mode kerja
   (otomatis, diawasi, manual; Legal selalu manual kecuali kamu ubah), jam kerja, budget, dan daftar bahan per divisi
   (ada / belum / nanti). Yang belum ada menjadi tugas pertama lead: mewawancaraimu dan membuat drafnya.

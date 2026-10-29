@@ -67,7 +67,7 @@ setInterval(() => { notify.notifyTick().catch((e) => console.error('[notify]', e
 setInterval(() => { try { const r = inbox.tick(); if (r) console.log(`[insight] ${r.found} patterns, ${r.added.length} new suggestions`); } catch (e) { console.error('[insight]', e.message); } }, 60000).unref();
 // the handoff bus and the ERPNext watcher (0.19): packages out of every outbox; the pipeline every few minutes
 setInterval(() => { handoffTick().then((r) => { for (const x of r.sent) console.log(`[handoff] ${x.ok ? `${x.id} ${x.status}` : `refused: ${x.reason}`}`); if (r.erp?.error) console.error('[erpnext]', r.erp.error); }, (e) => console.error('[handoff]', e.message)); }, 20000).unref();
-// targets (1.1): ERPNext and CSV targets measured on their interval
+// targets (1.3): ERPNext and CSV targets measured on their interval
 setTimeout(() => { kpiTick().catch((e) => console.error('[kpi]', e.message)); }, 20000).unref();
 setInterval(() => { kpiTick().then((r) => { for (const x of r) console.log(`[kpi] ${x.floorId}/${x.kpi}: ${x.error ? `failed: ${x.error}` : x.value}`); }, (e) => console.error('[kpi]', e.message)); }, 3600e3).unref();
 // the dispatcher: starts queued work when there is room, stops agents that sit idle

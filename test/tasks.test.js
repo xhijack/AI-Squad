@@ -68,3 +68,39 @@ test('stalls: quiet output for 10 minutes, or far longer than usual (learned per
   assert.equal(tasks.typicalMs('pytest', history), 0, 'no history: no "long" stall');
   assert.equal(tasks.duration(452e3), '7m 32s'); assert.equal(tasks.duration(45e3), '45s'); assert.equal(tasks.duration(3840e3), '1h 04m');
 });
+
+test('services: dev servers, watchers and log tails by their command, description or what they printed', () => {
+  for (const c of ['pnpm dev', 'npm run dev -- --port 3001', 'yarn start', 'next dev', 'npx vite --host', 'docker compose up', 'docker-compose up web', 'node --test --watch', 'tail -f logs/app.log', 'bench start', 'python -m http.server 8000', 'uvicorn app:app --reload', 'npm run build && npm run dev'])
+    assert.equal(tasks.classify(c).kind, 'service', c);
+  for (const c of ['npm test', 'npm run build', 'vite build', 'docker compose up -d', 'docker compose up --detach db', 'pnpm install', 'tail -n 50 log'])
+    assert.notEqual(tasks.classify(c).kind, 'service', c);
+  assert.equal(tasks.classify('npm run x', 'Rebuild renderer and start dev server').kind, 'service');
+  for (const o of ['  ➜  Local:   http://localhost:5173/', 'ready on http://0.0.0.0:3000', 'Server running at http://127.0.0.1:8080', 'Listening on port 4000', '\x1b[32mwatching for file changes\x1b[0m'])
+    assert.ok(tasks.looksLikeService(o), o);
+  assert.ok(!tasks.looksLikeService('✓ 40 passed (12s)'));
+  // the agent is busy with the newest command that is not a service; services stand beside it
+  const running = [{ id: 'b1', kind: 'service', background: true }, { id: 'b2', kind: 'command', background: true, out: 'VITE ready in 300 ms\n  Local: http://localhost:5173/' }, { id: 't1', kind: 'tests', background: false }];
+  const out = (t) => t.out || '';
+  assert.deepEqual(tasks.splitRunning(running, out).services.map((t) => t.id), ['b1', 'b2']);
+  assert.equal(tasks.splitRunning(running, out).task.id, 't1');
+  assert.equal(tasks.splitRunning(running.slice(0, 2), out).task, null, 'only services: the agent is not working on anything');
+  assert.equal(tasks.splitRunning([{ id: 'f', kind: 'service', background: false }]).task.id, 'f', 'a foreground dev server blocks the agent: it is its work');
+  // waiting on a service only stalls when the service has been silent for the quiet threshold
+  const now = T0 + 3600e3;
+  assert.equal(tasks.serviceWaitStall({ waitStartedAt: now - 30 * 60e3, serviceOutputAt: now - 60e3, now }), '');
+  assert.equal(tasks.serviceWaitStall({ waitStartedAt: now - 30 * 60e3, serviceOutputAt: now - 11 * 60e3, now }), 'quiet');
+  assert.equal(tasks.serviceWaitStall({ waitStartedAt: now - 2 * 60e3, serviceOutputAt: now - 40 * 60e3, now }), '', 'a fresh wait');
+});
+
+test('Stop finds the service\'s shell under the agent\'s session, with its children, and nothing else', () => {
+  const rows = tasks.parsePs(`  100     1 tmux
+  200   100 claude --agent dev
+  300   200 /bin/bash -c -l source snap && eval 'pnpm dev' < /dev/null
+  301   300 node /x/.bin/vite
+  302   301 esbuild --service
+  400   200 /bin/bash -c -l eval 'npm test'
+  900     1 /bin/bash -c pnpm dev`);
+  assert.deepEqual(tasks.serviceProcesses(rows, [100], 'pnpm dev'), [300, 301, 302], 'not the other session\'s pnpm dev (900)');
+  assert.deepEqual(tasks.serviceProcesses(rows, [100], 'yarn start'), []);
+  assert.deepEqual(tasks.serviceProcesses(rows, [100], ''), [], 'no command: nothing');
+});

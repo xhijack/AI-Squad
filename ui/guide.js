@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The Company Guide (1.2): the first thing a new owner meets, and "Set up the company" in the Lobby afterwards.
+// The Company Guide (1.4): the first thing a new owner meets, and "Set up the company" in the Lobby afterwards.
 // Eight short steps with buttons (language, the business, the goals, what exists, the divisions, what runs by
 // itself, the machine and the budget), then the plan in plain words to edit and build. Every answer is saved on
 // the server (GET/PUT /api/guide), so the owner can stop and come back; the language choice reloads the page in

@@ -86,6 +86,27 @@ test('TASKS.md is parsed into board columns', () => {
   assert.equal(squad.floorDetail('shop').board.tasks.length, 5);
 });
 
+test('current sprint: the highest open sprint named in PLAN.md / TASKS.md or config.sh (1.2.0)', () => {
+  assert.equal(sprint.headingSprint('# PLAN Sprint 17 (28 Okt 2026)\n'), 17);
+  assert.equal(sprint.headingSprint('Intro about sprint 3\n\n# Task list Sprint 16\n'), 16);
+  assert.equal(sprint.headingSprint('# Tasks\n'), null);
+  const cfg = read(proj, '.claude/squad/config.sh'), plan = read(proj, 'docs/squad/PLAN.md'), tasks = read(proj, 'docs/squad/TASKS.md');
+  try {
+    fs.writeFileSync(path.join(proj, '.claude/squad/config.sh'), cfg.replace(/^SPRINT=.*$/m, 'SPRINT="15"'));
+    write(proj, 'docs/squad/PLAN.md', '# PLAN Sprint 16\n');
+    write(proj, 'docs/squad/TASKS.md', `# Task list Sprint 16\n\n${tasks.split('\n').slice(2).join('\n')}`);
+    assert.equal(sprint.currentSprint(proj), '16');                     // config.sh lags behind the docs
+    assert.equal(sprint.boardData(proj).sprint, '16');
+    write(proj, 'docs/squad/PLAN.md', '# PLAN Sprint 17\n');
+    write(proj, 'docs/squad/sprint-17/RELEASE.md', '# Release\n');       // 17 released: not the current one
+    assert.equal(sprint.currentSprint(proj), '16');
+  } finally {
+    fs.writeFileSync(path.join(proj, '.claude/squad/config.sh'), cfg); write(proj, 'docs/squad/PLAN.md', plan); write(proj, 'docs/squad/TASKS.md', tasks);
+    fs.rmSync(path.join(proj, 'docs/squad/sprint-17'), { recursive: true, force: true });
+  }
+  assert.equal(sprint.currentSprint(proj), '1');
+});
+
 const hook = (name, input) => spawnSync(process.execPath, [path.join(proj, '.claude/hooks', name)], { input: JSON.stringify(input), env: { ...process.env, CLAUDE_PROJECT_DIR: proj }, encoding: 'utf8' });
 
 test('TaskCompleted gate: handoff, bug status, QA report and open bugs', () => {

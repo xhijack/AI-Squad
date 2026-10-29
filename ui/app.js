@@ -2,7 +2,7 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { createSceneHost } from './renderer.js';
 import { OVERVIEWS, defaultOverview } from './scene-model.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago, oneAtATime, newKey } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -26,9 +26,15 @@ import './people.js';
 import { maybeOpen as maybeOpenGuide } from './guide.js';
 import './chat.js';
 import { attentionIndexHtml } from './convo.js';
+import { readAskForm } from './askform.js';
 import { playLine } from './voice.js';
 import { shoutStep, floorIdle, speak, voiceOn, setVoice } from './shout.js';
 import { t as tt, tx, LANG, LANGS, setLang, translateDom } from './i18n.js';
+import { makePatcher } from './patch.js';
+import { dockLayout, dockHtml as renderDock, moreHtml } from './dock.js';
+import { STATES, statusPill } from './status.js';
+import { feedOpen } from './feed.js';
+import { claim } from './notified.js';
 
 translateDom();                                       // the static parts of index.html
 $('langName').textContent = LANGS[LANG];
@@ -62,7 +68,7 @@ const scene = createSceneHost($('scene'), {
   onPickAgent: (floorId, agentId) => { if (!ctx.editing && (state.route.floorId === floorId || state.route.mode === 'lobby')) location.hash = `#/floor/${floorId}/desk/${agentId}`; },
   onPickQueue: () => ctx.actions.admin?.({ dataset: { tab: 'dispatcher' } }),                          // Office / List: the Lobby
   onPickOwner: () => document.querySelector('[data-pop="attPop"]')?.click(),                            // Office / List: approvals
-  onPickTargets: () => ctx.actions.admin?.({ dataset: { tab: 'targets' } }),                           // List: the targets (1.1)
+  onPickTargets: () => ctx.actions.admin?.({ dataset: { tab: 'targets' } }),                           // List: the targets (1.3)
   onPickScreen: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/screen`; },
   onPickRack: () => { if (!ctx.editing) ctx.actions.meter(); },
   onPickEyes: (floorId, agentId) => { if (!ctx.editing && state.route.floorId === floorId) location.hash = `#/floor/${floorId}/desk/${agentId}/eyes`; },
@@ -133,11 +139,13 @@ function getTaskForm() {
   f.className = 'taskBox';
   f.innerHTML = `<textarea name="text" placeholder="${tt('Describe the task. The agent gets it as a message in its Claude Code session.')}" aria-label="${tt('Task')}" required></textarea>
     <div class="files" data-files></div>
-    <div class="row" style="margin-top:8px"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="chip" style="cursor:pointer">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>
+    <div class="row" style="margin-top:var(--sp-2)"><label class="ghost" style="margin:0"><input type="file" multiple hidden data-file><span class="btn small ghost" tabindex="0" role="button">${tt('+ Attach files')}</span></label><span class="spacer"></span><button class="gold" type="submit">${tt('Send task')}</button></div>
     <details class="bgOpts"><summary>${tt('Run in the background')}</summary>
       <label class="inline"><input type="checkbox" name="bg"> ${tt('As a background job: no terminal, ends by itself, every step in the Squad Log')}</label>
       <div class="row"><label class="inline" style="margin:0">${tt('Budget (USD)')} <input name="budget" type="number" min="0.1" max="50" step="0.5" value="2" style="width:80px"></label>
       <label class="inline" style="margin:0"><input type="checkbox" name="edits"> ${tt('May edit files')}</label></div></details>`;
+  // the attach button is a label around the file input: Enter and Space open the picker too
+  f.querySelector('.btn[role=button]').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); f.querySelector('[data-file]').click(); } });
   f.querySelector('[data-file]').addEventListener('change', async (e) => {
     for (const file of e.target.files) {
       try {
@@ -147,25 +155,26 @@ function getTaskForm() {
     }
     e.target.value = '';
   });
-  f.addEventListener('submit', async (e) => {
+  // one submission at a time (Enter and a click, a double click); its key makes a duplicate that still arrives a no-op
+  f.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = f.elements.text.value.trim();
     if (!text) return;
-    const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
-    try {
-      if (f.elements.bg.checked) {
-        const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' });
-        if (!r) { btn.disabled = false; return; }
-        toast(r.waiting ? queuedText(r) : tt('Background job started'), r.waiting ? 6000 : 2800);
-        f.elements.text.value = ''; taskFiles = []; drawFiles(); btn.disabled = false; refresh();
-        return;
-      }
-      const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) });
-      toast(r.waiting ? queuedText(r) : r.queued ? tx(r.note) : tt('Task sent'), r.waiting ? 6000 : 2800);
-      f.elements.text.value = ''; taskFiles = []; drawFiles();
-      refresh();
-    } catch (err) { toast(err.message); }
-    btn.disabled = false;
+    f.dataset.key ||= newKey();
+    oneAtATime(f, async () => {
+      try {
+        if (f.elements.bg.checked) {
+          const r = await guarded(`/api/floors/${state.route.floorId}/agents/${state.route.agentId}/jobs`, { prompt: text, attachments: taskFiles.map((x) => x.path), budgetUsd: +f.elements.budget.value || 2, permissionMode: f.elements.edits.checked ? 'acceptEdits' : 'dontAsk' }, false, f.dataset.key);
+          if (!r) return;
+          toast(r.waiting ? queuedText(r) : tt('Background job started'), r.waiting ? 6000 : 2800);
+        } else {
+          const r = await api('POST', `/api/floors/${state.route.floorId}/agents/${state.route.agentId}/task`, { text, attachments: taskFiles.map((x) => x.path) }, { key: f.dataset.key });
+          toast(r.waiting ? queuedText(r) : r.queued ? tx(r.note) : tt('Task sent'), r.waiting ? 6000 : 2800);
+        }
+        f.elements.text.value = ''; taskFiles = []; drawFiles(); delete f.dataset.key;
+        refresh();
+      } catch (err) { toast(err.message); }
+    });
   });
   f.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) f.requestSubmit(); });
   function drawFiles() {
@@ -197,24 +206,23 @@ function tabsHtml(list, active, group) {
   return list.map((s) => `<button role="tab" data-tab="${group}:${s.id}" aria-selected="${s.id === active}">${s.icon ? icon(s.icon) : ''}${esc(s.title)}${s.count ? `<span class="count ${s.countClass || ''}">${s.count}</span>` : ''}</button>`).join('');
 }
 
-// set innerHTML only when it changed and the user is not typing inside; keep scroll positions and slots
-function patch(el, html) {
-  if (el._html === html) return;
-  const active = document.activeElement;
-  if (active && el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName) && !active.closest('[data-slot]')) return;
-  const scrolls = {};
-  el.querySelectorAll('[data-scroll]').forEach((s) => { scrolls[s.dataset.scroll] = { top: s.scrollTop, bottom: s.scrollHeight - s.scrollTop - s.clientHeight < 24 }; });
-  const bodies = [...el.querySelectorAll('.cardBody')].map((x) => x.scrollTop);
-  const bodyTop = el.scrollTop;
-  for (const slot of el.querySelectorAll('[data-slot]')) for (const c of [...slot.children]) c.remove();   // keep slot nodes alive
-  el.innerHTML = html;
-  el._html = html;
-  el.querySelectorAll('[data-slot="task"]').forEach((s) => s.appendChild(getTaskForm()));
-  // new scroll areas start at the end (screens, a reply card's ask); a Finished report starts at its first lines
-  el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p ? ('top' in s.dataset ? 0 : s.scrollHeight) : p.bottom && !('top' in s.dataset) ? s.scrollHeight : p.top; });
-  el.querySelectorAll('.cardBody').forEach((x, i) => { x.scrollTop = bodies[i] || 0; });
-  el.scrollTop = bodyTop;
-}
+// set innerHTML only when it changed, never under the owner's typing or a click (ui/patch.js); keep scroll positions and slots
+const patcher = makePatcher({
+  // the kept task form; Send task is filled (primary) only while it is the Desk's next useful action
+  fillSlots: (el) => el.querySelectorAll('[data-slot="task"]').forEach((s) => { const f = getTaskForm(); f.querySelector('[type=submit]').classList.toggle('gold', s.dataset.primary === '1'); s.appendChild(f); }),
+  before: (el) => {
+    const scrolls = {};
+    el.querySelectorAll('[data-scroll]').forEach((s) => { scrolls[s.dataset.scroll] = { top: s.scrollTop, bottom: s.scrollHeight - s.scrollTop - s.clientHeight < 24 }; });
+    return { scrolls, bodies: [...el.querySelectorAll('.cardBody')].map((x) => x.scrollTop), top: el.scrollTop };
+  },
+  after: (el, { scrolls, bodies, top }) => {
+    // new scroll areas start at the end (screens, a reply card's ask); a Finished report starts at its first lines
+    el.querySelectorAll('[data-scroll]').forEach((s) => { const p = scrolls[s.dataset.scroll]; s.scrollTop = !p ? ('top' in s.dataset ? 0 : s.scrollHeight) : p.bottom && !('top' in s.dataset) ? s.scrollHeight : p.top; });
+    el.querySelectorAll('.cardBody').forEach((x, i) => { x.scrollTop = bodies[i] || 0; });
+    el.scrollTop = top;
+  },
+});
+const patch = (el, html) => patcher.patch(el, html);
 
 // one floating card: an optional back link, tabs when it holds several sections, the active section's body
 function cardHtml(list, group) {
@@ -289,17 +297,19 @@ function hudHtml(b, route, f) {
   const c = f.counts || {}, active = (c.working || 0) + (c.waiting || 0), board = state.floor?.id === f.id ? state.floor.board : null;
   const tasks = board?.tasks || [], done = tasks.filter((t) => t.column === 'DONE').length;
   const progress = tasks.length ? `<span class="sep"></span><button class="sprintBtn" data-act="board" title="${tt('Open the board')}">${board.sprint ? `<b>${tt('Sprint {name}', { name: esc(board.sprint) })}</b>` : `<b>${tt('Board')}</b>`}<span class="prog"><i style="width:${Math.round(done / tasks.length * 100)}%"></i></span><span class="meta">${done}/${tasks.length}</span></button>` : '';
+  // status chips inside the header card: icon + text, and the action that clears it
   let warn = '';
   if (!f.independent && !f.missing) {
-    if (f.budget?.level === 'over') warn = `<span class="hpill warn">${icon('alert')}${tt('Budget reached')}</span>`;
-    else if (f.agents.some((a) => a.crash && !a.crash.withLead)) { const c = f.agents.find((a) => a.crash && !a.crash.withLead); warn = `<a class="hpill wait" href="#/floor/${f.id}/desk/${c.id}" title="${esc(tx(c.crash.text))}">${icon('alert')}<span class="ellipsis">${tt('{name} stopped unexpectedly', { name: esc(String(c.displayName).split(' - ')[0]) })}</span></a>`; }
-    else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<button class="hpill warn" data-act="start-all" title="${tt('Start every agent of this Floor')}">${icon('alert')}${tt('Squad not running')}</button>`;
-    else if (f.waitingFor) warn = `<button class="hpill wait" data-act="waiting-for" title="${esc(f.waitingFor.docs ? tt('Not approved yet: {docs}', { docs: f.waitingFor.docs.join(', ') }) : tt('Open what the squad waits for'))}">${icon('alert')}<span class="ellipsis">${esc(tx(f.waitingFor.text))}</span></button>`;
-    else if (f.budget?.level === 'warn') warn = `<span class="hpill warn">${icon('alert')}${tt('Budget {pct} %', { pct: Math.round(f.budget.pct) })}</span>`;
+    if (f.budget?.level === 'over') warn = `<span class="hchip bad">${icon('alert')}${tt('Budget reached')}</span>`;
+    else if (f.agents.some((a) => a.crash && !a.crash.withLead)) { const c = f.agents.find((a) => a.crash && !a.crash.withLead); warn = `<a class="hchip bad" href="#/floor/${f.id}/desk/${c.id}" title="${esc(tx(c.crash.text))}">${icon('alert')}<span class="ellipsis">${tt('{name} stopped unexpectedly', { name: esc(String(c.displayName).split(' - ')[0]) })}</span></a>`; }
+    else if (f.agents.length && !f.agents.some((a) => a.running)) warn = `<span class="hchip warn">${icon('pause')}${tt('Squad not running')}</span><button class="small gold" data-act="start-all" title="${tt('Start every agent of this Floor')}">${tt('Start squad')}</button>`;
+    else if (f.waitingFor) warn = `<button class="hchip wait" data-act="waiting-for" title="${esc(f.waitingFor.docs ? tt('Not approved yet: {docs}', { docs: f.waitingFor.docs.join(', ') }) : tt('Open what the squad waits for'))}">${icon('alert')}<span class="ellipsis">${esc(tx(f.waitingFor.text))}</span></button>`;
+    else if (f.budget?.level === 'warn') warn = `<span class="hchip warn">${icon('coin')}${tt('Budget {pct} %', { pct: Math.round(f.budget.pct) })}</span>`;
   }
+  const status = warn || apChip(f) ? `<span class="sep"></span><span class="hstatus">${warn}${apChip(f)}</span>` : '';
   return `<div class="bar"><a class="iconBtn" href="#/" title="${tt('Lobby')}" aria-label="${tt('Back to the Lobby')}">${icon('building')}</a><span class="lamp ${f.lamp}"></span>
-    <b class="brand ellipsis">${f.number} · ${esc(f.name)}</b>${progress}<span class="sep"></span><span class="meta">${tt('<b>{n}</b>/{total} active', { n: active, total: f.agents.length })}</span>
-    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="${tt('Floor menu')}" aria-label="${tt('Floor menu')}">${icon('more')}</button>`}${menu}</div>${warn}${apChip(f)}${attPill}`;
+    <b class="brand ellipsis">${f.number} · ${esc(f.name)}</b>${progress}<span class="sep"></span><span class="meta">${tt('<b>{n}</b>/{total} active', { n: active, total: f.agents.length })}</span>${status}
+    ${f.independent || f.missing ? '' : `<button class="iconBtn" data-pop="floorMenu" aria-haspopup="true" aria-expanded="false" title="${tt('Floor menu')}" aria-label="${tt('Floor menu')}">${icon('more')}</button>`}${menu}</div>${attPill}`;
 }
 
 // the Floor's Autopilot level; when a critical item waits it says so (opens the Floor settings)
@@ -308,7 +318,7 @@ function apChip(f) {
   const ap = f.autopilot;
   if (!ap || f.independent || f.missing) return '';
   const name = AP_NAME[ap.level] || ap.level[0].toUpperCase() + ap.level.slice(1);
-  return `<button class="hpill ap ${ap.level}${ap.critical ? ' crit' : ''}" data-act="floor-settings" title="${esc(ap.level === 'off' ? tt('Autopilot is off: every question waits for you') : tt('Autopilot {name}: non-critical questions are decided after {min} min', { name, min: Math.round(ap.timeoutSec / 60) }))}">${tt('Autopilot: {level}', { level: name })}${ap.critical ? ` · ${ap.critical === 1 ? tt('{n} critical waits for you', { n: 1 }) : tt('{n} critical wait for you', { n: ap.critical })}` : ''}</button>`;
+  return `<button class="hchip ap ${ap.level}${ap.critical ? ' crit' : ''}" data-act="floor-settings" title="${esc(ap.level === 'off' ? tt('Autopilot is off: every question waits for you') : tt('Autopilot {name}: non-critical questions are decided after {min} min', { name, min: Math.round(ap.timeoutSec / 60) }))}">${icon(ap.critical ? 'alert' : 'spark')}${tt('Autopilot: {level}', { level: name })}${ap.critical ? ` · ${ap.critical === 1 ? tt('{n} critical waits for you', { n: 1 }) : tt('{n} critical wait for you', { n: ap.critical })}` : ''}</button>`;
 }
 
 function floorMenuHtml(f) {
@@ -330,26 +340,41 @@ const WORST = (m) => {
   items.sort((x, y) => (rank[L[y[0]]] || 0) - (rank[L[x[0]]] || 0) || y[2] - x[2]);
   return { level: L.overall || 'ok', text: items[0][1] };
 };
-function dockHtml(b, route, f) {
-  const btn = (act, ic, tip, extra = '', label = '') => `<button class="dk" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(ic)}${label ? `<span>${label}</span>` : ''}</button>`;
+// labelled buttons in groups (View · Team · System); on a phone four and More (ui/dock.js)
+function dockItems(b, route, f) {
   const w = WORST(b.meter), voice = voiceOn(), floor = route.mode !== 'lobby' && f && !f.missing;
   const out = [];
-  if (!floor) out.push(btn('setup-squad', 'spark', tt('Set up Squad'), '', tt('Set up Squad')), '<span class="dsep"></span>');
-  if (!floor) out.push(`<span class="ovSeg" role="group" aria-label="${tt('Overview')}">${[['building', tt('Building')], ['office', tt('Office')], ['list', tt('List')]].map(([v, l]) => `<button class="dk ov" data-act="overview" data-v="${v}" aria-pressed="${ctx.overview === v}">${l}</button>`).join('')}</span>`, '<span class="dsep"></span>');
-  if (floor && state.floor?.board) out.push(btn('board', 'board', tt('Board')));
-  if (floor && f.workflow === 'squad-sprint') out.push(btn('performance', 'chart', tt('Performance and cost projection')));
-  if (floor) out.push(btn('log', 'log', tt('Squad Log: timeline and conversation')));
-  if (floor && !f.independent) out.push(btn('audit', 'audit', tt('Audit: process and token efficiency')));
-  out.push(btn('cost', 'coin', floor ? tt('Cost of this Floor') : tt('Cost of all Floors'), '', money(floor ? f.cost.today : b.costToday)));
-  out.push(`<button class="dk ${w.level}" data-act="meter" data-tip="${tt('Server meter: CPU, RAM, swap and disk')}" aria-label="${tt('Server meter, {value}', { value: esc(w.text) })}">${icon('server')}<i class="sdot ${w.level}"></i><span>${esc(w.text)}</span></button>`);
-  out.push('<span class="dsep"></span>');
-  if (floor && !f.independent) out.push(btn('add-agent', 'user-plus', tt('Add agent')));
-  out.push(btn('voice', voice ? 'vol' : 'mute', voice ? tt('Lead voice: on') : tt('Lead voice: off'), `aria-pressed="${voice}"`));
-  out.push(`<button class="dk" data-pop="legendPop" data-tip="${tt('Legend and controls')}" aria-label="${tt('Legend and controls')}" aria-expanded="false">${icon('info')}</button>`);
-  return out.join('');
+  if (!floor) {
+    out.push({ id: 'setup', group: 'view', prio: 1, act: 'setup-squad', icon: 'spark', label: tt('Set up Squad'), tip: tt('Set up Squad') });
+    out.push({ id: 'overview', group: 'view', prio: 0, html: `<span class="ovSeg" role="group" aria-label="${tt('Overview')}">${[['building', tt('Building')], ['office', tt('Office')], ['list', tt('List')]].map(([v, l]) => `<button class="dk ov" data-act="overview" data-v="${v}" aria-pressed="${ctx.overview === v}">${l}</button>`).join('')}</span>` });
+  }
+  if (floor && state.floor?.board) out.push({ id: 'board', group: 'view', prio: 1, act: 'board', icon: 'board', label: tt('Board'), tip: tt('Board') });
+  if (floor && f.workflow === 'squad-sprint') out.push({ id: 'performance', group: 'view', prio: 7, act: 'performance', icon: 'chart', label: tt('Stats'), tip: tt('Performance and cost projection') });
+  if (floor) out.push({ id: 'log', group: 'view', prio: 2, act: 'log', icon: 'log', label: tt('Log'), tip: tt('Squad Log: timeline and conversation') });
+  if (floor && !f.independent) out.push({ id: 'audit', group: 'view', prio: 8, act: 'audit', icon: 'audit', label: tt('Audit'), tip: tt('Audit: process and token efficiency') });
+  if (floor && !f.independent) out.push({ id: 'add-agent', group: 'team', prio: 3, act: 'add-agent', icon: 'user-plus', label: tt('Add agent'), tip: tt('Add agent') });
+  out.push({ id: 'voice', group: 'team', prio: 6, act: 'voice', icon: voice ? 'vol' : 'mute', label: tt('Voice'), tip: voice ? tt('Lead voice: on') : tt('Lead voice: off'), pressed: voice });
+  out.push({ id: 'cost', group: 'system', prio: 4, act: 'cost', icon: 'coin', label: money(floor ? f.cost.today : b.costToday), value: true, tip: floor ? tt('Cost of this Floor') : tt('Cost of all Floors') });
+  out.push({ id: 'meter', group: 'system', prio: 5, act: 'meter', icon: 'server', label: w.text, value: true, level: w.level, tip: tt('Server meter: CPU, RAM, swap and disk'), aria: tt('Server meter, {value}', { value: w.text }) });
+  out.push({ id: 'legend', group: 'system', prio: 9, pop: 'legendPop', icon: 'info', label: tt('Help'), tip: tt('Legend and controls') });
+  return out;
+}
+let dockMore = [];
+function dockHtml(b, route, f) {
+  const layout = dockLayout(dockItems(b, route, f), { phone: isPhone() });
+  dockMore = layout.more;
+  return renderDock(layout);
+}
+// labels show from 1024 px; when they do not fit beside the panel the dock drops to icons
+function fitDock() {
+  const dock = $('dock');
+  if (dock.hidden || isPhone()) return dock.classList.remove('compact');
+  dock.classList.remove('compact');
+  const side = $('side').hidden ? null : $('side').getBoundingClientRect(), room = (side && side.width ? side.left : innerWidth) - 32;
+  if (dock.offsetWidth > room) dock.classList.add('compact');
 }
 
-const LEGEND = `<div class="lgGrid"><span><i class="st working">${tt('working')}</i></span><span><i class="st waiting">${tt('needs you')}</i></span><span><i class="st idle">${tt('idle')}</i></span><span><i class="st stopped">${tt('stopped')}</i></span><span><i class="st standby">${tt('not started')}</i></span></div>
+const LEGEND = `<div class="lgGrid">${STATES.map((k) => `<span>${statusPill(k)}</span>`).join('')}</div>
   <ul class="lgList"><li>${tt('<b>Click a character</b> to look through its eyes')}</li><li>${tt('<b>Click a name chip</b> for the desk')}</li><li>${tt('<b>Click a monitor</b> for the screen view')}</li>
   <li>${tt('<b>Drag</b> to move around, <b>scroll</b> to zoom')}</li><li>${tt('<b>Esc</b> goes back one level')}</li></ul>`;
 
@@ -369,12 +394,14 @@ function render() {
   patch($('hud'), hudHtml(b, route, f));
   scene.setLoad(b.meter);
   announceAttention(needsYou(b.attention), route);
+  announceNotices(b.attention);
   if (!$('attPop').hidden) patch($('attPop'), attPopHtml(b.attention));
   if (!$('floorMenu').hidden && f) patch($('floorMenu'), floorMenuHtml(f));
   if (state.offline) toast(tt('Server not reachable, retrying…'));
 
   $('dock').hidden = !!ctx.editing;
   patch($('dock'), dockHtml(b, route, f));
+  fitDock();
   // a meeting starts at the table: the lead opens it in one short line
   if (f?.meeting && f.meeting.since !== lastMeeting[f.id]) {
     if (lastMeeting[f.id] !== undefined) playLine({ floorId: f.id, agentId: f.meeting.agents[0], kind: 'meeting', text: tt("{label}. Let's start.", { label: tx(f.meeting.label) }) });
@@ -398,7 +425,7 @@ function render() {
   const floorsForScene = b.floors.map((x) => (state.floor && state.floor.id === x.id ? { ...x, desks: state.floor.desks, devices: state.floor.devices } : x));
   scene.route(route, !!ctx.editing, ctx.overview);                     // three.js, Iso Pixel or the List (ui/renderer.js)
   scene.sync(floorsForScene);
-  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits, targets: b.targets || null });
+  scene.setCompany({ queued: b.limits?.queued || 0, attention: needsYou(b.attention).length, resources: b.resources, limits: b.limits, targets: b.targets || null, walks: b.walks || [] });
   showRenderer();
   const viewKey = routeKey(route) + (state.desk ? '' : '-') + ctx.overview;
   if (!ctx.editing && scene._viewKey !== viewKey) { scene._viewKey = viewKey; scene.setView({ ...route, overview: ctx.overview }); }
@@ -424,6 +451,17 @@ ctx.updateInsets = () => { insetKey = ''; updateInsets(); };
 ctx.isPhone = isPhone;
 ctx.panelBody = () => (isPhone() ? $('sheetBody') : $('sideMain'));
 
+// a stall notice is muted; a Notification only once it has lasted 15 minutes (its notifyAt), and once
+const noticed = new Set();
+function announceNotices(list) {
+  for (const a of list) {
+    if (!a.notice || noticed.has(a.id) || Date.now() < (a.notifyAt || 0)) continue;
+    noticed.add(a.id);
+    if (claim(a) && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(tt('Notice: {floor}', { floor: a.floorName || 'The AI Squad' }), { body: tx(String(a.text || '')).slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
+    }
+  }
+}
 // ---------- new Attention: open it by itself, badge the tab, notify when the tab is in the background ----------
 const lastMeeting = {};                // floorId -> the meeting already announced
 let seenAtt = null, attBooted = false;
@@ -435,13 +473,15 @@ function announceAttention(list, route) {
   // items that arrive later open the popover, so the two never open together
   if (!attBooted) { attBooted = true; fresh.forEach((a) => seenAtt.add(a.id)); return; }
   if (!fresh.length) return;
+  // the voice line and the Notification come from one tab only, once per item (ui/notified.js); every tab updates its panels
+  const mine = fresh.filter((a) => claim(a));
   // the newest report or question is said aloud by its character (short; the full text is in the conversation view)
-  const say = fresh.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
+  const say = mine.find((a) => ['finished', 'question', 'reply'].includes(a.kind) && a.agentId);
   if (say && seenAtt.size) playLine({ floorId: say.floorId, agentId: say.agentId, kind: say.kind, text: say.text });
   fresh.forEach((a) => seenAtt.add(a.id));
   try { sessionStorage.setItem('aisquad.seenAtt', JSON.stringify([...seenAtt].slice(-200))); } catch { /* private mode */ }
-  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-    const a = fresh[0];
+  if (mine.length && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    const a = mine[0];
     try { new Notification(a.kind === 'finished' ? tt('{name} finished', { name: a.agentName || tt('An agent') }) : tt('{name} needs you', { name: a.agentName || tt('An agent') }), { body: String(a.text || '').slice(0, 160), tag: a.id }); } catch { /* not allowed here */ }
   }
   // do not interrupt: typing, an open dialog, another popover, or the screen / first person view
@@ -468,10 +508,13 @@ function announceAttention(list, route) {
 const attPopHtml = (list) => `<div class="cardHead"><h3>${tt('Needs you')}</h3><span class="count bad">${needsYou(list).length}</span></div>${attentionIndexHtml([...needsYou(list), ...list.filter((a) => a.muted)])}`;
 
 // ---------- popovers (menu, Floor menu, attention, legend) ----------
-const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop'];
-function closePopovers() {
+const POPS = ['menu', 'floorMenu', 'attPop', 'legendPop', 'morePop'];
+let popAnchor = null;
+function closePopovers(refocus = false) {
   for (const id of POPS) $(id).hidden = true;
   document.querySelectorAll('[data-pop]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
+  if (refocus && popAnchor?.isConnected) popAnchor.focus();     // Escape: back to the button that opened it
+  popAnchor = null;
 }
 function openPopover(id, anchor) {
   const was = !$(id).hidden;
@@ -481,9 +524,12 @@ function openPopover(id, anchor) {
   if (id === 'floorMenu') { const f = state.building.floors.find((x) => x.id === state.route.floorId); if (!f) return; el._html = null; patch(el, floorMenuHtml(f)); }
   if (id === 'attPop' && 'Notification' in window && Notification.permission === 'default') { try { Notification.requestPermission(); } catch { /* unsupported */ } }
   if (id === 'attPop') { el._html = null; patch(el, attPopHtml(state.building.attention)); }
+  if (id === 'morePop') { el._html = null; patch(el, moreHtml(dockMore)); }
   if (id === 'legendPop') { patch(el, LEGEND); getJson('/api/version').then((v) => { if (!el.querySelector('.ver')) el.insertAdjacentHTML('beforeend', `<p class="ver note">The AI Squad ${v.version}</p>`); }).catch(() => {}); }
   el.hidden = false;
   anchor.setAttribute('aria-expanded', 'true');
+  popAnchor = anchor;
+  if (id === 'morePop') el.querySelector('button')?.focus();
   // under hud buttons, above dock buttons, kept on screen
   const below = r.top < innerHeight / 2, w = el.offsetWidth;
   Object.assign(el.style, { left: `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - (below ? 24 : w / 2)))}px`, top: below ? `${r.bottom + 8}px` : 'auto', bottom: below ? 'auto' : `${innerHeight - r.top + 8}px`, right: 'auto' });
@@ -495,8 +541,10 @@ document.addEventListener('click', (e) => {
 }, true);
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
-  if (POPS.some((id) => !$(id).hidden)) return closePopovers();
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable) return;   // typing: Escape is the field's
+  if (POPS.some((id) => !$(id).hidden)) return closePopovers(true);
   if (ctx.editing) return;
+  if ($('sheet').classList.contains('tall')) { $('sheet').classList.remove('tall'); setTimeout(() => { render(); updateInsets(); }, 250); return; }   // a raised sheet goes down first
   if (state.route.eyes || state.route.follow) location.hash = `#/floor/${state.route.floorId}`;
   else if (state.route.screen) location.hash = `#/floor/${state.route.floorId}/desk/${state.route.agentId}`;
   else if (state.route.mode === 'desk') location.hash = `#/floor/${state.route.floorId}`;
@@ -518,11 +566,11 @@ addEventListener('resize', () => { for (const id of ['hud', 'dock', 'sideTop', '
 // starts that the Watchdog may question first (swap above 80 %, the Floor at its maximum of agents): ask, then force
 // the dispatcher queued it (0.13): why it waits; it starts by itself when there is room
 const queuedText = (r) => tt('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) });
-async function guarded(url, body = {}, force = false) {
-  try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }); } catch (e) {
+async function guarded(url, body = {}, force = false, key = '') {
+  try { return await api('POST', url, { ...body, ...(force ? { force: true } : {}) }, { key }); } catch (e) {
     if (e.status !== 409) throw e;
     if (!confirm(tt('Watchdog: {message}', { message: tx(e.message) }))) return null;
-    return api('POST', url, { ...body, force: true });
+    return api('POST', url, { ...body, force: true }, { key: key && `${key}-force` });
   }
 }
 
@@ -596,12 +644,18 @@ const actions = Object.assign(ctx.actions, {
     const n = r.results.filter((x) => x.installed).length;
     toast(n ? (n === 1 ? tt('Installed {n} skill into .claude/skills', { n }) : tt('Installed {n} skills into .claude/skills', { n })) : tt('Already installed'));
   },
+  async 'stop-service'(el) {
+    if (!confirm(tt('Stop this background service? The agent sees its shell end.'))) return;
+    try { await api('POST', `/api/floors/${el.dataset.floor}/agents/${el.dataset.agent}/services/${el.dataset.service}/stop`, {}); toast(tt('Service stopped')); refresh(); }
+    catch (e) { toast(tx(e.message), 6000); }
+  },
   async 'job-stop'(el) { await api('POST', `/api/jobs/${el.dataset.job}/stop`, {}); toast(tt('Job stopped')); },
   async 'job-open'(el) {
     const j = await api('GET', `/api/jobs/${el.dataset.job}`);
     const body = openModal(`<div class="mHead"><h3 class="grow">${esc(j.title)}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
       <div class="mBody"><p class="note">${tt('{status} · {cost} · {turns} turns · started {ago}', { status: esc(j.status), cost: money(j.cost), turns: j.turns || 0, ago: ago(j.startedAt) })}${j.sessionId ? ` · <code>${esc(j.sessionId.slice(0, 8))}</code>` : ''}</p>
       ${j.error ? `<div class="att budget warn"><div class="q">${esc(tx(j.error))}</div></div>` : ''}
+      ${j.denials?.length ? `<div class="denied"><b>${tt('Denied in the background (no one could be asked):')}</b><ul>${j.denials.map((d) => `<li><code>${esc(d.tool)}</code> ${esc(d.command)}</li>`).join('')}</ul>${tt('Start the agent on its Desk for work that needs these, so the prompts reach Needs you.')}</div>` : ''}
       ${j.text ? `<div class="md">${mdLite(j.text)}</div>` : ''}
       ${j.events?.length ? `<details><summary>${tt('Steps ({n})', { n: j.events.length })}</summary><ul class="feed events">${j.events.map((e) => `<li><span class="k ${e.kind === 'tool' ? 'tool' : 'text'}"></span><div class="grow d ${e.kind === 'tool' ? 'mono' : ''}">${esc(e.detail)}</div></li>`).join('')}</ul></details>` : ''}</div>`);
     body.querySelector('[data-close]').onclick = () => body.closest('dialog').close();
@@ -615,12 +669,21 @@ document.addEventListener('click', async (e) => {
   const act = e.target.closest('[data-act]');
   // a message opens large on click, but links in it still work and selecting text does not open it
   if (act?.dataset.act === 'convo' && act.tagName !== 'BUTTON' && (e.target.closest('a[href]') || String(getSelection?.() || '').trim())) return;
+  // a feed row expands in place: no server call, focus stays on the row
+  if (act?.dataset.act === 'feed-toggle') {
+    const k = act.dataset.key;
+    if (!feedOpen.delete(k)) feedOpen.add(k);
+    layoutPanels(lastSections = sectionsFor());
+    document.querySelector(`[data-act="feed-toggle"][data-key="${CSS.escape(k)}"]`)?.focus();
+    return;
+  }
   if (act && act.tagName !== 'FORM') {
     const fn = actions[act.dataset.act];
     if (!fn) return;
     e.preventDefault();
     closePopovers();
-    try { await fn(act); } catch (err) { if (err.status !== 401) toast(err.message); }
+    // one at a time per button: a second click while the first runs does nothing (answers, Approve, Dismiss, …)
+    await oneAtATime(act, async () => { try { await fn(act); } catch (err) { if (err.status !== 401) toast(err.message); } });
     refresh();
     return;
   }
@@ -639,20 +702,34 @@ document.addEventListener('submit', async (e) => {
   const r = e.target.closest('form[data-act="reply"]');
   if (!r) return;
   e.preventDefault();
-  const btn = r.querySelector('button:not([type=button])'); btn.disabled = true;   // Send reply (reply card) or Reply (Finished card)
   // the typed text stays (textarea and draft) until the server confirms; a moved-on item still gets it as a message
-  try {
-    const res = await answerItem(r.dataset.id, { option: 1, text: r.elements.text.value }, itemContext(r));
-    drafts.delete(r.dataset.id); r.elements.text.value = ''; r.elements.text.blur();
-    toast(res.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Reply sent'));
-  } catch (err) { btn.disabled = false; drafts.set(r.dataset.id, r.elements.text.value); toast(err.message); }
+  await oneAtATime(r, async () => {
+    try {
+      const res = await answerItem(r.dataset.id, { option: 1, text: r.elements.text.value }, itemContext(r));
+      drafts.delete(r.dataset.id); r.elements.text.value = ''; r.elements.text.blur();
+      toast(res.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Reply sent'));
+    } catch (err) { drafts.set(r.dataset.id, r.elements.text.value); toast(err.message); }
+  });
+  refresh();
+});
+// a dialog with several questions or multi-select (askform.js): every answer at once
+document.addEventListener('submit', async (e) => {
+  const f = e.target.closest('form[data-act="answer-ask"]');
+  if (!f) return;
+  e.preventDefault();
+  const item = (state.building?.attention || []).concat(state.floor?.attentionItems || []).find((x) => x.id === f.dataset.id);
+  if (!item) { toast(tt('Already answered')); refresh(); return; }
+  await oneAtATime(f, async () => {
+    try { await answerItem(f.dataset.id, { answers: readAskForm(f, item) }, itemContext(f)); toast(tt('Answers sent')); }
+    catch (err) { f.querySelector('[data-askerr]').textContent = err.message; }
+  });
   refresh();
 });
 document.addEventListener('submit', async (e) => {
   const f = e.target.closest('form[data-act="answer-free"]');
   if (!f) return;
   e.preventDefault();
-  try { const r = await answerItem(f.dataset.id, { option: +f.dataset.n, text: f.elements.text.value }, itemContext(f)); toast(r.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Answer sent')); } catch (err) { toast(err.message); }
+  await oneAtATime(f, async () => { try { const r = await answerItem(f.dataset.id, { option: +f.dataset.n, text: f.elements.text.value }, itemContext(f)); toast(r.delivered === 'as-message' ? tt('Sent to the agent as a message') : tt('Answer sent')); } catch (err) { toast(err.message); } });
   refresh();
 });
 // theme: light (default) → dark → auto (follows the system), remembered per browser
@@ -673,7 +750,7 @@ function showRenderer() { $('rendererName').textContent = `${RENDERER_TEXT[scene
 showRenderer();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 applyTheme();
-$('menu').addEventListener('click', (e) => {
+$('menu').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-menu]'); if (!b) return;
   closePopovers();
   if (b.dataset.menu === 'theme') {
@@ -682,7 +759,10 @@ $('menu').addEventListener('click', (e) => {
     try { localStorage.setItem('aisquad.theme', next); } catch { /* private mode */ }
     applyTheme(); toast(tt('Theme: {name}', { name: THEMES[next] }));
   } else if (b.dataset.menu === 'voice') { ctx.actions['voice-settings']();
-  } else if (b.dataset.menu === 'language') { setLang(LANG === 'en' ? 'id' : 'en');                 // reloads in the other language
+  } else if (b.dataset.menu === 'language') {                   // this browser, and with the PIN the Building's too (1.2.0)
+    const next = LANG === 'en' ? 'id' : 'en';
+    if (hasPin()) await api('PATCH', '/api/building', { lang: next }).catch(() => {});
+    setLang(next);                                               // reloads in the other language
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
     scene.quality.set(next); showQuality(); toast(tt('Graphics: {name}', { name: QUALITY_TEXT[next] }));
@@ -704,5 +784,5 @@ if (location.hash === '#/new-floor') {
 }
 state.route = parseRoute();
 refresh();
-// the Company Guide (1.2): an owner's empty Building opens it once; after the language reload it comes back
+// the Company Guide (1.4): an owner's empty Building opens it once; after the language reload it comes back
 { let tries = 0; const open = () => { if (state.building && ctx.state.me) maybeOpenGuide(state.building, ctx.state.me); else if (tries++ < 20) setTimeout(open, 400); }; setTimeout(open, 600); }

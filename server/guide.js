@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// The Company Guide (1.2): the first thing a new owner meets. A short interview in the owner's language (what the
+// The Company Guide (1.4): the first thing a new owner meets. A short interview in the owner's language (what the
 // business is, what it should reach, what already exists, which divisions, how much runs by itself, the machine and
 // the budget), then a plan in plain words: the Spaces to build, their starting targets, what runs automatically and
 // what waits for the owner, and the materials each division needs. "Build" creates it all: the plan goes to the

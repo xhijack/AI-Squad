@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Targets (1.1): the numbers a Space works against, set by the Owner, measured by the server, read by the agents.
+// Targets (1.3): the numbers a Space works against, set by the Owner, measured by the server, read by the agents.
 //   <repo>/.claude/aisquad/kpi.json      the definitions (committed; a change is recorded in Admin → Changes)
 //   ~/.aisquad/kpi/<floor>.json           the measurements (this machine) and the Space's webhook token
 //   <repo>/docs/squad/KPI.md              what the agents read: each target, its value now, its status (generated)

@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>patch test</title>
+<style>body { font: 14px sans-serif; } textarea { width: 300px; height: 60px; } button { width: 120px; height: 40px; }</style>
+<div id="panel"></div>
+<div id="side"></div>
+<script type="module">
+  import { makePatcher } from '/ui/patch.js';
+  import { oneAtATime } from '/ui/lib.js';
+  // the Desk's task form: one node kept alive across panel updates (as ui/app.js getTaskForm)
+  const form = document.createElement('form');
+  form.innerHTML = '<textarea name="text"></textarea><button id="send" type="submit">Send task</button>';
+  window.sent = 0;
+  form.addEventListener('submit', (e) => { e.preventDefault(); oneAtATime(form, async () => { window.sent++; await new Promise((r) => setTimeout(r, 400)); }); });
+  form.querySelector('textarea').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) form.requestSubmit(); });
+  const p = makePatcher({ fillSlots: (el) => el.querySelectorAll('[data-slot]').forEach((s) => s.appendChild(form)) });
+  let n = 0;
+  window.update = () => { n++; p.patch(document.getElementById('panel'), `<div class="status">status ${n}</div><div data-slot="task"></div>`);
+    p.patch(document.getElementById('side'), `<p>reply card ${n}</p><textarea id="reply"></textarea><button id="ok" type="button">OK ${n}</button>`); };
+  window.update();
+  window.ready = true;
+</script>

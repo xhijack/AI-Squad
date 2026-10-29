@@ -103,9 +103,10 @@ export async function fetchImage(url) {
   } catch { return null; }
 }
 
-export async function api(method, url, body, { raw = null, headers = {}, quiet401 = false } = {}) {
+// key: an idempotency key for a submission (the server runs the same key once a minute, server/idempotency.js)
+export async function api(method, url, body, { raw = null, headers = {}, quiet401 = false, key = '' } = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const init = { method, headers: { 'x-aisquad-pin': pin, ...headers } };
+    const init = { method, headers: { 'x-aisquad-pin': pin, ...(key ? { 'x-idempotency-key': key } : {}), ...headers } };
     if (raw) init.body = raw;
     else if (body !== undefined) { init.body = JSON.stringify(body); init.headers['content-type'] = 'application/json'; }
     const r = await fetch(url, init);
@@ -124,8 +125,25 @@ export async function api(method, url, body, { raw = null, headers = {}, quiet40
 // answering an Attention item: its context (floorId, agentId, kind) goes along, so typed text reaches the agent
 // even when the item has moved on; "already answered" (409) is not an error for the owner
 export async function answerItem(id, body, where = {}) {
-  try { return await api('POST', `/api/attention/${id}/answer`, { ...body, floorId: where.floorId || '', agentId: where.agentId || '', kind: where.kind || '' }); }
+  // the same answer to the same item (a double click, Enter and a click, two tabs) is one answer
+  try { return await api('POST', `/api/attention/${id}/answer`, { ...body, floorId: where.floorId || '', agentId: where.agentId || '', kind: where.kind || '' }, { key: `answer:${id}:${hashOf(JSON.stringify(body))}` }); }
   catch (e) { if (e.status === 409) { toast(t('Already answered')); return { gone: true }; } throw e; }
+}
+// a short stable hash of a string (FNV-1a), for idempotency keys and notification de-duplication
+export function hashOf(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); }
+export const newKey = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+// one submission at a time per control (1.0.3): a spinner, disabled until the request settles; a second click or
+// Enter while it runs does nothing. el: the button or form; fn: the request
+export async function oneAtATime(el, fn) {
+  if (!el || el.dataset.busy) return undefined;
+  const btn = el.tagName === 'FORM' ? el.querySelector('button[type=submit], button:not([type])') : el;
+  el.dataset.busy = '1';
+  const was = btn ? btn.disabled : false;
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true'); }
+  try { return await fn(); } finally {
+    delete el.dataset.busy;
+    if (btn) { btn.disabled = was; btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); }
+  }
 }
 // the context of an Attention card (data attributes on .att)
 export const itemContext = (el) => { const c = el?.closest?.('.att, [data-item-floor]'); return c ? { floorId: c.dataset.itemFloor || '', agentId: c.dataset.itemAgent || '', kind: c.dataset.itemKind || '' } : {}; };

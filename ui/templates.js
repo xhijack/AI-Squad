@@ -18,8 +18,8 @@ function listHtml() {
   return `<div class="tplList">${meta.templates.map((t) => `<button type="button" class="card click" data-pick="${esc(t.role)}" style="width:100%;text-align:left;${t.role === selected ? 'border-color:var(--accent)' : ''}">
       <span class="avatar" style="--shirt:${esc(t.appearance.shirt || '#3d82d6')}">${esc(t.title.slice(0, 2).toUpperCase())}</span>
       <span class="grow"><b>${esc(t.title)}</b><div class="note">${esc(t.role)} · v${t.version} · ${esc(t.model)}${t.writable ? '' : ` · ${tt('{source} (read-only)', { source: esc(t.source) })}`}</div></span></button>`).join('')}
-    <button type="button" class="gold" data-new style="width:100%;margin-top:8px">${tt('+ New template')}</button>
-    <button type="button" data-libs style="width:100%;margin-top:8px">${tt('Libraries')}</button></div>`;
+    <button type="button" class="gold" data-new style="width:100%;margin-top:var(--sp-2)">${tt('+ New template')}</button>
+    <button type="button" data-libs style="width:100%;margin-top:var(--sp-2)">${tt('Libraries')}</button></div>`;
 }
 
 function editorHtml(t, isNew, versions = []) {
@@ -119,9 +119,9 @@ async function drawLibraries(openName = null) {
       ${libraries.map((l) => `<div class="card"><div class="row"><b class="grow">${esc(l.name)}</b><span class="chip">${l.templates === 1 ? tt('{n} template', { n: 1 }) : tt('{n} templates', { n: l.templates })}</span></div>
         <div class="note" style="word-break:break-all">${esc(l.url || l.path)}${l.ref ? ` · ${esc(l.ref)}` : ''}</div>
         ${l.version ? `<div class="note">${tt('Version')} <code>${esc(l.version.commit)}</code> · ${esc(new Date(l.version.date).toLocaleString())} · ${esc(l.version.subject)}</div>` : l.kind === 'git' ? `<div class="note">${tt('Not cloned yet.')}</div>` : ''}
-        <div class="row wrap" style="margin-top:6px">${l.kind === 'git' ? `<button type="button" class="small" data-pull="${esc(l.name)}">${tt('Pull')}</button>` : ''}<button type="button" class="small" data-browse="${esc(l.name)}">${tt('Templates')}</button><button type="button" class="small ghost danger" data-rmlib="${esc(l.name)}">${tt('Remove')}</button></div>
-        ${lib && lib.name === l.name ? `<div style="margin-top:8px">${list.map((t) => `<div class="row" style="margin-top:4px"><span class="grow">${esc(t.title)} <span class="note">${esc(t.role)} · v${t.version}</span></span><button type="button" class="small" data-copylib="${esc(t.role)}">${tt('Copy')}</button></div>`).join('') || `<div class="empty">${tt('No templates.')}</div>`}</div>` : ''}</div>`).join('') || `<div class="empty">${tt('No shared libraries yet.')}</div>`}
-      <h3 style="margin-top:16px">${tt('Add a library')}</h3>
+        <div class="row wrap" style="margin-top:var(--sp-2)">${l.kind === 'git' ? `<button type="button" class="small" data-pull="${esc(l.name)}">${tt('Pull')}</button>` : ''}<button type="button" class="small" data-browse="${esc(l.name)}">${tt('Templates')}</button><button type="button" class="small ghost danger" data-rmlib="${esc(l.name)}">${tt('Remove')}</button></div>
+        ${lib && lib.name === l.name ? `<div style="margin-top:var(--sp-2)">${list.map((t) => `<div class="row" style="margin-top:var(--sp-1)"><span class="grow">${esc(t.title)} <span class="note">${esc(t.role)} · v${t.version}</span></span><button type="button" class="small" data-copylib="${esc(t.role)}">${tt('Copy')}</button></div>`).join('') || `<div class="empty">${tt('No templates.')}</div>`}</div>` : ''}</div>`).join('') || `<div class="empty">${tt('No shared libraries yet.')}</div>`}
+      <h3 style="margin-top:var(--sp-4)">${tt('Add a library')}</h3>
       <form id="libForm" novalidate><div class="grid2"><div><label>${tt('Name')}</label><input name="name" placeholder="team" required></div><div><label>${tt('Branch (optional)')}</label><input name="ref" placeholder="main"></div></div>
         <label>${tt('Git URL or absolute directory')}</label><input name="src" placeholder="git@github.com:org/roles.git" spellcheck="false">
         <label>${tt('Folder inside the repository (optional; default roles/ when it exists)')}</label><input name="subdir" placeholder="roles">

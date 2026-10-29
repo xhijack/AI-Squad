@@ -97,7 +97,12 @@ export function repoRules(repos, lead = false) {
 // standard: the Floor's Blueprint ({ title, version, text, roleRules, lead }), written into every agent prompt
 // skillName(name): the name the skill is known by in Claude Code (aisquad:<name> for our plugin's copy)
 // repos: this agent's linked repositories ({ id, path, abs, access, branch, gate }); lead: it plans the board
-export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null, autopilot = null, repos = [], lead = false, context = [] } = {}) {
+// the servers the owner registered (Floor settings → Servers): reachable with ssh; everything else is local
+export const serverRules = (servers) => [
+  ...servers.map((s) => `\`${s.host}\`${s.purpose ? `: ${s.purpose}` : ''} (reach it with \`ssh ${s.host} <command>\`; allowed, also in background runs)`),
+  'Only these are servers. Everything else is this machine (local development): do not mix the two up, and do not guess other hosts. Production changes, sudo and installs still wait for the owner.',
+];
+export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'free-team', standard = null, skillName = (n) => n, memory = null, autopilot = null, repos = [], lead = false, context = [], servers = [] } = {}) {
   const fm = {
     name: eff.id,
     description: `${eff.displayName} (${eff.title}) on ${floorName || 'this Floor'}. ${eff.description || ''}`.trim(),
@@ -132,6 +137,7 @@ export function renderAgentFile(eff, { floorName = '', git = null, workflow = 'f
   const g = gitRules(git);
   if (g.length) sections.push(`## Git\n${g.map((r) => `- ${r}`).join('\n')}`);
   if (repos.length) sections.push(`## Repositories\n${repoRules(repos, lead).map((r) => `- ${r}`).join('\n')}`);
+  if (servers.length) sections.push(`## Servers\n${serverRules(servers).map((r) => `- ${r}`).join('\n')}`);
   if (usable.length) sections.push(`## Skills\nUse these skills through the Skill tool when relevant: ${usable.map((s) => `\`${s}\``).join(', ')}.`);
   if (eff.permissions.deny.length) sections.push(`## Not allowed\n${eff.permissions.deny.map((d) => `- \`${d}\``).join('\n')}`);
   if (eff.prompt) sections.push(`## Prompt\n${eff.prompt}`);

@@ -18,6 +18,8 @@ import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as tasksLib from './tasks.js';
+import * as askLib from './askdialog.js';
+import * as permits from './permits.js';
 import * as reposLib from './repos.js';
 import { redact } from './redact.js';
 import * as blueprintsLib from './blueprints.js';
@@ -62,7 +64,7 @@ import { config, ROOT, paths } from './config.js';
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
 // ended: how the last session of each agent ended (crashes, exits); autoResumes: times of automatic resumes;
 // autopilot: decisions taken automatically (shown until the owner says OK), lead decisions seen, nudges sent, blocks logged
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], dismissedStalls: r.dismissedStalls || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
   autopilot: { decided: [], leadSeen: {}, nudged: [], blocked: [], ...(r.autopilot || {}) } }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
@@ -177,7 +179,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
     const hookWaiting = hookFresh && h.state === 'waiting';
     // a long command (e2e, docker build) writes nothing while it runs: the agent is working all the same
-    const task = running ? liveTask(entry.id, a.id, st, own ? screen : '', now) : null;
+    const { task, services } = running ? liveTasks(entry.id, a.id, st, own ? screen : '', now) : { task: null, services: [] };
     const working = busy || !!task || (hookFresh ? h.state === 'working' : recent);
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
@@ -194,13 +196,15 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking && !squad.gate.passed ? 'docs' : 'sprint') : null;
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
+    // several questions or multi-select: the structure comes from the tool input, the screen says where we are
+    if (dialog && st?.ask?.questions?.length && askLib.parseAsk(screen)) dialog.ask = { questions: st.ask.questions };
     if (dialog && st?.ask?.questions?.length) {
       // the screen often cuts long questions; the transcript has the full text
       dialog.question = st.ask.questions.map((q) => (q.header ? `[${q.header}] ` : '') + q.question).join('\n\n');
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
+      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, services, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
   // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
   const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
@@ -222,7 +226,7 @@ function taskHistory(floorId, now) {
   const c = typicalCache.get(floorId);
   if (c && now - c.at < 5 * 60e3) return c.history;
   let history = [];
-  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }
+  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).filter((e) => !e.data?.service).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }   // services run until stopped: no "usual
   typicalCache.set(floorId, { at: now, history });
   return history;
 }
@@ -234,11 +238,22 @@ function readTail(file, bytes = 16 * 1024) {
     return { text: buf.toString('utf8'), mtime: st.mtimeMs };
   } catch { return null; }
 }
-export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
-  const t = st?.tasks?.running?.at(-1);
-  if (!t) return null;
+// -> { task, services }: services are background shells that serve or watch (1.0.2); they never make the agent
+// "working" and never stall by themselves
+export function liveTasks(floorId, agentId, st, screen = '', now = Date.now()) {
+  const tails = new Map();
+  const tailOf = (t) => { if (!t.file) return null; if (!tails.has(t.id)) tails.set(t.id, readTail(t.file)); return tails.get(t.id); };
+  const { task: t, services } = tasksLib.splitRunning(st?.tasks?.running || [], (x) => tailOf(x)?.text || '');
+  const svc = services.map((s) => ({ id: s.id, label: s.label, command: redact(s.command), startedAt: s.startedAt, lastOutputAt: tailOf(s)?.mtime || s.startedAt,
+    lines: tasksLib.tailLines(tailOf(s)?.text || '', 3).map((l) => redact(l).slice(0, 200)) }));
+  const task = t ? liveTask(floorId, agentId, t, screen, now, tailOf(t)) : null;
+  // a foreground wait while a service runs: only the service's silence makes it a stall
+  if (task && !task.background && svc.length) task.stall = tasksLib.serviceWaitStall({ waitStartedAt: task.startedAt, serviceOutputAt: Math.max(...svc.map((s) => s.lastOutputAt)), now });
+  return { task, services: svc };
+}
+function liveTask(floorId, agentId, t, screen, now, tail) {
   let text = '', lastOutputAt = 0;
-  if (t.file) { const r = readTail(t.file); if (r) { text = r.text; lastOutputAt = r.mtime; } }
+  if (t.file) { if (tail) { text = tail.text; lastOutputAt = tail.mtime; } }
   else if (screen) {
     text = screen;
     const key = `${floorId}/${agentId}/${t.id}`, hash = crypto.createHash('sha1').update(tasksLib.tailLines(screen, 12).join('\n')).digest('hex');
@@ -255,8 +270,11 @@ export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
 // commands that ended in the last half hour and ran at least TASK_CARD_MS: the owner gets a calm card
 const TASK_CARD_MS = 2 * 60e3, TASK_RECENT_MS = 30 * 60e3;
 export function endedTasks(st, now = Date.now()) {
-  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS)
-    .map((t) => ({ id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '', ...tasksLib.resultOf(t.kind, t.output || (t.file ? readTail(t.file)?.text || '' : ''), t.status) }));
+  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS).map((t) => {
+    const out = t.output || (t.file ? readTail(t.file)?.text || '' : '');
+    return { id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '',
+      ...(t.background && (t.kind === 'service' || tasksLib.looksLikeService(out)) ? { service: true } : {}), ...tasksLib.resultOf(t.kind, out, t.status) };
+  });
 }
 // "e2e Playwright finished in 7m 32s: 40 passed, 2 failed"
 export const taskDoneText = (tk) => `${tk.label} ${tk.status === 'completed' ? (tk.ok === false ? 'failed' : 'finished') : tk.status} in ${tasksLib.duration(tk.ms)}${tk.summary && !['done', tk.status].includes(tk.summary) ? `: ${tk.summary}` : ''}`;
@@ -267,11 +285,12 @@ function taskEvents(floorId, lives, now = Date.now()) {
   S.tasks ||= { started: {}, ended: {} };
   const out = [];
   for (const l of lives) {
-    const tk = l.task;
-    if (tk && tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background } }); }
+    for (const tk of [...(l.task ? [l.task] : []), ...(l.services || []).map((s) => ({ ...s, kind: 'service', background: true, service: true, elapsedMs: now - s.startedAt }))]) {
+      if (tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background, ...(tk.service ? { service: true } : {}) } }); }
+    }
     for (const e of l.tasksEnded || []) if (S.tasks.started[e.id] && !S.tasks.ended[e.id]) {
       S.tasks.ended[e.id] = now;
-      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
+      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.service ? { service: true } : {}), ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
       typicalCache.delete(floorId);
     }
   }
@@ -299,6 +318,7 @@ function agentView(root, l, cost) {
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     task: l.task || null,                                // a long-running command: label, start, last lines, progress, stall
+    services: l.services || [],                          // background shells that serve or watch: "Running in the background", Stop
     standby: l.standby || null, waitingReply: !!l.reply, finished: l.finished ? l.finished.ts : null,
     // stopped agents: how they ended (crash: Resume is the main action), the session Resume continues, the last state
     crash: l.ended?.kind === 'crashed' ? { cause: l.ended.cause, at: l.ended.at, text: recovery.crashText(l.ended), withLead: l.ended.withLead || null } : null,
@@ -312,27 +332,47 @@ function agentView(root, l, cost) {
 const attId = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
 const PERMISSION = /(do you want to|allow|permission|proceed|trust|make this edit|run this command)/i;
 
+// one id per open dialog, whichever way it is seen first (1.0.3: a new id meant a second notification): an
+// AskUserQuestion by its tool call (the transcript, before and after the screen shows it), a permission prompt by
+// its hook event, anything else by the screen's question and options
+function dialogId(floorId, l, now = Date.now()) {
+  if (l.status?.ask?.questions?.length) return episodeId(floorId, l.agent.id, attId(floorId, l.agent.id, l.status.ask.id), 'ask', now);
+  const pm = l.hook?.state === 'waiting' && l.hook.permission;
+  if (pm) return episodeId(floorId, l.agent.id, attId(floorId, l.agent.id, 'hook', pm.ts), 'hook', now);
+  return episodeId(floorId, l.agent.id, attId(l.session, l.dialog.question, l.dialog.options.map((o) => String(o.label).replace(/^\[[ ✔xX]\]\s*/, '')).join('|')), 'screen', now);
+}
+// the same dialog seen first on the screen and seconds later by its hook (or the transcript) keeps its first id
+const episodes = new Map();                     // floor/agent -> { id, src, at, alias }
+export function episodeId(floorId, agentId, id, src, now = Date.now()) {
+  const k = `${floorId}/${agentId}`, e = episodes.get(k);
+  if (e && (e.id === id || e.alias === id)) { e.seen = now; return e.id; }
+  if (e && e.src !== src && !e.alias && now - e.at < 30e3 && now - e.seen < 10e3) { e.alias = id; e.seen = now; return e.id; }
+  episodes.set(k, { id, src, at: now, seen: now, alias: null });
+  if (episodes.size > 500) episodes.delete(episodes.keys().next().value);
+  return id;
+}
 function floorAttention(entry, floor, lives, cost) {
   const out = [], dismissedNow = new Set(loadRuntime().dismissedReplies);
   for (const l of lives) {
     // a long command ended (2 min or more): a calm card with its duration and result, OK or Open log
     for (const tk of l.tasksEnded || []) {
+      if (tk.service) continue;                          // a dev server that was stopped is no news
       const key = replyKey(entry.id, l.agent.id, `task:${tk.id}`);
       if (dismissedNow.has(key)) continue;
       out.push({ id: attId(entry.id, l.agent.id, 'task', tk.id), kind: 'taskdone', replyKey: key, floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: taskDoneText(tk), task: tk, options: [], answerable: true, calm: true, canReply: false, ts: tk.endedAt });
     }
     if (l.dialog) {
-      out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
+      out.push({ id: dialogId(entry.id, l), kind: PERMISSION.test(l.dialog.question) && !l.dialog.ask ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
-        text: l.dialog.question, options: l.dialog.options, answerable: true, ts: l.lastTs || Date.now() });
+        text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, ts: l.lastTs || Date.now() });
     } else if (l.hook?.state === 'waiting' && l.hook.permission && (l.hook.permission.tool || !(l.status?.ask && l.state === 'waiting'))) {
       const pm = l.hook.permission;
-      out.push({ id: attId(entry.id, l.agent.id, 'hook', pm.ts), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
+      out.push({ id: episodeId(entry.id, l.agent.id, attId(entry.id, l.agent.id, 'hook', pm.ts), 'hook'), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: pm.message + (pm.detail ? `\n${pm.detail}` : ''), options: [], answerable: false, live: true, ts: pm.ts });
     } else if (l.status?.ask && l.state === 'waiting') {
       const q = l.status.ask.questions;
-      out.push({ id: attId(entry.id, l.agent.id, l.status.ask.id), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+      out.push({ id: episodeId(entry.id, l.agent.id, attId(entry.id, l.agent.id, l.status.ask.id), 'ask'), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: q.map((x) => x.question).join('\n\n'),
         options: (q[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.status.ask.ts });
     } else if (l.reply) {
@@ -350,8 +390,12 @@ function floorAttention(entry, floor, lives, cost) {
     }
   }
   const work = workOf(entry.id);
+  const dismissedStalls = new Set(loadRuntime().dismissedStalls);
   for (const s of wd.stallAlerts(lives.map((l) => ({ id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead, state: l.state, lastTs: l.lastTs, task: l.task })), work)) {
-    out.push({ id: attId('stall', entry.id, s.agent || ''), kind: 'stall', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
+    const stallKey = `${entry.id}/${s.key}`;
+    if (dismissedStalls.has(stallKey)) continue;
+    // a system notice, not an ask: muted under Notices, notified only once it has lasted NOTICE_NOTIFY_MS
+    out.push({ id: attId('stall', entry.id, s.agent || '', s.key), kind: 'stall', stallKey, notice: true, muted: true, notifyAt: s.since + wd.NOTICE_NOTIFY_MS, floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
   }
   for (const m of merge.mergeProblems(entry.id, loadRuntime().dismissedMerges)) {
     const what = m.result === 'merged' ? `Merged ${m.branch} but the push failed: ${m.push.error}` : `Merge of ${m.branch} ${m.result}: ${m.reason}`;
@@ -385,12 +429,15 @@ function autopilotItems(entry, floor, out) {
   const ownerOnly = blueprintsLib.floorBlueprint(entry.path, floor.blueprint)?.ownerOnly || [];
   for (const a of out) {
     if (!ASKING.has(a.kind)) continue;
-    const c = autopilot.classify([a.text, ...(a.options || []).filter((o) => !o.free).map((o) => o.label)].join('\n'), { level: floor.autopilot, ownerOnly });
-    const rec = a.kind === 'question' && a.answerable ? autopilot.recommendedOption(a.options) : null;
-    const auto = !c.critical && (a.kind === 'reply' || !!rec);                 // permission prompts are never answered
+    const labels = a.questions ? a.questions.flatMap((q) => [q.question, ...q.options.map((o) => o.label)]) : (a.options || []).filter((o) => !o.free).map((o) => o.label);
+    const c = autopilot.classify([a.text, ...labels].join('\n'), { level: floor.autopilot, ownerOnly });
+    // several questions: answered only when every one has a recommended option (and nothing is critical)
+    const recAll = a.questions && a.answerable ? askLib.recommendedAnswers(a.questions) : null;
+    const rec = a.kind === 'question' && a.answerable && !a.questions ? autopilot.recommendedOption(a.options) : null;
+    const auto = !c.critical && (a.kind === 'reply' || !!rec || !!recAll);     // permission prompts are never answered
     if (!apSeen.has(a.id)) apSeen.set(a.id, now);
     const since = Math.min(a.ts || now, apSeen.get(a.id));
-    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
+    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, ...(recAll ? { recommendedAnswers: recAll } : {}), auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
   }
   const day = Date.now() - 864e5;
   for (const d of loadRuntime().autopilot.decided) {
@@ -477,10 +524,12 @@ export function buildingSnapshot() {
   const independent = independentState(b);
   attention.push(...independent.attention);
   const floorsOut = [independent.summary, ...states.map(summary)].sort((x, y) => x.number - y.number);
-  let targets = null; try { const o = kpiLib.overview(); targets = { total: o.total, met: o.met, behind: o.behind, unset: o.unset }; } catch { /* none */ }   // the cockpit's counts (1.1)
-  let guide = { done: false, firstRun: false }; try { const g = guideLib.load(); guide = { done: !!g.done, firstRun: !g.done && !b.floors.length, language: b.prefs.language || null }; } catch { /* none */ }   // the Company Guide (1.2)
+  let targets = null; try { const o = kpiLib.overview(); targets = { total: o.total, met: o.met, behind: o.behind, unset: o.unset }; } catch { /* none */ }   // the cockpit's counts (1.3)
+  let guide = { done: false, firstRun: false }; try { const g = guideLib.load(); guide = { done: !!g.done, firstRun: !g.done && !b.floors.length, language: b.prefs.language || null }; } catch { /* none */ }   // the Company Guide (1.4)
   const value = {
     name: b.name, now: Date.now(), floors: floorsOut, attention, detected, targets, guide,
+    // handoffs between Spaces in the last minutes: in the Office the sender walks to the other room (1.1.0)
+    walks: recentWalks(new Set(floorsOut.map((f) => f.id))),
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
@@ -492,6 +541,11 @@ export function buildingSnapshot() {
   };
   snapCache = { at: Date.now(), value };
   return value;
+}
+const WALK_MS = 3 * 60e3;
+function recentWalks(spaces, now = Date.now()) {
+  return hb.load().filter((h) => now - (h.createdAt || 0) < WALK_MS && h.from?.agentId && spaces.has(h.from.floorId) && spaces.has(h.to?.floorId) && h.from.floorId !== h.to.floorId)
+    .slice(-10).map((h) => ({ id: h.id, from: h.from.floorId, agent: h.from.agentId, to: h.to.floorId, ts: h.createdAt }));
 }
 // the Lobby digest "Decided by autopilot today: N" (read from the Squad Log at most once a minute)
 let apToday = { at: 0, day: '', n: 0 };
@@ -593,6 +647,21 @@ const readTextSafe = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch {
 
 function readBriefSafe(root) { try { return fs.readFileSync(path.join(root, 'AISQUAD.md'), 'utf8').slice(0, 20000); } catch { return ''; } }
 
+// Stop a background service of an agent (1.0.2): its shell and the processes under it, found under the agent's
+// tmux session by its command line; Claude Code then sees the shell end
+export function stopService(floorId, agentId, serviceId) {
+  const { entry, agent, name } = locate(floorId, agentId);
+  const l = liveAgents(entry, { agents: [agent] }, new Set(tm.listSessions()), {})[0];
+  const raw = (l.status?.tasks?.running || []).find((t) => t.id === serviceId);
+  if (!raw || !(l.services || []).some((s) => s.id === serviceId)) throw notFound('That service is no longer running');
+  let ps = '';
+  try { ps = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8', timeout: 5000 }); } catch { /* no ps */ }
+  const pids = tasksLib.serviceProcesses(tasksLib.parsePs(ps), tm.panePids(name), raw.command.replace(/…$/, ''));
+  if (!pids.length) throw new HttpError(409, 'Could not find its process; ask the agent to stop it');
+  for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
+  invalidate();
+  return { ok: true, stopped: pids.length };
+}
 export function deskDetail(floorId, agentId) {
   if (floorId === ind.FLOOR_ID) return independentDesk(agentId);
   const entry = building.floorEntry(floorId);
@@ -741,6 +810,8 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
 export function logJobEnded(job) {
   if (!job.floorId) return;
   if (job.meta?.chat) chatAnswered(job);
+  // tools denied without a prompt ("dontAsk"): the Audit counts them; the command only as its first words
+  for (const d of job.denials || []) logEvent(job.floorId, { type: 'permission.denied', agent: job.agentId || null, data: { job: job.id, tool: d.tool, command: d.command.split(/\s+/).slice(0, 3).join(' ') } });
   hb.scan({ floorId: job.floorId }).then((r) => { if (r.length) invalidate(); }, (e) => console.error('[handoff]', e.message));   // its packages go now
   logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}), ...(job.node ? { node: job.node } : {}), ...(job.branch ? { branch: job.branch } : {}) } });
   invalidate();
@@ -836,7 +907,7 @@ async function answerOwnerDesk(item, option, text = '') {
   return { ok: true, ...r };
 }
 // the bus and the ERPNext watcher, from the server's tick
-// targets measured by the server (1.1), from the hourly tick
+// targets measured by the server (1.3), from the hourly tick
 export async function kpiTick(now = Date.now()) { const r = await kpiLib.tick(now); if (r.some((x) => !x.error)) invalidate(); return r; }
 export async function handoffTick(now = Date.now()) {
   const sent = await hb.scan({ now });
@@ -1053,24 +1124,71 @@ export async function sendChat(floorId, agentId, text, { context = 'space', user
     await sendTask(floorId, agentId, chatLib.typedText(who.name, t), [], { via: 'owner', priority: 'P0' });
     chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'typed' } });
     delivery = 'typed';
-  } else {
-    const st = chatLib.getState(p.key);
-    const prompt = chatLib.jobPrompt({ name: who.name, text: t, context, messages: chatLib.read(p.file, 20), spaceName: p.cfg.floor.name });
-    const r = await admit({ floorId, agentId, action: 'job', task: prompt, title: `Chat: ${t.replace(/\s+/g, ' ').slice(0, 100)}`, priority: 'P0', via: 'owner',
-      opts: { kind: 'chat', budgetUsd: 1, permissionMode: 'dontAsk', resume: st.sessionId || '', chat: { context, key: p.key, msgId: msg.id } } });
-    if (r.waiting) { delivery = 'queued'; dispatch = r.dispatch; chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'queued', queue: r.dispatch.id } }); }
-  }
+  } else ({ delivery, dispatch } = await chatJob(p, who.name, msg, t, context));
   const lead = p.cfg.team.agents.find((x) => x.lead) || p.cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
   if (context === 'space' && lead && lead.id !== agentId) chatLib.noteForLead(p.entry.path, { name: who.name, agentName: p.agent.displayName, text: t });
   logEvent(floorId, { type: 'chat.message', agent: agentId, data: { context, delivery, from: who.name, text: t.slice(0, 200) } });
   invalidate();
   return { ok: true, message: msg, delivery, ...(dispatch ? { dispatch } : {}) };
 }
+// a background job answers a chat message ("dontAsk": only what the Space's settings allow)
+async function chatJob(p, name, msg, text, context) {
+  const st = chatLib.getState(p.key);
+  const prompt = chatLib.jobPrompt({ name, text, context, messages: chatLib.read(p.file, 20), spaceName: p.cfg.floor.name });
+  const r = await admit({ floorId: p.entry.id, agentId: p.agent.id, action: 'job', task: prompt, title: `Chat: ${text.replace(/\s+/g, ' ').slice(0, 100)}`, priority: 'P0', via: 'owner',
+    opts: { kind: 'chat', budgetUsd: 1, permissionMode: 'dontAsk', resume: st.sessionId || '', chat: { context, key: p.key, msgId: msg.id } } });
+  if (!r.waiting) return { delivery: 'job', dispatch: null };
+  chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'queued', queue: r.dispatch.id } });
+  return { delivery: 'queued', dispatch: r.dispatch };
+}
+// a reply whose background run was denied tools, and the message it answered
+function deniedReply(p, msgId) {
+  const messages = chatLib.read(p.file, 200);
+  const reply = messages.find((m) => m.id === msgId && m.from === 'agent');
+  if (!reply?.denials?.length) throw bad('This reply has no denied tools');
+  const asked = messages.find((m) => m.id === reply.replyTo);
+  if (!asked) throw bad('The message it answered is no longer in the chat');
+  return { reply, asked };
+}
+// Allow and retry (1.0.1): the owner confirmed narrow allow rules for what was denied; they go into the Space's
+// .claude/settings.json and the same message runs again in the background
+export async function chatAllowRetry(floorId, agentId, { context = 'space', msgId, rules = null } = {}) {
+  if (context !== 'space') throw bad('Allow rules belong to a Space; use the Space chat or the Desk');
+  const p = chatPlace(floorId, agentId, context);
+  const { reply, asked } = deniedReply(p, msgId);
+  const list = (Array.isArray(rules) ? rules.map(String) : reply.denials.map((d) => d.rule)).filter(Boolean).slice(0, 10);
+  if (!list.length) throw bad('No narrow rule fits what was denied: run it on the Desk');
+  if (chatLib.getState(p.key).awaiting) throw bad('The agent is still answering in this chat');
+  const added = permits.addAllowRules(p.entry.path, list);
+  const who = currentActor() || { id: 'owner', name: 'Owner' };
+  logEvent(floorId, { type: 'permission.answered', agent: agentId, data: { allowed: list, via: 'chat', waitMs: Date.now() - reply.ts } });
+  chatLib.append(p.file, { from: 'system', context, text: `${who.name} allowed ${list.join(', ')}. Running the message again.`, replyTo: asked.id });
+  const r = await chatJob(p, asked.name || who.name, asked, asked.text, context);
+  invalidate();
+  return { ok: true, added, ...r };
+}
+// Run on the Desk (1.0.1): the same message typed into the agent's interactive session, where a permission prompt
+// reaches Needs you; a stopped session is started with it
+export async function chatOnDesk(floorId, agentId, { context = 'space', msgId } = {}) {
+  if (context !== 'space') throw bad('The Desk works in the Space; use the Space chat');
+  const p = chatPlace(floorId, agentId, context);
+  const { asked } = deniedReply(p, msgId);
+  const typed = chatLib.typedText(asked.name || 'Owner', asked.text);
+  let r;
+  if (tm.isRunning(p.name)) r = await sendTask(floorId, agentId, typed, [], { via: 'owner', priority: 'P0' });
+  else r = await startAgent(floorId, agentId, typed, { guard: true, via: 'owner' });
+  if (r?.waiting) { invalidate(); return { ok: true, delivery: 'queued', dispatch: r.dispatch }; }
+  chatLib.setState(p.key, { awaiting: { msgId: asked.id, since: Date.now(), mode: 'typed' } });
+  chatLib.append(p.file, { from: 'system', context, text: 'Running on the Desk: permission prompts reach Needs you.', replyTo: asked.id });
+  invalidate();
+  return { ok: true, delivery: 'typed' };
+}
 function chatAnswered(job) {
   const c = job.meta.chat;
   let p; try { p = chatPlace(job.floorId, job.agentId, c.context); } catch { return; }
   const text = job.status === 'done' ? job.result : `(${job.status}) ${job.error || job.result || 'no answer'}`;
-  chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost });
+  const denials = (job.denials || []).map((d) => ({ ...d, rule: permits.proposeRule(d) }));
+  chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost, ...(denials.length ? { denials } : {}) });
   chatLib.setState(p.key, { awaiting: undefined, ...(job.sessionId ? { sessionId: job.sessionId } : {}) });
   logEvent(job.floorId, { type: 'chat.reply', agent: job.agentId, data: { context: c.context, status: job.status, job: job.id } });
   bus.emit('chat.reply', { floorId: job.floorId, agentId: job.agentId, agentName: p.agent.displayName, context: c.context, text });
@@ -1147,6 +1265,7 @@ function openTasks(root, floor) {
 }
 // the dialog is still the same one: choose the recommended option, keep a muted item so the owner can change it
 async function autoAnswer(f, a) {
+  if (a.questions) return autoAnswerAsk(f, a);
   const name = tm.sessionName(f.id, a.agentId);
   const dialog = tm.parsePrompt(tm.capture(name));
   const rec = dialog && autopilot.recommendedOption(dialog.options);
@@ -1160,6 +1279,21 @@ async function autoAnswer(f, a) {
   saveRuntime(rt);
   logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec2.question.slice(0, 300), option: rec2.option, critical: false, waitedMs: rec2.waitedMs } });
   return { floorId: f.id, agentId: a.agentId, kind: 'answered', option: rec2.option };
+}
+// several questions, every one with a recommended option: the recommended answers, then a muted record
+async function autoAnswerAsk(f, a) {
+  const name = tm.sessionName(f.id, a.agentId);
+  if (!askLib.parseAsk(tm.capture(name))) return { floorId: f.id, agentId: a.agentId, kind: 'gone' };
+  const answers = a.autopilot.recommendedAnswers;
+  const r = await askLib.answerAll(a.questions.map((q) => ({ ...q, options: q.options.map((o) => o.label) })), answers, tm.askIO(name));
+  if (!r.ok) throw new Error(r.error);
+  const option = a.questions.map((q, i) => `${q.header || q.question}: ${answers[i].choices.map((n) => autopilot.cleanLabel(q.options[n - 1].label)).join(', ')}`).join(' · ');
+  const rt = loadRuntime();
+  const rec = { id: crypto.randomBytes(5).toString('hex'), floorId: f.id, agentId: a.agentId, agentName: a.agentName, question: a.text.slice(0, 1000), option, optionLabel: option, options: [], ts: Date.now(), by: 'server', waitedMs: Date.now() - (a.ts || Date.now()) };
+  rt.autopilot.decided = [...rt.autopilot.decided, rec].slice(-300);
+  saveRuntime(rt);
+  logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec.question.slice(0, 300), option, critical: false, waitedMs: rec.waitedMs, questions: a.questions.length } });
+  return { floorId: f.id, agentId: a.agentId, kind: 'answered', option };
 }
 async function nudgeReply(f, a, timeout) {
   const rt = loadRuntime();
@@ -1290,11 +1424,24 @@ async function answerGone({ floorId, agentId, kind }, option, text) {
   throw new HttpError(409, 'Already answered');
 }
 
-export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '' } = {}) {
+// a dialog with several questions or multi-select: one answer per question ({ choices: [option numbers], text })
+async function answerAsk(item, answers) {
+  const io = item.independent ? tm.askIO('', { target: item.target, socket: config.scanTmuxSocket }) : tm.askIO(tm.sessionName(item.floorId, item.agentId));
+  const r = await askLib.answerAll(item.questions.map((q) => ({ ...q, options: q.options.map((o) => o.label) })), answers.map((a) => ({ choices: (a.choices || []).map(Number).filter(Boolean), text: String(a.text || '') })), io);
+  if (!r.ok) throw bad(r.error);
+  if (item.independent) ind.resetCache();
+  invalidate();
+  return { ok: true };
+}
+// the tool input of a question dialog for the UI: per question its options, multiSelect, the recommended one
+export const askQuestions = (qs = []) => qs.map((q) => ({ header: q.header || '', question: q.question || '', multiSelect: !!q.multiSelect,
+  options: (q.options || []).map((label, i) => ({ n: i + 1, label, recommended: /\(recommended\)/i.test(label) })) }));
+export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '', answers = null } = {}) {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) return answerGone({ floorId, agentId, kind }, option, text);
   if (OWNER_DESK.has(item.kind)) return answerOwnerDesk(item, option, text);
+  if (item.kind === 'question' || item.kind === 'permission') episodes.delete(`${item.floorId}/${item.agentId}`);   // the next dialog is a new one
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'taskdone') { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'reply' || item.kind === 'finished') {
@@ -1335,8 +1482,10 @@ export async function answerAttention(id, option, text = '', { force = false, fl
     invalidate();
     return { ok: true };
   }
-  if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
+  // Dismiss sticks: the stall's key (its task, or the agent's last activity / assignment) stays dismissed; the work stays
+  if (item.kind === 'stall') { const r = loadRuntime(); r.dismissedStalls = [...r.dismissedStalls.filter((k) => k !== item.stallKey), item.stallKey].slice(-300); saveRuntime(r); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
+  if (item.questions && Array.isArray(answers)) return answerAsk(item, answers);
   if (item.independent) {
     const dialog = tm.parsePrompt(tm.capturePane(item.target, config.scanTmuxSocket));
     if (!dialog) throw new HttpError(409, 'Already answered');
@@ -1546,6 +1695,7 @@ function independentLives({ events = false } = {}) {
     const working = a.live && ((a.tmux && tm.isBusy(screen)) || (!a.tmux && st?.turnOpen && now - st.lastTs < tx.ACTIVE_MS));
     const state = !a.live ? 'stopped' : dialog || asking ? 'waiting' : working ? 'working' : 'idle';
     if (dialog && st?.ask?.questions?.length) dialog.question = st.ask.questions.map((q) => q.question).join('\n\n');
+    if (dialog && st?.ask?.questions?.length && askLib.parseAsk(screen)) dialog.ask = { questions: st.ask.questions };
     return { a, st, screen, dialog, state };
   });
 }
@@ -1568,7 +1718,7 @@ function independentState(b) {
   for (const l of lives) {
     const base = { floorId: ind.FLOOR_ID, floorNumber: building.INDEPENDENT_FLOOR, floorName: INDEPENDENT_NAME, agentId: l.a.id, agentName: ind.displayNameOf(l.a), independent: true };
     if (l.dialog) attention.push({ ...base, id: attId('ind', l.a.key, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
-      text: l.dialog.question, options: l.dialog.options, answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
+      text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
     else if (l.state === 'waiting' && l.st?.ask) attention.push({ ...base, id: attId('ind', l.a.key, l.st.ask.id), kind: 'question', text: l.st.ask.questions.map((q) => q.question).join('\n\n'),
       options: (l.st.ask.questions[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.st.ask.ts });
     else if (l.state === 'idle' && l.st) {

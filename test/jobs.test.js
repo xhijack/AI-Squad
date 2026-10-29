@@ -45,6 +45,19 @@ test('parseStream: session, tool calls, text, result and rate limits from the ev
   assert.equal(s.rateLimits.five_hour.used_percentage, 80);
 });
 
+test('parseStream: denied tool calls in "dontAsk" mode, from the tool results and the result event, once each', () => {
+  const msg = "Permission to use Bash has been denied because Claude Code is running in don't ask mode. ...";
+  const s = jobs.parseStream([
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ssh erpnext@192.168.0.150 uptime', description: 'check' } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: msg }] } }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't2', name: 'Read', input: { file_path: '/etc/hosts' } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't2', is_error: true, content: [{ type: 'text', text: 'File does not exist.' }] }] } }),
+    JSON.stringify({ type: 'result', subtype: 'success', result: 'Izin Bash ditolak', permission_denials: [{ tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ssh erpnext@192.168.0.150 uptime' } }, { tool_name: 'WebFetch', tool_use_id: 't3', tool_input: { url: 'https://x.test' } }] }),
+  ].join('\n'));
+  assert.deepEqual(s.denials, [{ id: 't1', tool: 'Bash', command: 'ssh erpnext@192.168.0.150 uptime' }, { id: 't3', tool: 'WebFetch', command: 'https://x.test' }], 'an ordinary error is not a denial');
+  assert.deepEqual(jobs.parseStream('{"type":"result","result":"ok"}').denials, []);
+});
+
 test('a job runs detached, reads its prompt from stdin and ends with its cost and session', async () => {
   const j = jobs.startJob({ floorId: 'f', agentId: 'a', prompt: '-starts with a dash and is long '.repeat(50), cwd: work, args: jobs.buildArgs({ agentId: 'a' }) });
   assert.equal(j.status, 'running'); assert.ok(j.pid);

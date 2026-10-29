@@ -110,13 +110,13 @@ function drawPanel() {
   const rows = f.agents.map((a) => {
     const ap = { ...a.appearance, ...(draft.appearance[a.id] || {}) };
     return `<div class="card" data-look="${esc(a.id)}"><div class="agent">${avatar({ ...a, appearance: ap })}<div class="meta"><div class="name ellipsis">${esc(a.displayName)}</div></div></div>
-      <div class="row wrap" style="margin-top:8px"><select data-k="style" style="width:auto" aria-label="${t('Hair style')}">${STYLES.map((s) => `<option ${ap.style === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <div class="row wrap" style="margin-top:var(--sp-2)"><select data-k="style" style="width:auto" aria-label="${t('Hair style')}">${STYLES.map((s) => `<option ${ap.style === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
         <input type="color" data-k="shirt" value="${esc(ap.shirt || '#3d82d6')}" title="${t('Shirt')}" aria-label="${t('Shirt colour')}"><input type="color" data-k="hair" value="${esc(ap.hair || '#2b2440')}" title="${t('Hair')}" aria-label="${t('Hair colour')}">
         <input type="color" data-k="skin" value="${esc(ap.skin || '#f6d2b0')}" title="${t('Skin')}" aria-label="${t('Skin colour')}"><label class="inline" style="margin:0"><input type="checkbox" data-k="glasses" ${ap.glasses ? 'checked' : ''}> ${t('Glasses')}</label></div></div>`;
   }).join('');
   ctx.layoutPanels([{ id: 'edit', title: t('Edit Mode'), card: 'main', html: `
     <p class="note" style="margin-top:0">${t('Drag desks and devices on the floor. Q / E rotate the selection, Delete removes a device. Pick a preset in the bar to rearrange all desks and the lounge. Idle agents walk to the sofa, beanbags, pantry, ping-pong table and whiteboard.')}</p>
-    <div class="sectionHead" style="margin-top:14px"><h3 class="grow">${t('Appearance')}</h3></div>${rows || `<div class="empty">${t('No agents on this Floor.')}</div>`}` }]);
+    <div class="sectionHead" style="margin-top:var(--sp-4)"><h3 class="grow">${t('Appearance')}</h3></div>${rows || `<div class="empty">${t('No agents on this Floor.')}</div>`}` }]);
   const panel = ctx.panelBody();
   panel.querySelectorAll('[data-look]').forEach((card) => card.addEventListener('input', (e) => {
     const k = e.target.dataset.k; if (!k) return;
