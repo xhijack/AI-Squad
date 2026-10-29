@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Admin → Targets (1.3): the numbers every Space works against. Per Space: each target with its value now, its goal,
 // its status and where the value comes from; the Owner adds targets and sets goals, people enter manual values,
-// the server measures ERPNext and CSV targets; the Space's webhook address for outside systems.
+// the server measures ERPNext, CSV and integration targets; the Space's webhook address for outside systems. A target
+// from an integration (1.6): an MCP server the Space may use, one of its read-only tools, its arguments (a form from
+// the tool's input schema), how the number is read, and Try before saving.
 import { esc, api, toast, ago } from './lib.js';
 import { t, tx } from './i18n.js';
 
 const STATE = { met: t('Met'), behind: t('Behind'), unset: t('No goal yet'), unknown: t('No value yet') };
 const TONE = { met: 'live', behind: 'bad', unset: '', unknown: '' };
 const PERIOD = { day: t('today'), week: t('this week'), month: t('this month'), total: t('in total') };
-const SOURCE = { manual: t('entered by a person'), erpnext: 'ERPNext', csv: 'CSV', webhook: t('webhook') };
+const SOURCE = { manual: t('entered by a person'), erpnext: 'ERPNext', csv: 'CSV', webhook: t('webhook'), mcp: t('from an integration') };
+const MEASURED = ['erpnext', 'csv', 'mcp'];
+const PICK = { path: t('the value at a path'), count: t('the number of items in a list'), sum: t('a field added up across a list'), regex: t('a number in the text (regular expression)') };
 const EVERY = { hour: t('every hour'), day: t('every day'), week: t('every week') };
 // what a target behind its goal raises (1.5)
 const MODE = { off: t('nothing'), notify: t('a notice'), suggest: t('a plan to approve'), act: t('the agents act') };
@@ -18,6 +22,47 @@ const agentName = (agents = [], v = '') => (v ? agents.find((a) => a.id === v ||
 const fmt = (v, unit) => (v == null ? '–' : `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}${unit ? ` ${esc(unit)}` : ''}`);
 const opts = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
 
+// ---------- a source from an integration (1.6) ----------
+let INTEG = null;                                       // GET /api/integrations (the Owner's), for the picker
+const usable = (spId) => (INTEG?.servers || []).filter((s) => !s.blocked && s.usableBy.includes(spId) && s.readOnly.length);
+const toolsOf = (s) => (s?.tested?.tools || []).filter((x) => s.readOnly.includes(x.name));
+const toolOpts = (s) => toolsOf(s).map((x) => `<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');
+// a field per top-level argument from the tool's input schema; a date range gets {{from}} / {{to}}
+export function argsHtml(tool) {
+  const props = Object.entries(tool?.inputSchema?.properties || {}).slice(0, 20), req = new Set(tool?.inputSchema?.required || []);
+  const field = ([name, p]) => {
+    const type = [].concat(p?.type || 'string')[0], label = `<span class="mono">${esc(name)}</span>${req.has(name) ? ' *' : ''}`, title = esc(String(p?.description || '').slice(0, 200));
+    if (Array.isArray(p?.enum)) return `<label title="${title}">${label}<select data-arg="${esc(name)}" data-type="${esc(type)}"><option value=""></option>${p.enum.slice(0, 50).map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></label>`;
+    if (type === 'boolean') return `<label title="${title}">${label}<select data-arg="${esc(name)}" data-type="boolean"><option value=""></option><option value="true">true</option><option value="false">false</option></select></label>`;
+    const guess = type === 'string' ? (/^(from|start|since|after|date_?from|start_?date)$/i.test(name) ? '{{from}}' : /^(to|end|until|before|date_?to|end_?date)$/i.test(name) ? '{{to}}' : '') : '';
+    return `<label title="${title}">${label}<input data-arg="${esc(name)}" data-type="${['number', 'integer'].includes(type) ? 'number' : 'string'}" ${['number', 'integer'].includes(type) ? 'type="number" step="any"' : ''} value="${esc(guess)}" placeholder="${title}"></label>`;
+  };
+  return `${props.length ? `<div class="grid4">${props.map(field).join('')}</div>` : ''}<label>${t('More arguments (JSON, optional)')}<input name="mcpArgsJson" placeholder='{"status": "published"}'></label>`;
+}
+function mcpBlock(spId) {
+  const list = usable(spId);
+  const wrap = (inner) => `<div class="ksrc" data-src="mcp" hidden style="grid-column: span 4">${inner}</div>`;
+  if (!list.length) return wrap(`<div class="note">${t('No integration with a read-only tool for this Space yet: test a server and mark its read-only tools in Admin → Integrations.')}</div>`);
+  return wrap(`<div class="grid4">
+      <label>${t('Integration')}<select name="mcpServer">${list.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label>
+      <label>${t('Tool (read-only)')}<select name="mcpTool">${toolOpts(list[0])}</select></label>
+      <label>${t('Read the number as')}<select name="pickType">${opts(PICK, 'path')}</select></label>
+      <label data-pick="path count sum">${t('Path')}<input name="pickPath" placeholder="total"></label>
+      <label data-pick="sum" hidden>${t('Field to add up')}<input name="pickField" placeholder="reach"></label>
+      <label data-pick="regex" hidden>${t('Regular expression')}<input name="pickPattern" placeholder="(\\d+) posts"></label></div>
+    <div class="mcpArgs">${argsHtml(toolsOf(list[0])[0])}</div>
+    <div class="row"><span class="note grow">${t('{{from}} and {{to}} are the first and last day of the target\'s period. Arguments are saved in the repository: no keys here.')}</span><button type="button" class="small" data-ktry>${t('Try')}</button></div>
+    <div class="mcpTry"></div>`);
+}
+function mcpSource(f) {
+  const v = (n) => f.elements[n]?.value ?? '';
+  const args = {};
+  f.querySelectorAll('[data-arg]').forEach((i) => { if (i.value === '') return; args[i.dataset.arg] = i.dataset.type === 'number' ? +i.value : i.dataset.type === 'boolean' ? i.value === 'true' : i.value; });
+  if (v('mcpArgsJson').trim()) { let j; try { j = JSON.parse(v('mcpArgsJson')); } catch { j = null; } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error(t('More arguments must be a JSON object, e.g. {"status": "published"}')); Object.assign(args, j); }
+  return { kind: 'mcp', server: v('mcpServer'), tool: v('mcpTool'), args, pick: { type: v('pickType'), path: v('pickPath'), field: v('pickField'), pattern: v('pickPattern') } };
+}
+const nameOf = (id) => (INTEG?.servers || []).find((s) => s.id === id)?.name || String(id).split(':').at(-1);
+
 // a small line of the last values
 function spark(series) {
   if (!series || series.length < 2) return '';
@@ -26,8 +71,9 @@ function spark(series) {
   return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.5" points="${pts}"/></svg>`;
 }
 
-export function targetsHtml(x, d, me) {
+export function targetsHtml(x, d, me, integ = null) {
   const owner = me?.role === 'owner';
+  INTEG = integ;
   const spaces = (d.spaces || []).filter((s) => !s.missing);
   const o = x || { spaces: [], total: 0, met: 0, behind: 0, unset: 0, unknown: 0 };
   const bySpace = Object.fromEntries(o.spaces.map((s) => [s.id, s]));
@@ -39,7 +85,7 @@ export function targetsHtml(x, d, me) {
         ${s.unreadable ? `<div class="note badText">${t('The values file of this Space is not valid JSON; fix or remove it under ~/.aisquad/kpi/ and the values and webhook come back.')}</div>` : ''}
         ${s.kpis.length ? `<div class="adminList">${s.kpis.map((k) => `<div class="adminRow" data-kpi="${esc(k.id)}"><div class="row"><span class="badge ${TONE[k.status.state]}">${STATE[k.status.state]}${k.status.pct != null ? ` ${k.status.pct} %` : ''}</span><b class="grow">${esc(tx(k.name))}</b>
             <span class="kval">${fmt(k.stale ? null : k.latest?.value, k.unit)}</span><span class="note">/ ${k.target == null ? t('no goal') : fmt(k.target, k.unit)}</span>${spark(k.series)}</div>
-          <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : ''}${['erpnext', 'csv'].includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
+          <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : k.source.kind === 'mcp' ? ` (${esc(nameOf(k.source.server))} · <span class="mono">${esc(k.source.tool)}</span>)` : ''}${MEASURED.includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
           <div class="note whenBehind">${t('When behind:')} <b>${MODE[k.onBehind?.mode || 'off']}</b>${k.onBehind && k.onBehind.mode !== 'off' && k.onBehind.mode !== 'notify' ? ` · ${esc(agentName(s.agents, k.onBehind.agent))}` : ''}${k.onBehind?.task ? ` · ${esc(k.onBehind.task.slice(0, 80))}` : ''}</div>
           ${owner ? `<details class="kbehind"><summary class="note">${t('Change what happens when it is behind')}</summary><form class="grid4" data-kbehind>
             <label>${t('When behind')}<select name="mode">${opts(MODE, k.onBehind?.mode || 'off')}</select></label>
@@ -66,6 +112,7 @@ export function targetsHtml(x, d, me) {
             <label>${t('Note')}<input name="note"></label>
             <div class="ksrc" data-src="erpnext" hidden style="grid-column: span 4"><div class="grid4"><label>DocType<input name="doctype" placeholder="Lead"></label><label>${t('Count or sum')}<select name="aggregate">${opts({ count: t('count'), sum: t('sum of a field') }, 'count')}</select></label><label>${t('Field to sum')}<input name="field" placeholder="grand_total"></label><label>${t('Date field')}<input name="dateField" value="creation"></label></div>
               <label>${t('Filters (JSON, optional)')}<input name="filters" placeholder='[["status","=","Ordered"]]'></label></div>
+            ${mcpBlock(sp.id)}
             <div class="ksrc" data-src="csv" hidden style="grid-column: span 4"><div class="grid4"><label>${t('File in the repository')}<input name="path" placeholder="docs/kpi/traffic.csv"></label><label>${t('Column')}<input name="column" value="value"></label><label>${t('Date column')}<input name="dateColumn" value="date"></label><label>${t('Take')}<select name="csvAggregate">${opts({ last: t('the last row'), sum: t('the sum in the period') }, 'last')}</select></label></div></div>
             <div class="row" style="grid-column: span 4"><span class="spacer"></span><button class="small gold">${t('Add')}</button></div>
           </form></details>
@@ -76,9 +123,14 @@ export function targetsHtml(x, d, me) {
 
 export function bindTargets(body, again) {
   body.addEventListener('change', (e) => {
-    if (e.target.name !== 'kind') return;
-    const f = e.target.closest('form');
-    f.querySelectorAll('.ksrc').forEach((el) => { el.hidden = el.dataset.src !== e.target.value; });
+    const f = e.target.closest('form[data-kadd]');
+    if (!f) return;
+    const n = e.target.name;
+    if (n === 'kind') f.querySelectorAll('.ksrc').forEach((el) => { el.hidden = el.dataset.src !== e.target.value; });
+    const server = () => (INTEG?.servers || []).find((s) => s.id === f.elements.mcpServer.value);
+    if (n === 'mcpServer') f.elements.mcpTool.innerHTML = toolOpts(server());
+    if (n === 'mcpServer' || n === 'mcpTool') { f.querySelector('.mcpArgs').innerHTML = argsHtml(toolsOf(server()).find((x) => x.name === f.elements.mcpTool.value)); f.querySelector('.mcpTry').innerHTML = ''; }
+    if (n === 'pickType') f.querySelectorAll('[data-pick]').forEach((el) => { el.hidden = !el.dataset.pick.split(' ').includes(e.target.value); });
   });
   body.addEventListener('submit', async (e) => {
     const f = e.target, sp = f.closest('[data-kspace]')?.dataset.kspace, id = f.closest('[data-kpi]')?.dataset.kpi;
@@ -94,6 +146,7 @@ export function bindTargets(body, again) {
         let source = { kind };
         if (kind === 'erpnext') { let filters = []; if (v('filters').trim()) { try { filters = JSON.parse(v('filters')); } catch { throw new Error(t('Filters must be JSON, e.g. [["status","=","Ordered"]]')); } } source = { kind, doctype: v('doctype'), aggregate: v('aggregate'), field: v('field'), dateField: v('dateField'), filters }; }
         if (kind === 'csv') source = { kind, path: v('path'), column: v('column'), dateColumn: v('dateColumn'), aggregate: v('csvAggregate') };
+        if (kind === 'mcp') source = mcpSource(f);
         await api('POST', `/api/floors/${sp}/kpis`, { name: v('name'), unit: v('unit'), target: v('target') === '' ? null : +v('target'), direction: v('direction'), period: v('period'), every: v('every'), note: v('note'), source });
         return again(t('Target added'));
       }
@@ -103,6 +156,16 @@ export function bindTargets(body, again) {
     const el = e.target, sp = el.closest('[data-kspace]')?.dataset.kspace, id = el.closest('[data-kpi]')?.dataset.kpi;
     if (!sp) return;
     try {
+      if (el.dataset.ktry !== undefined) {
+        const f = el.closest('form'), box = f.querySelector('.mcpTry');
+        el.disabled = true;
+        try {
+          const r = await api('POST', `/api/floors/${sp}/kpis/try`, { source: mcpSource(f), period: f.elements.period.value });
+          box.innerHTML = `<div class="note">${r.error ? `<span class="badText">${esc(tx(r.error))}</span>` : `${t('The number:')} <b class="kval">${fmt(r.value)}</b>`} · ${t('sent')} <span class="mono">${esc(JSON.stringify(r.args))}</span></div>
+            <details ${r.error ? 'open' : ''}><summary class="note">${t('The result as the tool returned it')}</summary><pre class="note pre mono">${esc(r.raw)}</pre></details>`;
+        } finally { el.disabled = false; }
+        return;
+      }
       if (el.dataset.khook !== undefined) { if (!confirm(t('Make a new webhook address? The old one stops working at once; update the outside systems.'))) return; await api('POST', `/api/floors/${sp}/kpis/hook`, {}); return again(t('New webhook address')); }
       if (!id) return;
       if (el.dataset.kmeasure !== undefined) { const r = await api('POST', `/api/floors/${sp}/kpis/${id}/measure`, {}); return again(t('Measured: {v}', { v: r.value })); }

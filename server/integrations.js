@@ -84,7 +84,7 @@ export function setMarks(id, { kind, readOnly } = {}) {
     if (unknown.length) throw bad(`Test the connection first: ${unknown.slice(0, 3).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not among its tools`);
     ro = [...new Set(readOnly)].slice(0, 100);
   }
-  st.servers[id] = { ...cur, ...(kind !== undefined ? { kind } : {}), readOnly: ro };
+  st.servers[id] = { ...cur, ...(kind !== undefined ? { kind } : {}), readOnly: ro, ...(readOnly !== undefined ? { markedAt: Date.now() } : {}) };
   saveState(st);
   return view(find(id));
 }
@@ -128,7 +128,7 @@ export function view(e) {
     id: e.id, name: e.name, source: e.source, sourceText: SOURCE_TEXT[e.source], ...(e.floorId ? { floorId: e.floorId } : {}), transport: e.transport,
     ...(e.url ? { url: maskUrl(e.url) } : {}), ...(e.command ? { command: maskValue(e.command, 'command'), args: maskArgs(e.args) } : {}),
     headers: Object.fromEntries(Object.entries(e.headers).map(([k, v]) => [k, maskValue(v, k)])), env: Object.fromEntries(Object.entries(e.env).map(([k, v]) => [k, maskValue(v, k)])),
-    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], tested: m.tested || null,
+    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], marked: !!m.markedAt, tested: m.tested || null,
     blocked: blocker(e, m), usableBy: spaces().filter((s) => usableBy(e, s)).map((s) => s.id),
   };
 }

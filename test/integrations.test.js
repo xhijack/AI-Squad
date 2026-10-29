@@ -111,7 +111,7 @@ test('Test connection: the tools with their schemas, the Squad Log; sign-in and 
   assert.equal(v.tested.ok, true);
   assert.deepEqual(v.tested.tools.map((t) => [t.name, t.readOnlyHint]), [['posts_this_week', true], ['delete_post', false]]);
   assert.deepEqual(Object.keys(v.tested.tools[0].inputSchema.properties), ['from', 'to', 'status']);
-  assert.deepEqual(v.readOnly, [], 'readOnlyHint pre-ticks in the UI; nothing is marked until the Owner saves');
+  assert.deepEqual([v.readOnly, v.marked], [[], false], 'readOnlyHint pre-ticks in the UI; nothing is marked until the Owner saves');
   const ev = squadLog.read(boss.id, { type: 'integration.tested' }).at(-1);
   assert.deepEqual([ev.data.server, ev.data.ok, ev.data.tools, ev.data.transport], ['user:stats', true, 2, 'stdio']);
   assert.match(ev.summary, /integration stats \(stdio\) tested: 2 tools/);
@@ -136,7 +136,7 @@ test('read-only marks: only tested tools, kept across tests while the tool exist
   assert.throws(() => integ.setMarks('user:stats', { readOnly: ['drop_table'] }), /Test the connection first/);
   assert.throws(() => integ.setMarks('user:stats', { kind: 'weather' }), /Kind/);
   const v = integ.setMarks('user:stats', { kind: 'analytics', readOnly: ['posts_this_week'] });
-  assert.deepEqual([v.kind, v.kindSet, v.readOnly], ['analytics', true, ['posts_this_week']]);
+  assert.deepEqual([v.kind, v.kindSet, v.readOnly, v.marked], ['analytics', true, ['posts_this_week'], true]);
   const sp = integ.spaces().find((s) => s.id === boss.id);
   assert.equal(integ.checkUse(sp, { server: 'user:stats', tool: 'posts_this_week' }).id, 'user:stats');
   assert.throws(() => integ.checkUse(sp, { server: 'user:stats', tool: 'delete_post' }), /not marked read-only/);
