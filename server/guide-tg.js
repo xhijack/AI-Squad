@@ -148,7 +148,8 @@ export function questionMessage(q, a, lang, sel = null) {
   const T = L[lang], n = STEP_OF[q.step] + 1;
   let ask = q.id.startsWith('m.') ? fill(T.q.mode, { division: T.division[q.id.slice(2)] }) : fill(T.q[q.id], { currency: a.goals.currency, list: guide.suggestFor(a.business.type, a.have).map((d) => T.division[d]).join(', ') });
   if (q.id.startsWith('m.')) ask += `\n${guide.MODES.map((m) => `• ${T.mode[m]}: ${T.modeText[m]}`).join('\n')}`;
-  const cur = nowText(lang, q, sel ?? valueOf(a, q.id));
+  // the type is "other" until the business step is answered (cleanAnswers' default): no "Now:" for it before a name
+  const cur = q.id === 'type' && !a.business.name ? '' : nowText(lang, q, sel ?? valueOf(a, q.id));
   const text = [`${fill(T.step, { n })} · ${STEP_TITLE[lang][STEP_OF[q.step]]}`, ask, ...(cur && q.kind !== 'multi' ? [fill(T.now, { v: cur })] : []), ...(q.kind === 'text' ? [T.typeIt] : q.kind === 'number' ? [T.typeNumber] : [])].join('\n\n');
   const rows = [];
   if (q.kind === 'choice' || q.kind === 'multi') {

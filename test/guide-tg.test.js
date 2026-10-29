@@ -73,6 +73,7 @@ test('the interview: one question per message, buttons, toggles, text, numbers, 
   await tap('Bahasa Indonesia');
   assert.equal(building.loadBuilding().prefs.language, 'id', 'the language is saved for the app, the bot and the agents');
   assert.match(last().text, /^Langkah 2\/7 · Bisnismu\n\nApa bisnismu\?/);
+  assert.doesNotMatch(last().text, /Sekarang:/, 'no "Now:" for a type nobody picked yet');
   await tap('Produk SaaS');
   assert.match(last().text, /Nama perusahaan atau produknya\?[\s\S]*Ketik jawabanmu\./);
   assert.ok(!data('Lewati'), 'the name cannot be skipped');
