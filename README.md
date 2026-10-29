@@ -99,12 +99,18 @@ An owner's empty Building opens the **Company Guide** by itself (later: **Set up
 2. **Your business**: the closest type (SaaS, ERPNext consulting, consulting, software house, agency, clinic, retail, other), a name and one sentence.
 3. **Your goals** for the next 3 months (revenue, leads, a launch, lower costs, better service) with a number where there is one: it becomes the first targets.
 4. **What you have**: products and prices, brand rules, a website, social accounts, ERPNext, other tools, code repositories, people, company documents. What is unticked becomes a task for the squads.
-5. **Divisions**: a suggestion per business type; one division alone is fine. Product, Engineering (Software House), Implementation (ERP Consultant), Marketing, Sales and Legal have a squad; Finance and Support are listed as "later" and never built.
-6. **How much runs by itself** per division: automatic, supervised or manual (Legal starts manual). Money, contracts, production deploys, secrets and deleting data always wait for the owner.
+5. **Divisions**: a suggestion per business type; one division alone is fine. Product, Engineering (Software House), Implementation (ERP Consultant), Marketing, Sales, Legal, Finance and Support (1.7) each have a squad. Support is suggested for SaaS, software houses and ERPNext consultants; Finance for every business that already has ERPNext. Finance is always built Owner-only.
+6. **How much runs by itself** per division: automatic, supervised or manual (Legal and Finance start manual). Money, contracts, production deploys, secrets and deleting data always wait for the owner.
 7. **Machine and budget**: this machine or more later, daytime, at night (22:00–05:00) or around the clock, and an optional monthly API budget split across the Spaces.
 8. **The plan**, in plain words and editable: a Space per division with its Blueprint, mode, shift and budget, its starting targets with goals, and **what the squad needs from you** (have, missing, later). Claude Code (haiku, structured output) writes the summary, sharpens the targets and adds up to three materials specific to the business; without it the plan is the defaults.
 
 **Build** creates every Space through Set up Squad (a folder with `git init` under the squads folder, the Blueprint's default team, skills), sets the autopilot level, the shift and the budget, writes the goals into the targets, and puts `docs/squad/MATERIALS.md` into the Space; the plan itself goes to the Company Brain as `PLAN.md`, where every agent reads it before its first task, together with its materials list (the lead asks the owner for what is missing and drafts it for approval; nobody invents a material). The answers and the plan are in `~/.aisquad/guide.json` (0600, the owner's; `GET/PUT/DELETE /api/guide`, `POST /api/guide/plan`, `POST /api/guide/build`, owner only). Nothing starts running by itself: the owner opens a Space and starts its lead. The Squad Log records `guide.built` per Space.
+
+The same interview runs on **Telegram** (1.7): see *The guide on Telegram* below.
+
+### The guide on Telegram (1.7)
+
+In the Owner's paired Telegram chat, **`/guide`** runs the Company Guide: one question per message, buttons for the choices (toggles and **Done** where several fit, *Use the suggestion* for the divisions), typed text for a name, a sentence or a number (`50`, `30.000.000`), **« Back** and **Cancel** under every question (`/cancel` too). Every answer is saved at once into the same `~/.aisquad/guide.json` as the app's, so `/guide` later offers *Continue* or *From the start*, Telegram shows what was answered in the app as *Now:*, and the app's guide, while open, follows what is answered on Telegram (*Updated from Telegram*). The language is the first answer, else the Building's. At the end the bot sends the plan in plain words (each Space with its mode, Owner-only or not, its targets, its routines and how many materials it needs from you; what waits for you) and a link to `#/guide`. **Build happens only in the app**: it makes repositories and Spaces and needs the PIN and a careful look. Members and Viewers who send `/guide` get a polite refusal. See `docs/TELEGRAM.md`.
 
 ### Set up Squad
 
@@ -132,6 +138,8 @@ The standard is written into `AISQUAD.md` and into every generated agent prompt,
 | Digital Marketing | Marketing Strategist | SEO Specialist, Content Writer, Social Media Specialist, Ads & Analytics Specialist, Designer (optional) | `docs/MARKETING-BRIEF.md`, `docs/BRAND.md`, `docs/CHANNELS.md` |
 | Sales & CRM | Sales Manager | Lead Researcher, CRM Administrator, Sales Copywriter, Sales Analyst | `docs/ICP.md`, `docs/OFFER.md`, `docs/PIPELINE.md` |
 | Product (1.4) | Project Manager as product lead | Lead Researcher, UI/UX Designer | `docs/PRODUCT-VISION.md`, `docs/ROADMAP.md`, `docs/RESEARCH.md`; an approved PRD leaves as a handoff to the engineering Space |
+| Finance (1.7, Owner only) | Finance Controller | Bookkeeper | `docs/FINANCE-POLICY.md` |
+| Support (1.7) | Support Lead | Support Agents (0-3) | `docs/SUPPORT-POLICY.md`; the knowledge base in `docs/kb/` |
 
 Software House runs on the Squad Sprint workflow; `/sprint` refuses to start while a source document is not approved. The other two keep their board in `docs/BOARD.md`.
 
@@ -328,6 +336,13 @@ A target can take its number from a read-only tool of an integration: Admin → 
 - It is **measured like ERPNext and CSV targets**: on its interval by the hourly tick, again when a new period starts, and with *Measure now*. Results go the usual way: `kpi.measured` (with `server` and `tool`, never the arguments), `kpi.failed` with the reason, `docs/squad/KPI.md` (source `mcp <server>`), the cockpit, and the target's *When behind* rule. Each call checks again that the server is known here, that this Space may use it and that the tool is still marked read-only.
 - **Blueprints** may hint at the integration that would measure a target (`requires: mcp:<kind>`, optionally with the tool, arguments and how to read it): Marketing's *Posts published* from a social scheduler (`posts…` tool, `{{from}}`/`{{to}}`, the number of posts) and *Organic traffic* from analytics. The **Company Guide**'s plan says per target *Measured from: <integration>* when a server the new Space may use has a matching read-only tool (Build then wires the target to it), and otherwise *Enter by hand (connect <kind> to measure it)*; when only your personal server has it, the plan says a team Space needs one in its own `.mcp.json`. Admin → Targets repeats the hint on a manual target until it is connected.
 
+### Change a target's source (1.7)
+
+Admin → Targets → a target → **Edit the source** (the Owner's): switch between entered by a person, ERPNext, CSV, webhook and an integration, or change the integration's server, tool, arguments and how the number is read, without deleting the target. The new source is checked like a new target's (a read-only tool this Space may use, no literal secrets, a valid DocType or path); a refused change leaves the target as it was.
+
+- **History is kept**: the old values stay in the series and in the sparkline, faint, with a marker where the source changed; the first value from the new source starts a new line. The status, `KPI.md`, the cockpit and the *When behind* rule count only from that first value (until then the target shows *No value yet*), and a measured source is measured at the next hourly tick.
+- The switch is kept with the values (`~/.aisquad/kpi/<space>.json`, `switches`) and logged as **`kpi.source.changed`** with the kinds before and after (and the integration's server and tool), never arguments, filters or anything secret. `PATCH /api/floors/<id>/kpis/<kpi>` `{source, every}`.
+
 ### Cadence (1.5)
 
 A Space can work on a rhythm without anyone giving it a task: **routines**. Each one has a title, an agent (a role such as `marketing-strategist`, which resolves to the Space's agent with that role, the lead first; or an agent id), when it runs (every day, every weekday, weekly on a day, monthly on a day of the month; the 31st means the last day of a short month), a time on this machine's clock, the task, and optionally a budget per run (default $2, at most $50). At most 20 per Space, in `.claude/aisquad/cadence.json` (committed; changes in Admin → Changes). When each one last ran, what waits and what runs is in `~/.aisquad/cadence/<space>.json` (0600).
@@ -389,6 +404,25 @@ The **cockpit**: the List overview and the Owner's room in the Office show how m
 **ERP Consultant Blueprint.** An ERPNext implementation team (Project Manager, ERP Functional Consultant, Frappe Developer, QA) with a BRD, a fit-gap (`fit-gap-analysis` skill: Fit, Configure, Gap, Process change), a data migration plan and a UAT plan; every gap needs your approval before development.
 
 **Quickstart.** `install.sh` checks the machine, installs into `~/.aisquad-app` without sudo, links `aisquad`, and runs `aisquad quickstart [--blueprint ID --name NAME]`: the server, the PIN, and optionally a first squad. Indonesian documentation in `docs/id/`.
+
+### Finance (1.7)
+
+*Set up Squad → Finance* (or the Company Guide) makes an **Owner-only department**: finance data (cash, receivables, payables, salaries, tax) is the Owner's alone, like Legal.
+
+- **Finance Controller** (lead): the month-end close checklist (`docs/finance/close/<yyyy-mm>.md`), the cash-flow view, budget vs actual, and receivables follow-ups as DRAFTs for you to send. **Bookkeeper**: reconciles ERPNext with the bank statements you place in `docs/finance/bank/`, flags anomalies and prepares tax worksheets. Neither has a shell or the web.
+- **Hard stops**, in both role files and the Blueprint's owner-only topics: no payments, no submitting or cancelling ERPNext documents, no tax filing, no invoices or reminders to customers without your approval, no salary data outside this Space, nothing from this Space on Telegram except counts.
+- **ERPNext** through the existing MCP with a **read-only finance key** (Admin → ERPNext → *Finance*; an *Accounts User* restricted to Read and Report, see `docs/ERPNEXT.md`). Only an Owner-only Space can have it, and its agents get the reading tools only (`create_document` and `update_document` are denied on top of the usual list).
+- **Targets** (no goals until you set them): *Overdue receivables* (the sum of `outstanding_amount` on submitted, overdue Sales Invoices), *Cash in bank* (entered by you), *Days to close the month* (entered), *Unreconciled bank lines* (count of unreconciled Bank Transactions). **Routines** (off): a weekday receivables digest, the monthly close checklist on day 1, a weekly budget-vs-actual note.
+- **Source document**: `docs/FINANCE-POLICY.md` (approval limits, who pays, the close calendar, the tax calendar, the budget); no finance work starts before you approve it.
+- **Telegram: counts only** (a Space setting, Admin → Spaces → Telegram): its questions arrive as "1 item(s) from an Owner-only Space wait for you" with only *Open*; the digest counts them; `/chat` does not reach its agents.
+
+### Support (1.7)
+
+*Set up Squad → Support* makes a team department.
+
+- **Support Lead** (lead): the morning triage against the SLAs, reviews replies and knowledge base articles, the weekly support report, and **escalations** to the product or engineering Space as handoff packages (the `space-handoff` skill). **Support Agents**: draft replies from the knowledge base. In **supervised** mode every reply is a draft for approval; in **automatic** mode an agent answers by itself only with an APPROVED KB article, cited in the reply. Refunds, credits, discounts, deleted accounts and promised dates are yours.
+- **Knowledge base** in the Space, `docs/kb/*.md`, written with the new **`kb-writer`** skill from resolved tickets: customers' names, phone numbers, e-mail addresses, addresses and ticket numbers never go into an article. An article starts DRAFT; the lead approves it.
+- **Tickets** come from a help desk connected as an integration, or from ERPNext Issues (or HD Ticket with the Helpdesk app) through the existing ERPNext MCP. **Targets**: first response time and customer satisfaction (by hand or from the help desk, `requires: mcp:helpdesk`), open tickets and tickets resolved (ERPNext Issues). **Routines** (off): morning triage, weekly support report, weekly KB gaps.
 
 ### Legal, Marketing at night and model tiering (0.20)
 

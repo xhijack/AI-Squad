@@ -9,12 +9,18 @@ Dokumentasi lengkap (bahasa Inggris) ada di [README](../../README.md).
 - **Space** = satu repositori dengan satu tim agent. Jenisnya *project* (satu klien/produk) atau *department*
   (Sales, Marketing, Legal). Akses *Team* atau *Owner only*: Space khusus Owner tidak terlihat oleh orang lain.
 - **Blueprint** menyiapkan tim, dokumen sumber, dan aturan kerja: Software House, ERP Consultant, Sales & CRM,
-  Digital Marketing (shift malam), Product, Legal (khusus Owner).
+  Digital Marketing (shift malam), Product, Legal (khusus Owner), Keuangan (khusus Owner, 1.7) dan Dukungan (1.7).
 - **Siapkan Perusahaan** (1.4): pemandu untuk pemilik yang belum tahu harus mulai dari mana. Beberapa pertanyaan
   dalam bahasamu, lalu rencana: satu Space per divisi (boleh satu saja), target awal dari tujuanmu, mode kerja
-  (otomatis, diawasi, manual; Legal selalu manual kecuali kamu ubah), jam kerja, budget, dan daftar bahan per divisi
+  (otomatis, diawasi, manual; Legal dan Keuangan mulai manual kecuali kamu ubah), jam kerja, budget, dan daftar bahan per divisi
   (ada / belum / nanti). Yang belum ada menjadi tugas pertama lead: mewawancaraimu dan membuat drafnya.
   Bahasa yang kamu pilih dipakai aplikasi dan agent saat bicara denganmu; kode dan dokumen teknis tetap Inggris.
+  Dukungan disarankan untuk SaaS, software house dan konsultan ERPNext; Keuangan untuk bisnis yang sudah memakai
+  ERPNext, dan selalu dibangun khusus Owner.
+- **Panduan di Telegram** (1.7): ketik `/guide` di chat Telegram Owner. Satu pertanyaan per pesan dengan tombol,
+  jawaban teks untuk nama, kalimat dan angka (`30.000.000`), tombol Kembali dan Batal. Jawaban tersimpan di file yang
+  sama dengan aplikasi, jadi bisa dilanjutkan di mana saja. Di akhir bot mengirim rencananya dan tautan ke aplikasi:
+  **Build hanya dari aplikasi** (butuh PIN dan tinjauan yang teliti). Anggota dan Viewer mendapat penolakan yang sopan.
 - **Company Brain** (L0): SOP, brand, template, produk; folder legal, keuangan, dan harga hanya untuk Space Owner.
   Agent hanya membaca, tidak pernah mengubah.
 
@@ -46,6 +52,21 @@ Kontrak dibuat dari template dwibahasa yang terkunci di Company Brain dan diperi
 KUHPerdata, UU 24/2009, UU PDP, TTE, bea meterai). Setiap kontrak tetap **DRAFT** sampai kamu menyetujuinya di
 aplikasi; kontrak yang ditandai APPROVED dengan cara lain dikembalikan ke DRAFT. Ini alat bantu penyusunan, bukan
 nasihat hukum.
+
+## Keuangan dan Dukungan (1.7)
+
+- **Keuangan** (khusus Owner): Finance Controller (tutup buku bulanan, arus kas, anggaran vs realisasi, draf
+  penagihan piutang) dan Bookkeeper (rekonsiliasi bank, anomali, kertas kerja pajak). Membaca ERPNext dengan **kunci
+  keuangan yang hanya baca** (Admin → ERPNext → Finance). Hard stop: tidak membayar, tidak submit atau cancel dokumen
+  ERPNext, tidak lapor pajak, tidak mengirim invoice atau pengingat ke pelanggan tanpa persetujuanmu, data gaji tidak
+  keluar dari Space ini. Di Telegram hanya jumlahnya yang dikirim, tanpa nominal atau nama.
+- **Dukungan**: Support Lead (triase sesuai SLA, laporan mingguan, eskalasi ke Space produk atau engineering lewat
+  handoff) dan Support Agent (draf balasan dari basis pengetahuan `docs/kb/`). Mode diawasi: setiap balasan menunggu
+  persetujuan; mode otomatis: hanya jawaban yang mengutip artikel KB yang sudah APPROVED. Skill `kb-writer` mengubah
+  tiket yang selesai menjadi artikel tanpa data pribadi pelanggan (nama, telepon, email disamarkan).
+- **Ubah sumber target** (Admin → Target → Ubah sumbernya): ganti sumber target (manual, ERPNext, CSV, webhook,
+  integrasi) tanpa menghapusnya. Riwayatnya tetap; nilai dari sumber baru memulai garis baru, dan perubahan tercatat di
+  Squad Log (`kpi.source.changed`).
 
 ## Biaya dan pembelajaran
 
