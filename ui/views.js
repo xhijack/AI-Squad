@@ -148,6 +148,7 @@ export function lobbySections(b) {
       ${p.hasFloorConfig ? `<button class="small" data-act="adopt" data-i="${i}">${tt('Register')}</button>` : `<button class="small" data-act="from-detected" data-i="${i}">${tt('Create Floor')}</button>`}</div>`).join('');
   const out = [
     { id: 'floors', title: tt('Floors'), card: 'main', count: b.floors.length, html: `
+      ${globalThis.document?.body.dataset.role === 'owner' ? `<button class="setupBtn" data-act="guide"><svg aria-hidden="true"><use href="#i-spark"/></svg><span><b>${b.guide?.done ? tt('Set up the company again') : tt('Set up the company')}</b><small>${tt('A few questions about your business; a squad per division with targets and what each needs from you')}</small></span></button>` : ''}
       ${b.floors.some((f) => !f.independent && !f.missing)
         ? `<button class="setupMini" data-act="setup-squad"><svg aria-hidden="true"><use href="#i-spark"/></svg>${tt('Set up another squad')}</button>`
         : `<button class="setupBtn" data-act="setup-squad"><svg aria-hidden="true"><use href="#i-spark"/></svg><span><b>${tt('Set up Squad')}</b><small>${tt('Describe what you want to build; get a team and how it works together')}</small></span></button>`}

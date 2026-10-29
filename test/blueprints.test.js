@@ -17,7 +17,7 @@ const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures',
 
 test('the shipped Blueprints are seeded with roles, counts and a lead', () => {
   const list = bp.listBlueprints();
-  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'erp-consultant', 'legal', 'sales-crm', 'software-house']);
+  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'erp-consultant', 'legal', 'product', 'sales-crm', 'software-house']);
   assert.equal(bp.getBlueprint('erp-consultant').lead, 'project-manager');
   assert.deepEqual(bp.getBlueprint('legal').space, { kind: 'department', access: 'owner' }, 'Legal is an Owner-only department (0.20)');
   assert.equal(bp.getBlueprint('digital-marketing').space.shift.from, '22:00', 'Marketing works nights');
@@ -41,7 +41,7 @@ test('catalog: every Role Template with its category (from the template or the B
   const of = (r) => c.find((t) => t.role === r);
   assert.equal(of('sales-copywriter').category, 'sales');
   assert.equal(of('qa-engineer').category, 'software');
-  assert.deepEqual(of('ui-ux-designer').blueprints, ['digital-marketing', 'software-house']);
+  assert.deepEqual(of('ui-ux-designer').blueprints, ['digital-marketing', 'product', 'software-house']);
   assert.equal(of('frappe-developer').category, 'software');
   assert.equal(of('seo-specialist').category, 'marketing');
 });

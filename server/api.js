@@ -38,6 +38,7 @@ import * as erp from './erpnext.js';
 import * as tiering from './tiering.js';
 import * as trust from './trust.js';
 import * as kpi from './kpi.js';
+import * as guide from './guide.js';
 import * as promote from './promote.js';
 
 const UI = path.join(ROOT, 'ui');
@@ -261,6 +262,12 @@ const routes = [
   ['PATCH', /^\/api\/nodes\/([\w-]+)$/, ([name], b) => nodes.setDrain(name, b.drain), { pin: true }],
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
+  // the Company Guide (1.4): the owner's answers, the plan, the build
+  ['GET', /^\/api\/guide$/, () => guide.state(), { pin: true }],
+  ['PUT', /^\/api\/guide$/, (p, b) => guide.answer(b?.answers || {}, b?.step), { pin: true }],
+  ['DELETE', /^\/api\/guide$/, () => guide.reset(), { pin: true }],
+  ['POST', /^\/api\/guide\/plan$/, (p, b) => guide.plan({ useClaude: b.useClaude !== false }), { pin: true }],
+  ['POST', /^\/api\/guide\/build$/, async (p, b) => { const r = await guide.build(b); squad.invalidate(); return r; }, { pin: true, history: () => ({ label: 'Company Guide: built' }) }],
   // targets (1.3): per Space, the cockpit across Spaces, a webhook for outside systems
   ['GET', /^\/api\/kpis$/, (p, b, req) => { const o = kpi.overview(); if (req.user?.role === 'owner') for (const s of o.spaces) s.hook = hookOf(s.id); return o; }, {}],
   ['POST', /^\/api\/kpi\/hook\/([0-9a-f]{32})$/, ([tok], b) => {
@@ -374,7 +381,7 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
           let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
           return history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor }, () => handler(m.slice(1), body, req));
         }));
-        if (method !== 'GET' && /^\/api\/floors/.test(url.pathname)) access.forgetOwnerFloors();
+        if (method !== 'GET' && /^\/api\/(floors|squads|guide)/.test(url.pathname)) access.forgetOwnerFloors();   // a new or changed Space may be the Owner's
         out = access.redact(url.pathname, out, user);
         if (out === null) return send(res, 404, { error: 'Not found' });
         if (out && out.__audio) { res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); return res.end(out.__audio); }

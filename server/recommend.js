@@ -66,9 +66,9 @@ export function claudePrompt(prompt, blueprints, roles) {
   ].join('\n');
 }
 
-export function runClaude(prompt, { timeoutMs = CLAUDE_TIMEOUT_MS } = {}) {
+export function runClaude(prompt, { timeoutMs = CLAUDE_TIMEOUT_MS, schema = SCHEMA } = {}) {
   return new Promise((resolve, reject) => {
-    const args = ['-p', '--model', 'haiku', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config', '--json-schema', JSON.stringify(SCHEMA), prompt];
+    const args = ['-p', '--model', 'haiku', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config', '--json-schema', JSON.stringify(schema), prompt];
     execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}`, ...auth.backgroundEnv(loadBuilding().prefs.auth) } },
       (err, stdout) => {
         if (err && !stdout) return reject(err);

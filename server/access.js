@@ -13,7 +13,8 @@ export const actorStore = new AsyncLocalStorage();
 export const currentActor = () => actorStore.getStore()?.user || null;
 
 const OWNER_ROUTES = [
-  /^(PATCH|PUT|POST|DELETE) \/api\/(building|auth\/key|company|backups|users|libraries|roles|voice\/key|squads$|squads\/recommend|independents)/,
+  /^(PATCH|PUT|POST|DELETE) \/api\/(building|auth\/key|company|backups|users|libraries|roles|voice\/key|squads$|squads\/recommend|independents|guide)/,
+  /^GET \/api\/guide$/,
   /^PATCH \/api\/(auth|voice|dispatcher|notify|insights)$/,
   /^(PUT|DELETE) \/api\/notify\//,
   /^POST \/api\/notify\/(test)$/,

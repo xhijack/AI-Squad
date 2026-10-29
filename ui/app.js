@@ -23,6 +23,7 @@ import './health.js';
 import './signin.js';
 import './admin.js';
 import './people.js';
+import { maybeOpen as maybeOpenGuide } from './guide.js';
 import './chat.js';
 import { attentionIndexHtml } from './convo.js';
 import { readAskForm } from './askform.js';
@@ -783,3 +784,5 @@ if (location.hash === '#/new-floor') {
 }
 state.route = parseRoute();
 refresh();
+// the Company Guide (1.4): an owner's empty Building opens it once; after the language reload it comes back
+{ let tries = 0; const open = () => { if (state.building && ctx.state.me) maybeOpenGuide(state.building, ctx.state.me); else if (tries++ < 20) setTimeout(open, 400); }; setTimeout(open, 600); }

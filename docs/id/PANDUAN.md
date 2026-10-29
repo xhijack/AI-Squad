@@ -9,7 +9,12 @@ Dokumentasi lengkap (bahasa Inggris) ada di [README](../../README.md).
 - **Space** = satu repositori dengan satu tim agent. Jenisnya *project* (satu klien/produk) atau *department*
   (Sales, Marketing, Legal). Akses *Team* atau *Owner only*: Space khusus Owner tidak terlihat oleh orang lain.
 - **Blueprint** menyiapkan tim, dokumen sumber, dan aturan kerja: Software House, ERP Consultant, Sales & CRM,
-  Digital Marketing (shift malam), Legal (khusus Owner).
+  Digital Marketing (shift malam), Product, Legal (khusus Owner).
+- **Siapkan Perusahaan** (1.4): pemandu untuk pemilik yang belum tahu harus mulai dari mana. Beberapa pertanyaan
+  dalam bahasamu, lalu rencana: satu Space per divisi (boleh satu saja), target awal dari tujuanmu, mode kerja
+  (otomatis, diawasi, manual; Legal selalu manual kecuali kamu ubah), jam kerja, budget, dan daftar bahan per divisi
+  (ada / belum / nanti). Yang belum ada menjadi tugas pertama lead: mewawancaraimu dan membuat drafnya.
+  Bahasa yang kamu pilih dipakai aplikasi dan agent saat bicara denganmu; kode dan dokumen teknis tetap Inggris.
 - **Company Brain** (L0): SOP, brand, template, produk; folder legal, keuangan, dan harga hanya untuk Space Owner.
   Agent hanya membaca, tidak pernah mengubah.
 

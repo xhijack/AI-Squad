@@ -242,7 +242,7 @@ async function quickstartCmd() {
   console.log(`\nThe AI Squad ${VERSION} is ${started === 'running' ? 'running' : 'started'} at ${url}${opened ? ' (opened in your browser)' : ''}`);
   console.log(`Your PIN (for changes): ${pin}   (kept in ${paths.pin()})`);
   if (squadLine) console.log(squadLine);
-  console.log(`Ready in ${Math.round((Date.now() - t0) / 1000)} s. Next: Set up Squad in the app, or /plugin marketplace add xhijack/AI-Squad in Claude Code for /aisquad.`);
+  console.log(`Ready in ${Math.round((Date.now() - t0) / 1000)} s. Next: the app opens the Company Guide (Set up the company): a few questions, then a squad per division. Or /plugin marketplace add xhijack/AI-Squad in Claude Code for /aisquad.`);
 }
 
 async function main() {

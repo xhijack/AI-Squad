@@ -37,12 +37,15 @@ export function sessionContext(root, floor, prefs = {}) {
     addDirs: has ? ['--add-dir', dir] : [],
     deny: [...identityDenyRules(), ...(has ? company.denyRules(dir, { owner }) : [])],
     settings: space.sessionSettings(root, sp),
-    lines: contextLines(sp, has ? dir : '', owner, { targets: fs.existsSync(path.join(root, '.claude', 'aisquad', 'kpi.json')) }),
+    lines: contextLines(sp, has ? dir : '', owner, { targets: fs.existsSync(path.join(root, '.claude', 'aisquad', 'kpi.json')), plan: has && fs.existsSync(path.join(dir, 'PLAN.md')), materials: fs.existsSync(path.join(root, 'docs', 'squad', 'MATERIALS.md')), language: prefs.language || 'en' }),
   };
 }
 
-export function contextLines(sp, dir, owner, { targets = false } = {}) {
+export function contextLines(sp, dir, owner, { targets = false, plan = false, materials = false, language = 'en' } = {}) {
   return [
+    ...(language === 'id' ? ['Talk to the owner and the team in Bahasa Indonesia (chat, questions, reports, handoff texts); code, commit messages and technical documentation stay in English.'] : []),
+    ...(plan ? [`The company plan is \`${dir}/PLAN.md\` (read only): the goals, the divisions, what runs by itself and what waits for the owner. Read it before your first task.`] : []),
+    ...(materials ? ['`docs/squad/MATERIALS.md` lists what this Space needs from the owner and what is still missing: the lead asks for the missing ones first and drafts them for approval; nobody invents a material.'] : []),
     `This Space is a ${sp.kind}${owner ? ' for the Owner only' : ''}. Your identity is your role; what you learn about this ${sp.kind === 'department' ? 'department\'s clients' : 'client or project'} stays in this Space (its documents, \`docs/squad/LEARNINGS.md\`${sp.memory === 'repo' ? ', its memory in `.claude/aisquad/memory/`' : ''}).`,
     'People may message you directly (Desk → Chat): answer them in your reply. The lead finds a list of those messages in `docs/squad/DIRECT.md`.',
     'Never write client or project facts to `~/.claude/CLAUDE.md`, `~/.aisquad` or the Company Brain: other Spaces would see them. Those paths are read-only for you.',

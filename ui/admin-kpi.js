@@ -3,7 +3,7 @@
 // its status and where the value comes from; the Owner adds targets and sets goals, people enter manual values,
 // the server measures ERPNext and CSV targets; the Space's webhook address for outside systems.
 import { esc, api, toast, ago } from './lib.js';
-import { t } from './i18n.js';
+import { t, tx } from './i18n.js';
 
 const STATE = { met: t('Met'), behind: t('Behind'), unset: t('No goal yet'), unknown: t('No value yet') };
 const TONE = { met: 'live', behind: 'bad', unset: '', unknown: '' };
@@ -32,7 +32,7 @@ export function targetsHtml(x, d, me) {
       const s = bySpace[sp.id] || { kpis: [] };
       return `<div class="section" data-kspace="${esc(sp.id)}"><div class="sectionHead"><h3 class="grow">${sp.number} · ${esc(sp.name)}</h3>${s.kpis.length ? `<span class="note">${t('{met} met · {behind} behind', { met: s.met || 0, behind: s.behind || 0 })}</span>` : ''}</div>
         ${s.unreadable ? `<div class="note badText">${t('The values file of this Space is not valid JSON; fix or remove it under ~/.aisquad/kpi/ and the values and webhook come back.')}</div>` : ''}
-        ${s.kpis.length ? `<div class="adminList">${s.kpis.map((k) => `<div class="adminRow" data-kpi="${esc(k.id)}"><div class="row"><span class="badge ${TONE[k.status.state]}">${STATE[k.status.state]}${k.status.pct != null ? ` ${k.status.pct} %` : ''}</span><b class="grow">${esc(k.name)}</b>
+        ${s.kpis.length ? `<div class="adminList">${s.kpis.map((k) => `<div class="adminRow" data-kpi="${esc(k.id)}"><div class="row"><span class="badge ${TONE[k.status.state]}">${STATE[k.status.state]}${k.status.pct != null ? ` ${k.status.pct} %` : ''}</span><b class="grow">${esc(tx(k.name))}</b>
             <span class="kval">${fmt(k.stale ? null : k.latest?.value, k.unit)}</span><span class="note">/ ${k.target == null ? t('no goal') : fmt(k.target, k.unit)}</span>${spark(k.series)}</div>
           <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : ''}${['erpnext', 'csv'].includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
           <div class="row wrap">
