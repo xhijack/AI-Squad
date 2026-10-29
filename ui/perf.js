@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Performance dialog (Squad Sprint Floors): per agent and per sprint from the docs/squad files, plus the
 // cost projection for the remaining backlog. Opened from the dock.
 import { esc, money, api, openModal } from './lib.js';
@@ -37,7 +38,7 @@ function draw() {
         <p class="note">${t('Remaining = open stories in <code>docs/BACKLOG.md</code> plus the unfinished part of the running sprint. Costs are estimates from transcript usage.')}</p>`}</div>
       <h4 class="perfH">${t('Sprints')}</h4>
       ${d.sprints.length ? `<div class="tableWrap"><table class="perf"><thead><tr><th>${t('Sprint')}</th><th>${t('SP done')}</th><th>${t('Modules')}</th><th>${t('Bugs')}</th><th>${t('Weighted')}</th><th>${t('Cost')}</th><th>${t('Cost / SP')}</th></tr></thead><tbody>${sprints}</tbody></table></div>` : `<div class="empty">${t('No sprint yet.')}</div>`}
-      <div class="row wrap" style="margin-top:14px"><h4 class="perfH grow" style="margin:0">${t('Agents')}</h4>
+      <div class="row wrap" style="margin-top:var(--sp-4)"><h4 class="perfH grow" style="margin:0">${t('Agents')}</h4>
         <select data-pick style="width:auto"><option value="all">${t('All sprints')}</option>${d.sprints.map((s) => `<option value="${s.sprint}" ${String(s.sprint) === pick ? 'selected' : ''}>${t('Sprint {n}', { n: s.sprint })}</option>`).join('')}</select></div>
       ${agentTable(d.agents, pick)}
       <p class="note">${t('Bug weights: Blocker 5, Major 3, Minor 1, Cosmetic 0.5. Read from <code>docs/squad</code> (PLAN, TASKS, qa/, bugs/ and the <code>sprint-&lt;N&gt;</code> archives).')}</p>

@@ -82,7 +82,49 @@ The first scan of a Floor only records a baseline (the current board and files a
 ```
 
 
+**`node.lost`** (0.18, lifecycle): a worker machine went silent (45 s without a heartbeat) or was removed while
+running this agent's background job. The job is marked failed (`lost: ...`) and queued again; `queued` is the new queue item.
+
+```json
+{"v":1,"id":"a91c0e2d7b13","ts":"2026-10-27T03:10:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":null,"type":"node.lost","summary":"budi-dev's job was lost with the machine box-3 and queued again","data":{"job":"j-20261027-c3d4e5f6","node":"box-3","queued":"q-20261027-0a1b2c"}}
+```
+
+**`dispatch.idle-stopped`** (0.13, lifecycle): the dispatcher stopped an agent that sat idle (`idleMin`) to free its
+slot; `queue` is true when work was waiting. Resume continues the session.
+
 ### Work (`work`)
+
+**`kpi.measured`** (1.3): a target of the Space got a value: `kpi` (its id), `name`, `value`, `unit`, `target` (the goal, or
+null), `period`, `source` (manual, erpnext, csv, webhook), `state` (met, behind, unset, unknown), `by` for a value a person
+entered.
+
+```json
+{"v":1,"id":"6f2b1c9e0a47","ts":"2026-10-27T15:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.measured","summary":"target Leads from the site: 31 leads (behind, goal 50, manual)","data":{"kpi":"leads","name":"Leads from the site","value":31,"unit":"leads","target":50,"period":"month","source":"manual","state":"behind","by":"Ramdani"}}
+```
+
+**`kpi.failed`** (1.3): the server could not measure an ERPNext or CSV target: `kpi`, `name`, `source`, `error` (one line).
+The last value stays, marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
+
+**`guide.built`** (1.2, lifecycle): the Company Guide built this Space: `division`, `blueprint`, `mode` (automatic, supervised,
+manual), `targets` (how many targets got a goal).
+
+**`legal.reverted`**, **`legal.approved`**, **`legal.changes`** (0.20): a contract in a Legal Space was put back to DRAFT
+(`reason`: marked APPROVED without the owner's approval, or changed after it), the owner approved it (`by`,
+`checklistOpen`: open checklist items at that moment), or asked for changes. `file` is the contract's path; its text
+is never logged.
+
+```json
+{"v":1,"id":"3e9a0b7c5d21","ts":"2026-10-27T04:10:00.000Z","floor":"legal","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"legal.reverted","summary":"contracts/2026-10-klinik-sow.md is a DRAFT again: marked APPROVED without the owner's approval","data":{"file":"contracts/2026-10-klinik-sow.md","reason":"marked APPROVED without the owner's approval"}}
+```
+
+**`erpnext.lead`**, **`erpnext.won`**, **`erpnext.approval`**, **`erpnext.approved`**, **`erpnext.sent-back`**, **`erpnext.alert`**
+(0.19): the ERPNext watcher handed a new Lead to the team, a Quotation became an order (a project handoff), an agent
+asked for a price approval, the Owner approved it (submitted with the owner key) or sent it back, a Quotation was
+submitted by an agent's user without approval. `quotation`, `lead`, `handoff`, `by`, `user`; never amounts.
+
+```json
+{"v":1,"id":"5b1e7a90c2d4","ts":"2026-10-27T03:40:00.000Z","floor":"sales","sprint":null,"module":null,"agent":"rina-sales","role":"sales-manager","session":null,"model":null,"type":"erpnext.approved","summary":"the owner approved SAL-QTN-2026-00012; it is submitted in ERPNext","data":{"quotation":"SAL-QTN-2026-00012","handoff":"h-20261027-473369","by":"Ramdani"}}
+```
 
 **`task.given`**: A prompt the owner typed or sent to the agent (from the transcript; `id` is the transcript record uuid).
 
@@ -168,8 +210,41 @@ The first scan of a Floor only records a baseline (the current board and files a
 {"v":1,"id":"785f02cafb95","ts":"2026-10-26T02:18:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"commit","summary":"commit 9b1e0c2d4f6a: feat(cart): M01 add and remove items","data":{"sha":"9b1e0c2d4f6a","subject":"feat(cart): M01 add and remove items"}}
 ```
 
+**`job.started`** (0.11): a background job (headless runner) started for an agent. `via` is `aisquad` (the owner's
+Desk) or the part of The AI Squad that started it.
+
+```json
+{"v":1,"id":"1f0a6c3e9b21","ts":"2026-10-26T02:19:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"sonnet","type":"job.started","summary":"budi-dev started a background job: write the README","data":{"job":"j-20261026-a1b2c3d4","kind":"task","title":"write the README","budgetUsd":2,"permissionMode":"dontAsk","via":"aisquad"}}
+```
+
+**`job.ended`** (0.11): the job ended: `done`, `failed` (with `error`, e.g. stopped at its budget) or `stopped`. From 0.18 a job that ran on a worker has `node` (the machine) and `branch` (the branch it pushed).
+
+```json
+{"v":1,"id":"7c2d1e0f4a65","ts":"2026-10-26T02:21:00.000Z","floor":"pos","sprint":null,"module":null,"agent":"budi-dev","role":"fullstack-developer","session":null,"model":"claude-sonnet-5-5","type":"job.ended","summary":"budi-dev's background job done ($0.04)","data":{"job":"j-20261026-a1b2c3d4","kind":"task","status":"done","cost":0.0421,"turns":2,"ms":121000}}
+```
+
+
+**`dispatch.queued`** (0.13): a start could not run now and waits in the dispatcher's queue. `action` is `start`,
+`resume`, `job` or `sprint`; `priority` P0 to P3; `reason` why it waits; `via` who asked (`owner`, `auto-resume`,
+`next-sprint`, `autopilot`).
+
+```json
+{"v":1,"id":"a3c90e7d1b42","ts":"2026-10-27T01:00:00.000Z","floor":"mkt","sprint":null,"module":null,"agent":"dodi-designer","role":"designer","session":null,"model":null,"type":"dispatch.queued","summary":"dodi-designer queued (job, P2): waiting for a free slot","data":{"action":"job","priority":"P2","reason":"waiting for a free slot","via":"owner"}}
+```
+
+**`dispatch.started`** (0.13): a queued start ran; `waitedMs` is how long it waited. **`dispatch.failed`**: it could
+not start (`error`; `dropped` after three attempts). **`dispatch.removed`**: the owner removed it from the queue.
 
 ### Communication (`communication`)
+
+**`handoff.sent`**, **`handoff.received`**, **`handoff.held`**, **`handoff.rejected`**, **`handoff.invalid`** (0.19): a package
+between Spaces was sent (in the sender's log), arrived (in the receiver's log), waits for the Owner because it leaves an
+Owner-only Space, was not delivered by the Owner, or could not be sent (`reason`). `handoff` is its id, `kind` task,
+lead, opportunity, quotation, project, clarify, answer or done; `replyTo` the package it answers.
+
+```json
+{"v":1,"id":"9d2f41c7e8a0","ts":"2026-10-27T03:12:00.000Z","floor":"mkt","sprint":null,"module":null,"agent":"mira-mkt","role":"marketing-strategist","session":null,"model":null,"type":"handoff.sent","summary":"mira-mkt handed task \"Build the webinar landing page\" to Website Revamp","data":{"handoff":"h-20261027-ff0ed4","kind":"task","to":"Website Revamp","title":"Build the webinar landing page"}}
+```
 
 **`message.sent`**: SendMessage from `agent` to `data.to` (agent-to-agent communication).
 
@@ -207,6 +282,17 @@ The first scan of a Floor only records a baseline (the current board and files a
 {"v":1,"id":"perm:pos/budi-dev:1761444000000:a","ts":"2026-10-26T02:23:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"permission.answered","summary":"budi-dev got permission after 2 min","data":{"tool":"Bash","waitMs":95000}}
 ```
 
+
+**`chat.message`** (0.14): a person sent an agent a direct message (Desk → Chat). `context` is `space` or
+`general`; `delivery` is `typed` (into the running Desk session), `job` (a background job answers) or `queued`;
+`text` is the first 200 characters. **`chat.reply`**: the agent's answer reached the chat (`status`).
+
+```json
+{"v":1,"id":"5d1c0b9e7a33","ts":"2026-10-27T02:00:00.000Z","floor":"sales","sprint":null,"module":null,"agent":"rudi-researcher","role":"lead-researcher","session":null,"model":null,"type":"chat.message","summary":"Dewi → rudi-researcher (chat): Who are the three biggest coffee chains in Bandung?","data":{"context":"space","delivery":"job","from":"Dewi","text":"Who are the three biggest coffee chains in Bandung?","by":"Dewi"}}
+```
+
+Since 0.14, an event caused by a person other than the Owner (a member's start, stop, task or chat) carries
+`data.by` with their name.
 
 ### Tools (`tools`)
 

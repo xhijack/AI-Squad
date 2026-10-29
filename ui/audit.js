@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Audit dialog (dock): run an audit of the Floor (since the last audit or one sprint), the scores per area, findings
 // sorted by severity with evidence links into the Squad Log, and the history of audits so trends show.
 import { esc, money, api, openModal, toast } from './lib.js';
@@ -57,14 +58,14 @@ function historyHtml() {
 function auditHtml(a) {
   if (!a) return '';
   const E = a.metrics.efficiency, P = a.metrics.process;
-  return `<h4 class="perfH" style="margin-bottom:2px">${tt('Audit · {range} · {when}', { range: esc(tx(a.range.label)), when: when(a.createdAt) })}</h4>
+  return `<h4 class="perfH" style="margin-bottom:var(--sp-half)">${tt('Audit · {range} · {when}', { range: esc(tx(a.range.label)), when: when(a.createdAt) })}</h4>
     <div class="note">${tt('{n} events · reviewed by {model} for {cost}', { n: a.range.events, model: esc(a.model), cost: usd(a.cost, 4) })}</div>
     ${a.error ? `<p class="chip warn" style="white-space:normal">${esc(tx(a.error))}</p>` : ''}
     ${scoreHtml(a.scores)}
     <div class="kpis"><div><span>${tt('Cost')}</span><b>${usd(E.totals.cost)}</b></div><div><span>${tt('Cost / SP')}</span><b>${usd(E.costPerSP, 3)}</b></div><div><span>${tt('First-round pass')}</span><b>${pct(P.qaFirstRoundPassRate)}</b></div>
       <div><span>${tt('Cache hit rate')}</span><b>${pct(E.cacheHitRate)}</b></div><div><span>${tt('Bugs')}</span><b>${P.bugs.total}</b></div><div><span>${tt('Waiting on you')}</span><b>${tt('{n} min', { n: E.blockedOnOwnerMin })}</b></div></div>
     ${a.summary ? `<p>${esc(a.summary)}</p>` : ''}
-    ${a.retro ? `<div class="row" style="margin:8px 0"><span class="chip ok">${tt('Retro of sprint {n}', { n: esc(a.retro.sprint) })}</span><button class="small" data-retro>${tt('Open the Retro')}</button></div>` : ''}
+    ${a.retro ? `<div class="row" style="margin:var(--sp-2) 0"><span class="chip ok">${tt('Retro of sprint {n}', { n: esc(a.retro.sprint) })}</span><button class="small" data-retro>${tt('Open the Retro')}</button></div>` : ''}
     <h4 class="perfH">${tt('Findings')}</h4>${a.findings.length ? a.findings.map((f) => findingHtml(a, f)).join('') : `<div class="empty">${tt('No findings.')}</div>`}`;
 }
 

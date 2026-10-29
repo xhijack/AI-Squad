@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Claude Code hook -> The AI Squad server (POST /api/events). Never blocks Claude Code: prints nothing,
 // always exits 0, gives up after ~1.5 s, and does nothing when the server or its PIN is missing.
 import fs from 'node:fs';

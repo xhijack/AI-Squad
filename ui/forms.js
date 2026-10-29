@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Form pieces shared by the wizard and dialogs: team member + overrides editor, git settings.
 import { esc, segHtml } from './lib.js';
 import { t as tt } from './i18n.js';
@@ -19,7 +20,7 @@ export function memberHtml(m, templates, { idx = 0, removable = true, templateLo
       <div class="grow" style="min-width:180px"><label>${tt('Display name')}</label><input data-f="displayName" value="${esc(m.displayName || '')}" placeholder="Ramdani - ${esc(t.title || tt('Developer'))}" maxlength="60" required></div>
       <div class="grow" style="min-width:160px"><label>${tt('Role Template')}</label>
         <select data-f="template" ${templateLocked ? 'disabled' : ''}>${templates.map((x) => `<option value="${esc(x.role)}" ${x.role === t.role ? 'selected' : ''}>${esc(x.title)} (v${x.version})</option>`).join('')}</select></div>
-      ${removable ? `<button type="button" class="ghost danger small" data-rm-member="${idx}" style="margin-top:28px" aria-label="${tt('Remove member')}">${tt('Remove')}</button>` : ''}
+      ${removable ? `<button type="button" class="ghost danger small" data-rm-member="${idx}" style="margin-top:var(--sp-7)" aria-label="${tt('Remove member')}">${tt('Remove')}</button>` : ''}
     </div>
     ${showLead ? `<label class="inline"><input type="checkbox" data-f="lead" ${m.lead ? 'checked' : ''}> ${tt('Team lead')}</label>` : ''}
     <details ${Object.keys(o).length ? 'open' : ''}><summary>${tt('Overrides (template: {model}, effort {effort}, {n} skills)', { model: esc(t.model), effort: esc(t.effort), n: (t.skills || []).length })}</summary>

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // The AI Squad server.  node server/index.js [--port 8097] [--host 127.0.0.1]
 import http from 'node:http';
 import { createHandler, isLoopback } from './api.js';
@@ -13,12 +14,20 @@ import { flushPending, watchdogTick, mergeTick, logTick, autoResumeTick, autopil
 import { maintain as maintainLogs, DEFAULT_RETENTION_DAYS } from './log.js';
 import { loadBuilding } from './building.js';
 import { meter } from './meter.js';
+import { migrate } from './schema.js';
+import * as backup from './backup.js';
+import * as jobs from './jobs.js';
+import { logJobEnded, dispatchTick, chatTick, handoffTick, kpiTick } from './squad.js';
+import * as notify from './notify.js';
+import * as inbox from './inbox.js';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const PORT = Number(opt('--port', process.env.AISQUAD_PORT || 8097));
 const HOST = opt('--host', '127.0.0.1');
 
+// the data in ~/.aisquad follows this release's version; an older home gets a safety backup first (no secrets)
+try { migrate({ before: (v) => backup.createBackup({ label: `pre-migrate-v${v}`, logs: false }), log: console.log }); } catch (e) { console.error('[schema]', e.message); }
 seedDefaults();
 seedBlueprints();
 configure({ serverUrl: `http://${isLoopback(HOST) ? HOST.replace(/^::1$/, '[::1]') : '127.0.0.1'}:${PORT}` });   // where agent hooks post events
@@ -47,3 +56,26 @@ setInterval(() => { autoResumeTick().then((done) => { for (const r of done) cons
 const rotateLogs = () => { try { maintainLogs({ retentionDays: Number(loadBuilding().prefs.logRetentionDays) || DEFAULT_RETENTION_DAYS }); } catch (e) { console.error('[log]', e.message); } };
 setTimeout(rotateLogs, 10000).unref();
 setInterval(rotateLogs, 3600e3).unref();
+// background jobs (headless runner): an ended job goes to the Squad Log; old jobs are cleared once a day
+setInterval(() => { try { for (const j of jobs.jobsTick()) { logJobEnded(j); console.log(`[job] ${j.id} ${j.status}${j.error ? `: ${j.error}` : ''}`); } } catch (e) { console.error('[job]', e.message); } }, 3000).unref();
+setInterval(() => { try { jobs.pruneJobs(); } catch { /* next day */ } }, 864e5).unref();
+setInterval(() => { try { chatTick(); } catch (e) { console.error('[chat]', e.message); } }, 5000).unref();
+// the Notification Gateway (Telegram): new Attention out, buttons off what was answered, the morning digest
+notify.start();
+setInterval(() => { notify.notifyTick().catch((e) => console.error('[notify]', e.message)); }, 15000).unref();
+// Daily Insight: once a night, suggestions into the Improvement Inbox (nothing is applied by itself)
+setInterval(() => { try { const r = inbox.tick(); if (r) console.log(`[insight] ${r.found} patterns, ${r.added.length} new suggestions`); } catch (e) { console.error('[insight]', e.message); } }, 60000).unref();
+// the handoff bus and the ERPNext watcher (0.19): packages out of every outbox; the pipeline every few minutes
+setInterval(() => { handoffTick().then((r) => { for (const x of r.sent) console.log(`[handoff] ${x.ok ? `${x.id} ${x.status}` : `refused: ${x.reason}`}`); if (r.erp?.error) console.error('[erpnext]', r.erp.error); }, (e) => console.error('[handoff]', e.message)); }, 20000).unref();
+// targets (1.3): ERPNext and CSV targets measured on their interval
+setTimeout(() => { kpiTick().catch((e) => console.error('[kpi]', e.message)); }, 20000).unref();
+setInterval(() => { kpiTick().then((r) => { for (const x of r) console.log(`[kpi] ${x.floorId}/${x.kpi}: ${x.error ? `failed: ${x.error}` : x.value}`); }, (e) => console.error('[kpi]', e.message)); }, 3600e3).unref();
+// the dispatcher: starts queued work when there is room, stops agents that sit idle
+setInterval(() => {
+  dispatchTick().then((r) => { for (const x of r.started) console.log(`[dispatch] started ${x.floorId}/${x.agentId} (${x.action})`); for (const x of r.stopped) console.log(`[dispatch] idle stop ${x.floorId}/${x.agentId}`); for (const f of r.failed) console.error(`[dispatch] ${f.item.floorId}/${f.item.agentId}: ${f.error}`); }, (e) => console.error('[dispatch]', e.message));
+}, 15000).unref();
+// nightly backup (Building settings → Backups) and a monthly read-back check of the newest one
+setInterval(() => {
+  try { const r = backup.backupTick(loadBuilding().prefs.backup); if (r.backup) console.log(`[backup] ${r.backup.ok ? r.backup.file : `failed: ${r.backup.error}`}`); if (r.verify) console.log(`[backup] check of ${r.verify.file}: ${r.verify.ok ? 'ok' : r.verify.errors.join('; ')}`); }
+  catch (e) { console.error('[backup]', e.message); }
+}, 60000).unref();

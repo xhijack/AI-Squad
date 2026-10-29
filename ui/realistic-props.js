@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Realistic look (Phase 3.2 proof of concept): the desk-corner pieces that are built here rather than loaded,
 // in real sizes (metres) with bevelled edges and physically based materials: an office chair, a monitor, a
 // keyboard, a mouse, a mug and an oak desk. Textures are CC0 from Poly Haven (see ASSETS.md).

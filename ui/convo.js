@@ -1,16 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
 // The conversation view: an Attention item as a large dialog. The agent's own chibi as a live portrait, its message
 // as a speech bubble (readable markdown that scrolls between a fixed header and action bar), the actions for the
 // item (options, Reply, OK / Dismiss, Open desk), and "n of m" with previous / next. While it is open the office
 // camera eases to the agent and a short bubble appears over its head. Esc closes.
-import { esc, api, toast, ago, mdLite, drafts, answerItem } from './lib.js';
+import { esc, api, toast, ago, mdLite, drafts, answerItem, oneAtATime } from './lib.js';
 import { ctx } from './ctx.js';
 import { preview, bubbleText, actionsFor, step, ofText } from './convo-model.js';
 import { playLine, stopVoice } from './voice.js';
 import { t } from './i18n.js';
+import { askFormHtml, readAskForm } from './askform.js';
 
 let C = null;            // { list, i, portrait, dlg }
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources') };
+const KIND = { finished: t('Finished'), reply: t('Waiting for your reply'), question: t('Question'), permission: t('Permission'), crash: t('Stopped unexpectedly'), decided: t('Decided by autopilot'), scope: t('Scope change'), stall: t('Stalled'), merge: t('Merge'), budget: t('Budget'), resource: t('Resources'), price: t('Price approval'), handoff: t('Handoff'), erpnext: 'ERPNext', contract: t('Contract'), legal: t('Legal'), canary: t('Canary') };
 
 function agentOf(item) {
   const f = ctx.state.building?.floors.find((x) => x.id === item.floorId);
@@ -35,6 +37,7 @@ function dialogEl() {
 function actionsHtml(item, a) {
   const desk = item.floorId && item.agentId ? `<a class="btn ghost" href="#/floor/${esc(item.floorId)}/desk/${esc(item.agentId)}" data-desk>${t('Open desk')}</a>` : '';
   const dismiss = a.dismiss ? `<button type="button" class="ghost" data-dismiss>${esc(a.dismiss === 'OK' ? t('OK') : t('Dismiss'))}</button>` : '';
+  if (a.mode === 'ask') return `${askFormHtml(item, { act: 'convo-ask' })}<div class="convoBar">${desk}</div>`;
   if (a.mode === 'options') {
     const free = a.options.find((o) => o.free);
     return `<div class="convoOpts">${a.options.filter((o) => !o.free).map((o) => `<button type="button" class="big ${o.recommended ? 'gold' : ''}" data-n="${o.n}">${o.recommended ? `<small>${t('Recommended')}</small>` : ''}${esc(o.label)}</button>`).join('')}</div>
@@ -60,7 +63,7 @@ function render() {
         <div class="note">${esc([ag.title, item.floorNumber ? t('Floor {n} · {name}', { n: item.floorNumber, name: item.floorName }) : item.floorName].filter(Boolean).join(' · '))}</div><div class="note">${ago(item.ts)}</div></div>
       <div class="convoNav">${C.list.length > 1 ? `<button type="button" class="iconBtn ghost" data-prev aria-label="${t('Previous item')}">‹</button><span class="note">${ofText(C.i, C.list.length)}</span><button type="button" class="iconBtn ghost" data-next aria-label="${t('Next item')}">›</button>` : ''}
         ${item.agentId && item.text ? `<button type="button" class="small ghost" data-listen title="${t('Read the whole message aloud')}">▶ ${t('Listen')}</button>` : ''}<button type="button" class="iconBtn ghost" data-close aria-label="${t('Close')}">×</button></div></div>
-    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">${t('Decided automatically: <b>{choice}</b>. Pick another option to change it.', { choice: esc(item.chosen) })}</p>` : ''}</div></div>
+    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">${t('Decided automatically: <b>{choice}</b>. Pick another option to change it.', { choice: esc(item.chosen) })}</p>` : ''}${item.hardStop?.length ? `<p class="note warnText">${t('Hard stop ({reasons}): only you decide this.', { reasons: esc(item.hardStop.join(', ')) })}</p>` : ''}</div></div>
     <div class="convoActions">${actionsHtml(item, a)}</div>`;
   if (!d.open) d.showModal();
   wire(d, item, a);
@@ -73,8 +76,15 @@ function render() {
   (d.querySelector('.convoActions textarea') || d.querySelector('.convoActions button.gold') || d.querySelector('.convoBody')).focus({ preventScroll: true });
 }
 
+// one action at a time in the conversation view: a second click or Enter while it runs does nothing
+let acting = false;
 async function act(fn, done = t('Sent')) {
-  try { const r = await fn(); if (!r?.gone) toast(done); } catch (e) { toast(e.message); return; }   // gone: the helper already said "Already answered"
+  if (acting) return;
+  acting = true;
+  const bar = dialogEl().querySelectorAll('button, input, textarea');
+  bar.forEach((b) => { b.disabled = true; }); dialogEl().classList.add('busy');
+  try { const r = await fn(); if (!r?.gone) toast(done); } catch (e) { toast(e.message); bar.forEach((b) => { b.disabled = false; }); return; }   // gone: the helper already said "Already answered"
+  finally { acting = false; dialogEl().classList.remove('busy'); }
   C.list.splice(C.i, 1);
   await ctx.refresh();
   if (!C.list.length) return dialogEl().close();
@@ -94,6 +104,8 @@ function wire(d, item, a) {
     if (a.act === 'crash-answer') return ctx.actions['crash-answer']({ dataset: { id: item.id, n: b.dataset.n }, closest: () => null });
     return answer(item, { option: +b.dataset.n });
   }, t('Answer sent')); });
+  const askF = d.querySelector('form[data-act="convo-ask"]');
+  if (askF) askF.onsubmit = (e) => { e.preventDefault(); try { const answers = readAskForm(askF, item); act(() => answer(item, { answers }), t('Answers sent')); } catch (x) { askF.querySelector('[data-askerr]').textContent = x.message; } };
   const free = d.querySelector('[data-free]');
   if (free) free.onsubmit = (e) => { e.preventDefault(); act(() => answer(item, { option: +free.dataset.free, text: free.elements.text.value }), t('Answer sent')); };
   const reply = d.querySelector('[data-reply]');

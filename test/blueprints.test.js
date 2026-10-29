@@ -15,9 +15,12 @@ import { readFloor } from '../server/floors.js';
 const root = scratch();
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-claude-print.cjs');
 
-test('the three shipped Blueprints are seeded with roles, counts and a lead', () => {
+test('the shipped Blueprints are seeded with roles, counts and a lead', () => {
   const list = bp.listBlueprints();
-  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'sales-crm', 'software-house']);
+  assert.deepEqual(list.map((b) => b.id), ['digital-marketing', 'erp-consultant', 'legal', 'product', 'sales-crm', 'software-house']);
+  assert.equal(bp.getBlueprint('erp-consultant').lead, 'project-manager');
+  assert.deepEqual(bp.getBlueprint('legal').space, { kind: 'department', access: 'owner' }, 'Legal is an Owner-only department (0.20)');
+  assert.equal(bp.getBlueprint('digital-marketing').space.shift.from, '22:00', 'Marketing works nights');
   const sh = bp.getBlueprint('software-house');
   assert.equal(sh.lead, 'project-manager');
   assert.equal(sh.workflow, 'squad-sprint');
@@ -38,7 +41,7 @@ test('catalog: every Role Template with its category (from the template or the B
   const of = (r) => c.find((t) => t.role === r);
   assert.equal(of('sales-copywriter').category, 'sales');
   assert.equal(of('qa-engineer').category, 'software');
-  assert.deepEqual(of('ui-ux-designer').blueprints, ['digital-marketing', 'software-house']);
+  assert.deepEqual(of('ui-ux-designer').blueprints, ['digital-marketing', 'product', 'software-house']);
   assert.equal(of('frappe-developer').category, 'software');
   assert.equal(of('seo-specialist').category, 'marketing');
 });
@@ -84,7 +87,7 @@ test('Set up Squad: next free Floor from 2, a new folder under the squads folder
   assert.equal(r.lead, 'rina-pm', 'the Blueprint lead role leads');
   assert.ok(fs.existsSync(path.join(r.path, '.git')));
   const f = readFloor(r.path);
-  assert.deepEqual(f.floor.blueprint, { id: 'software-house', version: 4 });
+  assert.deepEqual(f.floor.blueprint, { id: 'software-house', version: 5 });
   assert.equal(f.floor.workflow, 'squad-sprint');
   const second = await createSquad({ blueprint: 'sales-crm', name: 'Leads', team: [{ template: 'lead-researcher', displayName: 'Sam' }] });
   assert.equal(second.number, 3);
@@ -97,7 +100,7 @@ test('the standard is written into AISQUAD.md and every agent file, with the rul
     { template: 'project-manager', displayName: 'Rina - PM', lead: true }, { template: 'fullstack-developer', displayName: 'Budi - Dev' }, { template: 'devops-engineer', displayName: 'Ops' }] });
   const read = (f) => fs.readFileSync(path.join(r.path, f), 'utf8');
   const brief = read('AISQUAD.md');
-  assert.match(brief, /## Squad standard: Software House v4/);
+  assert.match(brief, /## Squad standard: Software House v5/);
   assert.match(brief, /only the lead \(Rina - PM \(`rina-pm`\)\) talks to the owner/);
   assert.match(brief, /\| `docs\/PRD\.md` \| What and why/);
   assert.doesNotMatch(brief, /Rules per role/, 'role rules go to the agents, not the brief');
@@ -135,7 +138,7 @@ test('the standard is written into AISQUAD.md and every agent file, with the rul
 
 test('Blueprint body sections and per-role rules', () => {
   const b = bp.getBlueprint('digital-marketing');
-  assert.deepEqual(bp.sections(b.body).map((s) => s.title), ['Purpose', 'Source documents', 'Channels', 'Work items', 'Handoff', 'Gates', 'Definition of done', 'Rules per role']);
+  assert.deepEqual(bp.sections(b.body).map((s) => s.title), ['Purpose', 'Shift', 'Source documents', 'Channels', 'Work items', 'Handoff', 'Gates', 'Definition of done', 'Rules per role']);
   assert.match(bp.roleRules(b, 'social-media-specialist'), /Follow `docs\/BRAND\.md` exactly/);
   assert.equal(bp.roleRules(b, 'frappe-developer'), '');
   assert.match(b.kickoff, /marketing brief, the brand rules and the channel plan/);
@@ -162,7 +165,7 @@ test('a Blueprint can list owner-only topics for Autopilot', () => {
 
 test('Software House v3: an optional Security Engineer, a plan review gate and the premise check for the lead', () => {
   const b = bp.getBlueprint('software-house');
-  assert.equal(b.version, 4);
+  assert.equal(b.version, 5);
   assert.ok(b.roles.find((r) => r.template === 'second-opinion-reviewer' && r.min === 0));
   assert.deepEqual(b.roles.find((r) => r.template === 'security-engineer'), { template: 'security-engineer', min: 0, default: 0, max: 1, lead: false, why: b.roles.find((r) => r.template === 'security-engineer').why });
   assert.ok(b.gates.includes('plan review before each sprint'));

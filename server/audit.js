@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Audit: turns a time range of the Squad Log (a sprint, a day, or since the last audit) into a compact digest
 // (metrics computed here plus the most relevant events), asks Claude Code (`claude -p` with the bundled squad-audit
 // skill, structured JSON output) to judge process and efficiency, and stores the result in
@@ -5,6 +6,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import * as auth from './auth.js';
+import { loadBuilding } from './building.js';
 import { execFile } from 'node:child_process';
 import { config, claudeBin, ROOT } from './config.js';
 import { safeReaddir, readJson, writeJson, writeText, readText, clip, oneLine, kebab } from './util.js';
@@ -82,7 +85,7 @@ export function metrics(events, info = {}) {
     bugs: { total: bugs.length, bySeverity, weighted, perSP: plannedSP ? r2(weighted / plannedSP) : null, open: bugs.length - of('bug.closed').length },
     parallel: { plannedOwners: plannedOwners.size, maxModulesInProgress: maxParallel },
     questions: { asked: of('question.asked').length, answered: answered.length, avgWaitMin: waits.length ? r2(sum(waits, (x) => x) / waits.length / 60e3, 1) : null, maxWaitMin: waits.length ? r2(Math.max(...waits) / 60e3, 1) : null },
-    permissions: { asked: of('permission.asked').length, totalWaitMin: r2(sum(permWaits, (x) => x) / 60e3, 1) },
+    permissions: { asked: of('permission.asked').length, denied: of('permission.denied').length, totalWaitMin: r2(sum(permWaits, (x) => x) / 60e3, 1) },
     gatesRefused: { total: refused.length, byGate: refused.reduce((o, e) => inc(o, e.data.gate || 'merge'), {}) },
     gatesPassed: of('gate.passed').length,
     shipBlocked: of('ship.blocked').map((e) => ({ branch: e.data.branch, missing: e.data.missing })),
@@ -246,7 +249,7 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['process.bugs', `${P.bugs.total} (${Object.entries(P.bugs.bySeverity).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}), weighted ${P.bugs.weighted}, per SP ${P.bugs.perSP ?? '–'}, open ${P.bugs.open}`],
       ['process.parallel', `${P.parallel.maxModulesInProgress} modules in progress at most, ${P.parallel.plannedOwners} owners planned`],
       ['process.questions', `${P.questions.asked} asked, ${P.questions.answered} answered, wait avg ${P.questions.avgWaitMin ?? '–'} min, max ${P.questions.maxWaitMin ?? '–'} min`],
-      ['process.permissions', `${P.permissions.asked} prompts, ${P.permissions.totalWaitMin} min waiting`],
+      ['process.permissions', `${P.permissions.asked} prompts, ${P.permissions.totalWaitMin} min waiting${P.permissions.denied ? `, ${P.permissions.denied} denied in the background` : ''}`],
       ['process.gatesRefused', `${P.gatesRefused.total} (${Object.entries(P.gatesRefused.byGate).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}), ${P.gatesPassed} passed`],
       ['process.rework', `${P.rework.reopened} rows reopened`],
       ...(P.secondOpinions?.total ? [['process.secondOpinions', `${P.secondOpinions.total} second opinions on risky modules${P.secondOpinions.disagree.length ? `, DISAGREE on ${P.secondOpinions.disagree.join(', ')}` : ', all agreed'}`]] : []),
@@ -358,7 +361,7 @@ export function runReview(digestText, { model = 'sonnet', timeoutMs = AUDIT_TIME
     '--append-system-prompt', skillText(), '--json-schema', JSON.stringify(REVIEW_SCHEMA), prompt];
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
-    execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 16e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}` } }, (err, stdout) => {
+    execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 16e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}`, ...auth.backgroundEnv(loadBuilding().prefs.auth) } }, (err, stdout) => {
       if (err && !stdout) return reject(new Error(err.killed ? 'The audit timed out' : `Claude Code failed: ${oneLine(err.message, 200)}`));
       let j; try { j = JSON.parse(stdout); } catch { return reject(new Error('Claude Code gave no readable answer')); }
       if (j.is_error) return reject(new Error(`Claude Code: ${oneLine(j.result || j.subtype || 'error', 200)}`));

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Long-running commands: a 10-minute docker build or e2e run writes nothing to the transcript while it runs, so
 // without this the agent looks idle and the Watchdog or Autopilot would nudge it. From the transcript records:
 // open tool calls (a tool_use without its tool_result yet), background shells (started with run_in_background:
@@ -9,6 +10,19 @@
 const oneLine = (s, n = 80) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const tsOf = (r) => Date.parse(r.timestamp || '') || 0;
 const resultText = (c) => (Array.isArray(c) ? c.map((x) => x.text || '').join('\n') : String(c || ''));
+
+// a background shell that serves or watches (1.0.2): a dev server, a watcher, a log tail. It runs until stopped, so
+// it never stalls by itself and its duration says nothing about "usual"; it is shown as running in the background
+const SERVICE_COMMAND = [
+  /\b(npm|pnpm|yarn|bun)( run)? (dev|start|serve|preview|watch)(:\S*)?\b/i, /\bnpx? (next|vite|nuxt|astro|remix) (dev|start|preview)\b/i, /\bnext (dev|start)\b/i,
+  /\bvite(?! build)(\s|$)/i, /\b(nodemon|live-server|http-server|serve -[sl]|webpack serve|webpack-dev-server)\b/i, /--watch\b|\bwatch -n\b/i, /\btail -[fF]\b/,
+  /\bdocker[- ]compose\b.*\bup\b(?!.*(\s-d\b|--detach))/i, /\bbench (start|serve)\b/i, /\bpython3? -m http\.server\b|\bflask run\b|\b(uvicorn|gunicorn|hypercorn)\b/i,
+  /\brails s(erver)?\b|\bphp -S\b|\bhugo server\b|\bjekyll serve\b/i,
+];
+const SERVICE_TEXT = /\b(start|run)(ning)?( the)? (dev|development|local) server\b|\bdev server\b|\bwatch(er| mode)\b/i;
+const SERVICE_OUTPUT = /\b(listening on|ready (on|in)|server (is )?running (at|on)|local:\s+https?:\/\/|serving (http|at|on)|started server on|watching for (file )?changes)\b|https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::\]):\d+/i;
+export const isServiceCommand = (command = '', description = '') => SERVICE_COMMAND.some((re) => re.test(command)) || SERVICE_TEXT.test(description);
+export const looksLikeService = (output = '') => SERVICE_OUTPUT.test(String(output).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''));
 
 // what kind of command it is, and a short label the owner recognises
 const KINDS = [
@@ -24,6 +38,7 @@ const KINDS = [
 ];
 export function classify(command = '', description = '') {
   const c = `${command} ${description}`;
+  if (isServiceCommand(command, description)) return { kind: 'service', label: oneLine(description || command, 40) || 'service' };
   for (const [kind, re, name] of KINDS) if (re.test(c)) {
     const label = kind === 'e2e' && /cypress/i.test(c) ? 'e2e Cypress' : name;
     return { kind, label };
@@ -134,6 +149,32 @@ export function stallOf({ startedAt, lastOutputAt = 0, now = Date.now(), typical
   if (hasOutput && lastOutputAt && now - lastOutputAt >= STALL_QUIET_MS) return 'quiet';
   if (typical && now - startedAt > Math.max(3 * typical, typical + STALL_QUIET_MS)) return 'long';
   return '';
+}
+// what the agent is busy with: the newest running command that is not a service, and the services beside it
+// (a background shell that serves or watches, by its command or by what it printed). outputOf(task) -> its text
+export function splitRunning(running = [], outputOf = () => '') {
+  const services = [], work = [];
+  for (const t of running) (t.background && (t.kind === 'service' || looksLikeService(outputOf(t))) ? services : work).push(t);
+  return { task: work.at(-1) || null, services };
+}
+// Stop for a service: the processes under the agent's session (ps rows { pid, ppid, args }) whose command line
+// carries the service's command, with their children -> pids, parents first
+export function serviceProcesses(rows = [], rootPids = [], command = '') {
+  const kids = new Map();
+  for (const r of rows) { if (!kids.has(r.ppid)) kids.set(r.ppid, []); kids.get(r.ppid).push(r); }
+  const below = (pid) => (kids.get(pid) || []).flatMap((r) => [r, ...below(r.pid)]);
+  const mine = rootPids.flatMap(below);
+  const want = String(command).replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (want.length < 3) return [];
+  const hits = mine.filter((r) => r.args.replace(/\s+/g, ' ').includes(want));
+  const top = hits.filter((r) => !hits.some((h) => h.pid === r.ppid));            // the outermost match (the shell)
+  return [...new Set(top.flatMap((r) => [r.pid, ...below(r.pid).map((x) => x.pid)]))];
+}
+export const parsePs = (text = '') => String(text).split('\n').map((l) => l.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)).filter(Boolean).map((m) => ({ pid: +m[1], ppid: +m[2], args: m[3] }));
+// waiting on a service (a foreground wait while one runs): it only stalls when the service has written nothing for
+// the quiet threshold and the wait has lasted that long too
+export function serviceWaitStall({ waitStartedAt, serviceOutputAt, now = Date.now() }) {
+  return now - waitStartedAt >= STALL_QUIET_MS && now - serviceOutputAt >= STALL_QUIET_MS ? 'quiet' : '';
 }
 // "7m 32s", "1h 04m", "45s"
 export function duration(ms) {

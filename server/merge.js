@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Auto-merge executor (decision D3). The AI Squad server, never an agent, merges finished branches:
 // one-time approval per Floor (stored in ~/.aisquad, not in the repo), merge in a temporary worktree,
 // run the quality gate on the merged result, refuse on conflicts or a red gate, squash or merge,

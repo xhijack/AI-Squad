@@ -42,6 +42,17 @@ test('serves the UI and refuses path traversal', async () => {
   assert.equal((await fetch(base + '/..%2fpackage.json')).status, 404);
 });
 
+test('the Building language is on the page for the first paint (1.2.0)', async () => {
+  let html = await (await fetch(`${base}/`)).text();
+  assert.match(html, /<html lang="en" data-theme/);
+  assert.equal((await call('PATCH', '/api/building', { lang: 'id' })).status, 200);
+  html = await (await fetch(`${base}/`)).text();
+  assert.match(html, /<html lang="id" data-lang="id"/);
+  assert.equal((await call('PATCH', '/api/building', { lang: 'xx' }, false)).status, 401);
+  await call('PATCH', '/api/building', { lang: 'en' });
+  assert.match(await (await fetch(`${base}/`)).text(), /<html lang="en" data-lang="en"/);
+});
+
 test('create a Floor through the wizard API and read it back', async () => {
   const r = await call('POST', '/api/floors', { name: 'Acme', goal: 'Coffee shop', directory: { mode: 'new', path: proj },
     team: [{ displayName: 'Rina - PM', template: 'project-manager', lead: true }, { displayName: 'Budi - Dev', template: 'fullstack-developer' }] });
@@ -54,7 +65,7 @@ test('create a Floor through the wizard API and read it back', async () => {
   const d = (await call('GET', '/api/floors/acme')).body;
   assert.equal(d.team.length, 2);
   assert.match(d.brief, /Coffee shop/);
-  assert.equal((await call('GET', '/api/roles')).body.templates.length, 21);
+  assert.equal((await call('GET', '/api/roles')).body.templates.length, 24);
   assert.equal((await call('GET', '/api/floors/nope')).status, 404);
 });
 
@@ -82,7 +93,7 @@ test('start agent with a task: dialog shows in Attention, answering it lets the 
   const item = await wait(async () => (await call('GET', '/api/building')).body.attention.find((a) => a.agentId === 'budi-dev'));
   assert.ok(item, 'trust dialog reaches Attention');
   assert.equal(item.kind, 'permission');
-  assert.match(fs.readFileSync(LOG, 'utf8'), /START --agent budi-dev --disallowedTools Read\(\.\/\.env\) Read\(\.\/\.env\.\*\) Bash\(git push\*\) Bash\(rm -rf \*\) --model sonnet --effort medium/, 'configured model and effort passed explicitly');
+  assert.match(fs.readFileSync(LOG, 'utf8'), /START --agent budi-dev --disallowedTools Read\(\.\/\.env\) Read\(\.\/\.env\.\*\) Bash\(git push\*\) Bash\(rm -rf \*\) .*Write\(\/\/\S+\/CLAUDE\.md\).* --model sonnet --effort medium/, 'configured model and effort passed explicitly; identity guarded');
   assert.equal(item.answerable, true);
   const b = (await call('GET', '/api/building')).body;
   assert.equal(b.floors.find((f) => f.id === 'acme').agents.find((a) => a.id === 'budi-dev').state, 'waiting');
@@ -365,4 +376,16 @@ test('static JSON (the UI translations) is served as it is', async () => {
   assert.equal(r.status, 200);
   const j = await r.json();
   assert.equal(j['Send task'], 'Kirim tugas');
+});
+
+test('a submission sent twice with the same idempotency key runs once and both get the first answer (1.0.3)', async () => {
+  const post = (body, key) => fetch(`${base}/api/users`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-aisquad-pin': pin, ...(key ? { 'x-idempotency-key': key } : {}) }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const [a, b] = await Promise.all([post({ name: 'Idem', role: 'viewer' }, 'k-1'), post({ name: 'Idem', role: 'viewer' }, 'k-1')]);
+  assert.deepEqual([a.status, b.status], [200, 200]); assert.equal(a.body.pin, b.body.pin, 'the same answer');
+  assert.equal((await post({ name: 'Idem', role: 'viewer' }, 'k-1')).body.pin, a.body.pin, 'a late duplicate too');
+  assert.equal((await call('GET', '/api/users')).body.users.filter((u) => u.name === 'Idem').length, 1, 'one person');
+  assert.equal((await post({ name: 'Idem', role: 'viewer' })).status, 400, 'without a key it really runs again');
+  const bad = await post({ name: '', role: 'viewer' }, 'k-2');
+  assert.equal(bad.status, 400);
+  assert.equal((await post({ name: 'Idem2', role: 'viewer' }, 'k-2')).status, 200, 'a failure is not kept: a retry runs');
 });

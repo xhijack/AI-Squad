@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // ~/.aisquad/building.json: the Floors registered on this machine (absolute paths live only here).
 import fs from 'node:fs';
 import path from 'node:path';

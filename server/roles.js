@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Role Template library: ~/.aisquad/roles/<role>.md (frontmatter + "## Rules" + "## Prompt"),
 // plus read-only extra libraries from ~/.aisquad/libraries.json. Every content change bumps the version;
 // old versions are kept in roles/.history so diffs stay available.

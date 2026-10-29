@@ -1,12 +1,12 @@
 [
-  { "url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-lobby-1440.png", "w": 1440, "h": 900, "pin": "123456", "wait": 8000 },
-  { "url": "http://127.0.0.1:8097/#/floor/sopwer-hr", "out": "playground/reference/after-floor-1440.png", "w": 1440, "h": 900, "wait": 8000 },
-  { "url": "http://127.0.0.1:8097/#/floor/independents", "out": "playground/reference/after-floor1-1440.png", "w": 1440, "h": 900, "wait": 7000 },
-  { "url": "http://127.0.0.1:8097/#/floor/acme-coffee-shop/desk/budi-fullstack-developer", "out": "playground/reference/after-desk-1440.png", "w": 1440, "h": 900, "wait": 7000 },
-  { "url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-setup-1440.png", "w": 1440, "h": 900, "wait": 6000, "eval": "window.aisquad.actions['setup-squad']()", "after": 2000 },
-  { "url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-lobby-390.png", "w": 390, "h": 844, "wait": 7000 },
-  { "url": "http://127.0.0.1:8097/#/floor/sopwer-hr", "out": "playground/reference/after-floor-390.png", "w": 390, "h": 844, "wait": 7000 },
-  { "url": "http://127.0.0.1:8097/#/floor/independents", "out": "playground/reference/after-floor1-390.png", "w": 390, "h": 844, "wait": 6000 },
-  { "url": "http://127.0.0.1:8097/#/floor/acme-coffee-shop/desk/budi-fullstack-developer", "out": "playground/reference/after-desk-390.png", "w": 390, "h": 844, "wait": 6000 },
-  { "url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-setup-390.png", "w": 390, "h": 844, "wait": 6000, "eval": "window.aisquad.actions['setup-squad']()", "after": 2000 }
+  {"url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-lobby-1440.png", "w": 1440, "h": 900, "pin": "123456", "wait": 8000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/floor/sopwer-hr", "out": "playground/reference/after-floor-1440.png", "w": 1440, "h": 900, "wait": 8000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/floor/independents", "out": "playground/reference/after-floor1-1440.png", "w": 1440, "h": 900, "wait": 7000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/floor/acme-coffee-shop/desk/budi-fullstack-developer", "out": "playground/reference/after-desk-1440.png", "w": 1440, "h": 900, "wait": 7000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-setup-1440.png", "w": 1440, "h": 900, "wait": 6000, "eval": "window.aisquad.actions['setup-squad']()", "after": 2000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-lobby-390.png", "w": 390, "h": 844, "wait": 7000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/floor/sopwer-hr", "out": "playground/reference/after-floor-390.png", "w": 390, "h": 844, "wait": 7000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/floor/independents", "out": "playground/reference/after-floor1-390.png", "w": 390, "h": 844, "wait": 6000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/floor/acme-coffee-shop/desk/budi-fullstack-developer", "out": "playground/reference/after-desk-390.png", "w": 390, "h": 844, "wait": 6000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}},
+  {"url": "http://127.0.0.1:8097/#/", "out": "playground/reference/after-setup-390.png", "w": 390, "h": 844, "wait": 6000, "eval": "window.aisquad.actions['setup-squad']()", "after": 2000, "storage": {"aisquad.renderer": "three", "aisquad.overview": "building"}}
 ]

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Set up Squad wizard: What do you want to build? → Team → Folder → Review and create.
 // The recommendation comes from Claude Code (haiku) with a keyword fallback; the owner edits the team freely.
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs } from './lib.js';
@@ -36,14 +37,14 @@ function memberCard(m, i) {
       <label class="inline" style="margin:0"><input type="radio" name="ssLead" data-lead="${i}" ${m.lead ? 'checked' : ''}> ${tt('Lead')}</label>
       <button type="button" class="small ghost danger" data-rm="${i}" aria-label="${tt('Remove {name}', { name: esc(m.displayName) })}">${tt('Remove')}</button></div>
     <div class="chips"><span class="chip">${esc(t.title)}</span><span class="chip">${esc(t.model)}</span>${(t.skills || []).map((k) => `<span class="pill">${esc(k)}</span>`).join('')}</div>
-    ${m.reason ? `<div class="note" style="margin-top:6px"><b>${tt('Why:')}</b> ${esc(m.reason)}</div>` : ''}</div>`;
+    ${m.reason ? `<div class="note" style="margin-top:var(--sp-2)"><b>${tt('Why:')}</b> ${esc(m.reason)}</div>` : ''}</div>`;
 }
 
 function catalogHtml() {
   const f = s.filter, q = f.skill.trim().toLowerCase();
   const list = s.templates.filter((t) => (!f.category || t.category === f.category) && (!q || t.skills.some((k) => k.includes(q)) || t.title.toLowerCase().includes(q)));
   return `<div class="card"><div class="row wrap"><b class="grow">${tt('Add agent from the catalog')}</b><button type="button" class="small ghost" data-catalog="close">${tt('Done')}</button></div>
-    <div class="row wrap" style="margin-top:8px">${segHtml('category', [['', tt('All')], ...Object.entries(CATEGORY)], f.category)}<input id="ssSkill" placeholder="${esc(tt('Filter by skill, e.g. tdd'))}" value="${esc(f.skill)}" style="max-width:220px"></div>
+    <div class="row wrap" style="margin-top:var(--sp-2)">${segHtml('category', [['', tt('All')], ...Object.entries(CATEGORY)], f.category)}<input id="ssSkill" placeholder="${esc(tt('Filter by skill, e.g. tdd'))}" value="${esc(f.skill)}" style="max-width:220px"></div>
     <div class="catalog">${list.map((t) => `<div class="card"><div class="row"><b class="grow">${esc(t.title)}</b><span class="chip">${esc(t.model)}</span><button type="button" class="small gold" data-add="${esc(t.role)}">${tt('Add')}</button></div>
       <div class="note">${esc(t.description)}</div><div class="chips">${t.skills.map((k) => `<span class="pill">${esc(k)}</span>`).join('') || `<span class="note">${tt('no skills listed')}</span>`}</div></div>`).join('') || `<div class="empty">${tt('No Role Template matches.')}</div>`}</div></div>`;
 }
@@ -51,11 +52,11 @@ function catalogHtml() {
 function teamHtml() {
   const r = s.rec, bp = bpOf();
   const src = r?.source === 'claude' ? tt('Recommended by Claude Code (haiku).') : r?.source === 'keywords' ? `${tt('Recommended by keyword match (Claude Code was not available).')} ${esc(tx(r.note))}` : tt('The Blueprint\'s default team.');
-  return `<div class="card" style="margin-top:12px"><div class="row"><b class="grow">${esc(bp.title)} v${bp.version}</b><span class="note">${src}</span></div>
+  return `<div class="card" style="margin-top:var(--sp-3)"><div class="row"><b class="grow">${esc(bp.title)} v${bp.version}</b><span class="note">${src}</span></div>
       <div class="grid2"><div><label for="ssName">${tt('Squad name')}</label><input id="ssName" value="${esc(s.name)}" maxlength="60"></div>
-      <div><label>${tt('Workflow')}</label><div class="note" style="margin-top:8px">${bp.workflow === 'squad-sprint' ? tt('Squad Sprint (lead, board, QA gate)') : tt('Free Team led by the lead')}</div></div></div>
+      <div><label>${tt('Workflow')}</label><div class="note" style="margin-top:var(--sp-2)">${bp.workflow === 'squad-sprint' ? tt('Squad Sprint (lead, board, QA gate)') : tt('Free Team led by the lead')}</div></div></div>
       <label for="ssGoal">${tt('Goal (written to AISQUAD.md)')}</label><textarea id="ssGoal" rows="3">${esc(s.goal)}</textarea></div>
-    <div class="sectionHead" style="margin-top:12px"><h3 class="grow">${s.team.length === 1 ? tt('Team · {n} agent', { n: 1 }) : tt('Team · {n} agents', { n: s.team.length })}</h3><button type="button" class="small gold" data-catalog="open">${tt('+ Add agent')}</button></div>
+    <div class="sectionHead" style="margin-top:var(--sp-3)"><h3 class="grow">${s.team.length === 1 ? tt('Team · {n} agent', { n: 1 }) : tt('Team · {n} agents', { n: s.team.length })}</h3><button type="button" class="small gold" data-catalog="open">${tt('+ Add agent')}</button></div>
     ${s.catalog ? catalogHtml() : ''}
     ${s.team.map(memberCard).join('') || `<div class="empty">${tt('No agents yet. Add them from the catalog.')}</div>`}`;
 }
@@ -63,16 +64,16 @@ function teamHtml() {
 function suggestPath() { if (!s.pathTouched) s.path = `${s.squadsDir.replace(/\/$/, '')}/${kebab(s.name) || s.blueprint}`; }
 
 function folderHtml() {
-  return `<p class="note" style="margin-top:12px">${tt('One squad = one project folder. Its Floor files, agent files and the Blueprint\'s documents go into this folder.')}</p>
+  return `<p class="note" style="margin-top:var(--sp-3)">${tt('One squad = one project folder. Its Floor files, agent files and the Blueprint\'s documents go into this folder.')}</p>
     ${segHtml('dirMode', [['new', tt('Create a new folder (git init)')], ['existing', tt('Use an existing repository')]], s.dirMode)}
     <label for="ssPath">${s.dirMode === 'new' ? tt('New folder (absolute path; must not exist yet or be empty)') : tt('Repository folder (absolute path)')}</label>
     <input id="ssPath" value="${esc(s.path)}" spellcheck="false" placeholder="/home/you/projects/restaurant-pos">
     ${s.dirMode === 'new' ? `<p class="note">${tt('New squads go to <code>{dir}</code> by default (a setting in <code>~/.aisquad/building.json</code>).', { dir: esc(s.squadsDir) })} <button type="button" class="small ghost" data-squadsdir>${tt('Change the default')}</button></p>` : ''}
-    <div class="sectionHead" style="margin-top:14px"><h3 class="grow">${tt('Linked repositories')}</h3><button type="button" class="small" data-addrepo>${tt('+ Add linked repository')}</button></div>
+    <div class="sectionHead" style="margin-top:var(--sp-4)"><h3 class="grow">${tt('Linked repositories')}</h3><button type="button" class="small" data-addrepo>${tt('+ Add linked repository')}</button></div>
     <p class="note">${tt('This folder is the primary repository (the Floor, the board, the docs). A squad can also read or write other repositories: a path on this machine or a clone URL.')}</p>
     ${s.repos.map((r, i) => `<div class="card" data-repoi="${i}"><div class="grid2"><div><label>${tt('Path or clone URL')}</label><input data-rk="where" value="${esc(r.where)}" placeholder="../dtamu-landing-page"></div>
       <div><label>${tt('Access')}</label><select data-rk="access"><option value="read" ${r.access !== 'write' ? 'selected' : ''}>${tt('Read only (context)')}</option><option value="write" ${r.access === 'write' ? 'selected' : ''}>${tt('Write (its agents commit there)')}</option></select></div></div>
-      <label>${tt('Agents')}</label><div class="row wrap">${s.team.map((m, k) => `<label class="inline" style="margin:0 10px 0 0"><input type="checkbox" data-rteam="${k}" ${r.team.includes(k) ? 'checked' : ''}> ${esc(String(m.displayName).split(' - ')[0])}</label>`).join('')}</div>
+      <label>${tt('Agents')}</label><div class="row wrap">${s.team.map((m, k) => `<label class="inline" style="margin:0 var(--sp-3) 0 0"><input type="checkbox" data-rteam="${k}" ${r.team.includes(k) ? 'checked' : ''}> ${esc(String(m.displayName).split(' - ')[0])}</label>`).join('')}</div>
       <div class="row"><span class="grow"></span><button type="button" class="small ghost danger" data-rmrepo="${i}">${tt('Remove')}</button></div></div>`).join('')}`;
 }
 // a linked repository from the Folder step -> repos.json entry (path relative to the squad folder; a URL is cloned
@@ -92,7 +93,7 @@ function repoEntry(r, ids) {
 const AUTOPILOT = [['balanced', tt('Balanced (recommended)')], ['full', tt('Full')], ['off', tt('Off')]];
 function reviewHtml() {
   const bp = bpOf(), lead = s.team.find((m) => m.lead);
-  return `<div class="card" style="margin-top:12px"><dl class="kv">
+  return `<div class="card" style="margin-top:var(--sp-3)"><dl class="kv">
       <dt>${tt('Floor')}</dt><dd>${s.number} <span class="note">${tt('(next free Floor; Floor 1 is for independent agents)')}</span></dd>
       <dt>${tt('Squad')}</dt><dd>${esc(s.name)}</dd><dt>Blueprint</dt><dd>${esc(bp.title)} v${bp.version}</dd>
       <dt>${tt('Folder')}</dt><dd><code>${esc(s.path)}</code> <span class="note">(${s.dirMode === 'new' ? tt('new, git init') : tt('existing')})</span></dd>

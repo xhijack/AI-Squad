@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Blueprints: versioned templates for a whole squad (roles and counts, the lead, and the communication
 // standard). Stored like Role Templates: shipped in templates/blueprints/<id>/ (blueprint.md + pack/ files),
 // seeded into ~/.aisquad/blueprints/<id>/ where the owner may edit them.
@@ -31,6 +32,10 @@ export function parseBlueprint(text, fallbackId = '') {
     gates: list(data.gates), kickoff: String(data.kickoff || ''), body: String(body || '').trim(),
     // Autopilot (balanced): topics only the owner decides, besides the hard-stop list
     ownerOnly: list(data.ownerOnly).map(String).filter(Boolean),
+    // the Space a squad of this Blueprint becomes (0.20): kind, access, shift (Legal: Owner only; Marketing: nights)
+    // starting targets (1.3): the Owner sets their values in Admin → Targets
+    kpis: Array.isArray(data.kpis) ? data.kpis.filter((k) => k && k.name) : [],
+    space: (({ kind, access, shift }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
   };
 }
 

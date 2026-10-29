@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Retro: the ritual after a sprint closes. Built from the sprint's audit (metrics and findings) and the Performance
 // data, without another model call: what went well, what did not, a per-agent breakdown, the cost per story point
 // trend and three concrete changes. Saved inside the audit and as retro.md next to it; the lead turns it into

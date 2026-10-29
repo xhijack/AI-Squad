@@ -6,9 +6,17 @@ The AI Squad turns a machine running Claude Code into a 3D **Building**. Every p
 - **Floor**: a 3D office with a desk per agent (working, idle, waiting, stopped), the team panel, an activity feed, messages between agents, and a board when the Floor uses the Squad Sprint workflow.
 - **Desk**: one agent: send a task (with attachments), answer its questions and permission prompts, its live terminal screen, transcript and profile (role, template version, overrides, skills, model), start and stop.
 
-Agents are Claude Code sessions in tmux, created from **Role Templates** with per-agent **overrides**. A **Squad Blueprint** turns a group of agents into a team: it sets the roles, the source documents every agent works from, who talks to whom, the gates and the definition of done. Blueprints ship for a Software House, Digital Marketing and Sales & CRM, with 19 Role Templates and 25 built-in skills.
+Agents are Claude Code sessions in tmux, created from **Role Templates** with per-agent **overrides**. A **Squad Blueprint** turns a group of agents into a team: it sets the roles, the source documents every agent works from, who talks to whom, the gates and the definition of done. Blueprints ship for a Software House, an ERP Consultant (ERPNext implementations), Digital Marketing, Sales & CRM and Legal, with 24 Role Templates and 41 built-in skills.
 
 Floor 1 shows the **independent agents** already running on your machine (terminal, tmux, VS Code); squads start at Floor 2.
+
+**Quickstart** (1.0): one command on a new machine, see [`docs/QUICKSTART.md`](docs/QUICKSTART.md):
+
+```
+curl -fsSL https://raw.githubusercontent.com/xhijack/AI-Squad/main/install.sh | bash
+```
+
+**Bahasa Indonesia:** [mulai cepat](docs/id/QUICKSTART.md) · [panduan](docs/id/PANDUAN.md).
 
 ## Requirements
 
@@ -72,12 +80,31 @@ Your Floors and their repositories are not touched. To remove The AI Squad's mac
 | `/aisquad status` | Floors, agent states, Attention, machine resources and the service state as text |
 | `/aisquad stop` | Stop the server; agents keep running in tmux |
 | `/aisquad uninstall` | Stop the server and remove the systemd user service or launchd agent |
+| `/aisquad backup` | Back up the Building (see Backups and moving to another machine) |
+| `/aisquad verify <file>` | Check that a backup reads back |
+| `/aisquad restore <file>` | Restore a backup, on this machine or a new one |
+| `/aisquad doctor` | Check this machine and the Building: Node.js, tmux, Claude Code, git, the service, the data version, PIN and secrets permissions, every Floor folder and linked repository, memory, disk and backups |
 
 The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`); Claude Code accepts the short `/aisquad` when no other command uses that name. In `claude -p`, use the full name.
 
 The server listens on `http://127.0.0.1:8097`. Pass `--port` to change it, and `--host 0.0.0.0` only if you really want it reachable from other machines.
 
 On `127.0.0.1` (the default) viewing is open and every change and every agent screen needs the local PIN. Bound to any other address (for example `--host 0.0.0.0`), every API call needs the PIN, reads included; the browser asks for it once. Find it with `cat ~/.aisquad/pin`.
+
+### Set up the company: the Company Guide (1.4)
+
+An owner's empty Building opens the **Company Guide** by itself (later: **Set up the company** in the Lobby, also to add a division or change the goals). It assumes nothing: eight short steps with buttons, in the owner's language, and nothing happens before **Build**.
+
+1. **Language**: English or Bahasa Indonesia, for the app, the Telegram bot and the agents when they talk to the owner (code, commits and technical documents stay in English). The choice is saved in `~/.aisquad/building.json` (`language`).
+2. **Your business**: the closest type (SaaS, ERPNext consulting, consulting, software house, agency, clinic, retail, other), a name and one sentence.
+3. **Your goals** for the next 3 months (revenue, leads, a launch, lower costs, better service) with a number where there is one: it becomes the first targets.
+4. **What you have**: products and prices, brand rules, a website, social accounts, ERPNext, other tools, code repositories, people, company documents. What is unticked becomes a task for the squads.
+5. **Divisions**: a suggestion per business type; one division alone is fine. Product, Engineering (Software House), Implementation (ERP Consultant), Marketing, Sales and Legal have a squad; Finance and Support are listed as "later" and never built.
+6. **How much runs by itself** per division: automatic, supervised or manual (Legal starts manual). Money, contracts, production deploys, secrets and deleting data always wait for the owner.
+7. **Machine and budget**: this machine or more later, daytime, at night (22:00–05:00) or around the clock, and an optional monthly API budget split across the Spaces.
+8. **The plan**, in plain words and editable: a Space per division with its Blueprint, mode, shift and budget, its starting targets with goals, and **what the squad needs from you** (have, missing, later). Claude Code (haiku, structured output) writes the summary, sharpens the targets and adds up to three materials specific to the business; without it the plan is the defaults.
+
+**Build** creates every Space through Set up Squad (a folder with `git init` under the squads folder, the Blueprint's default team, skills), sets the autopilot level, the shift and the budget, writes the goals into the targets, and puts `docs/squad/MATERIALS.md` into the Space; the plan itself goes to the Company Brain as `PLAN.md`, where every agent reads it before its first task, together with its materials list (the lead asks the owner for what is missing and drafts it for approval; nobody invents a material). The answers and the plan are in `~/.aisquad/guide.json` (0600, the owner's; `GET/PUT/DELETE /api/guide`, `POST /api/guide/plan`, `POST /api/guide/build`, owner only). Nothing starts running by itself: the owner opens a Space and starts its lead. The Squad Log records `guide.built` per Space.
 
 ### Set up Squad
 
@@ -104,6 +131,7 @@ The standard is written into `AISQUAD.md` and into every generated agent prompt,
 | Software House | Project Manager | Developers (1-4), QA Engineer, UI/UX Designer, DevOps Engineer | `docs/PRD.md`, `docs/TECH.md`, `docs/DESIGN.md`, `docs/ENVIRONMENTS.md` |
 | Digital Marketing | Marketing Strategist | SEO Specialist, Content Writer, Social Media Specialist, Ads & Analytics Specialist, Designer (optional) | `docs/MARKETING-BRIEF.md`, `docs/BRAND.md`, `docs/CHANNELS.md` |
 | Sales & CRM | Sales Manager | Lead Researcher, CRM Administrator, Sales Copywriter, Sales Analyst | `docs/ICP.md`, `docs/OFFER.md`, `docs/PIPELINE.md` |
+| Product (1.4) | Project Manager as product lead | Lead Researcher, UI/UX Designer | `docs/PRODUCT-VISION.md`, `docs/ROADMAP.md`, `docs/RESEARCH.md`; an approved PRD leaves as a handoff to the engineering Space |
 
 Software House runs on the Squad Sprint workflow; `/sprint` refuses to start while a source document is not approved. The other two keep their board in `docs/BOARD.md`.
 
@@ -162,6 +190,166 @@ On a Desk: **Start** opens `claude --agent <id>` in tmux session `aisquad-<floor
 Agents started by The AI Squad load this plugin's hooks (`--plugin-dir`), which stream session events (task submitted, tool use, permission prompts, end of turn) to the server. Status and Attention update live, and the Floor shows a **live** badge. With **per agent** commit identity in the Floor's git settings, each agent commits with its own name and email (`GIT_AUTHOR_*` / `GIT_COMMITTER_*`).
 
 On the Floor, desk screens show what each agent is doing: the file it is editing, its terminal, QA screenshots, or a question waiting for you. Idle agents wander to the lounge and run back when work arrives. Click a monitor (or **Look at screen** on the Desk) to look over the agent's shoulder at its live terminal.
+
+### Background jobs (Runner v2, 0.11)
+
+An agent runs in one of two runners (`server/runner.js`):
+
+- **tmux**: the interactive Claude Code session of its Desk (you type, answer dialogs and watch its screen). Its status comes from the plugin hooks and the transcript.
+- **headless**: a **background job**, `claude -p --output-format stream-json` with the same agent file, model, effort, denied tools and linked repositories. Claude Code writes one JSON event per line (the session id, tool calls, text, the result with its cost and turns), so nothing is read from a screen. A job runs detached in its own process group with its output in `~/.aisquad/jobs/<id>.jsonl`, survives a server restart, and stops at its budget (`--max-budget-usd`, default $2). It cannot answer permission prompts: it runs in `dontAsk` mode (only what the project's settings allow), or `acceptEdits` when you tick "May edit files".
+
+On a Desk: Send task → **Run in the background** (budget, may edit files). The agent shows as working ("background: …") while its job runs; **Background jobs** on the Desk lists them with status and cost, **Open** shows the answer and every step, **Stop** ends it. `job.started` and `job.ended` go to the Squad Log. Jobs count towards the machine's agents at once. Records older than 30 days are cleared.
+
+API: `POST /api/floors/:id/agents/:agent/jobs { prompt, budgetUsd, permissionMode }`, `GET /api/jobs?floor=&agent=`, `GET /api/jobs/:id`, `POST /api/jobs/:id/stop`.
+
+**Claude sign-in** (Menu): background runs (jobs, audits, squad recommendations) sign in with this machine's `claude` login, or with an **API key** (`ANTHROPIC_API_KEY`, kept write-only in `~/.aisquad/secrets.json`), so unattended work is billed to a Console organization. In API-key mode without a key, background runs are refused rather than falling back to a personal login. See `docs/BILLING.md`.
+
+### Spaces, Company Brain and Admin (0.12)
+
+A Floor is a **Space**: a `project` (one client or product) or a `department` (Sales, Marketing: many clients over time). The same agent can work in several Spaces; each session sees one Space only, through four layers:
+
+| Layer | What | How |
+|---|---|---|
+| L0 Company Brain | brand, SOPs, templates, products (legal, finance, pricing for Owner Spaces only) | `~/.aisquad/company` or your own folder, `--add-dir`, read-only |
+| L1 Identity | the agent's role | generated agent file; no writes to `~/.claude/CLAUDE.md`, `~/.claude/agent-memory`, `~/.aisquad` |
+| L2 Space | repository, documents, memory | the Floor's repository; with memory "In the Space", Claude Code's auto memory lives in `.claude/aisquad/memory/` |
+| L3 Session | the task | thrown away afterwards; what was learned is written into the Space |
+
+A Space also has **access** (team or Owner only) and a **shift** (days and hours; a night shift past midnight belongs to the day it starts), which the dispatcher uses from 0.13.
+
+**Menu → Admin** is one place for the whole company: Spaces, agents across Spaces (model, effort, extra skills, add, remove), the skill catalog, the Company Brain, and **Changes**: every change made through The AI Squad to `building.json` or a Space's configuration files, with who made it and a diff. **Roll back** puts the files back (and asks first when they changed again since).
+
+### Dispatcher, shifts and the quota guard (0.13)
+
+Every start goes through one queue (`server/dispatcher.js`): the Desk's Start, Resume and Send task to a stopped agent, background jobs, Autopilot, auto-resume after a crash and the lead's next sprint. It starts now when there is room, otherwise it queues and starts by itself later; the Desk says why it waits and at which place.
+
+- **Slots**: the smallest of the Building maximum, what free RAM allows (2 GB stays free; the RAM per session is measured), and the CPU (no new session above 90 % load). A Space's own maximum still applies.
+- **Order**: P0 the owner's own work, P1 a waiting squad (resume, next sprint), P2 normal work, P3 background. Waiting 30 minutes moves an item up one level (never to P0). In the daytime one slot stays free for the owner.
+- **Shift**: a Space's automated work (everything the owner did not start) waits outside its shift, e.g. a Marketing department that works 22:00-05:00. Autopilot's idle nudges wait too.
+- **Idle stop**: an agent that sits idle for 30 minutes (10 while work waits) is stopped to free its slot, unless someone waits on it (an open question, report, command or dialog) or it is a lead with teammates in its session. Resume continues the session.
+- **Quota guard**: automated work pauses when a background job reports its 5-hour or weekly limit at 90 % (or reached), or when the API-equivalent cost of the last 5 hours or 7 days reaches the limits you set (off by default; an estimate, a subscription counts differently). The owner's own work still starts.
+
+**Admin → Dispatcher** shows the slots and what limits them, the quota guard, the queue (priority, Start now, Remove) and the settings. API: `GET/PATCH /api/dispatcher`, `POST /api/dispatcher/queue/:id/start`, `PATCH|DELETE /api/dispatcher/queue/:id`. A start with `force: true` skips the queue.
+
+### People and direct chat (0.14)
+
+**Menu → People** (Owner): add **members** (start and stop agents, send tasks, chat, answer questions, background jobs) and **viewers** (read only). Each person gets an own 8-digit PIN, shown once and stored only as a scrypt hash in `~/.aisquad/users.json`; the PIN in `~/.aisquad/pin` stays the Owner's. The Building's settings, money, secrets, people, merges, approvals of source documents and Owner-only Spaces stay with the Owner (403 for others). An **Owner-only Space** does not exist for anyone else: it is left out of the Building, Admin, Changes, jobs and the queue, and its routes answer 404 (also for reads without a PIN). Changes record who made them; Squad Log events done by someone other than the Owner carry `data.by`.
+
+**Desk → Chat**: talk to one agent directly.
+
+- **This Space**: a running Desk session gets the message typed in and its answer comes back to the chat; a stopped agent answers through a short background job ($1 budget, P0 in the dispatcher's queue) that continues the chat's own session. The thread lives in the Space (`docs/squad/chats/<agent>.jsonl`); the lead finds a note of direct messages in `docs/squad/DIRECT.md`.
+- **General**: the same agent with no project: a neutral folder with only its role and the Company Brain (`~/.aisquad/general/<space>--<agent>/`), the thread in `~/.aisquad/chats/`. For questions and drafts that belong to no client.
+
+API: `GET/POST /api/floors/:id/agents/:agent/chat` (`context`: `space` | `general`), `GET /api/me`, `GET/POST /api/users`, `PATCH/DELETE /api/users/:id`, `POST /api/users/:id/pin`.
+
+### Telegram, digest and Daily Insight (0.15)
+
+**Admin → Notifications**: a Telegram bot sends questions, permissions and alerts with buttons, holds quiet hours, and sends a morning digest. Answers from Telegram take the same path as the browser, as the paired person, with the same role checks; hard stops need a 4-digit code. `/chat <agent>` talks to an agent. Long polling only (no open port). See `docs/TELEGRAM.md`.
+
+**Admin → Improvements** (Daily Insight, trust level 0): every night (02:30) The AI Squad counts patterns in its own week (failing commands, opus for short turns, slow answers, idle with open work, out-of-memory crashes, queue waits, repeated questions) and suggests a change with its evidence, impact, risk and how to check it. Nothing is applied until the Owner accepts; an accepted change goes through Changes (rollback). No model is called.
+
+API: `GET/PATCH /api/notify`, `PUT/DELETE /api/notify/telegram/token`, `POST /api/notify/pair|test|digest`, `DELETE /api/notify/chats/:id`, `GET/PATCH /api/insights`, `POST /api/insights/run`, `POST /api/insights/:id/accept|dismiss`.
+
+### Views: 3D or Iso Pixel (0.16)
+
+**Menu → Scene view** switches the renderer, remembered per browser:
+
+- **3D** (three.js): everything, including first person, live screens, follow and Edit Mode.
+- **Iso Pixel** (Canvas 2D, no WebGL): the same Building, Floors, desks and agents from the same isometric angle, as pixel sprites. Clicking an agent opens its Desk; states, the Attention bubble, walking to the lounge and the meeting table are there; first person, live screens and shadows are not. A Floor with five agents measured 9.8 MB of JS heap and 0.7 ms per frame, against 51 MB and ~1 s per frame for 3D in headless Chrome (software rendering).
+- **Auto** (default): Iso Pixel on phones, on devices with 4 GB of memory or less and with more than 12 agents; 3D otherwise.
+
+The first person, screen and follow views and Edit Mode always switch to 3D. The renderer not in use is disposed (its memory and WebGL context are given back). Both read the same renderer-neutral Scene Model (`ui/scene-model.js`: projection, desk and chair depth, poses by state, the palette swap).
+
+The sprites come from the 3D models: `node scripts/make-iso-sprites.js` renders `ui/dev/sprites.html` in headless Chrome and writes `ui/assets/iso/atlas.png` + `atlas.json` (devices, desks and chairs at 8 headings; every chibi style and pose twice, as a colour-key mask and a white shading pass, so each agent is painted in its own colours). Run it again when a model changes. The realistic look (`?look=realistic`) is frozen: no new features are built for it.
+
+### Building, Office and List (0.17)
+
+The Lobby has three overviews (the dock: **Building · Office · List**, remembered per browser):
+
+- **Building**: the Floors stacked as before, in the Scene view you chose (3D or Iso Pixel).
+- **Office**: the whole company on one floor plan, in the Scene view you chose (3D or Iso Pixel, since 1.1.0). Departments along the back wall with the **Server room** at its end (this machine's racks with RAM and CPU bars, agents at once), projects in the middle (a room each, appearing and going with the project), the **Lobby** (the dispatcher's queue, people waiting in line), a shared **meeting room**, the **pantry** and the **Owner's room** (what waits for you) at the front, with corridors between the rows. Every agent sits at a desk facing you, in its state; a `?` shows who needs you, names appear when you zoom in. A room opens its Space (in the Scene view you chose), an agent its Desk, the Lobby the queue, the Owner's room the approvals, the Server room the meter.
+- **Office in 3D** (1.1.0): every room has a low wall with glass on top, one door onto a corridor and a name plate in the Space's accent colour; the Server room has the racks with RAM and CPU bars. Hover shows a room's or an agent's name; clicking a room zooms into it (with **Open Space** and **Whole office**), clicking an agent opens its Desk. The `?` bubbles, Needs you and the conversation view work as on a Floor. When a Space holds a meeting, its agents walk through the doors to the shared meeting room and back; the sender of a handoff to another Space walks to that room's door. It is built to stay light: far away every agent is one instance of a low-poly chibi at merged low-poly desks with blob shadows and no shadow map; zoomed into one room, that room alone gets the full desks and characters. Nothing is drawn while nothing changes, and the Floors of the Building are not kept in memory while the Office is open. On **Auto**, the 3D Office switches to Iso Pixel in that browser once it cannot hold about 30 fps (choosing 3D in the Scene view still gets 3D). Edit Mode stays per Space. With 6 Spaces of 5 agents it took 207 draw calls and 66k triangles, against 5,157 draw calls and 3.7M triangles for the 3D Building.
+- **List**: plain DOM, no canvas: what waits for you, the queue and the machine on top; departments, projects and independent agents with every agent's state and activity. A tap opens the Space or the Desk. The default on phones.
+
+Owner-only Spaces are left out for everyone else, as everywhere (0.14).
+
+### More machines: Head and workers (0.18)
+
+When one machine runs out of room, add another instead of upgrading it. The machine that runs the server is the **Head**: it keeps every Space, the queue, the Squad Log, the people and the chats. A **worker** only runs background jobs (the headless runner) and keeps nothing that matters, so it can be replaced at any time.
+
+1. **Admin → Machines → Add a machine** (owner only): a name gives a token, shown once (only its SHA-256 hash is stored, in `~/.aisquad/nodes.json`).
+2. On the worker, with The AI Squad and Claude Code installed and **signed in to Claude there** (credentials never travel):
+   ```
+   aisquad node --head http://head.tailnet:8097 --name box-2 --token <token> [--max-agents 6]
+   ```
+   The worker only connects out to the Head (put both on a private network such as Tailscale or WireGuard): a heartbeat every 10 s with its free memory and running jobs, and a long poll for work. No port opens on it.
+3. A background job goes to this machine first, then to the online worker with the most free memory, preferring one that already has the repository. A Space can be pinned (Admin → Spaces: **Background jobs run on** any machine with room, this machine only, or one worker). A Space whose repository has no git remote runs on the Head only. Desk sessions (tmux) always stay on the Head.
+4. On the worker the job runs in its own clone (`~/.aisquad/worker/repos/<space>`) on a fresh branch `<agent>/job-<id>` from the main branch, with the agent file from the Head. The event stream comes back to the Head as it runs; at the end the worker pushes the branch when it made commits, and the Head fetches it, so it merges through the usual quality gate.
+5. A worker silent for 45 seconds is offline: its running jobs are marked lost and queued again at P1 (`via: failover`), with a note to continue from the branch it pushed last. **Drain** stops new jobs for a machine; **Remove** revokes its token.
+
+Admin → Machines also has the **Move to another machine** steps (backup, copy, restore, check), for when you replace the Head itself.
+
+### Handoffs between Spaces, ERPNext and the Sales pilot (0.19)
+
+**Handoffs.** Work passes from one Space to another as a **package**: an agent writes a Markdown file with a short header (`to:` the Space, `kind:`, `title:`, optionally `agent:` and `erpnext: DocType/name`) to `docs/squad/handoffs/outbox/`. The server (code, no model) delivers it to the other Space's `docs/squad/handoffs/inbox/<id>.md`, keeps a copy in `sent/`, and starts the receiving agent as a background job (P1, through the dispatcher, shifts respected). Questions go back as a `clarify` package (the sender is woken, answers with `answer`), the result as `done`. Packages leaving an Owner-only Space wait for the Owner; secrets are removed from every package; a bad package is renamed `.invalid` with the reason. The bundled skill `space-handoff` has the format. **Admin → Handoffs** lists them, with the share done without a round of questions.
+
+**ERPNext** (setup: [`docs/ERPNEXT.md`](docs/ERPNEXT.md)). Agents use ERPNext through Frappe Assistant Core (an MCP server inside ERPNext) with the key of an ERPNext user made for their role: **Admin → Spaces → ERPNext**: *Sales* or *Delivery*. Keys are write-only (**Admin → ERPNext**), reach a session only as environment variables, never go to a worker; deleting, submitting, workflows, e-mail and code tools are denied on top of ERPNext's own permissions. The server watches the pipeline every few minutes:
+
+- a new **Lead** becomes a handoff to the Sales Space (its ERPNext id and company, never contact data);
+- a draft **Quotation** an agent hands to `owner` becomes a **price approval** on the Owner's desk (a hard stop: money; hidden from everyone else, a 4-digit code on Telegram). *Approve and submit* submits exactly the version on the card with the owner key, which no agent ever gets (without an owner key you approve here and press Submit in ERPNext yourself); *Send back with a note* returns it to the agent;
+- a Quotation that became an **order** becomes a project handoff to the delivery Space, with the items and without prices;
+- a Quotation submitted by an agent's user without your approval raises an alert.
+
+Admin → ERPNext shows the pipeline: Leads handed over, prices approved, orders, and the median time from Lead to draft and to approved Quotation.
+
+### Targets and the cockpit (1.3)
+
+Every Space can work against **targets**: the numbers the Owner sets (Admin → Targets), measured by the server, read by the agents. A target has a name, a unit, a goal, a direction (more or less is better), a period (today, this week, this month, in total) and a source:
+
+- **entered by a person** (Owner or Member, in Admin → Targets), **webhook** (an outside system posts `{"kpi": "<id>", "value": 12}` to the Space's address, shown to the Owner),
+- **ERPNext** (a count or a sum of documents, with filters, in the period; needs an ERPNext key from 0.19), **CSV** (a file in the repository: the last row or the sum in the period).
+
+ERPNext and CSV targets are measured every hour, day or week (never less often than their period, and again when a new period starts); *Measure now* measures at once. A team Space measures ERPNext with the Space's own key or the sales or delivery key, never with the Owner's (its values are seen by the whole team and committed); an Owner-only Space uses the Owner's key. Period boundaries are taken in this machine's time zone, so set it to the ERPNext site's. Every measurement goes to the Squad Log (`kpi.measured`, a failure `kpi.failed`) and to `docs/squad/KPI.md` in the Space, which the agents read: their agent file tells them to plan against the targets that are behind and never to invent a value. A measured target takes no values by hand; a person may enter a webhook target's value when the outside system is down. The webhook address is the Owner's; *New address* retires a leaked one at once. Target definitions live in `.claude/aisquad/kpi.json` (committed; changes in Admin → Changes), measurements in `~/.aisquad/kpi/<space>.json`. Blueprints start their Spaces with fitting targets without goals (Marketing: traffic, leads, posts, engagement; Sales: new leads and orders from ERPNext; Software House: story points, open bugs, uptime; ERP Consultant: coverage, UAT, open gaps; Legal: turnaround, revisions).
+
+The **cockpit**: the List overview and the Owner's room in the Office show how many targets are met and behind, Admin → Targets has every target with its value, goal, status, a small history line and where the value comes from, and the Telegram morning digest lists the targets that are behind. Owner-only Spaces are left out for everyone else.
+
+### Background services and stall notices (1.0.2)
+
+**Services.** A dev server, a watcher or a log tail an agent starts in the background runs until it is stopped, so it is never treated as stuck. The Desk, the agent's row and its bubble show "Running in the background: <label> · since <time>" with a **Stop** button; it does not count as work, does not skew the usual durations, and only raises a stall when the agent itself waits on it and it has written nothing for 10 minutes.
+
+**Stalls are notices.** Stall cards appear muted under **Notices**, below the questions, permissions, replies and approvals that really need you. They send a Notification or Telegram message only once they have lasted 15 minutes. **Dismiss** sticks: a dismissed stall stays away until something changes (new work for the agent, or it becomes active again); the assigned work itself is kept.
+
+### Dialogs with several questions, denials in background runs (1.0.1)
+
+**Several questions at once.** When an agent asks a Claude Code question dialog with several questions (tabs) or a multi-select question, the Attention card and the conversation view show one block per question: radio buttons for one choice, checkboxes for several, the "Recommended" options marked, an Other field for your own answer, and one **Send answers**. The AI Squad types the answers into the dialog question by question and checks the screen after each step; if the screen does not match, it stops and says why. On Telegram such a question is listed in full with a link to answer it in the app. Autopilot answers it only when every question has a recommended option and nothing is critical.
+
+**Denied in the background.** Chat replies and background jobs cannot ask for permission: they run in `dontAsk` mode, so a tool the Space's settings do not allow is denied silently. The reply now shows what was denied (tool and command) with two actions: **Allow and retry** adds one narrow allow rule per denial to the Space's `.claude/settings.json` after you confirm (Owner only; never a wildcard, `sudo`/`sh -c`-like commands, `git push` or anything on the hard-stop list) and sends the message again; **Run on the Desk** types it into the agent's interactive session, where prompts reach Needs you. Every denial is in the Squad Log (`permission.denied`) and counted in the Audit.
+
+**Servers** (Floor settings → Servers). List the servers DevOps may reach: a host alias from `~/.ssh/config` or `user@host`, and what each is for. Each server allows `ssh <host> …` in that Space, also in background runs, and the list goes into the DevOps agent's prompt, so it does not mix up local development with a real server. Removing a server removes its rule.
+
+### Self-learning v2, ERP Consultant and release 1.0 (1.0.0)
+
+**Trust ladder** (Admin → Improvements). Level 0 (the default): every Daily Insight suggestion waits for you. Level 1, per category, only for low-risk changes to one agent (a rule after a failing command, a lighter model): a new suggestion is applied by itself as a **canary** for 7 days, measured against its "before" with the same counts that raised it, and then a card asks you to keep it or roll it back (through the change history). A category earns level 1 with 10 accepted suggestions, 80 % of its decisions accepted, and improved follow-ups (60 % of at least 3 measured). Every accepted change is measured a week later. Never automatic: the hard-stop list, wider permissions, Building settings, Legal Spaces and roles, the Company Brain, promoting lessons.
+
+**Capacity advice.** When the queue waits and memory or the CPU is the limit, Daily Insight suggests adding a machine (Admin → Machines) instead of upgrading this one, and says whether the connected workers still have room.
+
+**Promote a lesson** (Admin → Improvements). A lesson a Space learned (`docs/squad/LEARNINGS.md`, L2) becomes a rule of a Role Template (L1): the server takes the client out (the Space's name and folder, its agents, personal data, secrets) and refuses a rule that still names them; you edit and approve it; the template gets a new version.
+
+**ERP Consultant Blueprint.** An ERPNext implementation team (Project Manager, ERP Functional Consultant, Frappe Developer, QA) with a BRD, a fit-gap (`fit-gap-analysis` skill: Fit, Configure, Gap, Process change), a data migration plan and a UAT plan; every gap needs your approval before development.
+
+**Quickstart.** `install.sh` checks the machine, installs into `~/.aisquad-app` without sudo, links `aisquad`, and runs `aisquad quickstart [--blueprint ID --name NAME]`: the server, the PIN, and optionally a first squad. Indonesian documentation in `docs/id/`.
+
+### Legal, Marketing at night and model tiering (0.20)
+
+**Legal.** *Set up Squad → Legal* makes an Owner-only department (Legal Counsel and Contract Drafter, both without a shell or the web). Contracts are copied from the locked bilingual templates in the Company Brain (`legal/templates/`: an NDA and an implementation services agreement, Indonesian governing, added to every Company Brain) into `contracts/` of the Legal Space, and checked with the `contract-checklist` skill: the four conditions of Pasal 1320 KUHPerdata, Bahasa Indonesia (UU 24/2009), personal data (UU 27/2022 PDP), electronic signature (UU ITE, PP 71/2019) and stamp duty, and the commercial points of `docs/LEGAL-POLICY.md`. A drafting aid, not legal advice.
+
+- Every contract stays **DRAFT** until you approve it. Agents may set `READY FOR REVIEW`; that puts a card on your desk (a hard stop: legal; Telegram shows only the title) with the checklist's open points. *Approve the contract* approves exactly the version on the card; *Request changes* sends it back to the lead as a DRAFT with your note.
+- The server keeps a fingerprint of every approval (`~/.aisquad/legal.json`): a contract marked APPROVED any other way, or changed after your approval, is put back to DRAFT, logged and shown to you.
+- **Admin → Legal** lists the contracts with their status, checklist and revisions, and shows their text.
+
+**Marketing at night.** The Digital Marketing Blueprint (version 2) makes a department that works 22:00-05:00 every day: its automated work waits for the shift and its results reach you in the morning digest.
+
+**Model tiering** (Admin → Dispatcher, off by default). Background jobs run on the model their work needs: each role has a tier (light, standard, deep → haiku, sonnet, opus by default) and routine work (a new lead, a reply to a handoff, a result to file) goes one tier lighter. Legal roles keep their model, an agent whose model you set keeps it, and Desk sessions and chats always use the role's model. The section shows the cost per job before tiering was switched on and since.
 
 ### Role Templates and overrides
 
@@ -281,6 +469,32 @@ Checked every minute and shown in the Lobby:
 - **Stall**: pending work while the lead and all agents are idle for 10 minutes, or an agent with assigned work idle for 10 minutes.
 - **Resources**: free RAM below 1.5 GB, swap above 85 %, free disk below 5 GB.
 - **Budget**: estimated from transcript token usage; warning at 80 %, Attention at 100 %.
+- **Agents at once** (0.10): every Floor has its maximum (Floor settings, default 4) and the whole machine has one too (Menu → **Backups and health**, default 6). Starting one more asks first. The Desk shows each running agent's RAM and CPU: its Claude Code process and everything under it (MCP servers, shells, test runs). The averages and peaks per session are kept in `~/.aisquad/usage.json`; they tell how much memory one more agent needs.
+- **Backups**: a failed or late nightly backup, or a backup that no longer reads back, is an Attention item.
+
+### Backups and moving to another machine
+
+`/aisquad backup` writes one file, `~/.aisquad/backups/aisquad-backup-<host>-<time>.tar.gz` (`--out` for another folder or file):
+
+- `~/.aisquad` without caches and this machine's state: the Building registry, Role Templates, Blueprints, the Squad Log (`--no-logs` leaves it out), audits and improvements, attachments, settings. Left out on purpose: the voice cache, cloned template libraries (cloned again), running sessions, the independent agents scan, and auto-merge approvals (you approve again on the new machine).
+- Each Floor's configuration (`.claude/aisquad/`, `AISQUAD.md`), in case it was never committed, and Claude Code's auto memory of each Floor.
+- A manifest with a sha256 per file and, per Floor, its git remote, branch, commit and how many changes are not committed (the backup warns about them: repositories come back from git, so push your work).
+
+Secrets (PIN, API keys) are only backed up encrypted: `--passphrase-env VAR` (or the passphrase saved in Backups and health) encrypts the file with AES-256-GCM as `.tar.gz.enc`, and `--with-secrets` adds them. Without a passphrase the file is a plain `.tar.gz` you can open with `tar`.
+
+`/aisquad verify <file>` checks that every file reads back. `/aisquad restore <file> --dry-run` shows where every Floor goes; then, with the server stopped:
+
+```
+/aisquad restore aisquad-backup-old-box-20261026-023000.tar.gz --projects-dir ~/projects     # new machine, projects in ~/projects
+/aisquad restore <file> --relink /home/old/projects=/home/new/code                           # map an old folder to a new one
+/aisquad restore <file> --force                                                              # over a ~/.aisquad in use (kept as ~/.aisquad.before-restore-<time>)
+```
+
+Floors missing on the new machine are cloned from their remote (`--no-clone` to skip), a Floor without its configuration gets it from the backup, auto memory lands under the Floor's new path, the data is migrated, and `doctor` runs at the end.
+
+**Nightly backups** (Menu → Backups and health): on at a time you pick, the newest N kept, into `~/.aisquad/backups` or a folder you choose (a synced folder or a USB disk keeps it off the machine). Once a month the newest backup is read back. With a saved passphrase (`~/.aisquad/backup-passphrase`, mode 600, never backed up itself) they are encrypted.
+
+**Data versions**: `~/.aisquad/schema.json` records which version the files follow. A newer release migrates them when the server starts, after a safety backup (`…-pre-migrate-v<N>.tar.gz`, without secrets).
 
 ### Log and Audit
 
@@ -325,6 +539,32 @@ Checked every minute and shown in the Lobby:
 ~/.aisquad/audits/<floor>/<time>.json|.md  audits
 ~/.aisquad/improvements.jsonl              improvement ledger: decisions on audit findings, metrics before and after
 ~/.aisquad/exports/                        anonymised audit exports (written only by /aisquad audit export)
+~/.aisquad/company/                        Company Brain (default location; read-only for agents)
+~/.aisquad/history/<id>.json               configuration changes with before and after (Admin → Changes)
+~/.aisquad/queue.json                      the dispatcher's queue (survives a restart)
+~/.aisquad/users.json                      people: name, role, scrypt hash of their PIN (0600)
+~/.aisquad/notify.json                     paired Telegram chats, what was sent, open buttons (0600)
+~/.aisquad/insights/                       Daily Insight reports, the Improvement Inbox, decisions
+~/.aisquad/chats/                          General chats and the state of every chat thread
+~/.aisquad/general/<space>--<agent>/       the neutral folder of an agent's General chat
+<repo>/docs/squad/chats/<agent>.jsonl      direct chat with an agent in this Space
+<repo>/docs/squad/DIRECT.md                the lead's note of direct messages
+~/.aisquad/quota.json                      rate-limit signals the quota guard keeps until they reset
+<repo>/.claude/aisquad/memory/             a Space's Claude Code memory when memory is "In the Space"
+~/.aisquad/nodes.json                      worker machines: name, token hash, last heartbeat (0600)
+~/.aisquad/worker/repos/<space>/           on a worker: its clone of each Space's repository
+~/.aisquad/handoffs.json                   packages between Spaces (the last 500)
+~/.aisquad/erpnext.json                    the ERPNext watcher: pipeline cursors, approvals, alerts
+~/.aisquad/erpnext/mcp.json                the MCP configuration for ERPNext (variables only, no secrets)
+<repo>/docs/squad/handoffs/                outbox/ (agents write), sent/ (copies), inbox/ (delivered)
+~/.aisquad/legal.json                      fingerprints of the contracts the Owner approved, revisions, alerts
+<repo>/contracts/                          a Legal Space's contracts (STATUS: DRAFT / READY FOR REVIEW / APPROVED)
+<repo>/.claude/aisquad/kpi.json            the Space's targets (name, goal, direction, period, source)
+<repo>/docs/squad/KPI.md                   the targets as the agents read them (generated)
+~/.aisquad/kpi/<space>.json                measurements and the Space's webhook token (0600)
+~/.aisquad/guide.json                      the Company Guide: the owner's answers and the plan (0600)
+~/.aisquad/company/PLAN.md                 the company plan every agent reads (generated by the guide)
+<repo>/docs/squad/MATERIALS.md             what the Space needs from the owner and what is missing (generated)
 ~/.config/systemd/user/aisquad.service     the server as a user service (generated by /aisquad)
 ```
 
@@ -357,6 +597,11 @@ commands/aisquad.md   the Claude Code command
 ```
 
 ## License
+
+Apache License 2.0 (`LICENSE`, `NOTICE`; every source file carries `SPDX-License-Identifier: Apache-2.0`).
+Contributions are welcome under the Developer Certificate of Origin (`CONTRIBUTING.md`); report security
+problems privately (`SECURITY.md`). How Claude usage is billed and which sign-in to use for unattended work:
+`docs/BILLING.md`.
 
 Apache License 2.0. Free for personal and commercial use, as long as you keep the
 `LICENSE` and `NOTICE` files and credit the original source:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Microsoft Rocketbox (MIT) avatar and animations: FBX from 3ds Max -> one GLB for three.js. Runs in the converter page.
 import * as THREE from 'three';
 import { FBXLoader } from 'jsm/loaders/FBXLoader.js';

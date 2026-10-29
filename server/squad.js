@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
 // The live Building: Floor summaries, agent states, Attention, running agents and sending tasks.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { readJson, writeJson, writeText, statOf, bad, notFound, HttpError } from './util.js';
 import * as building from './building.js';
 import * as floors from './floors.js';
@@ -16,6 +18,8 @@ import { floorPerformance } from './performance.js';
 import { meter } from './meter.js';
 import * as ind from './independents.js';
 import * as tasksLib from './tasks.js';
+import * as askLib from './askdialog.js';
+import * as permits from './permits.js';
 import * as reposLib from './repos.js';
 import { redact } from './redact.js';
 import * as blueprintsLib from './blueprints.js';
@@ -33,12 +37,34 @@ import * as rituals from './rituals.js';
 import * as ship from './ship.js';
 import * as design from './design.js';
 import * as voice from './voice.js';
+import * as usageLib from './usage.js';
+import * as backupLib from './backup.js';
+import * as jobsLib from './jobs.js';
+import * as auth from './auth.js';
+import { runnerFor } from './runner.js';
+import * as dispatcher from './dispatcher.js';
+import * as nodesLib from './nodes.js';
+import * as hb from './handoff.js';
+import * as erp from './erpnext.js';
+import * as legal from './legal.js';
+import * as tiering from './tiering.js';
+import * as trust from './trust.js';
+import * as insightLib from './insight.js';
+import * as history from './history.js';
+import * as kpiLib from './kpi.js';
+import * as guideLib from './guide.js';
+import { execFileSync, execFile } from 'node:child_process';
+import * as quotaLib from './quota.js';
+import * as space from './space.js';
+import { currentActor, ownerFloors as accessOwnerFloors } from './access.js';
+import * as chatLib from './chat.js';
+import * as contextLib from './context.js';
 import { config, ROOT, paths } from './config.js';
 
 // ---------- runtime state (work items per agent; machine-local, never in the repo) ----------
 // ended: how the last session of each agent ended (crashes, exits); autoResumes: times of automatic resumes;
 // autopilot: decisions taken automatically (shown until the owner says OK), lead decisions seen, nudges sent, blocks logged
-const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
+const loadRuntime = () => { const r = readJson(paths.runtime(), {}) || {}; return { work: r.work || {}, dismissedMerges: r.dismissedMerges || [], dismissedReplies: r.dismissedReplies || [], dismissedStalls: r.dismissedStalls || [], sessions: r.sessions || {}, nextSprint: r.nextSprint || {}, ended: r.ended || {}, autoResumes: r.autoResumes || {},
   autopilot: { decided: [], leadSeen: {}, nudged: [], blocked: [], ...(r.autopilot || {}) } }; };
 const saveRuntime = (r) => writeJson(paths.runtime(), r);
 const workKey = (floorId, agentId) => `${floorId}/${agentId}`;
@@ -153,7 +179,7 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const hookFresh = h && h.ts >= (st?.lastTs || 0) - 5000 && (running || now - h.ts < 10 * 60e3);
     const hookWaiting = hookFresh && h.state === 'waiting';
     // a long command (e2e, docker build) writes nothing while it runs: the agent is working all the same
-    const task = running ? liveTask(entry.id, a.id, st, own ? screen : '', now) : null;
+    const { task, services } = running ? liveTasks(entry.id, a.id, st, own ? screen : '', now) : { task: null, services: [] };
     const working = busy || !!task || (hookFresh ? h.state === 'working' : recent);
     let state = dialog || asking || hookWaiting ? 'waiting' : working ? 'working' : running ? 'idle' : 'stopped';
     const w = work[a.id];
@@ -170,13 +196,15 @@ function liveAgents(entry, team, sessions, { events = false, squad = null } = {}
     const standby = squad && lead && a !== lead && !running && !withLead ? (squad.gate?.blocking && !squad.gate.passed ? 'docs' : 'sprint') : null;
     const turnEnded = Math.max(st?.lastEndTurn || 0, h && h.event === 'Stop' ? h.ts : 0);
     if (w && !w.doneAt && turnEnded > w.assignedAt && !busy && !dialog && !working) { w.doneAt = turnEnded; setWork(entry.id, a.id, w); }
+    // several questions or multi-select: the structure comes from the tool input, the screen says where we are
+    if (dialog && st?.ask?.questions?.length && askLib.parseAsk(screen)) dialog.ask = { questions: st.ask.questions };
     if (dialog && st?.ask?.questions?.length) {
       // the screen often cuts long questions; the transcript has the full text
       dialog.question = st.ask.questions.map((q) => (q.header ? `[${q.header}] ` : '') + q.question).join('\n\n');
     }
     const activity = hookFresh && h.activity ? h.activity : st?.activity || '';
     return { agent: a, session: name, running, state, dialog, status: st, lastTs: Math.max(st?.lastTs || 0, hookFresh ? h.ts : 0), work: w || null, screen, started: sessionInfo(entry.id, a.id),
-      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
+      hook: hookFresh ? h : null, activity, inLead, reply, finished, standby, task, services, tasksEnded: endedTasks(st, now), turnKey: t?.file ? `${path.basename(t.file, '.jsonl')}@${(reply || finished)?.ts || 0}` : '', withLead, own, resumeId: own ? null : lastSession.get(a.id) || null };
   });
   // how a stopped agent ended: its own record, or (teammates) the lead's crash took it down
   const leadEnd = lead && !leadRunning ? ended.get(lead.id) : null;
@@ -198,7 +226,7 @@ function taskHistory(floorId, now) {
   const c = typicalCache.get(floorId);
   if (c && now - c.at < 5 * 60e3) return c.history;
   let history = [];
-  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }
+  try { history = squadLog.read(floorId, { type: 'task.ended', limit: 400 }).filter((e) => !e.data?.service).map((e) => ({ kind: e.data?.kind, ms: e.data?.ms })); } catch { /* no log yet */ }   // services run until stopped: no "usual
   typicalCache.set(floorId, { at: now, history });
   return history;
 }
@@ -210,11 +238,22 @@ function readTail(file, bytes = 16 * 1024) {
     return { text: buf.toString('utf8'), mtime: st.mtimeMs };
   } catch { return null; }
 }
-export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
-  const t = st?.tasks?.running?.at(-1);
-  if (!t) return null;
+// -> { task, services }: services are background shells that serve or watch (1.0.2); they never make the agent
+// "working" and never stall by themselves
+export function liveTasks(floorId, agentId, st, screen = '', now = Date.now()) {
+  const tails = new Map();
+  const tailOf = (t) => { if (!t.file) return null; if (!tails.has(t.id)) tails.set(t.id, readTail(t.file)); return tails.get(t.id); };
+  const { task: t, services } = tasksLib.splitRunning(st?.tasks?.running || [], (x) => tailOf(x)?.text || '');
+  const svc = services.map((s) => ({ id: s.id, label: s.label, command: redact(s.command), startedAt: s.startedAt, lastOutputAt: tailOf(s)?.mtime || s.startedAt,
+    lines: tasksLib.tailLines(tailOf(s)?.text || '', 3).map((l) => redact(l).slice(0, 200)) }));
+  const task = t ? liveTask(floorId, agentId, t, screen, now, tailOf(t)) : null;
+  // a foreground wait while a service runs: only the service's silence makes it a stall
+  if (task && !task.background && svc.length) task.stall = tasksLib.serviceWaitStall({ waitStartedAt: task.startedAt, serviceOutputAt: Math.max(...svc.map((s) => s.lastOutputAt)), now });
+  return { task, services: svc };
+}
+function liveTask(floorId, agentId, t, screen, now, tail) {
   let text = '', lastOutputAt = 0;
-  if (t.file) { const r = readTail(t.file); if (r) { text = r.text; lastOutputAt = r.mtime; } }
+  if (t.file) { if (tail) { text = tail.text; lastOutputAt = tail.mtime; } }
   else if (screen) {
     text = screen;
     const key = `${floorId}/${agentId}/${t.id}`, hash = crypto.createHash('sha1').update(tasksLib.tailLines(screen, 12).join('\n')).digest('hex');
@@ -231,8 +270,11 @@ export function liveTask(floorId, agentId, st, screen = '', now = Date.now()) {
 // commands that ended in the last half hour and ran at least TASK_CARD_MS: the owner gets a calm card
 const TASK_CARD_MS = 2 * 60e3, TASK_RECENT_MS = 30 * 60e3;
 export function endedTasks(st, now = Date.now()) {
-  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS)
-    .map((t) => ({ id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '', ...tasksLib.resultOf(t.kind, t.output || (t.file ? readTail(t.file)?.text || '' : ''), t.status) }));
+  return (st?.tasks?.ended || []).filter((t) => t.endedAt - t.startedAt >= TASK_CARD_MS && now - t.endedAt < TASK_RECENT_MS).map((t) => {
+    const out = t.output || (t.file ? readTail(t.file)?.text || '' : '');
+    return { id: t.id, kind: t.kind, label: t.label, startedAt: t.startedAt, endedAt: t.endedAt, ms: t.endedAt - t.startedAt, status: t.status, file: t.file || '',
+      ...(t.background && (t.kind === 'service' || tasksLib.looksLikeService(out)) ? { service: true } : {}), ...tasksLib.resultOf(t.kind, out, t.status) };
+  });
 }
 // "e2e Playwright finished in 7m 32s: 40 passed, 2 failed"
 export const taskDoneText = (tk) => `${tk.label} ${tk.status === 'completed' ? (tk.ok === false ? 'failed' : 'finished') : tk.status} in ${tasksLib.duration(tk.ms)}${tk.summary && !['done', tk.status].includes(tk.summary) ? `: ${tk.summary}` : ''}`;
@@ -243,11 +285,12 @@ function taskEvents(floorId, lives, now = Date.now()) {
   S.tasks ||= { started: {}, ended: {} };
   const out = [];
   for (const l of lives) {
-    const tk = l.task;
-    if (tk && tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background } }); }
+    for (const tk of [...(l.task ? [l.task] : []), ...(l.services || []).map((s) => ({ ...s, kind: 'service', background: true, service: true, elapsedMs: now - s.startedAt }))]) {
+      if (tk.elapsedMs >= TASK_LOG_MS && !S.tasks.started[tk.id]) { S.tasks.started[tk.id] = now; out.push({ type: 'task.started', agent: l.agent.id, ts: now, data: { id: tk.id, kind: tk.kind, label: tk.label, background: tk.background, ...(tk.service ? { service: true } : {}) } }); }
+    }
     for (const e of l.tasksEnded || []) if (S.tasks.started[e.id] && !S.tasks.ended[e.id]) {
       S.tasks.ended[e.id] = now;
-      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
+      out.push({ type: 'task.ended', agent: l.agent.id, ts: e.endedAt, data: { id: e.id, kind: e.kind, label: e.label, ms: e.ms, status: e.status, ok: e.ok, summary: e.summary, ...(e.service ? { service: true } : {}), ...(e.passed != null ? { passed: e.passed, failed: e.failed } : {}) } });
       typicalCache.delete(floorId);
     }
   }
@@ -275,6 +318,7 @@ function agentView(root, l, cost) {
     role: l.agent.role, title: eff?.title || l.agent.role.template, model: eff?.model || '', appearance: eff?.appearance || l.agent.appearance || {},
     state: l.state, running: l.running, inLead: l.inLead, activity: l.reply ? 'waiting for your reply' : l.standby ? STANDBY_TEXT[l.standby] : l.activity, lastTs: l.lastTs, session: l.session, live: !!l.hook,
     task: l.task || null,                                // a long-running command: label, start, last lines, progress, stall
+    services: l.services || [],                          // background shells that serve or watch: "Running in the background", Stop
     standby: l.standby || null, waitingReply: !!l.reply, finished: l.finished ? l.finished.ts : null,
     // stopped agents: how they ended (crash: Resume is the main action), the session Resume continues, the last state
     crash: l.ended?.kind === 'crashed' ? { cause: l.ended.cause, at: l.ended.at, text: recovery.crashText(l.ended), withLead: l.ended.withLead || null } : null,
@@ -288,27 +332,47 @@ function agentView(root, l, cost) {
 const attId = (...parts) => crypto.createHash('sha1').update(parts.join('|')).digest('hex').slice(0, 12);
 const PERMISSION = /(do you want to|allow|permission|proceed|trust|make this edit|run this command)/i;
 
+// one id per open dialog, whichever way it is seen first (1.0.3: a new id meant a second notification): an
+// AskUserQuestion by its tool call (the transcript, before and after the screen shows it), a permission prompt by
+// its hook event, anything else by the screen's question and options
+function dialogId(floorId, l, now = Date.now()) {
+  if (l.status?.ask?.questions?.length) return episodeId(floorId, l.agent.id, attId(floorId, l.agent.id, l.status.ask.id), 'ask', now);
+  const pm = l.hook?.state === 'waiting' && l.hook.permission;
+  if (pm) return episodeId(floorId, l.agent.id, attId(floorId, l.agent.id, 'hook', pm.ts), 'hook', now);
+  return episodeId(floorId, l.agent.id, attId(l.session, l.dialog.question, l.dialog.options.map((o) => String(o.label).replace(/^\[[ ✔xX]\]\s*/, '')).join('|')), 'screen', now);
+}
+// the same dialog seen first on the screen and seconds later by its hook (or the transcript) keeps its first id
+const episodes = new Map();                     // floor/agent -> { id, src, at, alias }
+export function episodeId(floorId, agentId, id, src, now = Date.now()) {
+  const k = `${floorId}/${agentId}`, e = episodes.get(k);
+  if (e && (e.id === id || e.alias === id)) { e.seen = now; return e.id; }
+  if (e && e.src !== src && !e.alias && now - e.at < 30e3 && now - e.seen < 10e3) { e.alias = id; e.seen = now; return e.id; }
+  episodes.set(k, { id, src, at: now, seen: now, alias: null });
+  if (episodes.size > 500) episodes.delete(episodes.keys().next().value);
+  return id;
+}
 function floorAttention(entry, floor, lives, cost) {
   const out = [], dismissedNow = new Set(loadRuntime().dismissedReplies);
   for (const l of lives) {
     // a long command ended (2 min or more): a calm card with its duration and result, OK or Open log
     for (const tk of l.tasksEnded || []) {
+      if (tk.service) continue;                          // a dev server that was stopped is no news
       const key = replyKey(entry.id, l.agent.id, `task:${tk.id}`);
       if (dismissedNow.has(key)) continue;
       out.push({ id: attId(entry.id, l.agent.id, 'task', tk.id), kind: 'taskdone', replyKey: key, floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: taskDoneText(tk), task: tk, options: [], answerable: true, calm: true, canReply: false, ts: tk.endedAt });
     }
     if (l.dialog) {
-      out.push({ id: attId(l.session, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
+      out.push({ id: dialogId(entry.id, l), kind: PERMISSION.test(l.dialog.question) && !l.dialog.ask ? 'permission' : 'question',
         floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
-        text: l.dialog.question, options: l.dialog.options, answerable: true, ts: l.lastTs || Date.now() });
+        text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, ts: l.lastTs || Date.now() });
     } else if (l.hook?.state === 'waiting' && l.hook.permission && (l.hook.permission.tool || !(l.status?.ask && l.state === 'waiting'))) {
       const pm = l.hook.permission;
-      out.push({ id: attId(entry.id, l.agent.id, 'hook', pm.ts), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
+      out.push({ id: episodeId(entry.id, l.agent.id, attId(entry.id, l.agent.id, 'hook', pm.ts), 'hook'), kind: 'permission', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: l.agent.id, agentName: l.agent.displayName,
         text: pm.message + (pm.detail ? `\n${pm.detail}` : ''), options: [], answerable: false, live: true, ts: pm.ts });
     } else if (l.status?.ask && l.state === 'waiting') {
       const q = l.status.ask.questions;
-      out.push({ id: attId(entry.id, l.agent.id, l.status.ask.id), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
+      out.push({ id: episodeId(entry.id, l.agent.id, attId(entry.id, l.agent.id, l.status.ask.id), 'ask'), kind: 'question', floorId: entry.id, floorNumber: entry.number, floorName: floor.name,
         agentId: l.agent.id, agentName: l.agent.displayName, text: q.map((x) => x.question).join('\n\n'),
         options: (q[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.status.ask.ts });
     } else if (l.reply) {
@@ -326,8 +390,12 @@ function floorAttention(entry, floor, lives, cost) {
     }
   }
   const work = workOf(entry.id);
+  const dismissedStalls = new Set(loadRuntime().dismissedStalls);
   for (const s of wd.stallAlerts(lives.map((l) => ({ id: l.agent.id, displayName: l.agent.displayName, lead: !!l.agent.lead, state: l.state, lastTs: l.lastTs, task: l.task })), work)) {
-    out.push({ id: attId('stall', entry.id, s.agent || ''), kind: 'stall', floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
+    const stallKey = `${entry.id}/${s.key}`;
+    if (dismissedStalls.has(stallKey)) continue;
+    // a system notice, not an ask: muted under Notices, notified only once it has lasted NOTICE_NOTIFY_MS
+    out.push({ id: attId('stall', entry.id, s.agent || '', s.key), kind: 'stall', stallKey, notice: true, muted: true, notifyAt: s.since + wd.NOTICE_NOTIFY_MS, floorId: entry.id, floorNumber: entry.number, floorName: floor.name, agentId: s.agent || null, text: s.text, ts: Date.now() });
   }
   for (const m of merge.mergeProblems(entry.id, loadRuntime().dismissedMerges)) {
     const what = m.result === 'merged' ? `Merged ${m.branch} but the push failed: ${m.push.error}` : `Merge of ${m.branch} ${m.result}: ${m.reason}`;
@@ -361,12 +429,15 @@ function autopilotItems(entry, floor, out) {
   const ownerOnly = blueprintsLib.floorBlueprint(entry.path, floor.blueprint)?.ownerOnly || [];
   for (const a of out) {
     if (!ASKING.has(a.kind)) continue;
-    const c = autopilot.classify([a.text, ...(a.options || []).filter((o) => !o.free).map((o) => o.label)].join('\n'), { level: floor.autopilot, ownerOnly });
-    const rec = a.kind === 'question' && a.answerable ? autopilot.recommendedOption(a.options) : null;
-    const auto = !c.critical && (a.kind === 'reply' || !!rec);                 // permission prompts are never answered
+    const labels = a.questions ? a.questions.flatMap((q) => [q.question, ...q.options.map((o) => o.label)]) : (a.options || []).filter((o) => !o.free).map((o) => o.label);
+    const c = autopilot.classify([a.text, ...labels].join('\n'), { level: floor.autopilot, ownerOnly });
+    // several questions: answered only when every one has a recommended option (and nothing is critical)
+    const recAll = a.questions && a.answerable ? askLib.recommendedAnswers(a.questions) : null;
+    const rec = a.kind === 'question' && a.answerable && !a.questions ? autopilot.recommendedOption(a.options) : null;
+    const auto = !c.critical && (a.kind === 'reply' || !!rec || !!recAll);     // permission prompts are never answered
     if (!apSeen.has(a.id)) apSeen.set(a.id, now);
     const since = Math.min(a.ts || now, apSeen.get(a.id));
-    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
+    a.autopilot = { level: floor.autopilot, critical: c.critical, reasons: c.reasons, recommended: rec?.n || null, ...(recAll ? { recommendedAnswers: recAll } : {}), auto, autoAt: auto ? since + floor.autopilotTimeoutSec * 1000 : null };
   }
   const day = Date.now() - 864e5;
   for (const d of loadRuntime().autopilot.decided) {
@@ -384,7 +455,7 @@ function floorState(entry, opts = {}) {
   const squad = squadOf(entry.path, cfg.floor);
   const lives = liveAgents(entry, cfg.team, sessions, { ...opts, squad });
   const cost = costFor(entry.id, entry.path);
-  return { entry, cfg, lives, cost, squad, attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
+  return { entry, cfg, lives, cost, squad, usage: opts.usage || null, jobs: (opts.jobs || []).filter((j) => j.floorId === entry.id), attention: floorAttention(entry, cfg.floor, lives, cost), budget: wd.budgetStatus(cfg.floor.budget, cost) };
 }
 
 const round2 = (n) => +(+n || 0).toFixed(2);
@@ -394,7 +465,15 @@ function summary(fs_) {
   if (fs_.missing) return { id: entry.id, number: entry.number, path: entry.path, missing: true, name: path.basename(entry.path), error: fs_.error || 'Directory not found', agents: [], attention: 0 };
   const { cfg, lives, cost } = fs_;
   const repoList = reposLib.readRepos(entry.path);
-  const agents = lives.map((l) => ({ ...agentView(entry.path, l, cost), repos: repoList.filter((r) => r.access === 'write' && r.agents.includes(l.agent.id)).map((r) => r.id) }));
+  const agents = lives.map((l) => ({ ...agentView(entry.path, l, cost), repos: repoList.filter((r) => r.access === 'write' && r.agents.includes(l.agent.id)).map((r) => r.id),
+    usage: (l.running && fs_.usage?.get(l.session)) || null }));      // RAM and CPU of its processes (server/usage.js)
+  // a background job (headless runner) makes a stopped agent "working" and says what it does
+  for (const a of agents) {
+    const j = (fs_.jobs || []).find((x) => x.agentId === a.id);
+    if (!j) continue;
+    a.job = { id: j.id, title: j.title, startedAt: j.startedAt, activity: j.activity };
+    if (!a.running && a.state !== 'waiting') { a.state = 'working'; a.activity = `background: ${j.activity || j.title}`; }
+  }
   const count = (s) => agents.filter((a) => a.state === s).length;
   const asks = fs_.attention.filter((a) => !a.muted);
   const lamp = asks.length ? 'attention' : count('working') ? 'working' : agents.some((a) => a.running) ? 'idle' : 'stopped';
@@ -404,6 +483,7 @@ function summary(fs_) {
     autopilot: { level: cfg.floor.autopilot, timeoutSec: cfg.floor.autopilotTimeoutSec, critical: asks.filter((a) => a.autopilot?.critical).length },
     meeting: rituals.active(meetings.get(entry.id)),
     id: entry.id, number: entry.number, path: entry.path, name: cfg.floor.name, goal: cfg.floor.goal, tagline: cfg.floor.tagline, accent: cfg.floor.accent, layout: cfg.floor.layout,
+    kind: cfg.floor.kind, access: cfg.floor.access, shift: cfg.floor.shift,                     // the Space (server/space.js)
     workflow: cfg.floor.workflow, desks: cfg.floor.desks, devices: cfg.floor.devices, agents, lamp,
     counts: { working: count('working'), waiting: count('waiting'), idle: count('idle'), stopped: count('stopped'), standby: agents.filter((a) => a.standby).length },
     cost: { today: round2(cost.today), month: round2(cost.month) }, budget: { ...cfg.floor.budget, ...fs_.budget, used: round2(fs_.budget.used) },
@@ -426,11 +506,16 @@ export function buildingSnapshot() {
   if (Date.now() - snapCache.at < 1500 && snapCache.value) return snapCache.value;
   const b = building.loadBuilding();
   const sessions = tm.listSessions();
-  const states = b.floors.map((e) => floorState(e, { sessions }));
+  const usage = usageLib.sessionsUsage(sessions, meter.state.tree, tm.panePids);
+  const running = jobsLib.runningJobs();
+  const local = running.filter((j) => !j.node);                       // jobs on workers use their machine's slots (0.18)
+  const states = b.floors.map((e) => floorState(e, { sessions, usage, jobs: running }));
   const res = wd.readResources();
   const attention = [
     ...wd.resourceWarnings(res).map((w) => ({ id: attId('resource', w.key), kind: 'resource', floorId: null, text: w.text, ts: res.ts })),
+    ...backupLib.backupAlerts(b.prefs.backup).map((w) => ({ id: attId('backup', w.key), kind: 'backup', floorId: null, text: w.text, ts: Date.now() })),
     ...states.flatMap((s) => s.attention || []),
+    ...ownerDesk(states),
   ];
   for (const s of states) if (s.budget?.level === 'warn') attention.push({ id: attId('budget-warn', s.entry.id), kind: 'budget', level: 'warn', floorId: s.entry.id, floorNumber: s.entry.number, floorName: s.cfg.floor.name, text: `Budget at ${s.budget.pct} %: $${s.budget.used.toFixed(2)} of $${s.cfg.floor.budget.usd} this ${s.cfg.floor.budget.period}`, ts: Date.now() });
   stampAlerts(attention);
@@ -439,17 +524,28 @@ export function buildingSnapshot() {
   const independent = independentState(b);
   attention.push(...independent.attention);
   const floorsOut = [independent.summary, ...states.map(summary)].sort((x, y) => x.number - y.number);
+  let targets = null; try { const o = kpiLib.overview(); targets = { total: o.total, met: o.met, behind: o.behind, unset: o.unset }; } catch { /* none */ }   // the cockpit's counts (1.3)
+  let guide = { done: false, firstRun: false }; try { const g = guideLib.load(); guide = { done: !!g.done, firstRun: !g.done && !b.floors.length, language: b.prefs.language || null }; } catch { /* none */ }   // the Company Guide (1.4)
   const value = {
-    name: b.name, now: Date.now(), floors: floorsOut, attention, detected,
+    name: b.name, now: Date.now(), floors: floorsOut, attention, detected, targets, guide,
+    // handoffs between Spaces in the last minutes: in the Office the sender walks to the other room (1.1.0)
+    walks: recentWalks(new Set(floorsOut.map((f) => f.id))),
     resources: { mem: res.mem, swap: res.swap, disk: res.disk, load: res.load, cpus: res.cpus, warnings: wd.resourceWarnings(res).map((w) => w.text) },
     costToday: round2(floorsOut.reduce((n, f) => n + (f.cost?.today || 0), 0)),
     meter: meter.summary(), autopilotToday: autopilotToday(b.floors),
+    // agents running at once on this machine and what one session needs in RAM (measured)
+    limits: { maxAgents: recovery.buildingMax(b.prefs), running: sessions.length + local.length, sessions: sessions.length, jobs: local.length, remote: running.length - local.length, session: usageLib.summary(), queued: dispatcher.load().length },
     options: { layouts: floors.LAYOUTS, workflows: floors.WORKFLOWS, deviceTypes: floors.DEVICE_TYPES, deskDevices: floors.DESK_DEVICES,
       branchStrategies: floors.BRANCH_STRATEGIES, pushPolicies: floors.PUSH_POLICIES, nextFloorNumber: building.nextFloorNumber(b),
       projectsDir: suggestProjectsDir(b), autopilot: { levels: autopilot.LEVELS, text: autopilot.LEVEL_TEXT, hardStop: autopilot.hardStopList(), defaultLevel: autopilot.DEFAULT_LEVEL } },
   };
   snapCache = { at: Date.now(), value };
   return value;
+}
+const WALK_MS = 3 * 60e3;
+function recentWalks(spaces, now = Date.now()) {
+  return hb.load().filter((h) => now - (h.createdAt || 0) < WALK_MS && h.from?.agentId && spaces.has(h.from.floorId) && spaces.has(h.to?.floorId) && h.from.floorId !== h.to.floorId)
+    .slice(-10).map((h) => ({ id: h.id, from: h.from.floorId, agent: h.from.agentId, to: h.to.floorId, ts: h.createdAt }));
 }
 // the Lobby digest "Decided by autopilot today: N" (read from the Squad Log at most once a minute)
 let apToday = { at: 0, day: '', n: 0 };
@@ -471,7 +567,7 @@ function suggestProjectsDir(b) {
 // Watchdog alerts (stall, budget, resources) are recomputed on every snapshot; remember when each
 // one first appeared so "since" stays stable, and report new ones once.
 const firstSeen = new Map();
-export const WATCH_KINDS = new Set(['stall', 'budget', 'resource', 'merge']);
+export const WATCH_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'backup']);
 function stampAlerts(items, onNew = null) {
   const now = Date.now(), live = new Set();
   for (const a of items) {
@@ -488,6 +584,7 @@ const reported = new Set();
 export function watchdogTick(log = console.log) {
   snapCache.at = 0;
   const snap = buildingSnapshot();
+  try { usageLib.record(usageLib.sessionsUsage(tm.listSessions(), meter.state.tree, tm.panePids)); } catch { /* no /proc */ }
   const live = new Set();
   for (const a of snap.attention) {
     live.add(a.id);
@@ -550,6 +647,21 @@ const readTextSafe = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch {
 
 function readBriefSafe(root) { try { return fs.readFileSync(path.join(root, 'AISQUAD.md'), 'utf8').slice(0, 20000); } catch { return ''; } }
 
+// Stop a background service of an agent (1.0.2): its shell and the processes under it, found under the agent's
+// tmux session by its command line; Claude Code then sees the shell end
+export function stopService(floorId, agentId, serviceId) {
+  const { entry, agent, name } = locate(floorId, agentId);
+  const l = liveAgents(entry, { agents: [agent] }, new Set(tm.listSessions()), {})[0];
+  const raw = (l.status?.tasks?.running || []).find((t) => t.id === serviceId);
+  if (!raw || !(l.services || []).some((s) => s.id === serviceId)) throw notFound('That service is no longer running');
+  let ps = '';
+  try { ps = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8', timeout: 5000 }); } catch { /* no ps */ }
+  const pids = tasksLib.serviceProcesses(tasksLib.parsePs(ps), tm.panePids(name), raw.command.replace(/…$/, ''));
+  if (!pids.length) throw new HttpError(409, 'Could not find its process; ask the agent to stop it');
+  for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
+  invalidate();
+  return { ok: true, stopped: pids.length };
+}
 export function deskDetail(floorId, agentId) {
   if (floorId === ind.FLOOR_ID) return independentDesk(agentId);
   const entry = building.floorEntry(floorId);
@@ -567,6 +679,8 @@ export function deskDetail(floorId, agentId) {
     skills: (effective?.skills || []).map((n) => skillsLib.skillStatus(entry.path, n)),
     screen: l.running ? tm.capture(l.session, 300).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim() : '', dialog: l.dialog,
     events: (l.status?.events || []).slice(-80).reverse(),
+    usage: l.running && l.own ? usageLib.usageOf(meter.state.tree, tm.panePids(l.session)) : null,     // RAM and CPU of its processes
+    jobs: jobsLib.listJobs({ floorId, agentId, limit: 6 }).map(({ prompt, ...j }) => j),             // its background jobs
     pending: pending.has(workKey(floorId, agentId)) ? pending.get(workKey(floorId, agentId)).text : null,
     attach: tm.attachCommand(l.session),
   };
@@ -585,16 +699,16 @@ function locate(floorId, agentId) {
   return { entry, cfg, agent, name: tm.sessionName(floorId, agentId) };
 }
 
-// resume: a Claude Code session id to continue (--resume) instead of a fresh session.
-// guard: the owner starts it; warn first (409) when swap is above 80 % or the Floor runs its maximum of agents
+// guard: the owner starts it from the Desk: it goes through the dispatcher, which starts it now or queues it (P0)
+// when the machine, the Space or the plan has no room. Without guard it starts now (internal, or the owner's
+// "start now anyway").
 export async function startAgent(floorId, agentId, task = '', { resume = '', guard = false, via = 'aisquad' } = {}) {
-  const { entry, cfg, agent, name } = locate(floorId, agentId);
-  if (guard && !tm.isRunning(name)) {
-    snapCache.at = 0;
-    const running = buildingSnapshot().floors.find((f) => f.id === floorId)?.agents.filter((a) => a.running).length || 0;
-    const warnings = recovery.startWarnings({ res: wd.readResources(), running, maxAgents: cfg.floor.recovery.maxAgents });
-    if (warnings.length) throw Object.assign(new HttpError(409, `${warnings.join(' ')} Start anyway?`), { data: { warnings } });
-  }
+  if (guard && !resume) return admit({ floorId, agentId, action: 'start', task, priority: 'P0', via: 'owner' });
+  return launchAgent(floorId, agentId, task, { resume, via });
+}
+// resume: a Claude Code session id to continue (--resume) instead of a fresh session
+async function launchAgent(floorId, agentId, task = '', { resume = '', via = 'aisquad' } = {}) {
+  const { entry, agent, name } = locate(floorId, agentId);
   floors.generate(entry.path);                          // agent file is current before Claude reads it
   const eff = floors.effectiveOf(entry.path, agent);
   // model comes from the agent file; effort is not read from agent files for the main session, so pass it
@@ -607,7 +721,13 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
   // linked repositories: --add-dir for each, and every write denied in the read-only ones (Phase 3.4)
   const repos = floors.agentReposOf(entry.path, agentId);
   extraArgs.push(...reposLib.addDirArgs(repos));
-  const r = await tm.startSession({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos)], extraArgs, env });
+  // the context layers: the Company Brain read-only, the identity guard, the Space's memory (server/context.js)
+  const sc = floors.sessionContext(entry.path);
+  extraArgs.push(...sc.addDirs, ...(sc.settings ? ['--settings', JSON.stringify(sc.settings)] : []));
+  // ERPNext through Frappe Assistant Core when the Space has a role (0.19): its key only as a hidden variable
+  const ex = erp.sessionFor(floors.readFloor(entry.path).floor);
+  if (ex) extraArgs.push(...ex.args, '--allowedTools', ...ex.allow);
+  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], extraArgs, env, secretEnv: ex ? ex.env : {} });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -621,15 +741,480 @@ export async function startAgent(floorId, agentId, task = '', { resume = '', gua
   return { ok: true, session: name, already: !!r.already, queued: !!task, ...(resume ? { resumed: resume } : {}) };
 }
 
-// continue the agent's last Claude Code session; a resumed lead of a squad gets a short recovery note
+// continue the agent's last Claude Code session; a resumed lead of a squad gets a short recovery note.
+// guard: the owner asks for it (dispatcher, P0)
 export async function resumeAgent(floorId, agentId, { guard = false, via = 'aisquad' } = {}) {
+  if (guard) { locate(floorId, agentId); return admit({ floorId, agentId, action: 'resume', priority: 'P0', via: 'owner' }); }
+  return resumeNow(floorId, agentId, { via });
+}
+async function resumeNow(floorId, agentId, { via = 'aisquad' } = {}) {
   const { entry, cfg, agent } = locate(floorId, agentId);
   const end = endedOf(floorId, agentId);
   const sessionId = tx.agentSessions(entry.path, agentId)[0]?.id || end?.sessionId;
   if (!sessionId) throw bad('This agent has no previous session to resume; start it fresh');
   const lead = cfg.team.agents.find((x) => x.lead) || cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
   const note = squadOf(entry.path, cfg.floor) && lead === agent ? recovery.recoveryMessage({ end, maxAgents: cfg.floor.recovery.maxAgents }) : '';
-  return startAgent(floorId, agentId, note, { resume: sessionId, guard, via });
+  return launchAgent(floorId, agentId, note, { resume: sessionId, via });
+}
+
+// a background job for an agent (headless runner): the same agent file, model, effort, denied tools and linked
+// repositories as on its Desk, a budget cap, no permission prompts (dontAsk, or acceptEdits when allowed).
+// guard: the owner asks for it: the dispatcher starts it now or queues it (P2, background work)
+export function startAgentJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', guard = false, via = 'aisquad', kind = 'task', title = '', resume = '', priority = 'P2' } = {}) {
+  locate(floorId, agentId);
+  if (!String(prompt || '').trim()) throw bad('The job needs a prompt');
+  if (guard) return admit({ floorId, agentId, action: 'job', task: prompt, title, priority, via: 'owner', opts: { budgetUsd, permissionMode, kind, resume } });
+  return launchJob(floorId, agentId, prompt, { budgetUsd, permissionMode, via, kind, title, resume });
+}
+function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGET_USD, permissionMode = 'dontAsk', via = 'aisquad', kind = 'task', title = '', resume = '', chat = null, node = nodesLib.HEAD, routine = false } = {}) {
+  const { entry, cfg, agent } = locate(floorId, agentId);
+  const b = building.loadBuilding();
+  const remote = node && node !== nodesLib.HEAD;
+  // a job on a worker gets no credentials from here: the worker signs in to Claude itself (0.18)
+  const env = { AISQUAD_AGENT: `${floorId}/${agentId}`, AISQUAD_URL: config.serverUrl, AISQUAD_HOME: config.home,
+    ...floors.commitIdentity(agent, cfg.git), ...(remote ? {} : auth.backgroundEnv(b.prefs.auth)) };
+  floors.generate(entry.path);
+  const eff = floors.effectiveOf(entry.path, agent);
+  // model tiering (0.20): routine background work on a lighter model; the owner's own choice and Legal stay
+  const tierPick = kind === 'chat' ? null : tiering.modelFor({ role: eff.role, ownerModel: !!agent.overrides?.model, routine });   // a chat is you talking: the role's model
+  if (tierPick) eff.model = tierPick.model;
+  // the General chat (0.14): a neutral folder with only the agent's identity and the Company Brain, no repositories
+  const general = chat?.context === 'general';
+  const cwd = general ? chatLib.neutralDir(floorId, agentId, path.join(entry.path, '.claude', 'agents', `${agentId}.md`)) : entry.path;
+  const repos = general ? [] : floors.agentReposOf(entry.path, agentId);
+  const sc = general ? contextLib.sessionContext(cwd, { ...cfg.floor, memory: 'claude' }, b.prefs) : floors.sessionContext(entry.path);
+  const ex = general ? null : erp.sessionFor(cfg.floor);                 // ERPNext (0.19): this machine only, never sent to a worker
+  if (ex && remote) throw bad('A Space with ERPNext keys runs its jobs on this machine only');
+  if (ex) Object.assign(env, ex.env);
+  const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
+    extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
+  const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : null };
+  let job;
+  if (remote) {
+    // the Head keeps the record; the worker gets what it needs to run it in its own clone of the repository
+    const url = remoteUrl(entry.path);
+    if (!url) throw bad('This Space has no git remote, so it runs on this machine only');
+    delete env.AISQUAD_HOME; delete env.AISQUAD_URL;                       // this machine's paths mean nothing there
+    job = jobsLib.recordRemote({ ...spec, node, opts: { budgetUsd, permissionMode, kind, resume, ...(chat ? { chat } : {}) } });
+    const agentFile = readTextSafe(path.join(entry.path, '.claude', 'agents', `${agentId}.md`)) || '';
+    nodesLib.assign(node, { type: 'job', job: { id: job.id, floorId, agentId, kind, title: job.title, prompt, args, env, model: eff.model, budgetUsd: spec.budgetUsd, permissionMode,
+      headRoot: entry.path, agentFile, repo: { url, main: cfg.git.mainBranch || 'main', branch: `${agentId}/job-${job.id}` } } });
+  } else job = runnerFor('headless').start(spec);
+  logEvent(floorId, { type: 'job.started', agent: agentId, model: eff.model, data: { job: job.id, kind, title: job.title, budgetUsd: job.budgetUsd, permissionMode, via, ...(remote ? { node } : {}) } });
+  if (chat) chatLib.setState(chat.key, { awaiting: { msgId: chat.msgId, since: Date.now(), mode: 'job', job: job.id } });
+  invalidate();
+  return job;
+}
+// from the server's job tick: an ended job goes to the Squad Log
+export function logJobEnded(job) {
+  if (!job.floorId) return;
+  if (job.meta?.chat) chatAnswered(job);
+  // tools denied without a prompt ("dontAsk"): the Audit counts them; the command only as its first words
+  for (const d of job.denials || []) logEvent(job.floorId, { type: 'permission.denied', agent: job.agentId || null, data: { job: job.id, tool: d.tool, command: d.command.split(/\s+/).slice(0, 3).join(' ') } });
+  hb.scan({ floorId: job.floorId }).then((r) => { if (r.length) invalidate(); }, (e) => console.error('[handoff]', e.message));   // its packages go now
+  logEvent(job.floorId, { type: 'job.ended', agent: job.agentId || null, model: job.model || null, data: { job: job.id, kind: job.kind, status: job.status, cost: job.cost, turns: job.turns, ms: (job.endedAt || Date.now()) - job.startedAt, ...(job.error ? { error: job.error } : {}), ...(job.node ? { node: job.node } : {}), ...(job.branch ? { branch: job.branch } : {}) } });
+  invalidate();
+}
+
+// ---------- handoffs between Spaces and ERPNext (0.19), see server/handoff.js and server/erpnext.js ----------
+export function spacesForHandoff() {
+  return building.loadBuilding().floors.flatMap((e) => {
+    try {
+      const c = floors.readFloor(e.path);
+      return [{ id: e.id, number: e.number, name: c.floor.name, root: e.path, access: c.floor.access || 'team', blueprint: c.floor.blueprint?.id || '',
+        agents: c.team.agents.map((a) => ({ id: a.id, displayName: a.displayName, lead: !!a.lead || sprint.roleKind(a) === 'lead' })) }];
+    } catch { return []; }
+  });
+}
+const realFloor = (id) => building.loadBuilding().floors.some((f) => f.id === id);
+Object.assign(hb.deps, {
+  spaces: spacesForHandoff,
+  log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); },
+  // the receiver works on it in the background: P1 (a handoff), this machine, edits allowed in its own Space
+  wake: ({ floorId, agentId, prompt, title, handoff }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: 'handoff',
+    opts: { kind: 'handoff', permissionMode: 'acceptEdits', headOnly: true, handoff, routine: tiering.LIGHT_KINDS.has(hb.get(handoff)?.kind) } }),
+  ownerItem: async (h) => { if (h.kind === 'quotation') await erp.prepareApproval(h); invalidate(); },
+});
+erp.deps.invalidate = () => invalidate();
+Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate() });
+Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });
+Object.assign(legal.deps, {
+  spaces: spacesForHandoff,
+  log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); },
+  ask: ({ floorId, agentId, prompt, title }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: 'owner', opts: { kind: 'task', permissionMode: 'acceptEdits', headOnly: true } }),
+  invalidate: () => invalidate(),
+});
+
+// what only the Owner decides, on the Owner's desk: packages leaving an Owner-only Space, questions about ERPNext
+// work, price approvals (a hard stop: money) and ERPNext alerts. Hidden from everyone else (ownerOnly).
+const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary']);
+function ownerDesk(states) {
+  const where = (floorId, agentId) => {
+    const s = states.find((x) => x.entry.id === floorId);
+    const a = s?.cfg.team.agents.find((x) => x.id === agentId);
+    return { floorId, floorNumber: s?.entry.number, floorName: s?.cfg.floor.name, ...(a ? { agentId, agentName: a.displayName } : {}) };
+  };
+  const out = [];
+  for (const h of hb.load()) {
+    const base = { ...where(h.from.floorId, h.from.agentId), ownerOnly: true, answerable: true, handoffId: h.id, ts: h.createdAt };
+    if (h.status === 'held') out.push({ ...base, id: attId('handoff', h.id), kind: 'handoff', mode: 'held', hardStop: ['legal'],
+      text: `Handoff from an Owner-only Space to ${h.to.name}: ${h.title}\n\n${h.body}`, options: [{ n: 1, label: 'Deliver it' }, { n: 2, label: 'Do not deliver' }] });
+    else if (h.status === 'question') out.push({ ...base, id: attId('handoff-q', h.id), kind: 'handoff', mode: 'question',
+      text: `${h.title}${h.erpnext ? ` (ERPNext ${h.erpnext})` : ''}\n\n${h.body}`, options: [{ n: 1, label: 'Your answer…', free: true }] });
+    else if (h.status === 'approval') {
+      // the card is the version of the Quotation it shows: a changed draft is a new card (and a new Telegram message)
+      const q = erp.approvalOf(h.id);
+      out.push({ ...base, id: attId('price', h.id, q?.modified || ''), kind: 'price', hardStop: ['money'], quotation: q, text: erp.approvalText(h),
+        options: [...(q?.modified && !q.error ? [{ n: 1, label: erp.credential('owner') ? 'Approve and submit' : 'Approve (you submit it in ERPNext)' }] : []), { n: 2, label: 'Send back with a note…', free: true }] });
+    }
+  }
+  for (const a of erp.loadState().alerts) out.push({ id: attId('erp', a.id), kind: 'erpnext', floorId: null, ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
+  // contracts (0.20): READY FOR REVIEW is a card for the version it shows; the guard's alerts
+  for (const c of legal.reviewItems()) out.push({ ...where(c.floorId, ''), id: attId('contract', c.key, c.hash), kind: 'contract', ownerOnly: true, answerable: true, hardStop: ['legal'],
+    contractKey: c.key, contractHash: c.hash, file: c.rel, text: c.text, ts: Date.now(), options: [{ n: 1, label: 'Approve the contract' }, { n: 2, label: 'Request changes…', free: true }] });
+  // a canary of Daily Insight finished its week (0.21): keep it or roll it back
+  for (const it of insightLib.loadInbox().items.filter((x) => x.status === 'canary-done')) out.push({ ...where(it.change?.floorId, it.change?.agentId), id: attId('canary', it.id), kind: 'canary', ownerOnly: true, answerable: true,
+    suggestionId: it.id, text: trust.canaryText(it), ts: it.canaryUntil, options: [{ n: 1, label: 'Keep it' }, { n: 2, label: 'Roll it back' }] });
+  for (const a of legal.alerts()) out.push({ ...where(a.floorId, ''), id: attId('legal', a.id), kind: 'legal', ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
+  return out;
+}
+async function answerOwnerDesk(item, option, text = '') {
+  const who = currentActor();
+  if (!who || who.role !== 'owner') throw new HttpError(403, 'Only the Owner decides this');
+  const by = who?.name || 'Owner', n = Number(option) || 0, note = String(text || '').trim();
+  let r;
+  if (item.kind === 'erpnext') r = erp.dismissAlert(item.alertId);
+  else if (item.kind === 'legal') r = legal.dismissAlert(item.alertId);
+  else if (item.kind === 'canary') {
+    if (!n) throw bad('Keep it or roll it back');
+    r = trust.decideCanary(item.suggestionId, n === 1, { by, rollback: history.rollback });
+  }
+  else if (item.kind === 'contract') {
+    if (n === 1) r = legal.approve(item.contractKey, item.contractHash, { by });
+    else if (note) r = await legal.requestChanges(item.contractKey, note, { by });
+    else throw bad('Approve it, or write what has to change');
+  }
+  else if (item.kind === 'price') {
+    if (n === 1) r = await erp.approve(item.handoffId, { by, seenModified: item.quotation?.modified || '' });
+    else if (note) r = await erp.sendBack(item.handoffId, note, { by });
+    else throw bad('Approve it, or send it back with a note');
+  } else if (item.mode === 'held') {
+    if (!n && !note) throw bad('Deliver it or not');
+    r = await hb.release(item.handoffId, n === 1, { by, reason: note });
+  } else r = note ? await hb.ownerReply(item.handoffId, note) : hb.closeOwnerItem(item.handoffId);
+  invalidate();
+  return { ok: true, ...r };
+}
+// the bus and the ERPNext watcher, from the server's tick
+// targets measured by the server (1.3), from the hourly tick
+export async function kpiTick(now = Date.now()) { const r = await kpiLib.tick(now); if (r.some((x) => !x.error)) invalidate(); return r; }
+export async function handoffTick(now = Date.now()) {
+  const sent = await hb.scan({ now });
+  const reverted = legal.guard(now);                                     // contracts: nothing APPROVED behind the Owner's back
+  const erpRun = await erp.tick(now).catch((e) => ({ error: e.message }));
+  if (sent.length) invalidate();
+  return { sent, erp: erpRun, reverted };
+}
+export const legalOverview = () => ({ contracts: legal.list(), metrics: legal.metrics(), alerts: legal.alerts() });
+export function contractText(key) {
+  const c = legal.contracts().find((x) => x.key === key);
+  if (!c) throw notFound('Contract not found');
+  return { key, file: c.rel, status: c.status, text: c.text };
+}
+export const handoffsOverview = (user) => (user?.role === 'owner' ? { handoffs: hb.listFor(), metrics: hb.metrics() }
+  : { handoffs: hb.listFor(accessOwnerFloors(), { owner: false }), metrics: hb.metrics() });
+
+// ---------- more machines (0.18), see server/nodes.js and server/worker.js ----------
+export function remoteUrl(root) {
+  try { return execFileSync('git', ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 }).trim(); } catch { return ''; }
+}
+// jobs handed to each worker since its last heartbeat (its report does not count them yet)
+function placedNow(now = Date.now()) {
+  const seen = new Map(nodesLib.listNodes(now).map((n) => [n.name, n.lastSeen || 0])), out = {};
+  for (const j of jobsLib.runningJobs()) if (j.node && j.createdAt >= (seen.get(j.node) || 0)) out[j.node] = (out[j.node] || 0) + 1;
+  return out;
+}
+// where a background job of this Space runs now: 'head', a worker, or null
+// headOnly: handoff work and Spaces with ERPNext keys stay here (their files and keys never go to a worker, 0.19)
+export function placeJob(floorId, headFree, now = Date.now(), { headOnly = false } = {}) {
+  let pin = 'auto', root = '';
+  try { root = building.floorEntry(floorId).path; const f = floors.readFloor(root).floor; pin = f.node || 'auto'; if (headOnly || (f.erpnext && f.erpnext !== 'off')) pin = nodesLib.HEAD; } catch { /* gone */ }
+  const workers = nodesLib.listNodes(now);
+  if (!workers.length && (pin === 'auto' || pin === nodesLib.HEAD)) return headFree > 0 ? nodesLib.HEAD : null;
+  return nodesLib.place({ pin, headFree, hasRemote: !!remoteUrl(root), floorId, placedNow: placedNow(now) }, now);
+}
+// a worker's report on a job it runs
+export function remoteReport(nodeName, id, body) {
+  const cur = jobsLib.readJob(id);
+  if (!cur || cur.node !== nodeName) throw notFound('Job not found');
+  const { job, ended } = jobsLib.applyReport(id, body);
+  if (ended) {
+    if (job.branch) {
+      // the worker's branch comes into this repository, so it merges as usual
+      try { execFile('git', ['-C', building.floorEntry(job.floorId).path, 'fetch', '-q', 'origin', `+${job.branch}:${job.branch}`], { timeout: 120000 }, () => invalidate()); } catch { /* the Space is gone */ }
+    }
+    logJobEnded(job);
+  }
+  invalidate();
+  return { ok: true, streamed: job.streamed || 0, status: job.status };
+}
+// workers that went silent: their jobs are lost and queued again (P1)
+export function failoverTick(now = Date.now()) {
+  const out = [];
+  const known = new Set(nodesLib.listNodes(now).map((n) => n.name));
+  const gone = [...new Set([...nodesLib.offline(now), ...jobsLib.runningJobs().filter((x) => x.node && !known.has(x.node)).map((x) => x.node)])];   // silent, or removed
+  for (const name of gone) {
+    for (const j of jobsLib.runningJobs().filter((x) => x.node === name)) {
+      Object.assign(j, { status: 'failed', endedAt: now, activity: '', error: `lost: the machine ${name} stopped answering` });
+      jobsLib.saveJob(j);
+      logJobEnded(j);
+      const note = `\n\n(Note from The AI Squad: this task ran on the machine ${name}, which stopped answering before it finished. Start it again; work that was not pushed is lost.)`;
+      const q = dispatcher.enqueue({ floorId: j.floorId, agentId: j.agentId, action: 'job', task: `${jobsLib.promptOf(j.id)}${note}`, title: j.title, priority: 'P1', via: 'failover', opts: { ...(j.opts || {}) } }, now);
+      logEvent(j.floorId, { type: 'node.lost', agent: j.agentId, data: { node: name, job: j.id, queued: q.id } });
+      out.push({ job: j.id, node: name, queued: q.id });
+    }
+  }
+  if (out.length) invalidate();
+  return out;
+}
+export function stopRemote(job) { if (job?.node) nodesLib.assign(job.node, { type: 'stop', id: job.id }); }
+
+// ---------- the dispatcher (0.13): one queue for every start, see server/dispatcher.js ----------
+const dispatchPrefs = () => dispatcher.cleanDispatcher(building.loadBuilding().prefs.dispatcher);
+// API-equivalent cost of every Space's sessions in the quota windows (an estimate; see server/quota.js)
+export function costWindows(now = Date.now()) {
+  const sum = (from) => { let n = 0; for (const c of costs.values()) for (const v of Object.values(c.tracker.costBetween(from, now + 1))) n += v; return n; };
+  return { fiveHour: sum(now - quotaLib.WINDOWS.fiveHour), week: sum(now - quotaLib.WINDOWS.week) };
+}
+// rate-limit reports and "usage limit reached" errors of the background jobs of the last week
+function quotaSignals(now) {
+  const out = [];
+  for (const j of jobsLib.listJobs({ limit: 60 }).filter((x) => now - x.createdAt < quotaLib.WINDOWS.week)) {
+    out.push(...quotaLib.parseRateLimits(j.rateLimits));
+    const hit = j.status === 'failed' && quotaLib.limitFromText(`${j.error} ${j.result}`, j.endedAt || now);
+    if (hit) out.push({ window: 'usage', usedPct: 100, resetsAt: hit.until, rejected: true });
+  }
+  return out;
+}
+export function quotaStatus(now = Date.now()) {
+  const st = quotaLib.observe(quotaSignals(now), now);
+  return quotaLib.check({ costs: costWindows(now), limits: dispatchPrefs().quota, signals: st.signals, now });
+}
+let readRes = () => wd.readResources();
+export const setResourceReader = (fn) => { readRes = fn || (() => wd.readResources()); };     // tests: a fixed machine
+function dispatchContext(now = Date.now(), { res = readRes() } = {}) {
+  snapCache.at = 0;
+  const snap = buildingSnapshot();
+  const prefs = dispatchPrefs();
+  const quota = quotaStatus(now);
+  const cap = dispatcher.capacity({ maxAgents: snap.limits.maxAgents, running: snap.limits.running, res, sessionRss: usageLib.estimateSessionRss(), quotaPaused: quota.paused });
+  const byFloor = new Map(snap.floors.map((f) => [f.id, f]));
+  const cfgs = new Map();
+  const cfgOf = (id) => { if (!cfgs.has(id)) { try { cfgs.set(id, floors.readFloor(building.floorEntry(id).path)); } catch { cfgs.set(id, null); } } return cfgs.get(id); };
+  const daytime = dispatcher.isDaytime(prefs, now);
+  const workers = nodesLib.clusterFree(now, placedNow(now));
+  const hasWorkers = nodesLib.listNodes(now).length > 0;          // slots on the worker machines (0.18)
+  return {
+    snap, prefs, quota, capacity: { ...cap, workers }, daytime,
+    free: cap.free + workers, headFree: cap.free, reserve: daytime ? prefs.reserveP0 : 0, quotaPaused: quota.paused, cpuBusy: cap.cpuBusy,
+    inShift: (id) => space.inShift(cfgOf(id)?.floor.shift, now),
+    floorFree: (id) => { const c = cfgOf(id); if (!c) return 0; return Math.max(0, c.floor.recovery.maxAgents - (byFloor.get(id)?.agents.filter((a) => a.running).length || 0)); },
+    busy: (it) => {
+      if (it.action === 'job') return !hasWorkers || placeJob(it.floorId, cap.free, now, { headOnly: !!it.opts?.headOnly }) ? false : 'no machine for this Space has room';   // one machine: the slots decide
+      if (it.action !== 'sprint') return false;
+      const a = byFloor.get(it.floorId)?.agents.find((x) => x.id === it.agentId); return !!a && (a.state === 'working' || a.state === 'waiting');
+    },
+  };
+}
+// a start needs a slot unless the agent's session already runs (a job always needs one)
+const needsSlot = (it) => it.action === 'job' || !tm.isRunning(tm.sessionName(it.floorId, it.agentId));
+async function execItem(it, ctx = null) {
+  if (it.action === 'start') return launchAgent(it.floorId, it.agentId, it.task, { via: it.via });
+  if (it.action === 'resume') return resumeNow(it.floorId, it.agentId, { via: it.via });
+  if (it.action === 'sprint') { stopAgent(it.floorId, it.agentId); return launchAgent(it.floorId, it.agentId, it.task, { via: it.via }); }
+  const node = placeJob(it.floorId, ctx ? ctx.capacity.free - (ctx.headUsed || 0) : 1, Date.now(), { headOnly: !!it.opts?.headOnly }) || nodesLib.HEAD;   // the owner's "start now" runs here
+  if (ctx && node === nodesLib.HEAD) ctx.headUsed = (ctx.headUsed || 0) + 1;
+  const job = launchJob(it.floorId, it.agentId, it.task, { ...it.opts, title: it.title, via: it.via, node });
+  return { ok: true, job };
+}
+// every start goes through here: now when there is room (and nothing more urgent waits), else into the queue.
+// -> what the start returned, or { ok, waiting: true, dispatch: { id, position, priority, reason } }
+export async function admit(item, { force = false } = {}) {
+  const it = { priority: 'P2', via: 'aisquad', ...item };
+  if (force || !needsSlot(it)) return execItem(it);
+  const ctx = dispatchContext();
+  const probe = { ...it, id: 'probe', createdAt: Date.now(), attempts: 0 };
+  const p = dispatcher.plan([...dispatcher.load(), probe], ctx);
+  if (p.start.some((x) => x.id === 'probe')) return execItem(it, ctx);
+  const reason = p.held.find((h) => h.id === 'probe')?.reason || 'waiting for a free slot';
+  const q = dispatcher.enqueue(it);
+  logEvent(it.floorId, { type: 'dispatch.queued', agent: it.agentId, data: { action: it.action, priority: q.priority, reason, via: it.via } });
+  invalidate();
+  return { ok: true, waiting: true, dispatch: { id: q.id, position: q.position, priority: q.priority, reason } };
+}
+// the queue with the reason each item waits, the slots and what limits them, the quota guard
+export function dispatchStatus(now = Date.now()) {
+  const ctx = dispatchContext(now);
+  const items = dispatcher.load();
+  const { held } = dispatcher.plan(items, ctx, now);
+  const why = new Map(held.map((h) => [h.id, h.reason]));
+  return {
+    prefs: ctx.prefs, capacity: ctx.capacity, daytime: ctx.daytime, reserve: ctx.reserve, quota: ctx.quota, sessionRss: usageLib.estimateSessionRss(),
+    queue: dispatcher.order(items, now).map((x) => ({ ...x, task: undefined, effective: dispatcher.PRIORITIES[dispatcher.effectivePriority(x, now)], reason: why.get(x.id) || 'starting', floorName: ctx.snap.floors.find((f) => f.id === x.floorId)?.name || x.floorId,
+      agentName: ctx.snap.floors.find((f) => f.id === x.floorId)?.agents.find((a) => a.id === x.agentId)?.displayName || x.agentId })),
+  };
+}
+export async function startQueued(id) {
+  const it = dispatcher.remove(id);
+  const r = await execItem(it);
+  logEvent(it.floorId, { type: 'dispatch.started', agent: it.agentId, data: { action: it.action, priority: it.priority, waitedMs: Date.now() - it.createdAt, via: 'owner' } });
+  invalidate();
+  return r;
+}
+export function dropQueued(id) { const it = dispatcher.remove(id); logEvent(it.floorId, { type: 'dispatch.removed', agent: it.agentId, data: { action: it.action } }); invalidate(); return { ok: true }; }
+
+// every 15 s: start what fits, then stop agents that sit idle (sooner while work waits in the queue)
+export async function dispatchTick(now = Date.now(), { res } = {}) {
+  const ctx = dispatchContext(now, res ? { res } : {});
+  failoverTick(now);
+  const r = await dispatcher.tick(ctx, async (it) => {
+    await execItem(it, ctx);
+    logEvent(it.floorId, { type: 'dispatch.started', agent: it.agentId, data: { action: it.action, priority: it.priority, waitedMs: now - it.createdAt, via: it.via } });
+  }, now);
+  for (const f of r.failed) logEvent(f.item.floorId, { type: 'dispatch.failed', agent: f.item.agentId, data: { action: f.item.action, error: f.error, dropped: f.dropped } });
+  const d = ctx.prefs, waiting = dispatcher.load().length > 0;
+  const min = waiting && d.idleStopBusyMin ? Math.min(d.idleStopBusyMin, d.idleStopMin || Infinity) : d.idleStopMin;
+  const agents = ctx.snap.floors.filter((f) => !f.independent && !f.missing).flatMap((f) => f.agents.map((a) => ({
+    floorId: f.id, id: a.id, own: a.running && !a.inLead, running: a.running, state: a.state, waitingReply: a.waitingReply, task: a.task, lastTs: a.lastTs, lead: a.lead,
+    teammatesInLead: f.agents.some((x) => x.inLead), attention: ctx.snap.attention.some((x) => x.floorId === f.id && x.agentId === a.id), pending: pending.has(workKey(f.id, a.id)) })));
+  const stopped = [];
+  for (const a of dispatcher.idleToStop(agents, { idleMs: min * 60e3, now })) {
+    try { stopAgent(a.floorId, a.id); stopped.push({ floorId: a.floorId, agentId: a.id }); logEvent(a.floorId, { type: 'dispatch.idle-stopped', agent: a.id, data: { idleMin: Math.round((now - a.lastTs) / 60e3), queue: waiting } }); }
+    catch (e) { console.error('[dispatch]', a.floorId, a.id, e.message); }
+  }
+  if (r.started.length || r.failed.length || stopped.length) invalidate();
+  return { started: r.started, failed: r.failed, stopped };
+}
+
+// things other modules follow without a cycle of imports (0.15: the Notification Gateway forwards chat answers)
+export const bus = new EventEmitter();
+
+// ---------- direct chat with one agent (0.14), see server/chat.js ----------
+function chatPlace(floorId, agentId, context) {
+  const { entry, cfg, agent, name } = locate(floorId, agentId);
+  const file = chatLib.threadFile({ root: entry.path, floorId, agentId, context });
+  return { entry, cfg, agent, name, file, key: chatLib.keyOf(floorId, agentId, context) };
+}
+export function chatThread(floorId, agentId, context = 'space') {
+  const p = chatPlace(floorId, agentId, context);
+  const st = chatLib.getState(p.key);
+  return { context, contexts: chatLib.CONTEXTS, agent: { id: agentId, displayName: p.agent.displayName }, running: tm.isRunning(p.name),
+    messages: chatLib.read(p.file, 100), awaiting: st.awaiting || null, hasSession: !!st.sessionId };
+}
+// a person's message: typed into the running Desk session (Space), else a background job answers (P0). In a Space
+// the lead learns about it (docs/squad/DIRECT.md and the Squad Log).
+export async function sendChat(floorId, agentId, text, { context = 'space', user = null } = {}) {
+  const p = chatPlace(floorId, agentId, context);
+  const t = chatLib.cleanText(text);
+  const who = user || currentActor() || { id: 'owner', name: 'Owner' };
+  const msg = chatLib.append(p.file, { from: 'person', name: who.name, by: who.id, context, text: t });
+  let delivery = 'job', dispatch = null;
+  if (context === 'space' && tm.isRunning(p.name)) {
+    await sendTask(floorId, agentId, chatLib.typedText(who.name, t), [], { via: 'owner', priority: 'P0' });
+    chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'typed' } });
+    delivery = 'typed';
+  } else ({ delivery, dispatch } = await chatJob(p, who.name, msg, t, context));
+  const lead = p.cfg.team.agents.find((x) => x.lead) || p.cfg.team.agents.find((x) => sprint.roleKind(x) === 'lead');
+  if (context === 'space' && lead && lead.id !== agentId) chatLib.noteForLead(p.entry.path, { name: who.name, agentName: p.agent.displayName, text: t });
+  logEvent(floorId, { type: 'chat.message', agent: agentId, data: { context, delivery, from: who.name, text: t.slice(0, 200) } });
+  invalidate();
+  return { ok: true, message: msg, delivery, ...(dispatch ? { dispatch } : {}) };
+}
+// a background job answers a chat message ("dontAsk": only what the Space's settings allow)
+async function chatJob(p, name, msg, text, context) {
+  const st = chatLib.getState(p.key);
+  const prompt = chatLib.jobPrompt({ name, text, context, messages: chatLib.read(p.file, 20), spaceName: p.cfg.floor.name });
+  const r = await admit({ floorId: p.entry.id, agentId: p.agent.id, action: 'job', task: prompt, title: `Chat: ${text.replace(/\s+/g, ' ').slice(0, 100)}`, priority: 'P0', via: 'owner',
+    opts: { kind: 'chat', budgetUsd: 1, permissionMode: 'dontAsk', resume: st.sessionId || '', chat: { context, key: p.key, msgId: msg.id } } });
+  if (!r.waiting) return { delivery: 'job', dispatch: null };
+  chatLib.setState(p.key, { awaiting: { msgId: msg.id, since: Date.now(), mode: 'queued', queue: r.dispatch.id } });
+  return { delivery: 'queued', dispatch: r.dispatch };
+}
+// a reply whose background run was denied tools, and the message it answered
+function deniedReply(p, msgId) {
+  const messages = chatLib.read(p.file, 200);
+  const reply = messages.find((m) => m.id === msgId && m.from === 'agent');
+  if (!reply?.denials?.length) throw bad('This reply has no denied tools');
+  const asked = messages.find((m) => m.id === reply.replyTo);
+  if (!asked) throw bad('The message it answered is no longer in the chat');
+  return { reply, asked };
+}
+// Allow and retry (1.0.1): the owner confirmed narrow allow rules for what was denied; they go into the Space's
+// .claude/settings.json and the same message runs again in the background
+export async function chatAllowRetry(floorId, agentId, { context = 'space', msgId, rules = null } = {}) {
+  if (context !== 'space') throw bad('Allow rules belong to a Space; use the Space chat or the Desk');
+  const p = chatPlace(floorId, agentId, context);
+  const { reply, asked } = deniedReply(p, msgId);
+  const list = (Array.isArray(rules) ? rules.map(String) : reply.denials.map((d) => d.rule)).filter(Boolean).slice(0, 10);
+  if (!list.length) throw bad('No narrow rule fits what was denied: run it on the Desk');
+  if (chatLib.getState(p.key).awaiting) throw bad('The agent is still answering in this chat');
+  const added = permits.addAllowRules(p.entry.path, list);
+  const who = currentActor() || { id: 'owner', name: 'Owner' };
+  logEvent(floorId, { type: 'permission.answered', agent: agentId, data: { allowed: list, via: 'chat', waitMs: Date.now() - reply.ts } });
+  chatLib.append(p.file, { from: 'system', context, text: `${who.name} allowed ${list.join(', ')}. Running the message again.`, replyTo: asked.id });
+  const r = await chatJob(p, asked.name || who.name, asked, asked.text, context);
+  invalidate();
+  return { ok: true, added, ...r };
+}
+// Run on the Desk (1.0.1): the same message typed into the agent's interactive session, where a permission prompt
+// reaches Needs you; a stopped session is started with it
+export async function chatOnDesk(floorId, agentId, { context = 'space', msgId } = {}) {
+  if (context !== 'space') throw bad('The Desk works in the Space; use the Space chat');
+  const p = chatPlace(floorId, agentId, context);
+  const { asked } = deniedReply(p, msgId);
+  const typed = chatLib.typedText(asked.name || 'Owner', asked.text);
+  let r;
+  if (tm.isRunning(p.name)) r = await sendTask(floorId, agentId, typed, [], { via: 'owner', priority: 'P0' });
+  else r = await startAgent(floorId, agentId, typed, { guard: true, via: 'owner' });
+  if (r?.waiting) { invalidate(); return { ok: true, delivery: 'queued', dispatch: r.dispatch }; }
+  chatLib.setState(p.key, { awaiting: { msgId: asked.id, since: Date.now(), mode: 'typed' } });
+  chatLib.append(p.file, { from: 'system', context, text: 'Running on the Desk: permission prompts reach Needs you.', replyTo: asked.id });
+  invalidate();
+  return { ok: true, delivery: 'typed' };
+}
+function chatAnswered(job) {
+  const c = job.meta.chat;
+  let p; try { p = chatPlace(job.floorId, job.agentId, c.context); } catch { return; }
+  const text = job.status === 'done' ? job.result : `(${job.status}) ${job.error || job.result || 'no answer'}`;
+  const denials = (job.denials || []).map((d) => ({ ...d, rule: permits.proposeRule(d) }));
+  chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context: c.context, text, job: job.id, replyTo: c.msgId, cost: job.cost, ...(denials.length ? { denials } : {}) });
+  chatLib.setState(p.key, { awaiting: undefined, ...(job.sessionId ? { sessionId: job.sessionId } : {}) });
+  logEvent(job.floorId, { type: 'chat.reply', agent: job.agentId, data: { context: c.context, status: job.status, job: job.id } });
+  bus.emit('chat.reply', { floorId: job.floorId, agentId: job.agentId, agentName: p.agent.displayName, context: c.context, text });
+}
+// every few seconds: the answer of a Desk session that got a typed chat message goes back into the thread
+export function chatTick(now = Date.now()) {
+  const done = [];
+  for (const [key, st] of Object.entries(chatLib.loadState())) {
+    if (st.awaiting?.mode !== 'typed') continue;
+    const [floorId, agentId, context] = key.split('/');
+    let p; try { p = chatPlace(floorId, agentId, context); } catch { chatLib.setState(key, { awaiting: undefined }); continue; }
+    const l = liveAgents(p.entry, { agents: [p.agent] }, new Set(tm.listSessions()), { squad: squadOf(p.entry.path, p.cfg.floor) })[0];
+    const reply = l?.status?.reply;
+    if (reply && !l.status.turnOpen && reply.ts > st.awaiting.since) {
+      chatLib.append(p.file, { from: 'agent', name: p.agent.displayName, context, text: reply.text, replyTo: st.awaiting.msgId }, now);
+      chatLib.setState(key, { awaiting: undefined });
+      logEvent(floorId, { type: 'chat.reply', agent: agentId, data: { context, status: 'done', via: 'desk' } });
+      bus.emit('chat.reply', { floorId, agentId, agentName: p.agent.displayName, context, text: reply.text });
+      done.push(key);
+    } else if (!tm.isRunning(p.name)) {
+      chatLib.append(p.file, { from: 'system', context, text: 'The Desk session stopped before it answered. Send the message again to get an answer from a background job.' }, now);
+      chatLib.setState(key, { awaiting: undefined });
+    }
+  }
+  if (done.length) invalidate();
+  return done;
 }
 
 const criticalWaiting = (floorId) => (snapCache.value?.attention || []).filter((a) => a.floorId === floorId && a.autopilot?.critical).length;
@@ -663,8 +1248,8 @@ export async function autopilotTick(now = Date.now(), { res = wd.readResources()
     const stop = autopilot.chainStop({ level: f.autopilot.level, budgetOver: f.budget?.level === 'over', pressure: recovery.memoryPressure(res), criticalWaiting: f.autopilot.critical, openWork: open });
     const st = apMem.idle.get(f.id) || {}; apMem.idle.set(f.id, st);
     const allIdle = !!lead?.running && f.agents.every((a) => a.state !== 'working' && a.state !== 'waiting');
-    if (!stop && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
-      await sendTask(f.id, lead.id, autopilot.idleNudge(open));
+    if (!stop && space.inShift(cfg.floor.shift, now) && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
+      await sendTask(f.id, lead.id, autopilot.idleNudge(open), [], { via: 'autopilot', priority: 'P2' });
       logEvent(f.id, { type: 'autopilot.nudged', agent: lead.id, data: { kind: 'idle', open } });
       done.push({ floorId: f.id, agentId: lead.id, kind: 'idle' });
     }
@@ -680,6 +1265,7 @@ function openTasks(root, floor) {
 }
 // the dialog is still the same one: choose the recommended option, keep a muted item so the owner can change it
 async function autoAnswer(f, a) {
+  if (a.questions) return autoAnswerAsk(f, a);
   const name = tm.sessionName(f.id, a.agentId);
   const dialog = tm.parsePrompt(tm.capture(name));
   const rec = dialog && autopilot.recommendedOption(dialog.options);
@@ -694,12 +1280,27 @@ async function autoAnswer(f, a) {
   logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec2.question.slice(0, 300), option: rec2.option, critical: false, waitedMs: rec2.waitedMs } });
   return { floorId: f.id, agentId: a.agentId, kind: 'answered', option: rec2.option };
 }
+// several questions, every one with a recommended option: the recommended answers, then a muted record
+async function autoAnswerAsk(f, a) {
+  const name = tm.sessionName(f.id, a.agentId);
+  if (!askLib.parseAsk(tm.capture(name))) return { floorId: f.id, agentId: a.agentId, kind: 'gone' };
+  const answers = a.autopilot.recommendedAnswers;
+  const r = await askLib.answerAll(a.questions.map((q) => ({ ...q, options: q.options.map((o) => o.label) })), answers, tm.askIO(name));
+  if (!r.ok) throw new Error(r.error);
+  const option = a.questions.map((q, i) => `${q.header || q.question}: ${answers[i].choices.map((n) => autopilot.cleanLabel(q.options[n - 1].label)).join(', ')}`).join(' · ');
+  const rt = loadRuntime();
+  const rec = { id: crypto.randomBytes(5).toString('hex'), floorId: f.id, agentId: a.agentId, agentName: a.agentName, question: a.text.slice(0, 1000), option, optionLabel: option, options: [], ts: Date.now(), by: 'server', waitedMs: Date.now() - (a.ts || Date.now()) };
+  rt.autopilot.decided = [...rt.autopilot.decided, rec].slice(-300);
+  saveRuntime(rt);
+  logEvent(f.id, { type: 'autopilot.decided', agent: a.agentId, data: { by: 'server timeout', question: rec.question.slice(0, 300), option, critical: false, waitedMs: rec.waitedMs, questions: a.questions.length } });
+  return { floorId: f.id, agentId: a.agentId, kind: 'answered', option };
+}
 async function nudgeReply(f, a, timeout) {
   const rt = loadRuntime();
   if (rt.autopilot.nudged.includes(a.replyKey)) return { floorId: f.id, agentId: a.agentId, kind: 'already' };
   rt.autopilot.nudged = [...rt.autopilot.nudged, a.replyKey].slice(-300);
   saveRuntime(rt);
-  await sendTask(f.id, a.agentId, autopilot.replyNudge(timeout));
+  await sendTask(f.id, a.agentId, autopilot.replyNudge(timeout), [], { via: 'autopilot', priority: 'P2' });
   logEvent(f.id, { type: 'autopilot.nudged', agent: a.agentId, data: { kind: 'reply', question: a.text.slice(-300) } });
   return { floorId: f.id, agentId: a.agentId, kind: 'nudged' };
 }
@@ -737,7 +1338,7 @@ export async function autoResumeTick(now = Date.now(), { res = wd.readResources(
       if (!ok.ok) continue;
       r.autoResumes[key] = [...(r.autoResumes[key] || []).filter((t) => now - t < recovery.AUTO_RESUME.windowMs), now];
       saveRuntime(r);
-      try { await resumeAgent(f.id, a.id, { via: 'auto-resume' }); done.push({ floorId: f.id, agentId: a.id }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
+      try { const r = await admit({ floorId: f.id, agentId: a.id, action: 'resume', priority: 'P1', via: 'auto-resume' }); done.push({ floorId: f.id, agentId: a.id, ...(r.waiting ? { waiting: r.dispatch.reason } : {}) }); } catch (e) { console.error('[recovery]', f.id, a.id, e.message); }
     }
   }
   return done;
@@ -766,12 +1367,13 @@ export function withAttachments(text, list) {
   return files.length ? `${text} [Attachments from the owner, open them with the Read tool: ${files.join(' ; ')}]` : text;
 }
 
-export async function sendTask(floorId, agentId, text, attachments = []) {
+export async function sendTask(floorId, agentId, text, attachments = [], { via = 'owner', priority = 'P0' } = {}) {
   const body = withAttachments(String(text || '').trim(), attachments);
   if (!String(text || '').trim()) throw bad('Task text is required');
   const { name } = locate(floorId, agentId);
   if (!tm.isRunning(name)) {
-    await startAgent(floorId, agentId, body);
+    const r = await admit({ floorId, agentId, action: 'start', task: body, priority, via });
+    if (r.waiting) return { ...r, note: `Queued: ${r.dispatch.reason}. The agent starts with this task when there is room.` };
     return { ok: true, queued: true, note: 'Agent is starting; the task is typed as soon as Claude Code is ready.' };
   }
   const screen = tm.capture(name);
@@ -822,10 +1424,24 @@ async function answerGone({ floorId, agentId, kind }, option, text) {
   throw new HttpError(409, 'Already answered');
 }
 
-export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '' } = {}) {
+// a dialog with several questions or multi-select: one answer per question ({ choices: [option numbers], text })
+async function answerAsk(item, answers) {
+  const io = item.independent ? tm.askIO('', { target: item.target, socket: config.scanTmuxSocket }) : tm.askIO(tm.sessionName(item.floorId, item.agentId));
+  const r = await askLib.answerAll(item.questions.map((q) => ({ ...q, options: q.options.map((o) => o.label) })), answers.map((a) => ({ choices: (a.choices || []).map(Number).filter(Boolean), text: String(a.text || '') })), io);
+  if (!r.ok) throw bad(r.error);
+  if (item.independent) ind.resetCache();
+  invalidate();
+  return { ok: true };
+}
+// the tool input of a question dialog for the UI: per question its options, multiSelect, the recommended one
+export const askQuestions = (qs = []) => qs.map((q) => ({ header: q.header || '', question: q.question || '', multiSelect: !!q.multiSelect,
+  options: (q.options || []).map((label, i) => ({ n: i + 1, label, recommended: /\(recommended\)/i.test(label) })) }));
+export async function answerAttention(id, option, text = '', { force = false, floorId = '', agentId = '', kind = '', answers = null } = {}) {
   snapCache.at = 0;
   const item = attentionItems().find((x) => x.id === id);
   if (!item) return answerGone({ floorId, agentId, kind }, option, text);
+  if (OWNER_DESK.has(item.kind)) return answerOwnerDesk(item, option, text);
+  if (item.kind === 'question' || item.kind === 'permission') episodes.delete(`${item.floorId}/${item.agentId}`);   // the next dialog is a new one
   if (item.kind === 'merge') { const r = loadRuntime(); r.dismissedMerges = [...r.dismissedMerges, item.mergeId].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'taskdone') { const r = loadRuntime(); r.dismissedReplies = [...r.dismissedReplies, item.replyKey].slice(-200); saveRuntime(r); invalidate(); return { ok: true }; }
   if (item.kind === 'reply' || item.kind === 'finished') {
@@ -866,8 +1482,10 @@ export async function answerAttention(id, option, text = '', { force = false, fl
     invalidate();
     return { ok: true };
   }
-  if (item.kind === 'stall') { clearWork(item.floorId, item.agentId || ''); if (!item.agentId) for (const k of Object.keys(workOf(item.floorId))) clearWork(item.floorId, k); invalidate(); return { ok: true }; }
+  // Dismiss sticks: the stall's key (its task, or the agent's last activity / assignment) stays dismissed; the work stays
+  if (item.kind === 'stall') { const r = loadRuntime(); r.dismissedStalls = [...r.dismissedStalls.filter((k) => k !== item.stallKey), item.stallKey].slice(-300); saveRuntime(r); invalidate(); return { ok: true }; }
   if (!item.answerable) throw bad('This question can only be answered in the agent\'s own terminal');
+  if (item.questions && Array.isArray(answers)) return answerAsk(item, answers);
   if (item.independent) {
     const dialog = tm.parsePrompt(tm.capturePane(item.target, config.scanTmuxSocket));
     if (!dialog) throw new HttpError(409, 'Already answered');
@@ -1058,9 +1676,8 @@ export async function startNextSprint(floorId) {
   if (fl.autopilot?.level !== 'off' && (fl.budget?.level === 'over' || fl.autopilot?.critical)) return null;   // the Autopilot chain stops here
   delete r.nextSprint[floorId];
   saveRuntime(r);
-  stopAgent(floorId, p.lead);
-  await startAgent(floorId, p.lead, `/sprint ${p.sprint}`);
-  return { sprint: p.sprint, lead: p.lead };
+  const r2 = await admit({ floorId, agentId: p.lead, action: 'sprint', task: `/sprint ${p.sprint}`, priority: 'P1', via: 'next-sprint' });
+  return { sprint: p.sprint, lead: p.lead, ...(r2.waiting ? { waiting: r2.dispatch.reason } : {}) };
 }
 
 // ---------- Floor 1: independent agents ----------
@@ -1078,6 +1695,7 @@ function independentLives({ events = false } = {}) {
     const working = a.live && ((a.tmux && tm.isBusy(screen)) || (!a.tmux && st?.turnOpen && now - st.lastTs < tx.ACTIVE_MS));
     const state = !a.live ? 'stopped' : dialog || asking ? 'waiting' : working ? 'working' : 'idle';
     if (dialog && st?.ask?.questions?.length) dialog.question = st.ask.questions.map((q) => q.question).join('\n\n');
+    if (dialog && st?.ask?.questions?.length && askLib.parseAsk(screen)) dialog.ask = { questions: st.ask.questions };
     return { a, st, screen, dialog, state };
   });
 }
@@ -1100,7 +1718,7 @@ function independentState(b) {
   for (const l of lives) {
     const base = { floorId: ind.FLOOR_ID, floorNumber: building.INDEPENDENT_FLOOR, floorName: INDEPENDENT_NAME, agentId: l.a.id, agentName: ind.displayNameOf(l.a), independent: true };
     if (l.dialog) attention.push({ ...base, id: attId('ind', l.a.key, l.dialog.question, l.dialog.options.map((o) => o.label).join('|')), kind: PERMISSION.test(l.dialog.question) ? 'permission' : 'question',
-      text: l.dialog.question, options: l.dialog.options, answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
+      text: l.dialog.question, options: l.dialog.options, ...(l.dialog.ask ? { questions: askQuestions(l.dialog.ask.questions) } : {}), answerable: true, target: l.a.tmux.target, ts: l.st?.lastTs || Date.now() });
     else if (l.state === 'waiting' && l.st?.ask) attention.push({ ...base, id: attId('ind', l.a.key, l.st.ask.id), kind: 'question', text: l.st.ask.questions.map((q) => q.question).join('\n\n'),
       options: (l.st.ask.questions[0]?.options || []).map((label, i) => ({ n: i + 1, label, free: false })), answerable: false, ts: l.st.ask.ts });
     else if (l.state === 'idle' && l.st) {
@@ -1248,6 +1866,8 @@ function logCtx(floorId, root, cfg) {
 }
 // logging never breaks the action that is logged
 export function logEvent(floorId, ev) {
+  const who = currentActor();                     // a person other than the Owner did it (0.14)
+  if (who && who.id !== 'owner') ev = { ...ev, data: { ...(ev.data || {}), by: who.name } };
   try { collect.emitter(floorId, logCtx(floorId, floorId === ind.FLOOR_ID ? '' : building.floorEntry(floorId).path))(ev); } catch (e) { console.error('[log]', e.message); }
 }
 

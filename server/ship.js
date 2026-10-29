@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Ship readiness: which gates and reviews ran for a sprint, and what is still missing before a merge or a deploy.
 // Read from the repo (board, QA reports, release notes, plan review, security findings, environments) so the merge
 // executor, the Ship readiness panel and the DevOps deploy skill check the same list.

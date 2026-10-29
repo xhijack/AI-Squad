@@ -101,9 +101,12 @@ test('Resume from Attention continues the last session; the lead gets the recove
   assert.equal(squad.attentionItems().filter((a) => a.kind === 'crash').length, 0);
 });
 
-test('the start guard warns when the Floor runs its maximum of agents (the lead and its live teammate count)', async () => {
+test('the dispatcher queues a start when the Floor runs its maximum of agents (the lead and its live teammate count)', async () => {
   floors.updateFloorConfig(r.path, { recovery: { maxAgents: 1 } });
-  await assert.rejects(squad.startAgent(FLOOR, 'budi-dev', '', { guard: true }), (e) => e.status === 409 && /2 agents already run on this Floor \(maximum 1\)/.test(e.message) && e.data.warnings.length >= 1);
+  const w = await squad.startAgent(FLOOR, 'budi-dev', '', { guard: true });
+  assert.equal(w.waiting, true); assert.equal(w.dispatch.reason, 'the Space runs its maximum of agents at once'); assert.equal(w.dispatch.priority, 'P0');
+  assert.equal(squad.dispatchStatus().queue[0].agentId, 'budi-dev');
+  squad.dropQueued(w.dispatch.id);
   const ok = await squad.startAgent(FLOOR, 'budi-dev', '', { guard: false });
   assert.equal(ok.ok, true);
   squad.stopAgent(FLOOR, 'budi-dev');

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Builds a scratch Building under ./playground for manual and screenshot tests:
 //   playground/home        AI Squad home (building.json, roles, pin)
 //   playground/claude      fake Claude home with synthetic transcripts

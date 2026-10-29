@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Floor settings → Repositories (Phase 3.4): the primary repository plus linked ones (.claude/aisquad/repos.json):
 // path (relative to the primary), remote, access (read: context only; write: the assigned agents commit there),
 // branch strategy, quality gate and agents; their status on this machine (branch, ahead/behind, uncommitted
@@ -22,9 +23,9 @@ function rowHtml(r, agents) {
     <div class="grid2"><div><label>${t('Main branch')}</label><input data-k="main" value="${esc(r.branch?.main || 'main')}"></div>
       <div><label>${t('Branches')}</label><select data-k="strategy">${Object.entries(STRATEGY()).map(([k, v]) => `<option value="${k}" ${(r.branch?.strategy || 'agent-branches') === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div></div>
     <label>${t('Quality gate (command, run on the merged result)')}</label><input data-k="gate" value="${esc(r.gate || '')}" placeholder="npm run build && npm test">
-    <label>${t('Agents')}</label><div class="row wrap">${agents.map((a) => `<label class="inline" style="margin:0 10px 0 0"><input type="checkbox" data-agent="${esc(a.id)}" ${(r.agents || []).includes(a.id) ? 'checked' : ''}> ${esc(String(a.displayName).split(' - ')[0])}</label>`).join('')}</div>
+    <label>${t('Agents')}</label><div class="row wrap">${agents.map((a) => `<label class="inline" style="margin:0 var(--sp-3) 0 0"><input type="checkbox" data-agent="${esc(a.id)}" ${(r.agents || []).includes(a.id) ? 'checked' : ''}> ${esc(String(a.displayName).split(' - ')[0])}</label>`).join('')}</div>
     <p class="note">${t('Read only with no agents ticked: context for everyone. Write: only the ticked agents edit and commit there; never pushed.')}</p>
-    ${st ? `<div class="row wrap" style="margin-top:6px"><span class="chip ${missing ? 'bad' : st.dirty ? 'warn' : 'ok'}">${esc(statusText(st))}</span><span class="note grow">${esc(r.abs || '')}${r.local ? ` · ${t('relinked on this machine')}` : ''}</span>
+    ${st ? `<div class="row wrap" style="margin-top:var(--sp-2)"><span class="chip ${missing ? 'bad' : st.dirty ? 'warn' : 'ok'}">${esc(statusText(st))}</span><span class="note grow">${esc(r.abs || '')}${r.local ? ` · ${t('relinked on this machine')}` : ''}</span>
       ${missing && r.remote ? `<button type="button" class="small gold" data-clone>${t('Clone')}</button>` : ''}<button type="button" class="small ghost" data-relink>${t('Relink')}</button>
       ${r.access === 'write' ? `<label class="inline" style="margin:0"><input type="checkbox" data-approve ${r.approval ? 'checked' : ''}> ${t('Merge automatically after its gate passes')}</label>` : ''}</div>` : ''}
     <div class="row"><span class="grow"></span><button type="button" class="small ghost danger" data-remove>${t('Remove from the list')}</button></div></div>`;

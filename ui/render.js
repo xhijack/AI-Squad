@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Rendering quality ("soft 3D", Phase 3): image-based light from a small studio HDRI, ambient occlusion (GTAO),
 // gentle colour grading with a vignette, SMAA, and soft contact shadows under the characters. Quality Low renders
 // like before (one pass); High adds the effects; Auto starts on High and drops to Low (and stays there) as soon as
@@ -80,6 +81,7 @@ export class Quality {
   loadEnv() {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     new RGBELoader().load(this.hdri, (hdr) => {
+      if (this.disposed) { hdr.dispose(); pmrem.dispose(); return; }        // the scene was switched away meanwhile
       this.env = pmrem.fromEquirectangular(hdr).texture;
       hdr.dispose(); pmrem.dispose();
       if (this.active === 'high') { this.scene.environment = this.env; if (this.hemi) this.hemi.intensity = .35; }

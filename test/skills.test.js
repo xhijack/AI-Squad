@@ -21,7 +21,7 @@ const SALES = ['icp-intake', 'lead-qualification', 'crm-hygiene', 'outreach-copy
 
 test('every skill a Role Template lists is bundled, in the standard format', () => {
   const bundled = skills.bundledSkills().map((s) => s.name);
-  assert.equal(bundled.length, 38);
+  assert.equal(bundled.length, 41);                    // 0.19: space-handoff, 0.20: contract-checklist, 1.0: fit-gap-analysis
   for (const [role, list] of Object.entries(MIN)) for (const s of list) assert.ok(listTemplates().find((t) => t.role === role).skills.includes(s), `${role} lists ${s}`);
   const listed = new Set([...listTemplates().flatMap((t) => t.skills), ...MARKETING, ...SALES]);
   for (const s of listed) if (!['frappe', 'erpnext'].includes(s)) assert.ok(bundled.includes(s), `${s} is bundled`);
@@ -43,9 +43,10 @@ test('DevOps v2: server skills with their safety rules, and the owner / lead spl
   assert.match(read('server-health'), /neighbour/i);
   assert.match(read('canary'), /roll back at once/); assert.match(read('canary'), /Production:\*\* do not roll back on your own/); assert.match(read('git-deploy'), /Ship readiness/);
   const t = listTemplates().find((x) => x.role === 'devops-engineer');
-  assert.equal(t.version, 3);
+  assert.equal(t.version, 4, 'v4 (1.0.1): the servers the owner registered');
   const rules = t.rules.join('\n');
   assert.match(rules, /AISQUAD_AGENT/); assert.match(rules, /Task from the owner.*setup preparation/); assert.match(rules, /Task from the lead.*deployment/);
+  assert.match(rules, /registered \(Floor settings → Servers\).*local development/);
   assert.match(rules, /Desk session prepares and never deploys/);
 });
 

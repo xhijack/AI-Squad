@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Squad Sprint pack (decision D4, optional): scaffolds the lead / developer / QA setup into a Floor
 // (config, gate hooks, /sprint command, docs/squad board), reads the board, and decides when a sprint
 // is closed so the server can merge it and optionally start the next sprint.
@@ -159,14 +160,33 @@ function statusColumn(s) {
 const statusOf = (text) => ((String(text || '').match(/^STATUS:\s*([A-Z]+)/mi) || [])[1] || '').toUpperCase();
 function filesIn(dir) { try { return fs.readdirSync(dir).filter((f) => f.endsWith('.md')); } catch { return []; } }
 
+// the sprint the squad works on (1.2.0): the highest sprint named in the first heading of docs/squad/PLAN.md or
+// TASKS.md, or in config.sh, that is not archived as released (docs/squad/sprint-<N>/RELEASE.md). config.sh alone
+// lags behind when the lead plans the next sprint in the docs first.
+export const headingSprint = (md) => {
+  for (const line of String(md || '').split('\n').slice(0, 30)) {
+    if (!/^#{1,3}\s/.test(line)) continue;
+    const m = line.match(/\bsprint\s+(\d+)\b/i);
+    if (m) return Number(m[1]);
+  }
+  return null;
+};
+export function currentSprint(root) {
+  const dir = SQUAD(root), cfg = Number(readConfig(root).SPRINT);
+  const named = [headingSprint(readText(path.join(dir, 'PLAN.md'))), headingSprint(readText(path.join(dir, 'TASKS.md'))), Number.isFinite(cfg) && String(readConfig(root).SPRINT || '').trim() ? cfg : null]
+    .filter((n) => n != null);
+  if (!named.length) return '';
+  const open = named.filter((n) => !fs.existsSync(path.join(dir, `sprint-${n}`, 'RELEASE.md')));
+  return String(Math.max(...(open.length ? open : named)));
+}
+
 export function boardData(root) {
   if (!hasPack(root)) return { pack: false };
-  const cfg = readConfig(root);
   const dir = SQUAD(root);
   const bugs = filesIn(path.join(dir, 'bugs')).map((f) => ({ id: f.slice(0, -3), status: statusOf(readText(path.join(dir, 'bugs', f))) }));
   const qa = filesIn(path.join(dir, 'qa')).map((f) => ({ id: f.slice(0, -3), status: statusOf(readText(path.join(dir, 'qa', f))) }));
   return {
-    pack: true, sprint: cfg.SPRINT || '', tasks: parseTasks(readText(path.join(dir, 'TASKS.md'))),
+    pack: true, sprint: currentSprint(root), tasks: parseTasks(readText(path.join(dir, 'TASKS.md'))),
     handoffs: filesIn(path.join(dir, 'handoff')).map((f) => f.slice(0, -3)),
     bugs: { open: bugs.filter((b) => b.status === 'OPEN').map((b) => b.id), fixed: bugs.filter((b) => b.status === 'FIXED').map((b) => b.id) },
     qa: { pass: qa.filter((q) => q.status === 'PASS').map((q) => q.id), fail: qa.filter((q) => q.status === 'FAIL').map((q) => q.id) },

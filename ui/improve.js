@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Improvement loop in the Audit dialog: a finding with a target shows its proposed change as a diff; Apply saves a new
 // Role Template or Blueprint version (Floors then see "Update available") or changes the Floor setting; Dismiss asks
 // why. The ledger lists every decision with the metrics before and after (from the next audit).
@@ -12,8 +13,8 @@ const decisionText = (d) => (d.decision === 'applied' ? (d.version ? t('Applied 
 
 ctx.auditTargetActions = (S, f) => {
   const d = S.current?.decisions?.[f.id];
-  if (d) return `<div class="row" style="margin-top:8px"><span class="chip ${d.decision === 'applied' ? 'ok' : ''}">${esc(decisionText(d))}</span></div>`;
-  return `<div class="row wrap" style="margin-top:8px"><button type="button" class="small" data-propose="${esc(f.id)}">${t('Review change')}</button><button type="button" class="small ghost" data-dismiss="${esc(f.id)}">${t('Dismiss')}</button></div><div data-prop="${esc(f.id)}"></div>`;
+  if (d) return `<div class="row" style="margin-top:var(--sp-2)"><span class="chip ${d.decision === 'applied' ? 'ok' : ''}">${esc(decisionText(d))}</span></div>`;
+  return `<div class="row wrap" style="margin-top:var(--sp-2)"><button type="button" class="small" data-propose="${esc(f.id)}">${t('Review change')}</button><button type="button" class="small ghost" data-dismiss="${esc(f.id)}">${t('Dismiss')}</button></div><div data-prop="${esc(f.id)}"></div>`;
 };
 
 ctx.bindAuditTargets = (body, S) => {
@@ -27,7 +28,7 @@ ctx.bindAuditTargets = (body, S) => {
         : p.kind === 'blueprint' ? t('Blueprint <code>{id}</code> v{from} → v{to}, in "Lessons from audits". Floors following it can update in the Standard tab.', { id: esc(p.id), from: p.fromVersion, to: p.toVersion })
           : t('Floor setting <code>{setting}</code> on this Floor.', { setting: esc(p.setting || '') });
       box.innerHTML = `<div class="proposal"><p class="note">${what}</p>${diffHtml(p.diff.filter((l, i, a) => l.op !== ' ' || a.slice(Math.max(0, i - 2), i + 3).some((x) => x.op !== ' ')))}
-        ${p.applicable ? `<div class="row" style="margin-top:8px"><span class="grow"></span><button type="button" class="gold small" data-apply="${esc(id)}">${t('Apply')}</button></div>` : `<p class="chip warn" style="white-space:normal">${esc(tx(p.reason))}</p>`}</div>`;
+        ${p.applicable ? `<div class="row" style="margin-top:var(--sp-2)"><span class="grow"></span><button type="button" class="gold small" data-apply="${esc(id)}">${t('Apply')}</button></div>` : `<p class="chip warn" style="white-space:normal">${esc(tx(p.reason))}</p>`}</div>`;
       box.querySelector('[data-apply]')?.addEventListener('click', async (e) => {
         e.target.disabled = true;
         try { const r = await api('POST', `${base()}/${id}/apply`); toast(r.decision.versionCreated ? t('Saved as version {n}', { n: r.decision.versionCreated }) : t('Applied')); await S.reload(); }
@@ -38,7 +39,7 @@ ctx.bindAuditTargets = (body, S) => {
   body.querySelectorAll('[data-dismiss]').forEach((b) => b.onclick = () => {
     const id = b.dataset.dismiss, box = body.querySelector(`[data-prop="${id}"]`);
     box.innerHTML = `<div class="proposal"><label>${t('Why do you dismiss it? (kept in the improvement ledger)')}</label><input data-reason maxlength="500" placeholder="${t('e.g. the wait was a holiday, not a process problem')}">
-      <div class="row" style="margin-top:8px"><span class="grow"></span><button type="button" class="small" data-confirm>${t('Dismiss')}</button></div></div>`;
+      <div class="row" style="margin-top:var(--sp-2)"><span class="grow"></span><button type="button" class="small" data-confirm>${t('Dismiss')}</button></div></div>`;
     const input = box.querySelector('[data-reason]');
     input.focus();
     box.querySelector('[data-confirm]').onclick = async () => {

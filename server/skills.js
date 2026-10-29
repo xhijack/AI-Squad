@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Built-in skills: bundled with the plugin in skills/<name>/SKILL.md. For each skill of an agent the Desk shows
 // where it comes from: the project (.claude/skills), the user (~/.claude/skills), the plugin (available to the
 // sessions The AI Squad starts, as aisquad:<name>) or nowhere. Install copies a bundled skill into the project.

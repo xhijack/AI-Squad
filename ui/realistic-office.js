@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Realistic look of the office (Phase 3.2 step 1b, ?look=realistic): the same isometric office, layout and chibis,
 // with realistic furniture and props: PBR wood floor and plaster walls, aluminium windows, an oak desk with an office
 // chair, monitors and keyboards per station, and the devices (sofa, plants, TV cabinet from Poly Haven; whiteboard,

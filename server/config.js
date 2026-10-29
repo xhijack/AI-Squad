@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Runtime paths and settings. Everything is overridable so tests can use scratch directories.
 import os from 'node:os';
 import path from 'node:path';

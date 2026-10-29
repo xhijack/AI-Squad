@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: Apache-2.0
 // Packs several glTF files (with their .bin and textures) into one GLB: one root node per model, named after the
 // file, textures embedded once (PNG or JPEG; every texture slot). Node built-ins only (a dev tool, not part of the server).
 //   node scripts/pack-glb.js out.glb a.gltf b.gltf ...

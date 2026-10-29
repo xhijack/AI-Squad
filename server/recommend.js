@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
 // "What do you want to build?" -> a Blueprint and a team, with the reason for every agent. Asks Claude Code
 // (`claude -p`, haiku, no tools, structured JSON output); falls back to keyword matching when Claude Code is
 // unavailable, slow or answers something unusable.
 import os from 'node:os';
 import path from 'node:path';
+import * as auth from './auth.js';
+import { loadBuilding } from './building.js';
 import { execFile } from 'node:child_process';
 import { claudeBin } from './config.js';
 import { kebab, clip } from './util.js';
@@ -63,10 +66,10 @@ export function claudePrompt(prompt, blueprints, roles) {
   ].join('\n');
 }
 
-export function runClaude(prompt, { timeoutMs = CLAUDE_TIMEOUT_MS } = {}) {
+export function runClaude(prompt, { timeoutMs = CLAUDE_TIMEOUT_MS, schema = SCHEMA } = {}) {
   return new Promise((resolve, reject) => {
-    const args = ['-p', '--model', 'haiku', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config', '--json-schema', JSON.stringify(SCHEMA), prompt];
-    execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}` } },
+    const args = ['-p', '--model', 'haiku', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config', '--json-schema', JSON.stringify(schema), prompt];
+    execFile(claudeBin(), args, { cwd: os.tmpdir(), timeout: timeoutMs, maxBuffer: 8e6, env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH || ''}`, ...auth.backgroundEnv(loadBuilding().prefs.auth) } },
       (err, stdout) => {
         if (err && !stdout) return reject(err);
         try {

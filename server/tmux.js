@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Agents run as Claude Code sessions in tmux ("aisquad-<floor>-<agent>"). This module starts and stops
 // them, reads their screens for option dialogs (numbered and unnumbered), answers dialogs and types tasks.
 // Prompt parsing is ported from the squad-3d prototype.
@@ -39,7 +40,7 @@ export function socketOf(name) {
   return s.length <= room ? s : `${s.slice(0, room - 9)}-${crypto.createHash('sha1').update(s).digest('hex').slice(0, 8)}`;
 }
 const shared = new Set();                       // sessions found on the shared server (older versions)
-const socketFor = (name) => (shared.has(name) ? config.tmuxSocket : socketOf(name));
+export const socketFor = (name) => (shared.has(name) ? config.tmuxSocket : socketOf(name));
 const hasSession = (name, socket) => tmux(['has-session', '-t', `=${name}`], socket) !== null;
 
 export function isRunning(name) {
@@ -194,10 +195,22 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 // when available, so the session survives the terminal or editor that launched the server and an out of
 // memory kill of one scope takes only this agent
 // env: extra variables for the agent (hook target, git identity), set with `env` in front of the command
-export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {} }) {
+// secretEnv: variables that must not show in a command line (ERPNext keys, 0.19): a 0600 file the shell reads and
+// removes before it starts Claude Code
+export async function startSession({ name, cwd, agentId, disallowedTools = [], extraArgs = [], env: agentEnv = {}, secretEnv = {} }) {
   if (isRunning(name)) return { ok: true, already: true };
-  const vars = Object.entries(agentEnv).filter(([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null).map(([k, v]) => `${k}=${v}`);
-  const cmd = [...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', ...disallowedTools] : []), ...extraArgs].map(shq).join(' ');
+  const ok = ([k, v]) => /^[A-Z_][A-Z0-9_]*$/.test(k) && v !== undefined && v !== null;
+  const vars = Object.entries(agentEnv).filter(ok).map(([k, v]) => `${k}=${v}`);
+  const secrets = Object.entries(secretEnv).filter(ok);
+  let pre = [];
+  if (secrets.length) {
+    const f = path.join(config.home, 'run', `${name}.env`);
+    fs.mkdirSync(path.dirname(f), { recursive: true, mode: 0o700 });
+    try { fs.unlinkSync(f); } catch { /* none */ }
+    fs.writeFileSync(f, secrets.map(([k, v]) => `export ${k}=${shq(v)}`).join('\n') + '\n', { mode: 0o600, flag: 'wx' });   // a new file: never through a link
+    pre = ['sh', '-c', '. "$1"; rm -f "$1"; shift; exec "$@"', 'sh', f];
+  }
+  const cmd = [...pre, ...(vars.length ? ['env', ...vars] : []), claudeBin(), '--agent', agentId, ...(disallowedTools.length ? ['--disallowedTools', ...disallowedTools] : []), ...extraArgs].map(shq).join(' ');
   const tm = ['tmux', ...tmuxArgs(['new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', cwd, cmd], socketOf(name))];
   const env = { ...process.env, PATH: `${process.execPath.replace(/\/node$/, '')}:${process.env.PATH || ''}` };
   delete env.TMUX;
@@ -211,7 +224,14 @@ export async function startSession({ name, cwd, agentId, disallowedTools = [], e
     if (!isRunning(name)) await exec(tm[0], tm.slice(1));
   }
   if (isRunning(name)) { keepSize(name); sized.add(name); }
+  else if (pre.length) try { fs.rmSync(pre[4]); } catch { /* read already */ }
   return { ok: isRunning(name), unit };
+}
+
+// the processes the session's panes run (Claude Code itself); [] when it is not running
+export function panePids(name) {
+  if (!isRunning(name)) return [];
+  return (tmux(['list-panes', '-s', '-t', `=${name}`, '-F', '#{pane_pid}'], socketFor(name)) || '').split('\n').map(Number).filter((n) => n > 1);
 }
 
 // kill-session only hangs up the panes; Claude Code can outlive that, so make sure the pane processes end
@@ -253,6 +273,11 @@ export async function typeTask(name, text, { settleMs = 600, verifyMs = 1500 } =
   return { ok: false, error: 'Task text is still in the input box' };
 }
 
+// a multi-question / multi-select AskUserQuestion dialog (server/askdialog.js): keys and screen of one pane
+export function askIO(name, { target = `=${name}:`, socket = socketFor(name) } = {}) {
+  return { send: async (keys) => { for (const c of askCalls(keys)) tmux(['send-keys', '-t', target, ...c], socket); },
+    capture: async () => (target === `=${name}:` && name ? capture(name) : capturePane(target, socket)), sleep };
+}
 // choose option n of the open dialog (arrow keys + Enter); free-text options get the typed text.
 // opts.target / opts.socket address a pane outside our own sessions (independent agents).
 export function answerDialog(name, dialog, n, text = '', { target = `=${name}:`, socket = socketFor(name) } = {}) {

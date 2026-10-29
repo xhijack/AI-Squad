@@ -1,9 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
 // Recovery after an agent dies: how a session ended (clean exit, out of memory kill, killed mid-turn), the texts
 // shown on the Desk and in Attention, when an automatic resume is allowed, the message a resumed lead gets,
 // and the memory guard before more agents start.
 import { execFileSync } from 'node:child_process';
 
 export const DEFAULTS = { autoResume: false, maxAgents: 4 };
+// agents running at once on the whole machine (all Floors together); Building settings, prefs.maxAgents
+export const BUILDING_MAX_DEFAULT = 6;
+export function buildingMax(prefs = {}) {
+  const n = parseInt(prefs?.maxAgents, 10);
+  return Number.isFinite(n) ? Math.max(1, Math.min(40, n)) : BUILDING_MAX_DEFAULT;
+}
 export const AUTO_RESUME = { max: 2, windowMs: 3600e3 };
 export const GUARD_SWAP_PCT = 80;
 const SLACK_MS = 60e3;
@@ -69,11 +76,13 @@ export function memoryPressure(res, freeRamBytes = 1.5 * 2 ** 30) {
   return '';
 }
 
-// the Watchdog warning before another agent starts: swap above 80 % or the Floor already at its maximum
-export function startWarnings({ res = null, running = 0, maxAgents = DEFAULTS.maxAgents } = {}) {
+// the Watchdog warning before another agent starts: swap above 80 %, the Floor or the whole Building already at
+// its maximum of agents running at once
+export function startWarnings({ res = null, running = 0, maxAgents = DEFAULTS.maxAgents, buildingRunning = 0, buildingMax: bMax = BUILDING_MAX_DEFAULT } = {}) {
   const out = [];
   if (swapPct(res) > GUARD_SWAP_PCT) out.push(`Swap is ${swapPct(res).toFixed(0)} % full: another agent may get the squad killed by the out of memory killer.`);
   if (running >= maxAgents) out.push(`${running} agent${running === 1 ? '' : 's'} already run on this Floor (maximum ${maxAgents}).`);
+  if (buildingRunning >= bMax) out.push(`${buildingRunning} agents already run on this machine (Building maximum ${bMax}).`);
   return out;
 }
 
