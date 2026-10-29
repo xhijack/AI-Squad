@@ -302,6 +302,31 @@ Admin → Machines also has the **Move to another machine** steps (backup, copy,
 
 Admin → ERPNext shows the pipeline: Leads handed over, prices approved, orders, and the median time from Lead to draft and to approved Quotation.
 
+### Cadence (1.5)
+
+A Space can work on a rhythm without anyone giving it a task: **routines**. Each one has a title, an agent (a role such as `marketing-strategist`, which resolves to the Space's agent with that role, the lead first; or an agent id), when it runs (every day, every weekday, weekly on a day, monthly on a day of the month; the 31st means the last day of a short month), a time on this machine's clock, the task, and optionally a budget per run (default $2, at most $50). At most 20 per Space, in `.claude/aisquad/cadence.json` (committed; changes in Admin → Changes). When each one last ran, what waits and what runs is in `~/.aisquad/cadence/<space>.json` (0600).
+
+- **A run is automated work.** It starts as a background job of its agent (`via: cadence`, edits allowed in its own Space, this machine) through the dispatcher, so the Space's shift, the quota guard, the free memory, the slot kept for the owner and the Space's budget all hold it like any other automated work.
+- **Skipped, never stacked.** A run may start up to two hours late (less when the next run comes sooner). If it cannot start in that window it is taken out of the queue and skipped with the reason (`outside the Space's shift`, `the Space reached its budget`, …). A routine has at most one waiting or running run; after downtime only the latest missed run is reported as skipped, nothing is caught up. A routine that is turned on does not run for a time that already passed.
+- **Blueprints** bring routines, created **off**: Marketing (a daily content draft at 22:30, a weekly report against the targets on Monday night), Sales (a follow-up list from ERPNext every weekday at 08:00), Software House (a standup summary every weekday, a weekly dependency and security check), ERP Consultant (a weekly UAT and gap status), Legal (a weekly review of the contract queue).
+- **Admin → Cadence**: per Space each routine with when it runs, its agent, the last run (done, failed or skipped with the reason, its cost, a link to the result on the agent's Desk) and the next run; **Run now**; **Turn on routines** for a Space. Floor settings lists the Space's routines; the Desk of the agent shows *Next routine: <title> · <time>*.
+- **Roles**: routines are the Owner's (add, change, remove); Members turn them on or off and press Run now (their own work, so the shift does not hold it; never a second run while one waits or runs); Viewers read. Owner-only Spaces are hidden for others.
+- The Squad Log records `cadence.started`, `cadence.skipped` (with the reason) and `cadence.done` (status, cost, duration); the Audit counts them and the Telegram morning digest says *Routines today: n done, n failed, n skipped*.
+- API: `GET /api/cadence`, `GET/POST /api/floors/<id>/cadence`, `PATCH/DELETE /api/floors/<id>/cadence/<routine>`, `POST …/<routine>/toggle` `{enabled}`, `POST …/<routine>/run`, `POST /api/floors/<id>/cadence/enable`.
+
+### When a target is behind (1.5)
+
+Every target has a rule for when a measurement leaves it behind its goal (`onBehind` in `kpi.json`; Admin → Targets, *When behind*, the Owner's):
+
+- **notify** (the default for the targets a Blueprint seeds): one notice, *Leads this week: 4 of 12 leads, behind*, under Notices like a stall card, with an id per target and period, so it is never sent twice. OK closes it.
+- **suggest**: the rule's agent (a role or agent id; empty means the lead) drafts a short recovery plan in a read-only run (`permission-mode plan`, $0.50 at most). The owner gets it as a card, in the app and on Telegram with **Approve** / **Dismiss**: Approve starts it as a task for that agent, Dismiss keeps the target quiet for the rest of the period.
+- **act**: the task starts at once as automated work, but only in a Space that acts by itself (Autopilot **full**, not Legal, not Owner-only) whose budget is not reached; otherwise it falls back to **suggest** and the card says why.
+- **off**: nothing.
+
+It fires after a measurement, at most once per period and once per cooldown (24 hours unless set, 1 to 720), and not while an earlier notice, plan or task for that target is still open; never for a target without a goal or with a value from an earlier period. The task always carries the numbers (the value, the goal, the period, the trend of the last measurements) and points to `docs/squad/KPI.md`, so the agent plans against facts and never invents a value. Cards from an Owner-only Space are the Owner's alone. Admin → Targets shows the rule of each target and the history of its triggers; the cockpit tile says *2 behind · 1 acting*. The Squad Log records `kpi.behind` (target, value, goal, mode) and `kpi.action` (approved, started, dismissed); the morning digest lists the targets that raised work. Trigger state is in `~/.aisquad/kpi/<space>.triggers.json` (0600).
+
+The **Company Guide** plans both (1.5): per Space the Blueprint's routines moved into the owner's hours (a night squad runs 22:00–05:00, a day squad not at night; a manual squad gets them unticked) and the rule of every target from the mode (manual → notify, supervised → suggest, automatic → act). The owner may untick any of them. Build writes `cadence.json` and the rules; the routines are made off, with one **Turn on routines** per Space after the build. `PLAN.md` lists every Space's rhythm in plain words, so the agents know it.
+
 ### Targets and the cockpit (1.3)
 
 Every Space can work against **targets**: the numbers the Owner sets (Admin → Targets), measured by the server, read by the agents. A target has a name, a unit, a goal, a direction (more or less is better), a period (today, this week, this month, in total) and a source:
@@ -559,9 +584,12 @@ Floors missing on the new machine are cloned from their remote (`--no-clone` to 
 <repo>/docs/squad/handoffs/                outbox/ (agents write), sent/ (copies), inbox/ (delivered)
 ~/.aisquad/legal.json                      fingerprints of the contracts the Owner approved, revisions, alerts
 <repo>/contracts/                          a Legal Space's contracts (STATUS: DRAFT / READY FOR REVIEW / APPROVED)
-<repo>/.claude/aisquad/kpi.json            the Space's targets (name, goal, direction, period, source)
+<repo>/.claude/aisquad/kpi.json            the Space's targets (name, goal, direction, period, source, what happens when behind)
 <repo>/docs/squad/KPI.md                   the targets as the agents read them (generated)
 ~/.aisquad/kpi/<space>.json                measurements and the Space's webhook token (0600)
+~/.aisquad/kpi/<space>.triggers.json       what each target behind its goal raised, and when (0600)
+<repo>/.claude/aisquad/cadence.json        the Space's routines (title, agent, when, task, budget, on or off)
+~/.aisquad/cadence/<space>.json            when each routine last ran, what waits, what runs (0600)
 ~/.aisquad/guide.json                      the Company Guide: the owner's answers and the plan (0600)
 ~/.aisquad/company/PLAN.md                 the company plan every agent reads (generated by the guide)
 <repo>/docs/squad/MATERIALS.md             what the Space needs from the owner and what is missing (generated)

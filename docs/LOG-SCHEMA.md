@@ -106,7 +106,34 @@ entered.
 The last value stays, marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
 
 **`guide.built`** (1.2, lifecycle): the Company Guide built this Space: `division`, `blueprint`, `mode` (automatic, supervised,
-manual), `targets` (how many targets got a goal).
+manual), `targets` (how many targets got a goal), `routines` (1.5: how many routines the plan kept; they are made off).
+
+**`kpi.behind`** (1.5): a measurement left a target behind its goal and its rule fired: `kpi`, `name`, `value`, `unit`, `target`,
+`period`, `mode` (what it raised: notify, suggest or act), `fallback` when an `act` rule asked instead (the Space does not act by
+itself, or its budget is reached). `agent` is the rule's agent. At most once per period and per cooldown.
+
+```json
+{"v":1,"id":"3c9a1f02b7de","ts":"2026-10-29T08:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":"mira-strategist","role":null,"session":null,"model":null,"type":"kpi.behind","summary":"target Leads: 4 leads of 12, behind (suggest)","data":{"kpi":"leads","name":"Leads","value":4,"unit":"leads","target":12,"period":"week","mode":"suggest"}}
+```
+
+**`kpi.action`** (1.5): what happened to the work a target raised: `kpi`, `name`, `action` (`approved`: the owner approved the
+recovery plan; `started`: its task started, `auto: true` when an `act` rule started it, `job` or `queued` with the dispatcher's
+reason; `dismissed`: the owner dismissed the plan, the target stays quiet for the rest of the period), `by` (the person).
+
+**`cadence.started`** (1.5): a routine's run started as a background job: `routine` (its id), `title`, `job`, `manual` (true for
+*Run now*), `waitedMs` (from its time to the start). `agent` is the agent that runs it.
+
+**`cadence.skipped`** (1.5): a routine did not run at its time: `routine`, `title`, `slot` (the time it was due, ISO), `reason`
+(`outside the Space's shift` and the other reasons the dispatcher holds work for, wrapped in `could not start in its window (…)`;
+`missed its window: the server was not running`; `the previous run is still running` or `… still waiting to start`;
+`the Space reached its budget`; `no agent with the role or id "…" in this Space`; `removed from the queue`).
+
+```json
+{"v":1,"id":"a81e40c2d9f3","ts":"2026-10-29T01:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"cadence.skipped","summary":"routine \"Weekly report vs targets\" skipped: could not start in its window (outside the Space's shift)","data":{"routine":"weekly-report","title":"Weekly report vs targets","slot":"2026-10-28T16:00:00.000Z","reason":"could not start in its window (outside the Space's shift)"}}
+```
+
+**`cadence.done`** (1.5): a routine's run ended: `routine`, `title`, `job`, `status` (done, failed, stopped), `cost` (USD), `ms`.
+
 
 **`legal.reverted`**, **`legal.approved`**, **`legal.changes`** (0.20): a contract in a Legal Space was put back to DRAFT
 (`reason`: marked APPROVED without the owner's approval, or changed after it), the owner approved it (`by`,
