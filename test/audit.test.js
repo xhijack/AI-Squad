@@ -188,3 +188,15 @@ test('second opinions and design picks in the digest', () => {
   assert.deepEqual(m.process.secondOpinions, { total: 2, disagree: ['M09'] }); assert.equal(m.process.designPicks, 1);
   assert.match(audit.digest(events, m, { ...INFO, floorId: 'pos' }).text, /process\.secondOpinions \| 2 second opinions on risky modules, DISAGREE on M09/);
 });
+
+test('cadence and targets that act (1.5) in the metrics: routine runs, skips with reasons, triggers by mode, plans approved', () => {
+  const ev = (type, data, ts = '2026-10-28T10:00:00.000Z') => ({ type, ts, agent: null, data });
+  const m = audit.metrics([
+    ev('cadence.done', { routine: 'r', status: 'done', cost: 0.25 }), ev('cadence.done', { routine: 'r', status: 'failed', cost: 0.05 }),
+    ev('cadence.skipped', { routine: 'w', reason: 'outside the Space\'s shift' }), ev('cadence.skipped', { routine: 'w', reason: 'outside the Space\'s shift' }),
+    ev('kpi.behind', { kpi: 'leads', mode: 'suggest' }), ev('kpi.behind', { kpi: 'posts', mode: 'notify' }),
+    ev('kpi.action', { kpi: 'leads', action: 'approved' }), ev('kpi.action', { kpi: 'leads', action: 'started' }),
+  ]);
+  assert.deepEqual(m.efficiency.routines, { done: 1, failed: 1, skipped: 2, cost: 0.3, skipReasons: [{ reason: 'outside the Space\'s shift', count: 2 }] });
+  assert.deepEqual(m.efficiency.targets, { behind: 2, byMode: { suggest: 1, notify: 1 }, approved: 1, dismissed: 0, started: 1 });
+});

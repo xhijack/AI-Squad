@@ -156,6 +156,10 @@ export function metrics(events, info = {}) {
     idleWithOpenWorkMin: r2(sum(Object.values(idleOpen), (x) => x) / 60e3, 1),
     voice: { lines: of('voice.spoken').length, chars: sum(of('voice.spoken').filter((e) => !e.data.cached), (e) => e.data.chars || 0), cached: of('voice.spoken').filter((e) => e.data.cached).length },
     blockedOnOwnerMin: r2((sum(waits, (x) => x) + sum(permWaits, (x) => x)) / 60e3, 1),
+    // cadence and targets that act (1.5): routine runs and what they cost, skips, and the work targets raised
+    routines: { done: of('cadence.done').filter((e) => e.data.status === 'done').length, failed: of('cadence.done').filter((e) => e.data.status !== 'done').length, skipped: of('cadence.skipped').length,
+      cost: r2(sum(of('cadence.done'), (e) => +e.data.cost || 0), 4), skipReasons: Object.entries(of('cadence.skipped').reduce((o, e) => inc(o, e.data.reason || '?'), {})).map(([reason, count]) => ({ reason, count })).slice(0, 5) },
+    targets: { behind: of('kpi.behind').length, byMode: of('kpi.behind').reduce((o, e) => inc(o, e.data.mode || '?'), {}), approved: of('kpi.action').filter((e) => e.data.action === 'approved').length, dismissed: of('kpi.action').filter((e) => e.data.action === 'dismissed').length, started: of('kpi.action').filter((e) => e.data.action === 'started').length },
     expensiveModelOnSimpleWork: Object.values(agents).filter((a) => a.models.opus && a.edits && a.editsDocsOnly).map((a) => ({ agent: a.agent, role: a.role, cost: r2(a.models.opus, 4), reason: 'opus for docs-only edits' })),
   };
   // Autopilot: decisions without the owner, how many the owner changed later (quality signal), critical items that were
@@ -272,6 +276,8 @@ export function digest(events, m, info = {}, { maxEvents = 60, maxChars = 14000 
       ['efficiency.longOutputs', `${E.longOutputs} replies over ${LONG_OUTPUT} output tokens`],
       ['efficiency.idleWithOpenWorkMin', E.idleWithOpenWorkMin],
       ['efficiency.blockedOnOwnerMin', E.blockedOnOwnerMin],
+      ...(E.routines && E.routines.done + E.routines.failed + E.routines.skipped ? [['efficiency.routines', `${E.routines.done} routine runs done, ${E.routines.failed} failed, ${E.routines.skipped} skipped${E.routines.skipReasons.length ? ` (${E.routines.skipReasons.map((x) => `${x.reason}: ${x.count}`).join('; ')})` : ''}, $${E.routines.cost}`]] : []),
+      ...(E.targets?.behind ? [['efficiency.targetsBehind', `${E.targets.behind} triggers (${Object.entries(E.targets.byMode).map(([k, v]) => `${k} ${v}`).join(', ')}); ${E.targets.approved} plans approved, ${E.targets.dismissed} dismissed, ${E.targets.started} tasks started`]] : []),
       ['efficiency.expensiveModelOnSimpleWork', E.expensiveModelOnSimpleWork.map((x) => `${x.agent} (${x.reason}, $${x.cost})`).join('; ') || 'none'],
     ]),
     '### Per agent (efficiency.byAgent)', table(['agent', 'role', 'models', 'cost $', 'tokens', 'turns', 'tool calls', 'failed', 'idle with open work (min)'], E.byAgent.map((a) => [a.agent, a.role, a.models, a.cost, a.tokens, a.turns, a.toolCalls, a.failedTools, a.idleWithOpenWorkMin])),
