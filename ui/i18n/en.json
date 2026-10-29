@@ -2101,5 +2101,9 @@
  "Where the tickets live (ERPNext Issues or a help desk)": "Where the tickets live (ERPNext Issues or a help desk)",
  "What answers come from (product docs, FAQ, past replies)": "What answers come from (product docs, FAQ, past replies)",
  "Channels, hours, SLAs and what only you decide": "Channels, hours, SLAs and what only you decide",
- "Updated from Telegram": "Updated from Telegram"
+ "Updated from Telegram": "Updated from Telegram",
+ "Edit the source": "Edit the source",
+ "The history stays; values from the new source start a new line, and the status counts from its first value.": "The history stays; values from the new source start a new line, and the status counts from its first value.",
+ "Save the source": "Save the source",
+ "Source changed": "Source changed"
 }

@@ -9,6 +9,9 @@
 // webhook (an outside system posts it to /api/kpi/hook/<token>), mcp (1.6: a read-only tool of an integration's MCP
 // server, server/integrations.js; its result read into one number by server/pick.js).
 // Every measurement goes to the Squad Log (kpi.measured); the status (met, behind, unset, unknown) is computed.
+// The Owner may change a target's source in place (1.7): the history stays, the switch is kept with the values
+// (`switches`) and logged (kpi.source.changed, the kinds only), and the status counts only from the new source's
+// first value, which starts a fresh line in the sparkline.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -103,15 +106,35 @@ export function addKpi(root, input) {
   writeDefs(root, [...kpis, k]);
   return k;
 }
-export function updateKpi(root, id, patch) {
+export function updateKpi(root, id, patch, { now = Date.now(), by = '' } = {}) {
   const kpis = readDefs(root);
   const i = kpis.findIndex((x) => x.id === id);
   if (i < 0) throw notFound('Target not found');
-  kpis[i] = cleanKpi(patch, kpis[i]);
+  const before = kpis[i];
+  kpis[i] = cleanKpi(patch, before);
   if (patch?.source !== undefined) checkSource(root, kpis[i].source);
   writeDefs(root, kpis);
+  if (JSON.stringify(before.source) !== JSON.stringify(kpis[i].source)) switched(root, kpis[i], before.source, now, by);
   return kpis[i];
 }
+// a new source: recorded with the values (the history stays), the old source's error forgotten, and logged with
+// the kinds before and after (an integration's server and tool, never its arguments)
+const floorOfRoot = (root) => building.loadBuilding().floors.find((f) => path.resolve(f.path) === path.resolve(root)) || null;
+function switched(root, k, from, now, by) {
+  const f = floorOfRoot(root);
+  if (!f) return;
+  try {
+    const vals = loadVals(f.id, { strict: true });
+    vals.switches = { ...(vals.switches || {}), [k.id]: [...(vals.switches?.[k.id] || []), { ts: now, from: from.kind, to: k.source.kind }].slice(-20) };
+    delete vals.errors[k.id];
+    saveVals(f.id, vals);
+  } catch { /* the values file is unreadable: the switch is still logged */ }
+  const ends = (s, side) => (s.kind === 'mcp' ? { [`${side}Server`]: s.server, [`${side}Tool`]: s.tool } : {});
+  deps.log(f.id, { type: 'kpi.source.changed', data: { kpi: k.id, name: k.name, from: from.kind, to: k.source.kind, ...ends(from, 'from'), ...ends(k.source, 'to'), ...(by ? { by } : {}) } });
+  deps.invalidate();
+}
+// when the target's source last changed (0: never)
+const switchedAt = (vals, id) => vals.switches?.[id]?.at(-1)?.ts || 0;
 // a source from an integration must be usable here and now: known, read-only, allowed for this Space (plain words)
 function checkSource(root, s) { if (s.kind === 'mcp') integ.checkUse(integ.spaceOfRoot(root), s); }
 export function removeKpi(root, id) {
@@ -145,7 +168,7 @@ function loadVals(floorId, { strict = false } = {}) {
 const saveVals = (floorId, v) => writeJson(valFile(floorId), v, 0o600);
 export const latest = (floorId, id) => (loadVals(floorId).series[id] || []).at(-1) || null;
 // the last measurement that came the way the target is defined (a hand-entered value never stands in for ERPNext)
-const latestOf = (floorId, k) => (loadVals(floorId).series[k.id] || []).findLast((p) => p.source === k.source.kind) || null;
+const latestOf = (floorId, k) => { const v = loadVals(floorId); return (v.series[k.id] || []).findLast((p) => p.source === k.source.kind && p.ts >= switchedAt(v, k.id)) || null; };
 // who may feed a target: a person enters manual and webhook targets (a fallback when the outside system is down),
 // the webhook feeds webhook targets, erpnext and csv come from the server's measurement only
 const feeds = (source, kind) => source === kind || (source === 'manual' && kind === 'webhook');
@@ -297,11 +320,11 @@ export async function tick(now = Date.now()) {
 export function list(floorId, root, now = Date.now()) {
   const vals = loadVals(floorId);
   return readDefs(root).map((k) => {
-    const series = vals.series[k.id] || [];
-    const l = series.at(-1) || null;
+    const series = vals.series[k.id] || [], since = switchedAt(vals, k.id);
+    const l = series.findLast((p) => p.ts >= since) || null;                       // values from before a source change do not count
     const stale = l && k.period !== 'total' && l.ts < periodStart(k.period, now) && k.source.kind !== 'manual';   // measured before this period started
     const err = vals.errors[k.id] && (!l || vals.errors[k.id].ts > l.ts) ? vals.errors[k.id] : null;              // the last measurement failed
-    return { ...k, latest: l, status: statusOf(k, stale ? null : l?.value), series: series.slice(-30), stale: !!stale, ...(err ? { error: err } : {}), ...(vals.unreadable ? { unreadable: true } : {}) };
+    return { ...k, latest: l, status: statusOf(k, stale ? null : l?.value), series: series.slice(-30), ...(since ? { switchedAt: since } : {}), stale: !!stale, ...(err ? { error: err } : {}), ...(vals.unreadable ? { unreadable: true } : {}) };
   });
 }
 // all Spaces, for the cockpit and the digest

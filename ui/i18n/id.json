@@ -2101,5 +2101,9 @@
  "Where the tickets live (ERPNext Issues or a help desk)": "Di mana tiket berada (Issue ERPNext atau help desk)",
  "What answers come from (product docs, FAQ, past replies)": "Sumber jawaban (dokumen produk, FAQ, balasan sebelumnya)",
  "Channels, hours, SLAs and what only you decide": "Kanal, jam layanan, SLA dan apa yang hanya kamu putuskan",
- "Updated from Telegram": "Diperbarui dari Telegram"
+ "Updated from Telegram": "Diperbarui dari Telegram",
+ "Edit the source": "Ubah sumbernya",
+ "The history stays; values from the new source start a new line, and the status counts from its first value.": "Riwayatnya tetap; nilai dari sumber baru memulai garis baru, dan status dihitung sejak nilai pertamanya.",
+ "Save the source": "Simpan sumber",
+ "Source changed": "Sumber diubah"
 }

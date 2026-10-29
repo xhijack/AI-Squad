@@ -101,6 +101,15 @@ entered. A target from an integration (1.6, `source: mcp`) also has `server` (th
 {"v":1,"id":"6f2b1c9e0a47","ts":"2026-10-27T15:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.measured","summary":"target Leads from the site: 31 leads (behind, goal 50, manual)","data":{"kpi":"leads","name":"Leads from the site","value":31,"unit":"leads","target":50,"period":"month","source":"manual","state":"behind","by":"Ramdani"}}
 ```
 
+**`kpi.source.changed`** (1.7): the Owner changed where a target's value comes from, in place (Admin → Targets → Edit
+the source): `kpi`, `name`, `from` and `to` (the source kinds: manual, erpnext, csv, webhook, mcp), `fromServer` /
+`fromTool` and `toServer` / `toTool` when that side is an integration, `by` (the person). Never the arguments, filters,
+paths or anything secret. The history stays; the status counts from the new source's first value.
+
+```json
+{"v":1,"id":"9d3a6b2e7c51","ts":"2026-10-29T09:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.source.changed","summary":"target Posts published: source changed from manual to mcp space:dtamu-marketing:scheduler posts_this_week by Owner","data":{"kpi":"posts","name":"Posts published","from":"manual","to":"mcp","toServer":"space:dtamu-marketing:scheduler","toTool":"posts_this_week","by":"Owner"}}
+```
+
 **`kpi.failed`** (1.3): the server could not measure an ERPNext, CSV or integration target: `kpi`, `name`, `source`, `error`
 (one line, secrets removed); for `source: mcp` (1.6) also `server` and `tool`, never the arguments. The last value stays,
 marked as failed in Admin → Targets and in `docs/squad/KPI.md`.

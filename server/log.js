@@ -24,7 +24,7 @@ export const TYPES = {
   'dispatch.queued': 'work', 'dispatch.started': 'work', 'dispatch.failed': 'work', 'dispatch.removed': 'work', 'dispatch.idle-stopped': 'lifecycle', 'node.lost': 'lifecycle',
   'handoff.sent': 'communication', 'handoff.received': 'communication', 'handoff.held': 'communication', 'handoff.rejected': 'communication', 'handoff.invalid': 'communication',
   'erpnext.lead': 'work', 'erpnext.won': 'work', 'erpnext.approval': 'work', 'erpnext.approved': 'work', 'erpnext.sent-back': 'work', 'erpnext.alert': 'work',
-  'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work', 'kpi.measured': 'work', 'kpi.failed': 'work', 'guide.built': 'lifecycle',
+  'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work', 'kpi.measured': 'work', 'kpi.failed': 'work', 'kpi.source.changed': 'work', 'guide.built': 'lifecycle',
   'cadence.started': 'work', 'cadence.skipped': 'work', 'cadence.done': 'work', 'kpi.behind': 'work', 'kpi.action': 'work', 'integration.tested': 'tools',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
@@ -108,6 +108,7 @@ function summarize(e) {
     case 'erpnext.sent-back': return `the owner sent ${d.quotation} back to ${who}`;
     case 'kpi.measured': return `target ${d.name}: ${d.value}${d.unit ? ` ${d.unit}` : ''} (${d.state}${d.target != null ? `, goal ${d.target}` : ''}, ${d.source}${d.server ? ` ${d.server} ${d.tool}` : ''})`;
     case 'kpi.failed': return `target ${d.name}: not measured from ${d.source}${d.server ? ` ${d.server} ${d.tool}` : ''}: ${d.error}`;
+    case 'kpi.source.changed': return `target ${d.name}: source changed from ${d.from}${d.fromServer ? ` ${d.fromServer} ${d.fromTool}` : ''} to ${d.to}${d.toServer ? ` ${d.toServer} ${d.toTool}` : ''}${d.by ? ` by ${d.by}` : ''}`;
     case 'integration.tested': return `integration ${d.name} (${d.transport}) tested: ${d.ok ? `${d.tools} tool${d.tools === 1 ? '' : 's'}` : `failed: ${d.error}`}`;
     case 'cadence.started': return `routine "${d.title}" started${e.agent ? ` for ${e.agent}` : ''}${d.manual ? ' (run now)' : ''}`;
     case 'cadence.skipped': return `routine "${d.title}" skipped${t(d.reason)}`;

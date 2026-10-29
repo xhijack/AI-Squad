@@ -74,7 +74,7 @@ export function noticeText(k, item) {
 }
 // the last measurements, oldest first ("2 → 3 → 4")
 export function trend(item, n = 5) {
-  const s = (item.series || []).slice(-n);
+  const s = (item.series || []).filter((p) => p.ts >= (item.switchedAt || 0)).slice(-n);   // since the source last changed (1.7)
   if (s.length < 2) return 'not enough measurements yet for a trend';
   return `${s.map((p) => fmt(p.value)).join(' → ')} (last ${s.length} measurements, ${new Date(s[0].ts).toISOString().slice(0, 10)} to ${new Date(s.at(-1).ts).toISOString().slice(0, 10)})`;
 }
