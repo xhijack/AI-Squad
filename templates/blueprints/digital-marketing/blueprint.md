@@ -1,7 +1,7 @@
 ---
 id: digital-marketing
 title: Digital Marketing
-version: 3
+version: 4
 category: marketing
 description: A marketing team that turns a brief, brand rules and a channel plan into content, social posts, SEO and campaigns, and reports results against KPIs.
 keywords: [marketing, digital marketing, seo, content, blog, social, "social media", instagram, tiktok, linkedin, facebook, ads, advertising, campaign, brand, branding, awareness, traffic, newsletter, email marketing, influencer, launch, growth, audience, followers, copywriting]
@@ -24,6 +24,9 @@ kpis:
   - { id: leads, name: Leads from the site, unit: leads, direction: up, period: month, source: { kind: manual } }
   - { id: posts, name: Posts published, unit: posts, direction: up, period: week, source: { kind: manual } }
   - { id: engagement, name: Engagement rate, unit: "%", direction: up, period: week, source: { kind: manual } }
+cadence:
+  - { id: daily-content-draft, title: Daily content draft, agent: content-writer, every: daily, at: "22:30", budget: 1, task: "Draft the next piece of the content calendar in docs/CHANNELS.md as a DRAFT in content/drafts/ (or content/social/<channel>/), in the brand voice of docs/BRAND.md. Update its row in docs/BOARD.md. Publish nothing." }
+  - { id: weekly-report, title: Weekly report vs targets, agent: marketing-strategist, every: "weekly:mon", at: "23:00", budget: 2, task: "Write the weekly marketing report in docs/reports/<date>-weekly.md: each target from docs/squad/KPI.md with its value and status, what was published, what worked, and the plan for this week against the targets that are behind. Use only the numbers in KPI.md." }
 gates: [source documents approved, brand and voice review, fact check, owner approval before publishing, KPI report]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me for the marketing brief, the brand rules and the channel plan. For anything missing, interview me and draft it in docs/ for my approval. No campaign work starts until all three are approved."
 ---

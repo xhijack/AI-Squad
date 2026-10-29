@@ -1,7 +1,7 @@
 ---
 id: software-house
 title: Software House
-version: 5
+version: 6
 category: software
 description: A software team that builds and ships an application from a PRD, a tech spec and a design, in QA-gated sprints.
 keywords: [software, app, application, website, web, mobile, saas, platform, pos, "point of sale", erp, crm system, api, backend, frontend, dashboard, portal, marketplace, ecommerce, "e-commerce", shop, store, booking, system, develop, build, code, startup, mvp]
@@ -24,6 +24,9 @@ kpis:
   - { id: stories-done, name: Story points done, unit: SP, direction: up, period: week, source: { kind: manual } }
   - { id: open-bugs, name: Open bugs (high and critical), unit: bugs, direction: down, period: total, source: { kind: manual } }
   - { id: uptime, name: Production uptime, unit: "%", direction: up, period: month, source: { kind: manual } }
+cadence:
+  - { id: standup-summary, title: Sprint standup summary, agent: project-manager, every: weekdays, at: "09:00", budget: 1, task: "Summarise yesterday in docs/squad/standups/<date>.md from docs/squad/TASKS.md and the git log: done, in progress, blocked, and what needs the owner. Keep it short." }
+  - { id: dependency-check, title: Weekly dependency and security check, agent: fullstack-developer, every: "weekly:fri", at: "10:00", budget: 2, task: "Check the project's dependencies for known vulnerabilities and outdated major versions with the package manager's own audit command (npm audit, pip-audit, bench or similar). Write the findings with severity and a proposed fix to docs/squad/security/<date>-dependencies.md. Change no dependency without a task." }
 gates: [source documents approved, plan review before each sprint, tests green, QA pass per module, design review, final QA smoke test]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then run the source document intake: ask me for the PRD, the Tech Spec and the Design Document (and what you need for docs/ENVIRONMENTS.md). For anything missing, interview me and draft it in docs/ for my approval. No sprint starts until PRD, Tech Spec and Design are approved. Ask me every decision and approval with AskUserQuestion (one question per decision, with options), and keep your plain-text summaries short."
 ---

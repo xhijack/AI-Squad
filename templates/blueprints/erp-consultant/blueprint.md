@@ -1,7 +1,7 @@
 ---
 id: erp-consultant
 title: ERP Consultant
-version: 2
+version: 3
 category: erp
 description: An ERPNext implementation team for a client: requirements, fit-gap, configuration, custom development for the real gaps, data migration, UAT and training, with the owner approving scope and every customisation.
 keywords: [erp, erpnext, frappe, implementation, implementasi, konsultan, consultant, accounting, akuntansi, inventory, stock, gudang, manufacturing, manufaktur, pos, hr, payroll, gaji, purchasing, pembelian, penjualan, sales order, migration, migrasi data, uat, training, pelatihan, go-live]
@@ -22,6 +22,8 @@ kpis:
   - { id: requirements-covered, name: Requirements with a fit-gap row, unit: "%", direction: up, period: total, source: { kind: manual } }
   - { id: uat-pass, name: UAT scripts passed, unit: "%", direction: up, period: total, source: { kind: manual } }
   - { id: open-gaps, name: Gaps waiting for approval, unit: gaps, direction: down, period: total, source: { kind: manual } }
+cadence:
+  - { id: uat-gap-status, title: Weekly UAT and gap status, agent: project-manager, every: "weekly:fri", at: "15:00", budget: 1, task: "Write the weekly UAT and gap status in docs/reports/<date>-uat-gaps.md: each gap from the fit-gap list with its status (approved, building, in UAT, accepted), UAT scripts passed and failed, and what waits for the client." }
 gates: [source documents approved, owner approval of every gap before development, tests green, UAT pass before go-live]
 ownerOnly: [scope, price, go-live date, customisation of accounting or stock ledgers]
 kickoff: "Start as the lead of this implementation. Read AISQUAD.md first. Then ask me for the client's business requirements (or an interview with me about their processes) and draft docs/BRD.md for my approval. Then the fit-gap: no development starts before the BRD and the fit-gap are approved, and every gap needs my approval."

@@ -20,6 +20,7 @@ import * as permits from './permits.js';
 import * as voiceLib from './voice.js';
 import * as reposLib from './repos.js';
 import * as kpi from './kpi.js';
+import * as cadence from './cadence.js';
 import { cleanStandup } from './rituals.js';
 import * as space from './space.js';
 import * as context from './context.js';
@@ -478,6 +479,7 @@ export async function createFloor(input) {
   if (floor.workflow === 'squad-sprint') sprint.scaffold(root, { git, agents });
   if (input.installSkills) for (const name of new Set(templates.flatMap((t) => t.skills))) if (skills.skillStatus(root, name).installable) skills.install(root, name);
   if (Array.isArray(input.kpis) && input.kpis.length) { kpi.seed(root, input.kpis); kpi.render(root, null); }   // the Blueprint's starting targets, in the first commit
+  if (Array.isArray(input.cadence) && input.cadence.length) cadence.seed(root, input.cadence);   // its routines, off until the Owner turns them on
   generate(root);
   if (mode === 'new') await initialCommit(root);          // main must exist for sprints and merges
   const entry = building.registerFloor(root, { name, number });

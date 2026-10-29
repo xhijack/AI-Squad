@@ -35,6 +35,8 @@ export function parseBlueprint(text, fallbackId = '') {
     // the Space a squad of this Blueprint becomes (0.20): kind, access, shift (Legal: Owner only; Marketing: nights)
     // starting targets (1.3): the Owner sets their values in Admin → Targets
     kpis: Array.isArray(data.kpis) ? data.kpis.filter((k) => k && k.name) : [],
+    // routines (1.5): created disabled in a new Space; the Owner turns them on in Admin → Cadence
+    cadence: Array.isArray(data.cadence) ? data.cadence.filter((r) => r && r.title && r.task) : [],
     space: (({ kind, access, shift }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
   };
 }

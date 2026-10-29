@@ -1,7 +1,7 @@
 ---
 id: legal
 title: Legal
-version: 2
+version: 3
 category: legal
 description: An Owner-only legal desk that drafts bilingual contracts (Indonesian and English) from locked templates, checks each against Pasal 1320 KUHPerdata, UU PDP and electronic signature rules, and leaves every contract a DRAFT until the owner approves it.
 keywords: [legal, contract, contracts, agreement, perjanjian, kontrak, nda, kerahasiaan, terms, sow, mou, spk, legal review, compliance, pdp, privacy, signature, tanda tangan]
@@ -16,6 +16,8 @@ sourceDocs:
 kpis:
   - { id: turnaround, name: Draft turnaround, unit: days, direction: down, period: month, source: { kind: manual } }
   - { id: revisions, name: Revisions per contract, unit: rounds, direction: down, period: month, source: { kind: manual } }
+cadence:
+  - { id: contract-queue, title: Weekly contract queue review, agent: legal-counsel, every: "weekly:mon", at: "09:00", budget: 1, task: "Review the contract queue: every DRAFT in contracts/ with its age, what it waits for and the next step, and contracts with a deadline or renewal in the next 30 days. Write it to docs/legal/queue-<date>.md for the owner. Change no contract text." }
 gates: [source documents approved, legal checklist complete, owner approval before any contract leaves the Space]
 ownerOnly: [contract terms, liability, penalties, governing law, signing]
 kickoff: "Start as the lead of this desk. Read AISQUAD.md first. Then ask me for the legal policy (which contracts we sign, who approves, how we sign, our standard positions). Draft docs/LEGAL-POLICY.md from my answers for my approval. No contract work starts before it is approved."
