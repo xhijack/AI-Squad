@@ -76,7 +76,7 @@ export function voiceControlsHtml(lang, vs, { inherit = '' } = {}) {
   const slider = (k, label) => `<label>${label} <output data-out="${k}">${v[k].toFixed(2)}</output></label><input type="range" name="vs_${k}" min="0" max="1" step="0.05" value="${v[k]}">`;
   return `<div class="grid2"><div><label>${t('Language')}</label><select name="vLang">${inherit ? `<option value="" ${!lang ? 'selected' : ''}>${esc(inherit)}</option>` : ''}
       <option value="auto" ${lang === 'auto' ? 'selected' : ''}>${t('Auto (from the words of each line)')}</option>${Object.entries(LANG_NAMES).map(([k, n]) => `<option value="${k}" ${lang === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
-    <div><label class="inline" style="margin-top:26px"><input type="checkbox" name="vsInherit" ${!vs && inherit ? 'checked' : ''} ${inherit ? '' : 'hidden'}> ${inherit ? t('Use the Floor\'s voice settings') : ''}</label></div></div>
+    <div><label class="inline" style="margin-top:var(--sp-7)"><input type="checkbox" name="vsInherit" ${!vs && inherit ? 'checked' : ''} ${inherit ? '' : 'hidden'}> ${inherit ? t('Use the Floor\'s voice settings') : ''}</label></div></div>
     <div class="grid2 vSliders">${slider('stability', t('Stability'))}${slider('similarity_boost', t('Similarity'))}${slider('style', t('Style'))}
       <label class="inline" style="align-self:end"><input type="checkbox" name="vs_use_speaker_boost" ${v.use_speaker_boost ? 'checked' : ''}> ${t('Speaker boost')}</label></div>
     <p class="note">${t('Steadier and closer to the original voice with higher stability and similarity; style adds expression (and takes longer).')}</p>`;

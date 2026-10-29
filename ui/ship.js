@@ -14,7 +14,7 @@ ctx.actions.ship = async () => {
     <span class="grow"><b>${esc(tx(i.label))}</b><span class="note">${esc(tx(i.detail))}</span></span><span class="chip">${NEED[i.for]}</span></li>`;
   const verdict = (k, ready, missing) => (r[k].ready ? `<span class="chip ok">${ready}</span>` : `<span class="chip bad">${missing}</span>`);
   const body = openModal(`<div class="mHead"><h3 class="grow">${r.sprint ? t('Ship readiness · sprint {n}', { n: esc(r.sprint) }) : t('Ship readiness')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
-    <div class="mBody"><div class="row wrap" style="margin-bottom:10px">${verdict('merge', t('Merge: ready'), t('Merge: {n} missing', { n: r.merge.missing?.length }))}${verdict('deploy', t('Deploy: ready'), t('Deploy: {n} missing', { n: r.deploy.missing?.length }))}</div>
+    <div class="mBody"><div class="row wrap" style="margin-bottom:var(--sp-3)">${verdict('merge', t('Merge: ready'), t('Merge: {n} missing', { n: r.merge.missing?.length }))}${verdict('deploy', t('Deploy: ready'), t('Deploy: {n} missing', { n: r.deploy.missing?.length }))}</div>
       <ul class="shipList">${r.items.map(row).join('')}</ul>
       <p class="note">${r.mergePolicy === 'auto' && r.approved ? t('Automatic merges of a closed sprint wait until the merge list is complete.') : t('Merges are manual or not approved on this Floor; the list still shows what is missing.')} ${t('The DevOps agent checks the deploy list before every deploy (git-deploy skill).')}</p></div>
     <div class="mFoot"><span class="grow"></span><button class="ghost" data-close>${t('Close')}</button></div>`);

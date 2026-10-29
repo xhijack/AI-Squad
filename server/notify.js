@@ -54,7 +54,8 @@ const TEXT = {
     chatOn: 'Chatting with {agent} in {space}. Type your message; /end stops.', chatOff: 'Chat ended.', noAgent: 'No agent called "{q}". Try its name or id.', many: 'Several agents match: {list}',
     sent: 'Sent to {agent}.', queued: 'Queued ({reason}); {agent} answers when there is room.', digestTitle: 'Summary for {day}', nothingOpen: 'Nothing waits for you.', open: 'Waiting for you ({n}):',
     lastDay: 'Last 24 hours: {done} background jobs done, {failed} failed, ${cost} spent; {stops} idle agents stopped; {chats} chat answers.', targets: 'Targets: {met} of {n} met, {behind} behind, {unset} without a goal.', behindLine: '{space} · {name}: {value} of {target} {unit}', suggestions: '{n} new improvement suggestions in Admin → Improvements.',
-    status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.' },
+    status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.',
+    askMany: 'Several questions (or several choices): answer them in The AI Squad.' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
     help: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/help daftar ini',
     reply: 'Ketik balasanmu untuk {agent}.', confirm: 'Hard stop ({reasons}). Ketik {code} dalam 5 menit untuk mengonfirmasi "{choice}". Ketikan lain membatalkan.', cancelled: 'Dibatalkan: tidak ada yang dikirim.',
@@ -62,14 +63,14 @@ const TEXT = {
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
     sent: 'Terkirim ke {agent}.', queued: 'Masuk antrean ({reason}); {agent} menjawab saat ada slot.', digestTitle: 'Ringkasan {day}', nothingOpen: 'Tidak ada yang menunggumu.', open: 'Menunggumu ({n}):',
     lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', targets: 'Target: {met} dari {n} tercapai, {behind} tertinggal, {unset} belum punya angka.', behindLine: '{space} · {name}: {value} dari {target} {unit}', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
-    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.' },
+    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
 // ---------- state ----------
 export function loadState() {
   const s = readJson(file(), {}) || {};
-  return { offset: 0, chats: [], pairing: null, sent: {}, tokens: {}, pending: {}, hourly: [], lastDigest: '', lastError: '', ...s };
+  return { offset: 0, chats: [], pairing: null, sent: {}, sentText: {}, tokens: {}, pending: {}, hourly: [], lastDigest: '', lastError: '', ...s };
 }
 const saveState = (s) => writeJson(file(), s, 0o600);
 function update(fn) { const s = loadState(); const r = fn(s); saveState(s); return r; }
@@ -127,7 +128,13 @@ export function messageFor(item, tok, s = settings()) {
   const where = [item.floorName || item.floorId, item.agentName].filter(Boolean).join(' · ');
   // a price approval: only its first line (customer, total) travels; the lines and the note are opened in the app
   const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(['price', 'contract'].includes(item.kind) ? String(item.text).split('\n')[0] : item.text, 600)];
-  const opts = (item.options || []).filter((o) => !o.free).slice(0, 6);
+  // several questions or multi-select (1.0.1): every question with its options, answered in the app (no one-tap buttons)
+  const many = item.questions?.length && (item.questions.length > 1 || item.questions.some((q) => q.multiSelect));
+  const opts = many ? [] : (item.options || []).filter((o) => !o.free).slice(0, 6);
+  if (many) {
+    lines.splice(1, 1, ...item.questions.flatMap((q, i) => ['', `${i + 1}. ${q.header ? `[${q.header}] ` : ''}${short(q.question, 200)}${q.multiSelect ? ' (multi)' : ''}`, ...q.options.map((o) => `   - ${short(o.label, 80)}`)]));
+    lines.push('', say('askMany', {}, s.lang));
+  }
   if (opts.length) lines.push('', ...opts.map((o) => `${o.n}. ${short(o.label, 80)}`));
   if (isCritical(item)) lines.push('', `Hard stop: ${reasonsOf(item).join(', ') || 'critical'}`);
   const buttons = [];
@@ -161,7 +168,7 @@ export function digestFor(user, { items = deps.items(), now = Date.now(), lang =
   if (!mine.length) lines.push(say('nothingOpen', {}, lang));
   else lines.push(say('open', { n: mine.length }, lang), ...mine.slice(0, 10).map((i) => `- ${[i.floorName, i.agentName].filter(Boolean).join(' · ')}: ${short(i.text, 90)}`));
   lines.push('', say('lastDay', { done, failed, cost: cost.toFixed(2), stops, chats }, lang));
-  // the targets (1.1): the counts, and every target that is behind
+  // the targets (1.3): the counts, and every target that is behind
   try {
     const o = kpi.overview(now), spaces = o.spaces.filter((s) => visible({ floorId: s.id }, user));
     if (spaces.length) {
@@ -179,6 +186,8 @@ const insightsCount = (since) => insight.newSince(since);
 const send = (chatId, text, buttons, fetchFn) => tg.sendMessage(botToken(), chatId, text, { buttons, fetchFn });
 
 // every 15 s: send what is new, take the buttons off what was answered elsewhere, the digest once a day
+const SAME_MS = 30 * 60e3;
+const contentKey = (item) => crypto.createHash('sha1').update([item.kind, item.floorId || '', item.agentId || '', String(item.text || '').trim()].join('|')).digest('hex').slice(0, 16);
 export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const s = settings();
   const out = { sent: 0, cleared: 0, digest: 0 };
@@ -191,6 +200,10 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   const quiet = inQuiet(s.quiet, now);
   for (const item of items) {
     if (st.sent[item.id]) continue;
+    // the same message for the same agent within half an hour is one message, whatever its id (1.0.3)
+    const same = contentKey(item);
+    if (st.sentText[same] && now - st.sentText[same] < SAME_MS) { st.sent[item.id] = { ts: now, duplicate: true, msgs: [] }; continue; }
+    if (item.notice && now < (item.notifyAt || 0)) continue;                                // a stall notice: only once it has lasted 15 min
     const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal'].includes(item.kind);
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
     if (quiet && item.kind !== 'resource') continue;                                         // after the quiet hours
@@ -207,6 +220,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
       catch (e) { st.lastError = `${new Date(now).toISOString()} ${e.message}`; }
     }
     st.sent[item.id] = { ts: now, msgs, tok };
+    st.sentText[same] = now;
   }
   for (const [id, x] of Object.entries(st.sent)) {
     if (open.has(id)) continue;
@@ -214,6 +228,7 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
     if (now - x.ts > 2 * 864e5) delete st.sent[id];
   }
   for (const [k, t] of Object.entries(st.tokens)) if (t.exp < now) delete st.tokens[k];
+  for (const [k, t] of Object.entries(st.sentText)) if (now - t > SAME_MS) delete st.sentText[k];
   const today = new Date(now - new Date(now).getTimezoneOffset() * 60e3).toISOString().slice(0, 10);
   if (st.lastDigest !== today && hhmm(now) >= mins(s.digestAt) && !quiet) {
     st.lastDigest = today;

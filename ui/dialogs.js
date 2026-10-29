@@ -44,7 +44,7 @@ async function editAgent(el) {
   const locked = tpl ? list : [{ role: a.role.template, title: a.role.template, version: a.role.version, skills: [], model: '', effort: '' }, ...list];
   const role = `${esc(a.role.template)}@${a.role.version}`;
   const body = wire(openModal(frame(tt('Edit {name}', { name: esc(a.displayName) }),
-    `<p class="note" style="margin-top:12px">${tt('Agent id <code>{id}</code> stays the same when you rename.', { id: esc(a.id) })} ${a.role.detached ? tt('Role: {role} (detached).', { role }) : tt('Role: {role}.', { role })}</p>
+    `<p class="note" style="margin-top:var(--sp-3)">${tt('Agent id <code>{id}</code> stays the same when you rename.', { id: esc(a.id) })} ${a.role.detached ? tt('Role: {role} (detached).', { role }) : tt('Role: {role}.', { role })}</p>
      ${memberHtml({ ...a, template: a.role.template }, locked, { removable: false, templateLocked: true })}`,
     `<button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
   body.querySelector('[data-ok]').onclick = async () => {
@@ -56,6 +56,8 @@ async function editAgent(el) {
   };
 }
 
+const serverRowHtml = (s) => `<div class="row serverRow"><input data-host value="${esc(s.host || '')}" placeholder="erpnext@192.168.0.150" aria-label="${tt('Host')}" style="max-width:220px">
+  <input data-purpose class="grow" value="${esc(s.purpose || '')}" placeholder="${esc(tt('Staging ERPNext (bench in ~/frappe-bench)'))}" aria-label="${tt('Purpose')}"><button type="button" class="small ghost danger" data-rmserver aria-label="${tt('Remove server')}">×</button></div>`;
 async function floorSettings() {
   const f = ctx.state.floor;
   if (!f?.floor) return;
@@ -73,33 +75,37 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="autoNext" ${c.sprint?.autoNext ? 'checked' : ''}> ${tt('Squad Sprint: start the next sprint automatically (fresh lead session) once a closed sprint is merged')}</label>
     <div class="grid2"><div><label>${tt('Budget (USD, 0 = none)')}</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
       <div><label>${tt('Budget period')}</label>${segHtml('budgetPeriod', [['month', tt('Per month')], ['day', tt('Per day')]], c.budget.period)}</div></div>
-    <h3 style="margin-top:18px">Autopilot</h3>
+    <h3 style="margin-top:var(--sp-5)">Autopilot</h3>
     ${segHtml('autopilot', Object.entries(AP_NAME), c.autopilot || 'off')}
     <ul class="note apLevels">${['off', 'balanced', 'full'].map((k) => `<li><b>${AP_NAME[k]}:</b> ${esc(tx(ap.text?.[k] || ''))}</li>`).join('')}</ul>
     <div class="grid2"><div><label>${tt('Auto-answer after (minutes)')}</label><input name="apTimeout" type="number" min="0.5" max="60" step="0.5" value="${(c.autopilotTimeoutSec || 180) / 60}"></div>
       <p class="note">${tt('A question with a "(Recommended)" option that is not critical gets that answer after this time; an unanswered plain-text ask gets a nudge to decide.')}</p></div>
     <details class="apHard"><summary>${tt('Always waits for you (hard-stop list)')}</summary><ul class="note">${(ap.hardStop || []).map((x) => `<li>${esc(tx(x))}</li>`).join('')}<li>${tt('Balanced also: anything the Blueprint marks as owner-only')}</li></ul>
       <p class="note">${tt('Autopilot also turns on auto-resume after a crash. It never approves a source document and never pushes; the budget and the memory guard still apply.')}</p></details>
-    <h3 style="margin-top:18px">${tt('Recovery and memory')}</h3>
+    <h3 style="margin-top:var(--sp-5)">${tt('Recovery and memory')}</h3>
     <label class="inline"><input type="checkbox" name="autoResume" ${c.recovery?.autoResume ? 'checked' : ''}> ${tt('Auto-resume after a crash (at most 2 times per hour per agent, not while memory is still under pressure)')}</label>
     <div class="grid2"><div><label>${tt('Max concurrent agents')}</label><input name="maxAgents" type="number" min="1" max="20" value="${c.recovery?.maxAgents || 4}"></div>
       <p class="note">${tt('The lead is told this limit. Starting more, or starting while swap is above 80 %, asks you first.')}</p></div>
-    <h3 style="margin-top:18px">Standup</h3>
+    <h3 style="margin-top:var(--sp-5)">Standup</h3>
     <div class="grid2"><div><label>${tt('Daily standup at (local time)')}</label><input name="standupTime" type="time" value="${esc(c.standup?.time || '09:30')}"></div>
       <label class="inline" style="align-self:end"><input type="checkbox" name="standupMeeting" ${c.standup?.meeting !== false ? 'checked' : ''}> ${tt('The team meets at the table for it')}</label></div>
     <p class="note">${tt('Made from the Squad Log (done, doing, blocked by per agent), no model call. It shows in the Standup tab.')}</p>
-    <h3 style="margin-top:18px">${tt('Voice (this Floor\'s default)')}</h3>
+    <h3 style="margin-top:var(--sp-5)">${tt('Voice (this Floor\'s default)')}</h3>
     <p class="note">${tt('How this Floor\'s agents speak unless an agent sets its own (Desk → Profile → Voice). Auto picks Indonesian or English from the words of each line.')}</p>
     ${voiceControlsHtml(c.voice?.lang || 'auto', c.voice?.settings || null)}
     <div class="row"><button type="button" class="small ghost" data-vpreview>${tt('Preview')}</button><div class="grow" id="dVErr"></div></div>
-    <h3 style="margin-top:18px">${tt('Squad Log and Audit')}</h3>
+    <h3 style="margin-top:var(--sp-5)">${tt('Squad Log and Audit')}</h3>
     <label class="inline"><input type="checkbox" name="logMessages" ${c.log?.messages !== false ? 'checked' : ''}> ${tt('Log message text (tasks, messages between agents, questions and answers). Off: metadata only.')}</label>
     <label class="inline"><input type="checkbox" name="logMask" ${c.log?.maskPersonalData !== false ? 'checked' : ''}> ${tt('Mask personal data (e-mail, phone, national id and bank account numbers). Secrets are always removed.')}</label>
     <label class="inline"><input type="checkbox" name="auditAuto" ${c.audit?.auto ? 'checked' : ''}> ${tt('Audit automatically after a sprint closes')}</label>
     <label>${tt('Audit model')}</label>${segHtml('auditModel', [['sonnet', 'Sonnet'], ['haiku', 'Haiku'], ['opus', 'Opus']], c.audit?.model || 'sonnet')}
-    <h3 style="margin-top:18px">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
-    <h3 style="margin-top:18px">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
-    <h3 style="margin-top:18px">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
+    <h3 style="margin-top:var(--sp-5)">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
+    <h3 style="margin-top:var(--sp-5)">${tt('Servers')}</h3>
+    <p class="note">${tt('The servers DevOps may reach: a host alias from ~/.ssh/config or user@host, and what it is for. Each one allows <code>ssh &lt;host&gt; …</code> in this Space (also in background runs) and is listed in the DevOps prompt; anything else is local development.')}</p>
+    <div id="dServers">${(c.servers || []).map(serverRowHtml).join('')}</div>
+    <button type="button" class="small" data-addserver>${tt('+ Add server')}</button>
+    <h3 style="margin-top:var(--sp-5)">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
+    <h3 style="margin-top:var(--sp-5)">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
   `<button class="ghost danger" data-remove>${tt('Remove Floor')}</button><span class="spacer"></span><button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
   bindSegs(body);
   body.querySelector('#dLang').onchange = (e) => setLang(e.target.value);   // per browser, not saved with the Floor
@@ -107,6 +113,9 @@ async function floorSettings() {
   body.querySelector('[data-vpreview]').onclick = () => { const c = readVoiceControls(body); previewVoice({ lang: c.lang, settings: c.settings }, body.querySelector('#dVErr')); };
   loadMerges(f.id, body.querySelector('#dMerges'));
   loadRepos(f.id, body.querySelector('#dRepos'), f.agents);
+  const servers = body.querySelector('#dServers');
+  servers.onclick = (e) => e.target.closest('[data-rmserver]')?.closest('.serverRow').remove();
+  body.querySelector('[data-addserver]').onclick = () => { servers.insertAdjacentHTML('beforeend', serverRowHtml({})); servers.lastElementChild.querySelector('input').focus(); };
   body.querySelector('[data-remove]').onclick = async () => {
     if (!confirm(tt('Remove this Floor from the Building? The project directory and its files stay untouched.'))) return;
     try { await api('DELETE', `/api/floors/${f.id}`); closeModal(); toast(tt('Floor removed')); location.hash = '#/'; } catch (e) { fail(e); }
@@ -119,7 +128,8 @@ async function floorSettings() {
         budget: { usd: Number(v('budgetUsd')) || 0, period: segValue(form, 'budgetPeriod') }, sprint: { autoNext: form.elements.autoNext.checked },
         log: { messages: form.elements.logMessages.checked, maskPersonalData: form.elements.logMask.checked },
         audit: { auto: form.elements.auditAuto.checked, model: segValue(form, 'auditModel') }, recovery: { autoResume: form.elements.autoResume.checked, maxAgents: Number(v('maxAgents')) || 4 },
-        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form), voice: readVoiceControls(form) });
+        autopilot: segValue(form, 'autopilot'), standup: { time: v('standupTime') || '09:30', meeting: form.elements.standupMeeting.checked }, autopilotTimeoutSec: Math.round((Number(v('apTimeout')) || 3) * 60), git: readGit(form), voice: readVoiceControls(form),
+        servers: [...servers.querySelectorAll('.serverRow')].map((r) => ({ host: r.querySelector('[data-host]').value.trim(), purpose: r.querySelector('[data-purpose]').value.trim() })).filter((s) => s.host) });
       closeModal(); toast(tt('Floor saved')); ctx.refresh();
     } catch (e) { fail(e); }
   };
@@ -140,7 +150,7 @@ async function loadMerges(floorId, el) {
     approval: m.approval ? tt('Approved {date}.', { date: esc(new Date(m.approval.approvedAt).toLocaleString()) }) : tt('Not approved on this machine yet.') };
   const policy = (p.pushPolicy === 'never' ? tt('{policy}, gate {gate}, push: never. {approval}', vars) : tt('{policy}, gate {gate}, push: after merge. {approval}', vars))
     + (m.running ? ` <b>${tt('A merge is running.')}</b>` : '');
-  const cands = m.candidates.map((c) => `<div class="row" style="margin-top:6px"><code class="grow ellipsis">${esc(c.branch)}</code>${c.lastResult ? `<span class="chip">${esc(RESULT_TEXT[c.lastResult])}</span>` : ''}<button type="button" class="small" data-merge="${esc(c.branch)}">${tt('Merge now')}</button></div>`).join('');
+  const cands = m.candidates.map((c) => `<div class="row" style="margin-top:var(--sp-2)"><code class="grow ellipsis">${esc(c.branch)}</code>${c.lastResult ? `<span class="chip">${esc(RESULT_TEXT[c.lastResult])}</span>` : ''}<button type="button" class="small" data-merge="${esc(c.branch)}">${tt('Merge now')}</button></div>`).join('');
   const log = m.log.slice(0, 8).map((e) => `<li><b class="${e.result === 'merged' ? 'ok' : ''}">${esc(RESULT_TEXT[e.result] || e.result)}</b> <code>${esc(e.branch)}</code> · ${esc(new Date(e.ts).toLocaleString())} · ${esc(TRIGGER_TEXT[e.trigger] || e.trigger)}${e.reason ? ` · ${esc(tx(e.reason))}` : ''}${e.push ? ` · ${e.push.ok ? tt('push ok') : tt('push failed')}` : ''}</li>`).join('');
   const sp = m.sprint;
   const CHECK = { branch: tt('branch'), release: 'RELEASE.md', closingCommit: tt('closing commit'), cleanTree: tt('clean tree'), qaPass: tt('final QA PASS') };
@@ -148,7 +158,7 @@ async function loadMerges(floorId, el) {
     ${Object.entries(sp.checks).map(([k, ok]) => `${ok ? '✓' : '·'} ${CHECK[k]}`).join(', ')}${sp.autoNext ? ` · ${tt('next sprint starts automatically')}` : ''}</p>` : '';
   el.innerHTML = `<p style="margin-top:0">${policy}</p>${sprintHtml}
     <b>${tt('Ready to merge')}</b>${cands || `<div class="empty">${tt('No unmerged branches for this branch strategy.')}</div>`}
-    <b style="display:block;margin-top:10px">${tt('Last merges')}</b>${log ? `<ul style="padding-left:18px;margin:4px 0">${log}</ul>` : `<div class="empty">${tt('None yet.')}</div>`}`;
+    <b style="display:block;margin-top:var(--sp-3)">${tt('Last merges')}</b>${log ? `<ul style="padding-left:var(--sp-5);margin:var(--sp-1) 0">${log}</ul>` : `<div class="empty">${tt('None yet.')}</div>`}`;
   el.querySelectorAll('[data-merge]').forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try { await api('POST', `/api/floors/${floorId}/merges`, { branch: b.dataset.merge }); toast(tt('Merge started; the result appears here and in Attention')); setTimeout(() => loadMerges(floorId, el), 3000); }
@@ -158,7 +168,7 @@ async function loadMerges(floorId, el) {
 
 async function templateDiff(el) {
   const d = await api('GET', `/api/floors/${floorId()}/agents/${el.dataset.agent}/diff`);
-  const body = wire(openModal(frame(tt('Update {role}: v{from} → v{to}', { role: esc(d.role), from: d.from, to: d.to }), `<p class="note" style="margin-top:12px">${tt('Changes in the Role Template. The agent\'s overrides are kept either way.')}</p>${diffHtml(d.diff)}`,
+  const body = wire(openModal(frame(tt('Update {role}: v{from} → v{to}', { role: esc(d.role), from: d.from, to: d.to }), `<p class="note" style="margin-top:var(--sp-3)">${tt('Changes in the Role Template. The agent\'s overrides are kept either way.')}</p>${diffHtml(d.diff)}`,
     `<button class="ghost" data-act-keep>${tt('Keep current')}</button><button class="gold" data-act-update>${tt('Update')}</button>`)));
   body.querySelector('[data-act-update]').onclick = async () => { await templateAction(el.dataset.agent, 'update'); closeModal(); };
   body.querySelector('[data-act-keep]').onclick = async () => { await templateAction(el.dataset.agent, 'keep'); closeModal(); };

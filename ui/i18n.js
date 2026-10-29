@@ -7,7 +7,16 @@
 // English.
 export const LANGS = { en: 'English', id: 'Bahasa Indonesia' };
 const KEY = 'aisquad.lang';
-export const LANG = (() => { try { const l = localStorage.getItem(KEY); return LANGS[l] ? l : 'en'; } catch { return 'en'; } })();
+// the language (1.2.0, on the first paint): this browser's choice (Menu → Language), else the Building's (the
+// server puts it on <html data-lang>), else the browser's own (id-* → Bahasa Indonesia), else English
+export function pickLang({ stored, building, browser = [] } = {}) {
+  for (const l of [stored, building]) if (LANGS[l]) return l;
+  const b = browser.find((x) => /^(id|en)\b/i.test(x));
+  return b && /^id/i.test(b) ? 'id' : 'en';
+}
+const stored = (() => { try { return localStorage.getItem(KEY); } catch { return null; } })();
+export const LANG = pickLang({ stored, building: globalThis.document?.documentElement.dataset.lang, browser: globalThis.navigator?.languages || [] });
+if (globalThis.document) document.documentElement.lang = LANG;
 let table = {}, patterns = [];
 
 export function setTable(t) {
@@ -36,7 +45,7 @@ export function tx(s) {
   }
   return str;
 }
-export function setLang(l) {
+export function setLang(l) {                                 // this browser; the menu also saves it for the Building
   try { localStorage.setItem(KEY, LANGS[l] ? l : 'en'); } catch { /* private mode */ }
   location.reload();                                         // every module renders with the new table
 }

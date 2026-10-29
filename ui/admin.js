@@ -189,7 +189,7 @@ async function openAdmin(tab = 'spaces') {
         const box = body.querySelector(`[data-diff="${el.dataset.change}"]`);
         if (box.innerHTML) { box.innerHTML = ''; return; }
         const c = await api('GET', `/api/history/${el.dataset.change}`);
-        box.innerHTML = `${c.files.map((f) => `<div class="note mono" style="margin-top:8px">${esc(f.key)}${f.created ? ` · ${t('created')}` : ''}</div>${diffHtml(f.diff)}`).join('')}
+        box.innerHTML = `${c.files.map((f) => `<div class="note mono" style="margin-top:var(--sp-2)">${esc(f.key)}${f.created ? ` · ${t('created')}` : ''}</div>${diffHtml(f.diff)}`).join('')}
           <div class="row"><span class="spacer"></span><button class="small ghost danger" data-rollback="${esc(c.id)}">${t('Roll back')}</button></div>`;
         return;
       }

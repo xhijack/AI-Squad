@@ -16,6 +16,7 @@ import * as blueprints from './blueprints.js';
 import * as skills from './skills.js';
 import * as recovery from './recovery.js';
 import * as autopilot from './autopilot.js';
+import * as permits from './permits.js';
 import * as voiceLib from './voice.js';
 import * as reposLib from './repos.js';
 import * as kpi from './kpi.js';
@@ -111,6 +112,8 @@ export function cleanFloor(f = {}, prev = {}) {
     // the Space: kind, access, where its auto memory lives, its shift and machine (server/space.js)
     ...space.cleanSpace({ kind: pick('kind'), access: pick('access'), memory: pick('memory'), shift: pick('shift'), node: pick('node'), erpnext: pick('erpnext') }),
     // the Squad Blueprint this Floor follows (its text is kept in .claude/aisquad/blueprint.md)
+    // the servers DevOps may reach with ssh (1.0.1, server/permits.js; checked in updateFloorConfig)
+    ...(pick('servers')?.length ? { servers: pick('servers') } : {}),
     ...(pick('blueprint')?.id ? { blueprint: { id: String(pick('blueprint').id).replace(/[^\w-]/g, '').slice(0, 60), version: Math.max(1, parseInt(pick('blueprint').version, 10) || 1) } } : {}),
     desks: (Array.isArray(pick('desks')) ? pick('desks') : []).filter((d) => d && d.agent).map((d) => ({
       agent: String(d.agent), x: num(d.x), z: num(d.z), ry: num(d.ry, 0, 7), device: DESK_DEVICES.includes(d.device) ? d.device : 'laptop' })),
@@ -210,6 +213,7 @@ export function generate(root) {
     writeText(path.join(agentsDir(root), a.id + '.md'), renderAgentFile(eff, { floorName: floor.name, git, workflow: floor.workflow, standard, skillName: (n) => skills.agentSkillName(root, n),
       memory: a === runsSquad ? recovery.memoryRules(floor.recovery.maxAgents) : null,
       autopilot: a === runsSquad ? autopilot.leadRules(floor.autopilot, { timeoutSec: floor.autopilotTimeoutSec, questionsFile: sprint.hasPack(root) ? 'docs/squad/QUESTIONS.md' : 'docs/QUESTIONS.md' }) : null,
+      servers: a.role.template === 'devops-engineer' ? floor.servers || [] : [],
       repos: a === runsSquad ? reposLib.leadRepos(root, repoList, a.id, localRepoPaths(root)) : reposLib.agentRepos(root, repoList, a.id, localRepoPaths(root)),
       lead: a === runsSquad, context: ctxLines }));
   }
@@ -406,11 +410,13 @@ export function templateAction(root, id, action) {
 
 export function updateFloorConfig(root, input) {
   const cur = readFloor(root);
+  if (input.servers !== undefined) input = { ...input, servers: permits.cleanServers(input.servers) };
   const floor = cleanFloor(input, cur.floor);
   if (floor.memory === 'repo' && cur.floor.memory !== 'repo') space.adoptMemory(root);   // what Claude Code learned here comes along
   const ids = new Set(cur.team.agents.map((a) => a.id));
   floor.desks = floor.desks.filter((d) => ids.has(d.agent));
   writeFloor(root, floor);
+  if (input.servers !== undefined) permits.syncServerRules(root, cur.floor.servers || [], floor.servers || []);
   if (input.git) { const g = cleanGit(input.git, cur.git); writeGit(root, g); applyAttribution(root, g); }
   if (floor.workflow === 'squad-sprint' && !sprint.hasPack(root)) sprint.scaffold(root, { git: readFloor(root).git, agents: cur.team.agents });
   generate(root);

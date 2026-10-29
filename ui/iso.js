@@ -12,6 +12,8 @@ import { NavGrid, footprints, Walker } from './nav.js';
 import { lookFor, agentStatus, floorLabelHtml, STATION_SCALE } from './scene.js';
 import { t as tt } from './i18n.js';
 import { Office } from './office.js';
+import { TAG_HTML, setTagState, applySpread } from './tags.js';
+import { easeStep } from './motion.js';
 
 const SLAB = .36;
 const STATE_RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
@@ -109,7 +111,7 @@ export class IsoScene {
       const desk = desks[i];
       const seat = { x: desk.x, z: desk.z, ry: desk.ry || 0 };
       const back = rot(0, -.9 * STATION_SCALE, seat.ry);
-      const el = Object.assign(document.createElement('div'), { innerHTML: '<span class="q" aria-hidden="true">?</span><div class="z" aria-hidden="true">z z z</div><span class="n"></span><div class="a"></div><div class="say" hidden></div>' });
+      const el = Object.assign(document.createElement('div'), { innerHTML: `${TAG_HTML}<div class="say" hidden></div>` });
       el.querySelector('.n').addEventListener('click', () => this.handlers.onPickAgent?.(f.id, a.id));
       el.querySelector('.n').style.pointerEvents = 'auto';
       this.layer.append(el);
@@ -124,22 +126,21 @@ export class IsoScene {
     if (r.a.state !== a.state && a.state === 'idle') r.idleSince = performance.now() / 1000;
     r.a = a;
     const name = String(a.displayName || '').split(' - ')[0];
-    const cls = `nlabel isoAgent ${a.state || 'stopped'}${a.standby ? ' standby' : ''}`;
-    if (r.el.className !== cls) r.el.className = cls;
-    const n = r.el.querySelector('.n');
-    if (n.textContent !== name) n.textContent = name;
+    const k = setTagState(r.el, a);                                    // the state is in the tag (1.2.0)
+    const cls = `nlabel isoAgent ${k}`, keep = ['faded', 'sel'].filter((c) => r.el.classList.contains(c)).map((c) => ` ${c}`).join('');
+    if (r.el.className !== cls + keep) r.el.className = cls + keep;
+    const n = r.el.querySelector('.n'), nm = n.querySelector('.nm');
+    if (nm.textContent !== name) nm.textContent = name;
     const color = a.appearance?.shirt || '#3d82d6';
     n.style.background = color; n.style.color = luminance(color) > .6 ? '#1f2937' : '#fff';
-    const s = agentStatus(a);
-    if (r.el.querySelector('.a').textContent !== s) r.el.querySelector('.a').textContent = s;
-    r.el.title = `${a.displayName}: ${a.activity || a.state}`;
+    r.el.title = `${a.displayName}: ${agentStatus(a)}`;
   }
 
   // ---------- life: idle agents walk to a lounge spot, a meeting gathers at the table, work brings them back ----------
   tick(dt, t) {
     this.walking = false; this.animating = false;
     if (this.camGoal) {
-      const k = Math.min(1, dt * 6);
+      const k = easeStep(dt * 6);                                   // reduced motion: straight to the goal
       for (const p of ['x', 'y', 'zoom']) this.cam[p] += (this.camGoal[p] - this.cam[p]) * k;
       if (Math.abs(this.camGoal.zoom - this.cam.zoom) < .002 && Math.hypot(this.camGoal.x - this.cam.x, this.camGoal.y - this.cam.y) < .01) { Object.assign(this.cam, this.camGoal); this.camGoal = null; }
     }
@@ -298,6 +299,8 @@ export class IsoScene {
       items.push({ depth: r.w.x + r.w.z + (r.mode === 'desk' ? .05 : 0), draw: () => this.character(r, base, labelsOn) });
     }
     items.sort((a, b) => a.depth - b.depth).forEach((i) => i.draw());
+    // overlapping name tags: nudged up, the farther (smaller x + z) faded, the Desk's agent on top (ui/tags.js)
+    if (labelsOn) applySpread([...o.agents.values()].map((r) => ({ id: r.id, el: r.el, depth: -(r.w.x + r.w.z), selected: this.view.mode === 'desk' && this.view.agentId === r.id })));
     // the Floor's chip (Lobby) beside the right edge
     const lp = P(X1 + .6, 1.2, Z1 - 1);
     o.labelEl.hidden = labelsOn;

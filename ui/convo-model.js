@@ -24,11 +24,12 @@ export function bubbleText(item) {
 }
 
 const isRecommended = (item, o) => /\(recommended\)/i.test(o.label) || item.autopilot?.recommended === o.n;
-// -> { mode: 'options' | 'reply' | 'view', options, canReply, dismiss, act }
+// -> { mode: 'options' | 'ask' | 'reply' | 'view', options, canReply, dismiss, act } (ask: several questions or multi-select)
 // act: the action the existing Attention handlers use for an option (answer, crash-answer)
 export function actionsFor(item) {
   const own = ['price', 'handoff', 'contract', 'canary'].includes(item.kind);                     // the server wrote these labels: translated
   const options = (item.options || []).map((o) => ({ ...o, recommended: !o.free && isRecommended(item, o), label: own ? tx(o.label) : String(o.label).replace(/\s*\(recommended\)\s*/i, ' ').trim() }));
+  if (item.answerable && item.questions?.length && (item.questions.length > 1 || item.questions.some((q) => q.multiSelect))) return { mode: 'ask', options: [], canReply: false, dismiss: '' };
   if (item.kind === 'reply' || item.kind === 'finished') return { mode: 'reply', options: [], canReply: item.canReply !== false, dismiss: item.kind === 'finished' ? 'OK' : 'Dismiss' };
   if (item.kind === 'crash') return { mode: 'options', options, canReply: false, dismiss: 'Dismiss', act: 'crash-answer' };
   if (item.kind === 'decided') return { mode: 'options', options, canReply: false, dismiss: 'OK', act: 'answer' };

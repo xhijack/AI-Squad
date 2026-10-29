@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The Office view (0.17), drawn by the Iso Pixel renderer: the whole company on one floor plan. Departments at the
-// back with the Server room, projects in the middle, the Lobby (the dispatcher's queue) and the Owner's room
-// (approvals) at the front. The layout comes from the Scene Model (officeLayout); this file only draws it and
+// back with the Server room, projects in the middle, the Lobby (the dispatcher's queue), the shared meeting room,
+// the pantry and the Owner's room (approvals) at the front. The layout comes from the Scene Model (officeLayout); this file only draws it and
 // answers clicks: a room opens its Space, an agent its Desk, the Lobby the queue, the Owner's room the approvals,
 // the Server room the meter.
 import { officeLayout, roomAt, RX, RZ, dirOf } from './scene-model.js';
@@ -9,7 +9,7 @@ import { floorLabelHtml } from './scene.js';
 import { t as tt } from './i18n.js';
 
 const WALL = 1.1;
-const ROOM_FILL = { department: '#ead9b8', project: '#dfe6ee', server: '#d3d9e1', lobby: '#efe3cf', owner: '#e6dcee' };
+const ROOM_FILL = { department: '#ead9b8', project: '#dfe6ee', server: '#d3d9e1', lobby: '#efe3cf', meeting: '#e3e8dc', pantry: '#f1e4d4', owner: '#e6dcee' };
 const STATE_RING = { working: '#16a34a', waiting: '#dc2626', idle: '#d97706', stopped: '#9ca3af' };
 const QUEUE_LOOKS = ['#3d82d6', '#e2574c', '#16a34a', '#d97706', '#7c5cd6', '#0ea5a4', '#db2777', '#64748b'];
 
@@ -44,6 +44,7 @@ export class Office {
     if (r.kind === 'server') return h.onPickRack?.();
     if (r.kind === 'lobby') return h.onPickQueue?.();
     if (r.kind === 'owner') return h.onPickOwner?.();
+    if (r.kind === 'meeting' || r.kind === 'pantry') return null;
     return h.onPickFloor?.(r.id);
   }
   hide() { for (const el of [...this.roomEls.values(), ...this.agentEls.values()]) el.hidden = true; }
@@ -84,6 +85,7 @@ export class Office {
         for (let i = 0; i < n; i++) { const qx = x0 + 1.2 + i * .85, qz = z0 + 2.8; items.push({ depth: qx + qz, draw: () => this.chibi({ state: 'idle', appearance: { shirt: QUEUE_LOOKS[i % QUEUE_LOOKS.length], style: ['bob', 'spiky', 'pony', 'buns'][i % 4] } }, 'stand', 1, qx, qz) }); }
         items.push({ depth: x0 + 7 + z0 + 1, draw: () => s.sprite('dev:sofa:4', x0 + 6.4, z0 + 1.2, 0) });
       }
+      if (r.kind === 'meeting' || r.kind === 'pantry') for (const dv of r.devices) items.push({ depth: dv.x + dv.z, draw: () => s.sprite(`dev:${dv.type}:${dirOf(dv.ry)}`, dv.x, dv.z, 0) });
       if (r.kind === 'owner') {
         const dk = r.desks[0];
         items.push({ depth: dk.x + dk.z + .8, draw: () => s.sprite('desk:lead:dual-monitor:0', dk.x, dk.z, 0) });
@@ -118,6 +120,8 @@ export class Office {
       if (el) {
         const html = f ? `${floorLabelHtml(f)}<span class="k">${f.kind === 'department' ? tt('Department') : tt('Project')}</span>`
           : r.kind === 'lobby' ? `<b>${tt('Lobby')}</b> <span class="${company.queued ? 'q' : 'm'}">${tt('{n} queued', { n: company.queued || 0 })}</span>`
+          : r.kind === 'meeting' ? `<b>${tt('Meeting room')}</b>`
+          : r.kind === 'pantry' ? `<b>${tt('Pantry')}</b>`
           : r.kind === 'owner' ? `<b>${tt('Owner')}</b> <span class="${company.attention ? 'q' : 'm'}">${tt('{n} waiting for you', { n: company.attention || 0 })}</span>${company.targets?.total ? ` <span class="${company.targets.behind ? 'q' : 'm'}">${tt('{met}/{n} targets', { met: company.targets.met, n: company.targets.total })}</span>` : ''}`
           : `<b>${tt('Server room')}</b> <span class="m">${esc(serverText(company))}</span>`;
         if (el.innerHTML !== html) el.innerHTML = html;

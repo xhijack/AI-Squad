@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Admin → Targets (1.1): the numbers every Space works against. Per Space: each target with its value now, its goal,
+// Admin → Targets (1.3): the numbers every Space works against. Per Space: each target with its value now, its goal,
 // its status and where the value comes from; the Owner adds targets and sets goals, people enter manual values,
 // the server measures ERPNext and CSV targets; the Space's webhook address for outside systems.
 import { esc, api, toast, ago } from './lib.js';

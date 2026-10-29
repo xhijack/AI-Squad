@@ -2,15 +2,23 @@
 // Desk → Chat (0.14): talk to one agent directly. "This Space": the agent in its project (a running Desk session
 // gets the message typed in, else a background job answers). "General": the same agent with no project, only its
 // role and the Company Brain. Messages from people go first in the dispatcher's queue.
-import { esc, api, toast, openModal, mdLite, ago } from './lib.js';
+import { esc, api, toast, openModal, mdLite, ago, oneAtATime, newKey } from './lib.js';
 import { ctx } from './ctx.js';
 import { t, tx } from './i18n.js';
 
 let timer = null;
 const CTX = { space: t('This Space'), general: t('General') };
+// tools a background reply was denied ("dontAsk"), with Allow and retry (narrow rules, the Owner) and Run on the Desk
+function deniedHtml(m, context) {
+  if (!m.denials?.length) return '';
+  const rules = m.denials.map((d) => d.rule).filter(Boolean);
+  return `<div class="denied"><b>${t('Denied in the background (no one could be asked):')}</b><ul>${m.denials.map((d) => `<li><code>${esc(d.tool)}</code> ${esc(d.command)}</li>`).join('')}</ul>
+    ${context === 'space' ? `<div class="row wrap">${rules.length ? `<button type="button" class="small gold" data-allow="${esc(m.id)}" data-rules="${esc(JSON.stringify(rules))}">${t('Allow and retry')}</button>` : `<span class="note">${t('No narrow rule fits; run it on the Desk.')}</span>`}
+      <button type="button" class="small" data-desk="${esc(m.id)}">${t('Run on the Desk')}</button></div>` : `<span class="note">${t('Ask it in the Space chat to allow it or run it on the Desk.')}</span>`}</div>`;
+}
 function messagesHtml(th) {
   if (!th.messages.length) return `<div class="empty">${t('No messages yet. Ask {name} anything, or give a direct instruction.', { name: esc(th.agent.displayName) })}</div>`;
-  return th.messages.map((m) => `<div class="msg ${esc(m.from)}"><div class="note">${esc(m.from === 'system' ? t('The AI Squad') : m.name || '')} · ${ago(m.ts)}${m.cost ? ` · $${(+m.cost).toFixed(2)}` : ''}</div><div class="bubble">${m.from === 'agent' ? mdLite(m.text) : esc(m.from === 'system' ? tx(m.text) : m.text)}</div></div>`).join('')
+  return th.messages.map((m) => `<div class="msg ${esc(m.from)}"><div class="note">${esc(m.from === 'system' ? t('The AI Squad') : m.name || '')} · ${ago(m.ts)}${m.cost ? ` · $${(+m.cost).toFixed(2)}` : ''}</div><div class="bubble">${m.from === 'agent' ? mdLite(m.text) : esc(m.from === 'system' ? tx(m.text) : m.text)}${deniedHtml(m, th.context)}</div></div>`).join('')
     + (th.awaiting ? `<div class="msg agent"><div class="bubble note">${th.awaiting.mode === 'queued' ? t('Waiting in the queue…') : th.awaiting.mode === 'typed' ? t('Typed into the Desk session; waiting for the answer…') : t('Thinking…')}</div></div>` : '');
 }
 async function openChat(floorId, agentId, context = 'space') {
@@ -38,18 +46,33 @@ async function openChat(floorId, agentId, context = 'space') {
     } catch { /* next time */ }
   };
   timer = setInterval(poll, 3000);
-  form.onsubmit = async (e) => {
+  log.onclick = async (e) => {
+    const b = e.target.closest('[data-allow], [data-desk]');
+    if (!b) return;
+    if (b.dataset.allow) {
+      const rules = JSON.parse(b.dataset.rules);
+      if (!confirm(t('Allow {rules} for every background run in this Space, then send the message again? The rules go into .claude/settings.json; remove them there to take them back.', { rules: rules.join(', ') }))) return;
+    }
+    b.disabled = true;
+    try {
+      const r = await api('POST', `/api/floors/${floorId}/agents/${agentId}/chat/${b.dataset.allow ? 'allow' : 'desk'}`, { msgId: b.dataset.allow || b.dataset.desk, context });
+      toast(r.delivery === 'queued' ? t('Queued: it starts by itself when there is room') : b.dataset.allow ? t('Allowed; running it again') : t('Typed into the Desk session; prompts reach Needs you'), 4000);
+      await poll();
+    } catch (err) { toast(tx(err.message), 6000); b.disabled = false; }
+  };
+  // one message per send (a double click, Ctrl+Enter and a click): one at a time, and its key makes a duplicate a no-op
+  form.onsubmit = (e) => {
     e.preventDefault();
     const text = ta.value.trim(); if (!text) return;
-    form.querySelector('button').disabled = true;
-    try {
-      const r = await api('POST', `/api/floors/${floorId}/agents/${agentId}/chat`, { text, context });
-      ta.value = '';
-      if (r.delivery === 'queued') toast(t('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) }), 6000);
-      await poll();
-    } catch (err) { toast(err.message, 5000); }
-    form.querySelector('button').disabled = false;
-    ta.focus();
+    form.dataset.key ||= newKey();
+    oneAtATime(form, async () => {
+      try {
+        const r = await api('POST', `/api/floors/${floorId}/agents/${agentId}/chat`, { text, context }, { key: form.dataset.key });
+        ta.value = ''; delete form.dataset.key;
+        if (r.delivery === 'queued') toast(t('Queued ({priority}, place {n}): {reason}. It starts by itself when there is room.', { priority: r.dispatch.priority, n: r.dispatch.position, reason: tx(r.dispatch.reason) }), 6000);
+        await poll();
+      } catch (err) { toast(err.message, 5000); }
+    }).then(() => ta.focus());
   };
   ta.focus();
 }

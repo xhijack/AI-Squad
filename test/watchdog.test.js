@@ -60,3 +60,16 @@ test('a running command keeps an agent off the idle list; the command itself can
   const long = wd.stallAlerts([{ id: 'a', displayName: 'Qori', state: 'working', lastTs: now, task: { ...task, stall: 'long' } }], {}, now);
   assert.deepEqual(long.map((x) => x.text), ['Qori: "e2e Playwright" has run 25 min, far longer than usual (7 min)'], 'even without assigned work');
 });
+
+test('stall keys change only with their condition: the task, the last activity or assignment', () => {
+  const now = Date.now();
+  const busy = { id: 'a', displayName: 'A', state: 'working', lastTs: now, task: { id: 'bash-1', label: 'build', stall: 'quiet', lastOutputAt: now - 12 * MIN, startedAt: now - 30 * MIN, elapsedMs: 30 * MIN, typicalMs: 0 } };
+  const k1 = wd.stallAlerts([busy], {}, now)[0], k2 = wd.stallAlerts([busy], {}, now + 5 * MIN)[0];
+  assert.deepEqual([k1.scope, k1.key, k2.key], ['task', 'task:bash-1', 'task:bash-1']);
+  assert.equal(k1.since, now - 12 * MIN);
+  const agents = [{ id: 'a', displayName: 'A', state: 'idle', lastTs: now - 11 * MIN }, { id: 'b', displayName: 'B', state: 'working', lastTs: now }];
+  const a1 = wd.stallAlerts(agents, { a: { assignedAt: now - 20 * MIN } }, now)[0];
+  assert.equal(a1.key, wd.stallAlerts(agents, { a: { assignedAt: now - 20 * MIN } }, now + 3 * MIN)[0].key, 'stable while nothing changes');
+  assert.notEqual(a1.key, wd.stallAlerts(agents, { a: { assignedAt: now - 1 * MIN } }, now + 12 * MIN)[0].key, 'a new assignment is a new condition');
+  assert.equal(wd.NOTICE_NOTIFY_MS, 15 * MIN);
+});

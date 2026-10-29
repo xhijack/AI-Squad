@@ -37,6 +37,7 @@ const OWNER_ROUTES = [
   /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/agents(\/[\w-]+(\/template)?)?$/,
   /^POST \/api\/floors\/[\w-]+\/(blueprint\/update|merge-approval|merges|skills\/install|docs\/approve)$/,
   /^POST \/api\/floors\/[\w-]+\/audits\/[\w-]+\/findings\/F\d+\/apply$/,
+  /^POST \/api\/floors\/[\w-]+\/agents\/[\w-]+\/chat\/allow$/,          // allow rules: only the Owner widens permissions
 ];
 // -> 'viewer' | 'member' | 'owner'
 export function requiredRole(method, pathname) {
@@ -66,7 +67,7 @@ export function hiddenPath(pathname, user) {
   return !!m && ownerFloors().has(m[1]);
 }
 
-// the cockpit's counts without the Owner-only Spaces (1.1)
+// the cockpit's counts without the Owner-only Spaces (1.3)
 function visibleTargets(hide) {
   const spaces = kpi.overview().spaces.filter((s) => !hide.has(s.id));
   const sum = (k) => spaces.reduce((n, s) => n + s[k], 0);
@@ -80,7 +81,7 @@ export function redact(pathname, out, user) {
   const hide = ownerFloors();
   if (!hide.size) return out;
   const keep = (x) => !hide.has(x?.floorId) && !hide.has(x?.id);
-  if (pathname === '/api/building') return { ...out, floors: out.floors.filter((f) => !hide.has(f.id)), attention: out.attention.filter((a) => !hide.has(a.floorId)), ...(out.targets ? { targets: visibleTargets(hide) } : {}) };
+  if (pathname === '/api/building') return { ...out, floors: out.floors.filter((f) => !hide.has(f.id)), attention: out.attention.filter((a) => !hide.has(a.floorId)), walks: (out.walks || []).filter((w) => !hide.has(w.from) && !hide.has(w.to)), ...(out.targets ? { targets: visibleTargets(hide) } : {}) };
   if (pathname === '/api/admin') return { ...out, spaces: out.spaces.filter(keep), agents: out.agents.filter((a) => !hide.has(a.floorId)), history: out.history.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/history') return { ...out, changes: out.changes.filter((h) => !hide.has(h.floorId)) };
   if (pathname === '/api/jobs') return { ...out, jobs: out.jobs.filter((j) => !hide.has(j.floorId)) };

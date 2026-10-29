@@ -196,3 +196,25 @@ test('Autopilot: older floor.json files stay off; the level and timeout reach th
   floors.updateFloorConfig(proj, { autopilot: 'off' });
   assert.doesNotMatch(read('.claude/agents/rina-project-manager.md'), /## Autopilot/);
 });
+
+test('Servers: each one allows ssh to it in the Space\'s settings and is listed in the DevOps prompt; removed ones are taken out', () => {
+  floors.addAgent(proj, { displayName: 'Dedi - DevOps', template: 'devops-engineer' });
+  const allow = () => json('.claude/settings.json').permissions?.allow || [];
+  floors.updateFloorConfig(proj, { servers: [{ host: 'erpnext@192.168.0.150', purpose: 'Staging ERPNext\n(bench)' }, { host: 'backup-box', purpose: '' }, { host: 'erpnext@192.168.0.150' }] });
+  assert.deepEqual(floors.readFloor(proj).floor.servers, [{ host: 'erpnext@192.168.0.150', purpose: 'Staging ERPNext (bench)' }, { host: 'backup-box', purpose: '' }]);
+  assert.ok(allow().includes('Bash(ssh erpnext@192.168.0.150 *)') && allow().includes('Bash(ssh backup-box *)'));
+  const ops = read('.claude/agents/dedi-devops.md');
+  assert.match(ops, /## Servers\n- `erpnext@192\.168\.0\.150`: Staging ERPNext \(bench\) \(reach it with `ssh erpnext@192\.168\.0\.150 <command>`; allowed, also in background runs\)\n- `backup-box` \(reach/);
+  assert.match(ops, /Only these are servers\. Everything else is this machine \(local development\)/);
+  assert.match(ops, /registered \(Floor settings → Servers\)/, 'the role template says where they come from');
+  assert.doesNotMatch(read('.claude/agents/rina-project-manager.md'), /## Servers/, 'only DevOps');
+  assert.throws(() => floors.updateFloorConfig(proj, { servers: [{ host: 'deploy@prod-db' }] }), /hard-stop/);
+  assert.throws(() => floors.updateFloorConfig(proj, { servers: [{ host: 'a b; rm -rf /' }] }), /host alias or user@host/);
+  floors.updateFloorConfig(proj, { servers: [{ host: 'backup-box' }] });
+  assert.ok(!allow().includes('Bash(ssh erpnext@192.168.0.150 *)') && allow().includes('Bash(ssh backup-box *)'));
+  floors.updateFloorConfig(proj, { name: 'Acme Shop' });
+  assert.equal(floors.readFloor(proj).floor.servers.length, 1, 'kept when not given');
+  floors.updateFloorConfig(proj, { servers: [] });
+  assert.equal(floors.readFloor(proj).floor.servers, undefined); assert.ok(!allow().some((r) => r.startsWith('Bash(ssh ')));
+  assert.doesNotMatch(read('.claude/agents/dedi-devops.md'), /## Servers/);
+});

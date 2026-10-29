@@ -38,9 +38,9 @@ function stepHtml() {
       <input id="wPath" data-w="path" value="${esc(w.path)}" placeholder="/home/you/projects/acme" spellcheck="false">
       <p class="note">${tt('Floor files go to <code>.claude/aisquad/</code> in this directory; generated agents to <code>.claude/agents/</code>. No secrets or absolute paths are written to the repo.')}</p>`;
     case 'Git': return gitHtml(w.git);
-    case 'Team': return `<p class="note" style="margin-top:12px">${tt('Agents are created from Role Templates. Overrides change one agent only: model and effort replace, skills add or remove, rules and prompt append, permissions can only get stricter.')}</p>
+    case 'Team': return `<p class="note" style="margin-top:var(--sp-3)">${tt('Agents are created from Role Templates. Overrides change one agent only: model and effort replace, skills add or remove, rules and prompt append, permissions can only get stricter.')}</p>
       <div id="wTeam">${w.team.map((m, i) => memberHtml(m, templates, { idx: i })).join('') || `<div class="empty">${tt('No agents yet. You can also add them later.')}</div>`}</div>
-      <div class="row wrap" style="margin-top:10px"><select id="wAddTpl" style="width:auto">${templates.map((t) => `<option value="${esc(t.role)}">${esc(t.title)}</option>`).join('')}</select><button type="button" id="wAdd">${tt('+ Add agent')}</button><button type="button" id="wSprintTeam" class="ghost">${tt('+ Squad Sprint team')}</button></div>`;
+      <div class="row wrap" style="margin-top:var(--sp-3)"><select id="wAddTpl" style="width:auto">${templates.map((t) => `<option value="${esc(t.role)}">${esc(t.title)}</option>`).join('')}</select><button type="button" id="wAdd">${tt('+ Add agent')}</button><button type="button" id="wSprintTeam" class="ghost">${tt('+ Squad Sprint team')}</button></div>`;
     case 'Workflow': return `<label>${tt('Workflow')}</label><div class="choice" data-choice="workflow">
         <button type="button" data-v="free-team" aria-pressed="${w.workflow === 'free-team'}"><b>Free Team</b><small>${tt('You give tasks to agents directly. Default.')}</small></button>
         <button type="button" data-v="squad-sprint" aria-pressed="${w.workflow === 'squad-sprint'}"><b>Squad Sprint</b><small>${tt('Lead plans a sprint board, QA gates every task.')}</small></button></div>
@@ -51,7 +51,7 @@ function stepHtml() {
       <p class="note">${tt('The Watchdog warns at 80 % of the budget and raises Attention at 100 % (estimated from transcript usage).')}</p>`;
     case 'Layout': return `<label>${tt('Layout preset')}</label><div class="choice" data-choice="layout">${LAYOUTS.map(([v, t, d]) => `<button type="button" data-v="${v}" aria-pressed="${w.layout === v}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
       <label for="wNum">${tt('Floor number')}</label><input id="wNum" type="number" min="2" max="99" data-w="number" value="${w.number}" style="max-width:120px">
-      <div class="card" style="margin-top:14px"><b>${tt('Summary')}</b><dl class="kv" style="margin-top:6px">
+      <div class="card" style="margin-top:var(--sp-4)"><b>${tt('Summary')}</b><dl class="kv" style="margin-top:var(--sp-2)">
         <dt>${tt('Project')}</dt><dd>${esc(w.name)}</dd><dt>${tt('Directory')}</dt><dd>${esc(w.path)} <span class="note">(${w.dirMode === 'new' ? tt('new, git init') : w.dirMode === 'clone' ? tt('clone {url}', { url: esc(w.url) }) : tt('existing')})</span></dd>
         <dt>${tt('Team')}</dt><dd>${w.team.length ? w.team.map((m) => esc(m.displayName || tt('(unnamed)'))).join(', ') : tt('none yet')}</dd>
         <dt>${tt('Workflow')}</dt><dd>${w.workflow === 'squad-sprint' ? 'Squad Sprint' : 'Free Team'}</dd>

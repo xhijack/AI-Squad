@@ -26,7 +26,7 @@ export function tieringHtml(x) {
   const sel = (tier) => `<select name="m-${tier}">${['haiku', 'sonnet', 'opus'].concat(s.models[tier] && !['haiku', 'sonnet', 'opus'].includes(s.models[tier]) ? [s.models[tier]] : []).map((m) => `<option ${m === s.models[tier] ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
   return `<form class="section" data-tiering><div class="sectionHead"><h3 class="grow">${t('Model tiering')}</h3><span class="badge ${s.enabled ? 'live' : ''}">${s.enabled ? t('On') : t('Off')}</span></div>
     <p class="note">${t('Background jobs run on the model their work needs: routine work (a new lead, a reply to a handoff, a result to file) one tier lighter than the role. Legal roles keep their model, an agent whose model you set keeps it, and Desk sessions and chats always use the role\'s model.')}</p>
-    <div class="grid4"><label class="row" style="flex-direction:row;align-items:center;margin-top:18px"><input type="checkbox" name="enabled" ${s.enabled ? 'checked' : ''}> ${t('Use model tiering')}</label>
+    <div class="grid4"><label class="row" style="flex-direction:row;align-items:center;margin-top:var(--sp-5)"><input type="checkbox" name="enabled" ${s.enabled ? 'checked' : ''}> ${t('Use model tiering')}</label>
       <label>${t('Light tier')}${sel('light')}</label><label>${t('Standard tier')}${sel('standard')}</label><label>${t('Deep tier')}${sel('deep')}</label></div>
     <div class="kpis"><div><span>${t('Cost per job before')}</span><b>${usd(st.before.avg)}</b><span>${t('{n} jobs', { n: st.before.jobs })}</span></div>
       <div><span>${t('Cost per job since')}</span><b>${usd(st.after.avg)}</b><span>${t('{n} jobs', { n: st.after.jobs })}</span></div>
