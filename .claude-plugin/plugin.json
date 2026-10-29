@@ -1,6 +1,6 @@
 {
   "name": "aisquad",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "The AI Squad: run Claude Code agent teams as Floors of a 3D building. Form teams from Role Templates, start agents, give tasks and answer their questions from the browser.",
   "author": {
     "name": "PT Sopwer Teknologi Indonesia"

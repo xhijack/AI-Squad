@@ -11,7 +11,7 @@
       "name": "aisquad",
       "source": "./",
       "description": "The AI Squad: Claude Code agent teams as Floors of a 3D building, with Squad Blueprints and built-in skills.",
-      "version": "1.6.0"
+      "version": "1.6.1"
     }
   ]
 }

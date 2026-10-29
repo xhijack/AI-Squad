@@ -1035,6 +1035,22 @@ Closes the Sprint 13 "Not yet": targets from other integrations (`mcp:<integrati
 - Screenshots `playground/reference/sprint16-*.png` at 1440 and 390 are **pending**: swap stood at 96–99 % for the whole sprint, so Chrome was not run (the UI views were rendered to strings in Node as a smoke check instead).
 - Not yet: OAuth servers as a target source (they need the browser sign-in Claude Code keeps), the old SSE transport, MCP resources as a source, Finance and Support Blueprints with integration hints, editing an existing target's integration source in place (remove and add it again).
 
+## Hotfix 1.6.1: a key inside an MCP server's URL (29 Oct 2026)
+
+- **Cause.** The product owner found it on 8097: the `postiz` server in `~/.claude.json` carries its API key as a path segment of its URL (`https://<host>/api/mcp/<key>`). 1.6.0 masked headers, env values, arguments and query values with credential names, but returned the URL's path as it was, so `GET /api/integrations` and Admin → Integrations showed the key.
+- **Fix** (`server/mask.js`): one place for an integration's masking.
+  - URLs: path segments and query values that look like keys (20+ characters of `[A-Za-z0-9_-]` with letters and digits, or 32+ of any of them, UUIDs, JWTs) become `••••` plus the last 4 characters. So do query parameters named like key, token, secret, auth, sig, pass, cred, session or code, and the whole userinfo (`user:pass@`). The host and ordinary paths stay readable (`https://postiz.sopwer.net/api/mcp/••••a1b2`, `/api/mcp`, `/v1/sse`, `${VAR}` references).
+  - URLs in arguments (`mcp-remote https://…`) are masked the same way.
+  - The MCP client scrubs every error before it leaves `server/mcp.js`: a server or `fetch` that echoes the URL, a stderr line, an RPC error. Every URL in the text is masked, and every literal secret of the definition (URL keys, secret headers, env values, arguments) is replaced. So the real URL is used only inside the client at call time.
+  - A tool's result is scrubbed before Try shows it, and so are tool descriptions and the server name kept from Test connection.
+  - A test error stored by 1.6.0 is masked again whenever it is shown.
+- **Checked for the same leak:** `integration.tested` and `kpi.measured` carry no URL. `kpi.failed` and the values file carry only scrubbed errors. KPI.md names the server only. The Audit, Telegram and Admin → Changes read only these, and integration marks are not in the change history.
+- **Tests:**
+  - `mask.test.js`: path keys, UUID, JWT, credential-named and key-like query values, userinfo, ordinary paths unchanged, scrubbed text and results, client errors from a fake server that echoes the URL.
+  - `integrations.test.js`: the list endpoint never contains the key, and neither do a failed test, a call's error and result, `integrations.json` or the Squad Log; a stored 1.6.0 error is masked on the way out.
+  - No test reads the real `~/.claude.json`.
+- `npm test`: 522 tests, 521 pass, 1 skipped (the Chrome test, which skips itself while swap is high).
+
 ## How to run
 
 ```
