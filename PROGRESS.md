@@ -982,6 +982,19 @@ Closes the two "Not yet" items PROGRESS gave to this sprint: a target below its 
 - Dogfood on a playground Building (port 8196, fake Claude, a fixed meminfo): a Marketing Space from the Blueprint, the daily content draft turned on and run, Posts behind (the notice), Leads behind (the content writer's plan card), the Squad Log entries.
 - Not yet: targets from integrations (`mcp:<integration>`, Sprint 16); Finance and Support Blueprints; the guide on Telegram; a routine's own result page (the link opens the agent's Desk, where its jobs are listed); cadence from an outside calendar.
 
+## Hotfix 1.5.1: a relative AISQUAD_HOME (29 Oct 2026)
+
+- **Cause.** A background job runs `sh -c` in its Space's folder, and its output goes to `<home>/jobs/<id>.jsonl`, `.err` and `.exit`. When the server is started with a relative `AISQUAD_HOME` (as `scripts/dev.sh` does with `playground/home`), those paths point inside the Space's folder, where no such directory exists. The shell cannot write any of the files, so every job ends "without a result".
+- **The same mistake elsewhere.** The relative home also broke:
+  - the agent's secrets env file, which tmux sources in the Space's folder;
+  - the attachments check, which compares an absolute path with a relative base, so attachments were dropped;
+  - the deny rules that keep agents out of the home;
+  - the `AISQUAD_HOME` given to agent hooks.
+- **Already safe.** Transcripts, KPI, cadence, the guide, backups and workers only build paths inside the server process, so they were not affected. The systemd unit already resolved its paths.
+- **Fix.** `config.js` resolves `AISQUAD_HOME`, `CLAUDE_HOME`, `AISQUAD_PROC` and a `CLAUDE_BIN` given as a path once, against the folder the server was started from. `configure()` does the same for overrides. A bare `claude` stays a PATH lookup. (`2e75fc3`)
+- **Regression test** (`test/home.test.js`). It starts the job runner with a relative home and a fake Claude given by relative path, with a different folder per Space. Each job ends with its result and nothing lands in the Space's folder. It also checks the deny rules. Without the fix it fails ("ended without a result").
+- `npm test`: 493 tests, 492 pass, 1 skipped (the Chrome test, which skips itself while swap is high).
+
 ## How to run
 
 ```
