@@ -151,7 +151,7 @@ test('the interview: one question per message, buttons, toggles, text, numbers, 
 test('resume, a change on the web seen on Telegram, Cancel', async () => {
   guide.answer({ business: { ...guide.load().answers.business, name: 'Kasir Pintar' } }, 1, { via: 'web' });
   await say('/guide');
-  assert.match(last().text, /^Kamu ada di langkah 2 dari 7 \(Bisnismu\)/);
+  assert.match(last().text, /^Terakhir kamu berhenti di: Bisnismu\. Lanjutkan/);
   await tap('Lanjutkan');
   assert.match(last().text, /Apa bisnismu\? Pilih yang paling mendekati\.\n\nSekarang: Produk SaaS/);
   await tap('Produk SaaS');

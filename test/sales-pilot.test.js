@@ -64,7 +64,8 @@ test('three Spaces, ERPNext set up with a key per role', async () => {
   assert.equal(got.keys.owner.user, 'ramdani@sopwer.id');
   assert.ok(!JSON.stringify(got).includes('SECRET'), 'secrets never leave');
   const test1 = (await call('POST', '/api/erpnext/test')).body;
-  assert.deepEqual(Object.values(test1).map((x) => x.ok), [true, true, true]);
+  assert.deepEqual(['sales', 'delivery', 'owner'].map((r) => test1[r].ok), [true, true, true]);
+  assert.deepEqual(test1.finance, { ok: false, error: 'no key' }, 'the finance key (1.7) is not set here');
   // the agent file says how handoffs work, and ERPNext only where the Space has a role
   floors.generate(S.sales.root); floors.generate(S.mkt.root);
   assert.match(fs.readFileSync(path.join(S.sales.root, '.claude', 'agents', `${S.sales.agent}.md`), 'utf8'), /never submit it/);

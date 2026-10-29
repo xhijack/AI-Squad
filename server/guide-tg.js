@@ -15,7 +15,7 @@ const L = {
   en: {
     refuse: 'The company guide is the Owner\'s: it decides which squads the company has. Ask the Owner to run it, or open The AI Squad.',
     hello: 'The company guide: a few questions about your business, then a plan for your AI company. Nothing is built here: you review the plan and press Build in the app. Back and Cancel are under every question.',
-    resume: 'You are at step {n} of 7 ({title}). Continue there, or go through the questions again (your answers are kept)?',
+    resume: 'You stopped at: {title}. Continue there, or go through the questions again (your answers are kept)?',
     again: 'The company is built. Run the guide again to add a division or change the goals: we start at the divisions.',
     continueBtn: 'Continue', restartBtn: 'From the start', backBtn: '« Back', cancelBtn: 'Cancel', skipBtn: 'Skip', doneBtn: 'Done ✓', suggestBtn: 'Use the suggestion',
     cancelled: 'Stopped. Your answers are saved; /guide continues where you left off, here or in the app.',
@@ -49,7 +49,7 @@ const L = {
   id: {
     refuse: 'Panduan perusahaan adalah milik Owner: di sinilah ditentukan squad apa saja yang dimiliki perusahaan. Minta Owner menjalankannya, atau buka The AI Squad.',
     hello: 'Panduan perusahaan: beberapa pertanyaan tentang bisnismu, lalu rencana untuk perusahaan AI-mu. Di sini tidak ada yang dibangun: kamu meninjau rencananya dan menekan Build di aplikasi. Kembali dan Batal ada di bawah setiap pertanyaan.',
-    resume: 'Kamu ada di langkah {n} dari 7 ({title}). Lanjutkan dari situ, atau ulangi pertanyaannya (jawabanmu tetap tersimpan)?',
+    resume: 'Terakhir kamu berhenti di: {title}. Lanjutkan dari situ, atau ulangi pertanyaannya (jawabanmu tetap tersimpan)?',
     again: 'Perusahaan sudah dibangun. Jalankan panduan lagi untuk menambah divisi atau mengubah tujuan: kita mulai dari divisi.',
     continueBtn: 'Lanjutkan', restartBtn: 'Dari awal', backBtn: '« Kembali', cancelBtn: 'Batal', skipBtn: 'Lewati', doneBtn: 'Selesai ✓', suggestBtn: 'Pakai saran',
     cancelled: 'Dihentikan. Jawabanmu tersimpan; /guide melanjutkan dari titik terakhir, di sini atau di aplikasi.',
@@ -217,7 +217,7 @@ export async function start(io, user) {
   if (!st.answers) { await io.send(T.hello, []); return goTo(io, questions(a)[0]); }
   io.setPending({ mode: 'guide', q: '' });
   const step = Math.min(Number(st.step) || 0, 7);
-  return io.send(fill(T.resume, { n: step + 1, title: STEP_TITLE[lang][step] }), [[{ text: T.continueBtn, data: 'g:c' }, { text: T.restartBtn, data: 'g:r' }], [{ text: T.cancelBtn, data: 'g:x' }]]);
+  return io.send(fill(T.resume, { title: STEP_TITLE[lang][step] }), [[{ text: T.continueBtn, data: 'g:c' }, { text: T.restartBtn, data: 'g:r' }], [{ text: T.cancelBtn, data: 'g:x' }]]);
 }
 // a button: g:<act>[:<question>[:<value>]]
 export async function press(io, user, data, messageId) {
