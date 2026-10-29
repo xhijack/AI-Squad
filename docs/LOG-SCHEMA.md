@@ -113,7 +113,7 @@ manual), `targets` (how many targets got a goal), `routines` (1.5: how many rout
 itself, or its budget is reached). `agent` is the rule's agent. At most once per period and per cooldown.
 
 ```json
-{"v":1,"id":"3c9a1f02b7de","ts":"2026-10-29T08:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":"mira-strategist","role":null,"session":null,"model":null,"type":"kpi.behind","summary":"target Leads: 4 leads of 12, behind (suggest)","data":{"kpi":"leads","name":"Leads","value":4,"unit":"leads","target":12,"period":"week","mode":"suggest"}}
+{"v":1,"id":"3c9a1f02b7de","ts":"2026-10-29T08:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":"mira-strategist","role":null,"session":null,"model":null,"type":"kpi.behind","summary":"target Leads: 4 of 12 leads, behind (suggest)","data":{"kpi":"leads","name":"Leads","value":4,"unit":"leads","target":12,"period":"week","mode":"suggest"}}
 ```
 
 **`kpi.action`** (1.5): what happened to the work a target raised: `kpi`, `name`, `action` (`approved`: the owner approved the

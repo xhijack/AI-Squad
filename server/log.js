@@ -111,7 +111,7 @@ function summarize(e) {
     case 'cadence.started': return `routine "${d.title}" started${e.agent ? ` for ${e.agent}` : ''}${d.manual ? ' (run now)' : ''}`;
     case 'cadence.skipped': return `routine "${d.title}" skipped${t(d.reason)}`;
     case 'cadence.done': return `routine "${d.title}" ${d.status === 'done' ? 'done' : d.status} in ${Math.round((d.ms || 0) / 1000)} s, $${(+d.cost || 0).toFixed(2)}`;
-    case 'kpi.behind': return `target ${d.name}: ${d.value}${d.unit ? ` ${d.unit}` : ''} of ${d.target}, behind (${d.mode})`;
+    case 'kpi.behind': return `target ${d.name}: ${d.value} of ${d.target}${d.unit ? ` ${d.unit}` : ''}, behind (${d.mode}${d.fallback ? ', asked instead of acting' : ''})`;
     case 'kpi.action': return `target ${d.name}: ${d.action}${d.by ? ` by ${d.by}` : ''}${d.job ? ` (job ${d.job})` : ''}`;
     case 'guide.built': return `built by the Company Guide: ${d.division} (${d.blueprint}, ${d.mode}, ${d.targets} targets with a goal)`;
     case 'legal.reverted': return `${d.file} is a DRAFT again: ${d.reason}`;

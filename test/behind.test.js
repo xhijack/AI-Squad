@@ -123,7 +123,7 @@ test('notify: a measurement behind the goal raises one muted notice with a stabl
   assert.deepEqual([n.notice, n.muted, n.id], [true, true, behind.noticeId(fid, 'leads', kpi.periodStart('week'))]);
   const ev = squadLog.read(fid, { type: 'kpi.behind' }).at(-1);
   assert.deepEqual([ev.data.kpi, ev.data.value, ev.data.target, ev.data.mode], ['leads', 4, 12, 'notify']);
-  assert.match(ev.summary, /target Leads: 4 leads of 12, behind \(notify\)/);
+  assert.match(ev.summary, /target Leads: 4 of 12 leads, behind \(notify\)/);
   kpi.record(fid, proj, 'leads', 5);                                         // measured again: still one notice
   await sleep(50); squad.invalidate();
   assert.equal(squad.attentionItems().filter((a) => a.kind === 'target').length, 1);
