@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
-// The AI Squad server.  node server/index.js [--port 8097] [--host 127.0.0.1]
+// The AI Squad server.  node server/index.js [--port 8097] [--host 127.0.0.1] [--public]
+// --public: every route needs a signed-in person (behind a proxy or a tunnel it turns on by itself, server/proxy.js)
 import http from 'node:http';
 import { createHandler, isLoopback } from './api.js';
 import { loadPin } from './pin.js';
@@ -25,6 +26,7 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const PORT = Number(opt('--port', process.env.AISQUAD_PORT || 8097));
 const HOST = opt('--host', '127.0.0.1');
+const PUBLIC = args.includes('--public');
 
 // the data in ~/.aisquad follows this release's version; an older home gets a safety backup first (no secrets)
 try { migrate({ before: (v) => backup.createBackup({ label: `pre-migrate-v${v}`, logs: false }), log: console.log }); } catch (e) { console.error('[schema]', e.message); }
@@ -32,11 +34,14 @@ seedDefaults();
 seedBlueprints();
 configure({ serverUrl: `http://${isLoopback(HOST) ? HOST.replace(/^::1$/, '[::1]') : '127.0.0.1'}:${PORT}` });   // where agent hooks post events
 const pin = loadPin();
-const server = http.createServer(createHandler({ pin, host: HOST }));
+const handler = createHandler({ pin, host: HOST, isPublic: PUBLIC });
+const server = http.createServer(handler);
+server.on('upgrade', handler.upgrade);
 server.listen(PORT, HOST, () => {
   console.log(`The AI Squad: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`PIN for changes: ${paths.pin()}`);
   if (!isLoopback(HOST)) console.log(`Listening on ${HOST}: every API call, reads included, needs the PIN.`);
+  if (PUBLIC) console.log('Public mode: every route, static files included, needs a signed-in person.');
   fs.writeFileSync(PID_FILE, String(process.pid));
 });
 const PID_FILE = path.join(config.home, 'server.pid');

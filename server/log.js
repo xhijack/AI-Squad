@@ -14,6 +14,7 @@ export const SCHEMA_VERSION = 1;
 export const GZIP_AFTER_DAYS = 7;
 export const DEFAULT_RETENTION_DAYS = 90;
 export const INDEPENDENTS = 'independents';           // Floor 1 (independent agents) logs under this id
+export const BUILDING = '_building';                   // Building-wide events (sign-in, 1.9): no Floor id can start with _
 
 // type -> category (the timeline filters by either)
 export const TYPES = {
@@ -33,6 +34,7 @@ export const TYPES = {
   'usage.turn': 'usage', 'voice.spoken': 'usage',
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
   'audit.done': 'audit', 'improvement.decided': 'audit', 'retro.done': 'audit',
+  'auth.signed_in': 'access', 'auth.failed': 'access', 'auth.locked': 'access', 'auth.signed_out': 'access',
   'autopilot.decided': 'autopilot', 'autopilot.nudged': 'autopilot', 'autopilot.blocked': 'autopilot', 'autopilot.changed': 'autopilot',
 };
 export const CATEGORIES = [...new Set(Object.values(TYPES))];
@@ -50,6 +52,10 @@ function summarize(e) {
   switch (e.type) {
     case 'agent.started': return `${who} started (${[d.model || e.model, d.effort].filter(Boolean).join(', ') || 'default model'})`;
     case 'agent.stopped': return `${who} stopped`;
+    case 'auth.signed_in': return `${d.user || d.role} signed in from ${d.ip}${d.email ? ` (${d.email})` : ''}${d.secondFactor ? ' with the second factor' : ''}`;
+    case 'auth.failed': return `a wrong ${d.what || 'PIN'} from ${d.ip}`;
+    case 'auth.locked': return d.scope === 'account' ? `PIN sign-in locked for everyone after ${d.fails} wrong PINs today` : `sign-in from ${d.ip} waits ${Math.round((d.waitS || 0) / 60)} minutes after ${d.fails} wrong PINs`;
+    case 'auth.signed_out': return d.everywhere ? `${d.user || d.role} signed everyone out (${d.sessions} sessions)` : `${d.user || d.role} signed out`;
     case 'agent.crashed': return `${who} ${d.cause === 'oom' ? 'was killed: out of memory' : d.cause === 'killed' ? 'stopped unexpectedly mid-turn' : 'ended without a stop from The AI Squad'}${d.withLead ? ` (with the lead ${d.withLead})` : ''}`;
     case 'agent.resumed': return `${who} resumed its last session${d.via === 'auto-resume' ? ' automatically' : ''}`;
     case 'autopilot.decided': return d.by === 'lead' ? `the lead decided on its own (autopilot)${t(d.question)}` : `${who}'s question answered automatically with "${d.option}"${t(d.question, 60)}`;

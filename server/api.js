@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // JSON API + static UI. On a loopback address (the default) reads are open and every change and agent
-// screen needs the local PIN (header x-aisquad-pin); on any other address every /api call needs it.
+// screen needs a signed-in person; on any other address every /api call needs one, and in public mode (1.9, behind a
+// proxy or a tunnel) every route does, static files included. A browser signs in with its PIN once and keeps a
+// session cookie (server/sessions.js); tools on this machine send the PIN in the header x-aisquad-pin.
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -45,6 +47,13 @@ import * as promote from './promote.js';
 import * as integ from './integrations.js';
 import * as google from './google.js';
 import * as agentToken from './agenttoken.js';
+import * as squadLog from './log.js';
+import * as proxy from './proxy.js';
+import * as sessions from './sessions.js';
+import * as limits from './limits.js';
+import * as cfaccess from './cfaccess.js';
+import * as harden from './harden.js';
+import * as second from './secondfactor.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -72,8 +81,8 @@ function readRaw(req, max) {
     req.on('error', reject);
   });
 }
-async function readBody(req) {
-  const buf = await readRaw(req, 2e6);
+async function readBody(req, max = harden.BODY_LIMIT) {
+  const buf = await readRaw(req, max);
   if (!buf.length) return {};
   try { return JSON.parse(buf.toString('utf8')); } catch { throw new HttpError(400, 'Invalid JSON'); }
 }
@@ -88,10 +97,11 @@ function serveStatic(res, pathname) {
     return true;
   }
   // the page carries the Building's language, so the first paint is already in it (ui/i18n.js)
-  if (rel === 'index.html') {
+  if (rel === 'index.html' || rel === 'login.html') {
     const lang = building.loadBuilding().prefs.lang;
     const html = fs.readFileSync(file, 'utf8');
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+    // its inline scripts (theme, import map, boot) are allowed by hash, nothing else inline (server/harden.js)
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': harden.csp({ scripts: harden.scriptHashes(html) }) });
     res.end(['en', 'id'].includes(lang) ? html.replace('<html lang="en"', `<html lang="${lang}" data-lang="${lang}"`) : html);
     return true;
   }
@@ -165,8 +175,12 @@ const routes = [
   ['GET', /^\/api\/users$/, () => ({ users: users.listUsers(), roles: users.ROLES }), { pin: true }],
   ['POST', /^\/api\/users$/, (p, b, req) => users.addUser(b, req.ownerPin), { pin: true }],
   ['PATCH', /^\/api\/users\/([\w-]+)$/, ([id], b) => ({ user: users.updateUser(id, b) }), { pin: true }],
-  ['POST', /^\/api\/users\/([\w-]+)\/pin$/, ([id], b, req) => users.resetPin(id, req.ownerPin), { pin: true }],
-  ['DELETE', /^\/api\/users\/([\w-]+)$/, ([id]) => users.removeUser(id), { pin: true }],
+  // a new PIN or a removed person ends that person's sessions (1.9)
+  ['POST', /^\/api\/users\/([\w-]+)\/pin$/, ([id], b, req) => { const r = users.resetPin(id, req.ownerPin); sessions.revokeAll({ userId: id }); return r; }, { pin: true }],
+  ['DELETE', /^\/api\/users\/([\w-]+)$/, ([id]) => { const r = users.removeUser(id); sessions.revokeAll({ userId: id }); return r; }, { pin: true }],
+  // "Sign out everywhere" (1.9): every session of every person, this one included
+  ['POST', /^\/api\/sessions\/revoke-all$/, (p, b, req) => { const n = sessions.revokeAll(); logAuth('auth.signed_out', { ip: req.client.ip, role: req.user.role, user: req.user.name, everywhere: true, sessions: n }); return { ok: true, sessions: n }; }, { pin: true }],
+  ['GET', /^\/api\/security$/, () => ({ lockout: limits.status(), sessions: sessions.count(), events: squadLog.read(squadLog.BUILDING, { from: Date.now() - 7 * 864e5 }).slice(-50).reverse() }), { pin: true }],
   ['POST', /^\/api\/events$/, (p, b) => squad.ingestEvent(b), { pin: true }],
   ['GET', /^\/api\/events$/, () => ({ events: hooksRecent() }), { pin: true }],
 
@@ -361,7 +375,7 @@ const routes = [
   ['POST', /^\/api\/floors\/([\w-]+)\/attachments$/, async ([id], b, req) => {
     const buf = await readRaw(req, 20 * 2 ** 20);
     return { ok: true, ...squad.saveAttachment(id, decodeURIComponent(String(req.headers['x-filename'] || '')), buf) };
-  }, { pin: true, raw: true }],
+  }, { pin: true, raw: true, maxBody: 20 * 2 ** 20 }],
 
   ['POST', /^\/api\/independents\/rescan$/, () => squad.rescanIndependents(), { pin: true }],
   ['POST', /^\/api\/independents\/([\w-]+)\/adopt$/, ([id], b) => squad.adoptIndependent(id, b), { pin: true }],
@@ -371,74 +385,226 @@ const routes = [
 // 127.0.0.0/8, ::1 and localhost; 0.0.0.0, :: and real addresses are not
 export const isLoopback = (host) => /^(localhost|127(\.\d{1,3}){3}|::1|\[::1\])$/i.test(String(host || '').trim());
 
-// host: the address the server is bound to. Off loopback every /api read needs the PIN as well.
-export function createHandler({ pin, host = '127.0.0.1' }) {
+// ---------- online access (1.9) ----------
+// building.json prefs: public, trustProxy, publicUrl (or the Notifications one), cfAccess, secondFactor; read at most every 2 s
+let onlineCache = { at: 0, v: null };
+export function onlineSettings(now = Date.now()) {
+  if (onlineCache.v && now - onlineCache.at < 2000) return onlineCache.v;
+  const p = building.loadBuilding().prefs;
+  onlineCache = { at: now, v: { public: p.public === true, trustProxy: p.trustProxy, publicUrl: String(p.publicUrl || p.notify?.publicUrl || ''), cfAccess: p.cfAccess || null, secondFactor: p.secondFactor } };
+  return onlineCache.v;
+}
+export const forgetOnline = () => { onlineCache = { at: 0, v: null }; };
+// sign-in events go to the Building's own Squad Log: the client address and the role, never the PIN
+function logAuth(type, data) { try { squadLog.append(squadLog.BUILDING, { type, data }, { pii: false }); } catch (e) { console.error('[auth]', e.message); } }
+// what a public-mode browser may load before signing in: the sign-in page and what it needs
+const OPEN_STATIC = /^\/(login\.html|login\.js|i18n\.js|i18n\/(en|id)\.json|tokens\.css|style\.css|vendor\/fonts\/[\w.-]+\.woff2)$/;
+const LOCKED = 'PIN sign-in is locked after too many wrong PINs. The Owner unlocks it with "aisquad unlock" on the machine or /unlock on Telegram.';
+const personOf = (id) => users.listUsers().find((u) => u.id === id) || null;
+
+// host: the address the server is bound to. Off loopback every /api read needs a signed-in person as well.
+// isPublic: --public. toOwner(text): security messages to the Owner (Telegram); fetchFn: the Cloudflare Access keys.
+export function createHandler({ pin, host = '127.0.0.1', isPublic: flag = false, toOwner = (text) => notify.toOwner(text), fetchFn } = {}) {
   const lockReads = !isLoopback(host);
-  return async (req, res) => {
+  const pub = proxy.publicMode({ flag, setting: () => onlineSettings().public });
+  let cf = { key: '', v: null };
+  const accessCheck = (o) => {
+    const c = cfaccess.cleanCfAccess(o.cfAccess);
+    if (!c) return null;
+    if (cf.key !== JSON.stringify(c)) cf = { key: JSON.stringify(c), v: cfaccess.verifier(c, { fetchFn }) };
+    return cf.v;
+  };
+  const secondOn = (c) => second.enabled({ setting: c.o.secondFactor, paired: notify.ownerPaired() });
+  const secondState = (c) => (c.user?.role === 'owner' && c.isPublic && c.session && secondOn(c) ? (c.session.secondAt ? 'done' : 'needed') : 'off');
+
+  // a wrong PIN or code: counted against the address (not for tools on this machine), logged, the Owner told of a lockout
+  function failed(c, what = 'PIN') {
+    logAuth('auth.failed', { ip: c.ip, what, ...(c.email ? { email: c.email } : {}) });
+    if (c.local) return { reason: 'wrong' };
+    const r = limits.fail(c.ip);
+    if (r.locked) {
+      const fails = r.locked === 'account' ? limits.status().failsToday : limits.PER_ADDRESS;
+      logAuth('auth.locked', r.locked === 'account' ? { scope: 'account', ip: c.ip, fails } : { scope: 'address', ip: c.ip, fails, waitS: Math.round(r.wait / 1000) });
+      const text = r.locked === 'account' ? notify.say('lockAccount', { fails }) : notify.say('lockAddress', { fails, ip: c.ip, minutes: Math.round(r.wait / 60e3) });
+      Promise.resolve().then(() => toOwner(text)).catch(() => {});
+    }
+    return { reason: r.locked === 'account' ? 'locked' : r.locked ? 'wait' : 'wrong', retryAfter: r.wait ? Math.ceil(r.wait / 1000) : 0 };
+  }
+  function refuse(res, l, wrong = 'Wrong PIN') {
+    if (l.reason === 'wrong') return send(res, 401, { error: wrong });
+    if (l.retryAfter) res.setHeader('retry-after', String(l.retryAfter));
+    return send(res, 429, { error: l.reason === 'locked' ? LOCKED : `Too many wrong PINs: try again in ${Math.max(1, Math.ceil(l.retryAfter / 60))} minutes`, locked: l.reason === 'locked', retryAfter: l.retryAfter || 0 });
+  }
+
+  // who is asking: a session cookie, or the PIN header (only from this machine in public mode) -> a refusal or null
+  function whoIs(req, c) {
+    c.sid = sessions.idFrom(req);
+    const s = c.sid ? sessions.lookup(c.sid) : null;
+    if (s) { const u = personOf(s.userId); if (u) { c.user = u; c.session = s; return null; } sessions.revoke(c.sid); }
+    const p = req.headers['x-aisquad-pin'];
+    if (!p || (c.isPublic && !c.local)) return null;
+    if (!c.local) { const l = limits.check(c.ip); if (!l.ok) return l; }
+    c.user = users.identify(p, pin);
+    if (!c.user) return failed(c);
+    if (!c.local) limits.succeed(c.ip);
+    return null;
+  }
+
+  // sign in, the second factor, sign out: reachable before anyone is signed in
+  async function sessionRoute(req, res, c, key) {
+    if (key === 'GET /api/session') return send(res, 200, { signedIn: !!c.user, user: c.user, public: c.isPublic, secondFactor: secondState(c) });
+    if (key === 'POST /api/session') {
+      if (!c.local) { const l = limits.check(c.ip); if (!l.ok) return refuse(res, l); }
+      const b = await readBody(req);
+      const user = users.identify(String(b.pin ?? '').trim(), pin);
+      if (!user) return refuse(res, failed(c));
+      if (!c.local) limits.succeed(c.ip);
+      if (c.sid) sessions.revoke(c.sid);
+      const id = sessions.create(user, { ip: c.ip, email: c.email });
+      res.setHeader('set-cookie', sessions.cookie(id, { secure: c.secure }));
+      Object.assign(c, { user, session: sessions.lookup(id) });
+      let sf = secondState(c);
+      if (sf === 'needed') { try { await second.send(c.session.key, { sendFn: toOwner, lang: notify.settings().lang }); sf = 'sent'; } catch { sf = 'unavailable'; } }
+      logAuth('auth.signed_in', { ip: c.ip, role: user.role, user: user.name, ...(c.email ? { email: c.email } : {}) });
+      return send(res, 200, { ok: true, user, secondFactor: sf });
+    }
+    if (key === 'DELETE /api/session') {
+      if (c.session) { sessions.revoke(c.sid); logAuth('auth.signed_out', { ip: c.ip, role: c.user.role, user: c.user.name }); }
+      res.setHeader('set-cookie', sessions.clearCookie({ secure: c.secure }));
+      return send(res, 200, { ok: true });
+    }
+    if (key === 'POST /api/session/code' || key === 'POST /api/session/verify') {
+      if (!c.session) return send(res, 401, { error: 'PIN required' });
+      if (secondState(c) === 'off') return send(res, 400, { error: 'No second factor is needed' });
+      if (key.endsWith('/code')) {
+        try { await second.send(c.session.key, { sendFn: toOwner, lang: notify.settings().lang }); } catch (e) { return send(res, e.status || 503, { error: e.message }); }
+        return send(res, 200, { ok: true });
+      }
+      if (!c.local) { const l = limits.check(c.ip); if (!l.ok) return refuse(res, l); }
+      const b = await readBody(req);
+      if (!second.verify(c.session.key, b.code)) return refuse(res, failed(c, 'code'), 'Wrong or expired code');
+      sessions.markSecond(c.session.key);
+      logAuth('auth.signed_in', { ip: c.ip, role: c.user.role, user: c.user.name, secondFactor: true, ...(c.email ? { email: c.email } : {}) });
+      return send(res, 200, { ok: true });
+    }
+    return undefined;
+  }
+
+  // what every request needs first: public mode, the client, headers, size, origin, Cloudflare Access, who
+  async function prepare(req, res, url, limit) {
+    const isPublic = pub.observe(req), o = onlineSettings();
+    const hops = proxy.hopsOf(o.trustProxy, isPublic);
+    const c = { isPublic, o, hops, ip: proxy.clientAddress(req, hops), https: proxy.isHttps(req, hops), local: proxy.isLocalTool(req), email: '', user: null, session: null, sid: '' };
+    // Secure over HTTPS and through a proxy in public mode; a browser on the LAN over plain HTTP still signs in
+    c.secure = c.https || (isPublic && proxy.hasProxyHeaders(req) && proxy.trusted(req, hops));
+    for (const [k, v] of Object.entries(harden.securityHeaders({ isPublic, https: c.https }))) res.setHeader(k, v);
+    if (harden.tooLarge(req, limit)) return void send(res, 413, { error: 'Request too large' });
+    if (harden.CHANGES.has(req.method) && !harden.originAllowed(req, { host: proxy.requestHost(req, hops), publicUrl: o.publicUrl })) return void send(res, 403, { error: 'Refused: this request came from another site' });
+    // Cloudflare Access: whatever came through the tunnel carries the team's token
+    const cfv = accessCheck(o);
+    if (cfv && proxy.hasProxyHeaders(req)) {
+      try { c.email = (await cfv.verify(req.headers[cfaccess.HEADER])).email; } catch { return void send(res, 403, { error: 'Cloudflare Access sign-in required' }); }
+    }
+    const l = whoIs(req, c);
+    if (l) return void refuse(res, l, 'PIN required');
+    return c;
+  }
+
+  const handler = async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
+      let hit = null;
+      for (const r of routes) { if (r[0] !== req.method) continue; const m = url.pathname.match(r[1]); if (m) { hit = { r, m }; break; } }
+      const c = await prepare(req, res, url, hit?.r[3]?.maxBody || harden.BODY_LIMIT);
+      if (!c) return;
+      req.client = c;
+      if (/^\/api\/session(\/(code|verify))?$/.test(url.pathname)) { const done = await sessionRoute(req, res, c, `${req.method} ${url.pathname}`); if (done !== undefined) return; }
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
+        if (c.isPublic && !c.user && !OPEN_STATIC.test(url.pathname)) {
+          if ((url.pathname === '/' || url.pathname === '/index.html') && serveStatic(res, '/login.html')) return;
+          return send(res, 401, 'Sign in first', 'text/plain');
+        }
         if (serveStatic(res, url.pathname)) return;
         return send(res, 404, 'Not found', 'text/plain');
       }
-      for (const [method, re, handler, opts = {}] of routes) {
-        if (method !== req.method) continue;
-        const m = url.pathname.match(re);
-        if (!m) continue;
-        // an outside system posting a target's value (1.3): the Space's token in the URL, nothing else
-        if (opts.hook) return send(res, 200, await handler(m.slice(1), await readBody(req), req));
-        // a tool inside an agent's session (1.8): the Space's agent token, only for that Space
-        if (opts.space) {
-          const id = agentToken.floorOfToken(req.headers[agentToken.HEADER]);
-          req.space = id && integ.spaces().find((s) => s.id === id);
-          if (!req.space) return send(res, 401, { error: 'Unknown Space token: start the agent from its Space' });
-          return send(res, 200, await handler(m.slice(1), await readBody(req), req));
-        }
-        // a worker machine (0.18): its own token, only for its own routes
-        if (opts.node) {
-          const node = nodes.authNode(req.headers['x-aisquad-node']);
-          if (!node) return send(res, 401, { error: 'Unknown machine or token' });
-          req.node = node;
-          return send(res, 200, await handler(m.slice(1), method === 'GET' ? {} : await readBody(req), req));
-        }
-        // who is asking (0.14): the Owner's PIN, or a person's own PIN; reads on loopback stay open without one
-        const user = users.identify(req.headers['x-aisquad-pin'], pin);
-        if ((opts.pin || lockReads) && !user) return send(res, 401, { error: 'PIN required' });
-        const need = access.requiredRole(method, url.pathname);
-        if (user && !access.allows(user, need)) return send(res, 403, { error: `Only ${need === 'owner' ? 'the Owner' : 'a member or the Owner'} can do this` });
-        if (!user && need === 'owner' && method !== 'GET') return send(res, 401, { error: 'PIN required' });
-        if (access.hiddenPath(url.pathname, user)) return send(res, 404, { error: 'Floor not found' });
-        Object.assign(req, { user: user || null, actor: user?.name || 'owner', ownerPin: pin });
-        const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req);
-        if (body && typeof body === 'object' && body.floorId && access.hiddenPath(`/api/floors/${body.floorId}`, user)) return send(res, 404, { error: 'Floor not found' });
-        // configuration is code: changes to the Building or a Space are recorded with their before and after (server/history.js)
-        // a submission sent twice (double click, two tabs) runs once: x-idempotency-key (server/idempotency.js)
-        const run = (fn) => (method === 'GET' ? fn() : idem.once(user?.id || 'owner', req.headers['x-idempotency-key'], fn));
-        let out = await run(() => access.actorStore.run({ user }, async () => {
-          if (!opts.history) return handler(m.slice(1), body, req);
-          const h = opts.history(m.slice(1), body);
-          let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
-          return history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor }, () => handler(m.slice(1), body, req));
-        }));
-        if (method !== 'GET' && /^\/api\/(floors|squads|guide)/.test(url.pathname)) access.forgetOwnerFloors();   // a new or changed Space may be the Owner's
-        out = access.redact(url.pathname, out, user);
-        if (out === null) return send(res, 404, { error: 'Not found' });
-        if (out && out.__audio) { res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); return res.end(out.__audio); }
-        if (out && out.__file && out.sandbox) {
-          // a design variant: shown in an iframe, sandboxed (no scripts, no access to The AI Squad), nothing from outside
-          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
-            'content-security-policy': "sandbox; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; font-src data:" });
-          return res.end(fs.readFileSync(out.__file));
-        }
-        if (out && out.__file) return send(res, 200, fs.readFileSync(out.__file), TYPES[path.extname(out.__file).toLowerCase()] || 'image/jpeg');
-        // reads open without the PIN (building, Floors) revalidate with an ETag; anything behind the PIN stays no-store
-        return method === 'GET' && !opts.pin && !lockReads ? sendJsonGet(req, res, out) : send(res, 200, out);
+      if (!hit) return send(res, 404, { error: 'Not found' });
+      const [method, , handler, opts = {}] = hit.r, m = hit.m;
+      // an outside system posting a target's value (1.3): the Space's token in the URL, nothing else
+      if (opts.hook) return send(res, 200, await handler(m.slice(1), await readBody(req), req));
+      // a tool inside an agent's session (1.8): the Space's agent token, only for that Space
+      if (opts.space) {
+        const id = agentToken.floorOfToken(req.headers[agentToken.HEADER]);
+        req.space = id && integ.spaces().find((s) => s.id === id);
+        if (!req.space) return send(res, 401, { error: 'Unknown Space token: start the agent from its Space' });
+        return send(res, 200, await handler(m.slice(1), await readBody(req), req));
       }
-      send(res, 404, { error: 'Not found' });
+      // a worker machine (0.18): its own token, only for its own routes
+      if (opts.node) {
+        const node = nodes.authNode(req.headers['x-aisquad-node']);
+        if (!node) return send(res, 401, { error: 'Unknown machine or token' });
+        req.node = node;
+        return send(res, 200, await handler(m.slice(1), method === 'GET' ? {} : await readBody(req), req));
+      }
+      // who is asking (0.14): a session or a PIN; reads on loopback stay open without one, never in public mode
+      const user = c.user;
+      if ((opts.pin || lockReads || c.isPublic) && !user) return send(res, 401, { error: 'PIN required' });
+      const need = access.requiredRole(method, url.pathname);
+      if (user && !access.allows(user, need)) return send(res, 403, { error: `Only ${need === 'owner' ? 'the Owner' : 'a member or the Owner'} can do this` });
+      if (!user && need === 'owner' && method !== 'GET') return send(res, 401, { error: 'PIN required' });
+      // the Owner's second factor (1.9): owner-level routes and Owner-only Spaces, in public mode, once per session
+      const space = url.pathname.match(/^\/api\/floors\/([\w-]+)(\/|$)/);
+      const sf = secondState(c);
+      if (second.needed({ isPublic: c.isPublic, on: sf !== 'off', user, need, ownerSpace: !!space && access.ownerFloors().has(space[1]), session: c.session })) return send(res, 401, { error: 'Second factor required', secondFactor: true });
+      const viewer = sf === 'needed' ? { ...user, role: 'member' } : user;     // until then lists show what a member sees
+      if (access.hiddenPath(url.pathname, viewer)) return send(res, 404, { error: 'Floor not found' });
+      Object.assign(req, { user: user || null, actor: user?.name || 'owner', ownerPin: pin });
+      const body = opts.raw || method === 'GET' || method === 'DELETE' ? {} : await readBody(req, opts.maxBody);
+      if (body && typeof body === 'object' && body.floorId && access.hiddenPath(`/api/floors/${body.floorId}`, viewer)) return send(res, 404, { error: 'Floor not found' });
+      // configuration is code: changes to the Building or a Space are recorded with their before and after (server/history.js)
+      // a submission sent twice (double click, two tabs) runs once: x-idempotency-key (server/idempotency.js)
+      const run = (fn) => (method === 'GET' ? fn() : idem.once(user?.id || 'owner', req.headers['x-idempotency-key'], fn));
+      let out = await run(() => access.actorStore.run({ user }, async () => {
+        if (!opts.history) return handler(m.slice(1), body, req);
+        const h = opts.history(m.slice(1), body);
+        let root = ''; if (h.floorId) { try { root = building.floorEntry(h.floorId).path; } catch { /* not registered (yet) */ } }
+        return history.track(h.label, { root, floorId: h.floorId || '', actor: req.actor }, () => handler(m.slice(1), body, req));
+      }));
+      if (method !== 'GET' && /^\/api\/(floors|squads|guide)/.test(url.pathname)) access.forgetOwnerFloors();   // a new or changed Space may be the Owner's
+      if (method !== 'GET' && url.pathname === '/api/building') forgetOnline();
+      out = access.redact(url.pathname, out, viewer);
+      if (out === null) return send(res, 404, { error: 'Not found' });
+      if (out && out.__audio) { res.writeHead(200, { 'content-type': 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); return res.end(out.__audio); }
+      if (out && out.__file && out.sandbox) {
+        // a design variant: shown in an iframe, sandboxed (no scripts, no access to The AI Squad), nothing from outside
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+          'content-security-policy': "sandbox; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; font-src data:" });
+        return res.end(fs.readFileSync(out.__file));
+      }
+      if (out && out.__file) return send(res, 200, fs.readFileSync(out.__file), TYPES[path.extname(out.__file).toLowerCase()] || 'image/jpeg');
+      // reads open without the PIN (building, Floors) revalidate with an ETag; anything behind the PIN stays no-store
+      return method === 'GET' && !opts.pin && !lockReads && !c.isPublic ? sendJsonGet(req, res, out) : send(res, 200, out);
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       if (status === 500) console.error(e);
+      if (res.headersSent) return void res.end();
       send(res, status, { error: e.message || 'Server error', ...(status !== 500 && e.data ? e.data : {}) });
     }
   };
+
+  // a WebSocket upgrade (none is served yet): the same origin check, Access and sign-in as any request, then 404,
+  // so a stream added later cannot skip the gate
+  handler.upgrade = async (req, socket) => {
+    const reply = (code, text) => { try { socket.end(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`); } catch { /* gone */ } socket.destroy(); };
+    try {
+      const isPublic = pub.observe(req), o = onlineSettings(), hops = proxy.hopsOf(o.trustProxy, isPublic);
+      if (!harden.originAllowed(req, { host: proxy.requestHost(req, hops), publicUrl: o.publicUrl })) return reply(403, 'Forbidden');
+      const c = { isPublic, o, hops, ip: proxy.clientAddress(req, hops), local: proxy.isLocalTool(req), email: '', user: null, session: null, sid: '' };
+      const cfv = accessCheck(o);
+      if (cfv && proxy.hasProxyHeaders(req)) { try { await cfv.verify(req.headers[cfaccess.HEADER]); } catch { return reply(403, 'Forbidden'); } }
+      if (whoIs(req, c) || !c.user) return reply(401, 'Unauthorized');
+      return reply(404, 'Not Found');
+    } catch { return reply(500, 'Internal Server Error'); }
+  };
+  handler.publicMode = pub;
+  return handler;
 }

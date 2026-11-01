@@ -2171,5 +2171,22 @@
  "Google access: add {email} to Search Console and GA4, then enter the properties in Floor settings → Google": "Akses Google: tambahkan {email} ke Search Console dan GA4, lalu isi propertinya di Pengaturan Lantai → Google",
  "Google access: upload the service account key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google": "Akses Google: unggah kunci service account (Admin → Integrasi → Google), tambahkan e-mailnya ke Search Console dan GA4, lalu isi propertinya di Pengaturan Lantai → Google",
  "The SEO brief: goals, audience, offer, markets and languages": "Brief SEO: tujuan, audiens, penawaran, pasar dan bahasa",
- "The site's repository or CMS, so fixes go as pull requests": "Repositori atau CMS situs, supaya perbaikan dikirim sebagai pull request"
+ "The site's repository or CMS, so fixes go as pull requests": "Repositori atau CMS situs, supaya perbaikan dikirim sebagai pull request",
+ "Sign in with your PIN.": "Masuk dengan PIN-mu.",
+ "Sign in": "Masuk",
+ "Code": "Kode",
+ "Send again": "Kirim lagi",
+ "Verify": "Verifikasi",
+ "We sent a 6-digit code to the Owner's Telegram.": "Kode 6 digit sudah dikirim ke Telegram Owner.",
+ "Wrong or expired code": "Kode salah atau kedaluwarsa",
+ "Code sent again": "Kode dikirim lagi",
+ "Too many wrong PINs: try again in {n} minutes": "Terlalu banyak PIN salah: coba lagi dalam {n} menit",
+ "PIN sign-in is locked after too many wrong PINs. The Owner unlocks it with \"aisquad unlock\" on the machine or /unlock on Telegram.": "Masuk dengan PIN dikunci setelah terlalu banyak PIN salah. Owner membukanya dengan \"aisquad unlock\" di mesin atau /unlock di Telegram.",
+ "The code could not be sent. Owner settings stay locked until it can.": "Kode tidak bisa dikirim. Pengaturan Owner tetap terkunci sampai kode bisa dikirim.",
+ "Could not reach the server": "Tidak bisa menghubungi server",
+ "Refused: this request came from another site": "Ditolak: permintaan ini datang dari situs lain",
+ "Cloudflare Access sign-in required": "Perlu masuk lewat Cloudflare Access",
+ "Second factor required": "Perlu kode verifikasi kedua",
+ "No second factor is needed": "Tidak perlu kode verifikasi kedua",
+ "The code could not be sent: pair the Owner's Telegram chat first": "Kode tidak bisa dikirim: hubungkan dulu chat Telegram Owner"
 }

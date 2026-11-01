@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The AI Squad</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="style.css">
+<style>
+  body.login { min-height: 100vh; display: grid; place-items: center; background: var(--bg); padding: 16px; }
+  .loginCard { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg, 14px); padding: 28px 24px; box-shadow: var(--elev-1); }
+  .loginCard h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .loginCard p { color: var(--text-muted); margin: 0 0 18px; }
+  .loginCard label { display: block; font-weight: 600; margin: 0 0 6px; }
+  .loginCard input { width: 100%; box-sizing: border-box; min-height: var(--control-h); padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--bg); font-size: 1.15rem; letter-spacing: .2em; }
+  .loginCard .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .loginCard .err { color: var(--danger-ink); min-height: 1.4em; margin-top: 10px; }
+  .loginCard [hidden] { display: none; }
+</style>
+</head>
+<body class="login">
+<main class="loginCard">
+  <h1>The AI Squad</h1>
+  <form id="loginForm">
+    <p id="pinNote">Sign in with your PIN.</p>
+    <label for="pin" id="pinLabel">PIN</label>
+    <input id="pin" name="pin" inputmode="numeric" autocomplete="current-password" required autofocus>
+    <div class="err" id="pinErr" role="alert"></div>
+    <div class="row"><button class="gold" type="submit" id="pinGo">Sign in</button></div>
+  </form>
+  <form id="codeForm" hidden>
+    <p id="codeNote">We sent a 6-digit code to the Owner's Telegram.</p>
+    <label for="code" id="codeLabel">Code</label>
+    <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+    <div class="err" id="codeErr" role="alert"></div>
+    <div class="row"><button class="ghost" type="button" id="codeResend">Send again</button><button class="gold" type="submit" id="codeGo">Verify</button></div>
+  </form>
+</main>
+<script type="module" src="login.js"></script>
+</body>
+</html>
