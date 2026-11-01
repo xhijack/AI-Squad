@@ -1156,6 +1156,86 @@ The owner asked for a Floor that does only SEO and GEO, with no extra running co
   - A job sent to a worker machine does not get the Google tools.
 - Not yet: OAuth MCP servers as a target source (still out of scope); a real-browser check of the Search Console and GA4 sign-up steps against Google's current UI (the README follows Google's documented menus);.
 
+## Phase 5, Sprint 19: AI Squad online, safely, 1.9.0 (1 Nov 2026)
+
+The owner asked to put the 3D web online, so it can run on a VPS and be reached from anywhere. Three gaps blocked that. Behind a proxy every request looks local, so reads were open to the internet. PIN guesses had no limit. And there was no guidance for HTTPS, cookies or origins. The owner's decisions held: the first target is this machine behind the existing remotely-managed Cloudflare Tunnel with Cloudflare Access; a VPS with Caddy or Nginx must work with the same code; settings differ, never the code.
+
+- **Public mode and the proxy** (`server/proxy.js`, `9eef761`).
+  - It turns on with `--public`, with `prefs.public: true`, or by itself on the first request with `X-Forwarded-For`, `Forwarded` or `CF-Connecting-IP`. It then stays on until a restart (also when the setting is turned off).
+  - `prefs.trustProxy` gives the hops (default 1 in public mode, 0 otherwise). The client address, the scheme and the host are read that many hops back. The headers are believed only from a loopback peer: a LAN client that spoofs `X-Forwarded-For` is seen at its own address.
+- **Sessions** (`server/sessions.js`, `afd54af`).
+  - A 256-bit random id in `aisquad_sid`: `HttpOnly; SameSite=Strict; Path=/`, plus `Secure` over HTTPS or through the proxy in public mode.
+  - Only its SHA-256 is stored, in `~/.aisquad/sessions.json` (0600). Sessions end after 12 h idle and after 7 days at most. `lastSeen` reaches the disk at most once a minute.
+  - Ways out: Sign out (one device); Sign out everywhere (Owner, `POST /api/sessions/revoke-all`). A new PIN or removing a person ends that person's sessions.
+- **Attempt limits** (`server/limits.js`, `66bed41`).
+  - 5 wrong PINs per address per 15 minutes, then a wait of 5 minutes that doubles per lockout of that address (5, 10, 20, 40, 60). A right PIN clears the address.
+  - 20 wrong PINs in a rolling day lock PIN sign-in for everyone. The lock is in `~/.aisquad/lockout.json` (0600), so it survives a restart. The Owner lifts it with `aisquad unlock` (new CLI command, documented in `/aisquad`) or with `/unlock` from the Owner's Telegram chat (`cff80f7`).
+  - Every lockout goes to the Owner's Telegram (`notify.toOwner`).
+- **Cloudflare Access check** (`server/cfaccess.js`, `469d442`). With `prefs.cfAccess { teamDomain, aud }`, requests through the tunnel need a valid `Cf-Access-Jwt-Assertion`.
+  - The check is RS256 with `node:crypto`, against the team's keys from `/cdn-cgi/access/certs`. Keys are cached for an hour; an unknown key id is looked up again at most every 5 minutes.
+  - Audience, issuer, expiry and not-before are checked, and the algorithm must be RS256. The e-mail goes into `auth.signed_in`.
+- **Browser hardening** (`server/harden.js`, `3b8cb11`, `2bfb9e1`).
+  - **Origin check** on POST, PUT, PATCH, DELETE and on a WebSocket upgrade. `Origin` (else `Referer`) must be the host the server is reached at, or `publicUrl` (`prefs.publicUrl`, else the Notifications one).
+  - **Content-Security-Policy**, self only. The three inline scripts of `index.html` are allowed by their hashes, computed when the page is served. `connect-src` also allows `blob:` and `data:`: dogfood showed three.js loads embedded GLTF textures that way.
+  - **Other headers**: `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `Permissions-Policy` (microphone for Voice only), `X-Content-Type-Options`, `Cross-Origin-Opener-Policy`, and HSTS in public mode over HTTPS.
+  - **Body limits**: a declared size over the route's limit gets `413` before anything is read. JSON is limited to 1 MB (was 2 MB) and attachments to 20 MB.
+- **The Owner's second factor** (`server/secondfactor.js`, `cff80f7`).
+  - In public mode an Owner session types a 6-digit code before owner-level routes and Owner-only Spaces. The code goes to the Owner's paired Telegram chats, lives 5 minutes, allows 5 tries, is kept only as a hash in memory, and is not re-sent within 30 s.
+  - It is sent right after the PIN; the sign-in page asks for it. Once passed it holds for that session.
+  - Until it is passed, lists show what a member sees.
+- **The gate** (`server/api.js`, `dd8bcdc`): every request goes through the same `prepare` step: public mode, client, headers, size, origin, Access, who.
+  - Session routes `GET/POST/DELETE /api/session`, `POST /api/session/code|verify`.
+  - Static files in public mode: only `login.html`, `login.js`, `i18n.js`, the two i18n tables, the CSS and the font are served before sign-in; `/` serves the sign-in page.
+  - The PIN header is accepted only from tools on this machine in public mode (loopback peer, no proxy headers: agent hooks, the CLI).
+  - WebSocket upgrades: there are no streams yet. `upgrade` runs the origin check, Access and sign-in, then answers 404, so a stream added later cannot skip the gate.
+  - The Owner reads the last week of sign-in events and the lock state at `GET /api/security`; the doctor's view is at `GET /api/online`.
+- **Log events** in the Building's own Squad Log `_building` (new category `access`): `auth.signed_in`, `auth.failed`, `auth.locked`, `auth.signed_out`. They carry the client address, the role and the person; never the PIN or the code.
+- **UI** (`3691486`).
+  - The PIN is no longer kept in `localStorage`; the old key is deleted on load. The PIN dialog signs in through `POST /api/session`; requests carry the cookie by themselves.
+  - Menu → **Sign out** and **Sign out everywhere** (Owner). A `401 secondFactor` asks for the Telegram code.
+  - The sign-in page (`ui/login.html` and `ui/login.js`) uses the shared i18n tables. 20 new Indonesian strings.
+- **Doctor** (`18b0461`): it warns when the server is bound off loopback without public mode, and when public mode has requests through the proxy without `X-Forwarded-Proto: https`.
+  - It fails when the session store's mode is not 600, and shows the PIN lock (fail, with `aisquad unlock`) and the day's count of wrong PINs.
+  - It reports the Owner's second factor and Cloudflare Access.
+- **Backups** (`3b13074`): `sessions.json` and `lockout.json` stay with this machine, so everyone signs in again after `restore`.
+- **Docs** (`21dd5c0`):
+  - INSTALL *Online (VPS or this machine)*: Cloudflare Tunnel with Access step by step, Caddy and Nginx configs with the WebSocket upgrade, Tailscale `serve` (not Funnel), and a VPS checklist (Node 22 and tmux, the Claude login, RAM sizing, repositories, backup and restore, firewall).
+  - README *Online access*, a SECURITY row, LOG-SCHEMA *Access*, `docs/id/PANDUAN.md` *Akses online*.
+  - `scripts/shot.js` signs in for a session; `scripts/chrome.js` reports CSP violations (`55f2c50`).
+- **Tests**: 43 new, each module run alone. Time, network and Telegram are injected or faked on 127.0.0.1.
+  - `proxy.test.js` (5): flag, setting, headers, latching; hops; spoofed headers from LAN and with 0 hops.
+  - `sessions.test.js` (4): hashed store 0600, idle and absolute expiry, sign out, everywhere, cookie.
+  - `limits.test.js` (5): the wait and its doubling, the 15-minute window, the daily lock surviving a restart, unlock, the rolling day.
+  - `cfaccess.test.js` (4): a key pair made in the test and a fake certs endpoint.
+  - `harden.test.js` (5), `secondfactor.test.js` (5): a fake Bot API, only the Owner's chat gets the code, expiry, tries, `/unlock` by the Owner but not by a member.
+  - `online.test.js` (11, real sockets): public mode by flag and by headers, sign-in, the LAN cookie without `Secure`, sign out and everywhere, 429 with Retry-After, the daily lock with tools still working, origin and WebSocket, headers and the page CSP, 413, the second factor end to end, Access end to end, Log events.
+  - `doctor-online.test.js` (4).
+- `npm test`: **635 tests, 635 pass** (swap 71 %, the Chrome typing test ran). One mid-sprint failure was the change to `scripts/chrome.js`, which counted the test stub's missing favicon as a page error; it now reports CSP violations only.
+- **Dogfood** (`playground/s19`, removed afterwards): the server on 8197 with its own home, behind a small local proxy on 8198 that sends `X-Forwarded-For`, `-Proto: https` and `-Host` like Caddy. The live service on 8097 and its agents were not touched; the playground used its own tmux socket.
+  - Without a session, through the proxy: `/api/building` 401, `/` the sign-in page, `/app.js` 401, the PIN header 401.
+  - Six wrong PINs from 203.0.113.66: 401 four times, then 429 (`retry-after: 300`, "try again in 5 minutes"); the right PIN from that address 429 too.
+  - From 198.51.100.20 the right PIN gave 200 with `HttpOnly; SameSite=Strict; Secure`, and reads 200. A PATCH with `Origin: https://evil.example` gave 403. The Log had `auth.failed`×5, `auth.locked` and `auth.signed_in`, with the PIN nowhere in it.
+  - **LAN kept working**: bound to `0.0.0.0` with public mode switched on by a tunnel request, a browser at `http://192.168.0.166:8197` got the sign-in page, a cookie without `Secure`, and reads. The bare PIN header from the LAN was refused.
+  - **Screenshots** (swap 71 %): `playground/s19-shots/1-signin.png` (1280), `2-signin-mobile.png` (390), `3-building-csp.png`: the 3D Building with the CSP on and no page errors, after the `connect-src` fix. Before that fix the GLTF textures were blocked.
+- **Assumptions** (the most conservative reasonable reading):
+  - The settings live in `building.json` under `"prefs"` (`public`, `trustProxy`, `publicUrl`, `cfAccess`, `secondFactor`). Top-level keys would be dropped on the next save.
+  - Forwarding headers are believed only from a loopback peer, whatever `trustProxy` says. A proxy on another host is not supported: run it on the same machine.
+  - `Secure` goes on over HTTPS and through the proxy in public mode, but not on a direct plain-HTTP LAN request. Otherwise a LAN browser would drop the cookie and LAN access, which must keep working here, would break.
+  - The Access check applies to requests that come through the tunnel (they carry proxy headers). Direct LAN requests and tools on the machine are not behind Access; they still need the PIN and a session. Target webhooks and worker machines that call in through the tunnel need an Access Bypass or Service Auth policy (documented).
+  - Tools on the machine (loopback, no proxy headers) are exempt from the attempt limits, so agent hooks keep working during a lock. This relies on the proxy adding forwarding headers (cloudflared and Caddy do; the Nginx sample does). The doctor counts proxied requests.
+  - "Lock PIN sign-in for the account" is read as for the whole Building, since a wrong PIN cannot be tied to a person. Signed-in sessions and the machine's tools keep working.
+  - The first wait is 5 minutes (the brief named only the doubling and the 1-hour cap).
+  - The second factor is "optional": it is on when the Owner has a paired Telegram chat, unless `prefs.secondFactor: false`. It holds for the rest of the session. Lockout messages and codes go to the Owner even while notifications are off; `/unlock` needs the bot running (notifications on).
+  - A change with neither `Origin` nor `Referer` is not from a browser page and is left to the PIN or session (browsers always send `Origin` on cross-site changes).
+  - Inline style attributes stay allowed in the CSP (`style-src 'unsafe-inline'`); the UI builds its markup with them.
+  - `--public` is a flag of `node server/index.js`; the installed service uses `prefs.public`.
+- **For the owner, to go live here** (not done by this sprint: dashboard access and a service restart are the owner's):
+  1. Add the public hostname (e.g. `squad.sopwer.net` → `http://127.0.0.1:8097`) to the existing tunnel.
+  2. Add the Access application with an e-mail one-time-PIN policy, and put its AUD and the team domain in `prefs.cfAccess`.
+  3. Set `prefs.public: true` and `prefs.publicUrl`.
+  4. Restart `aisquad.service` on 1.9.0. The live service still runs 1.8.0 with `--host 0.0.0.0`; until `prefs.public` is set, the 1.9 doctor warns about that address.
+- Not yet: a UI page for `GET /api/security` (the health dialog shows the doctor's lock line); WebSocket or SSE streams (none exist; the gate is ready for them); a proxy on another host (`trustProxy` from non-loopback peers).
+
 ## How to run
 
 ```
