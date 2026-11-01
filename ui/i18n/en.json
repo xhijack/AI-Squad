@@ -2154,5 +2154,11 @@
  "never automated, asked on the Desk, never a target": "never automated, asked on the Desk, never a target",
  "Save the marks": "Save the marks",
  "every quarter (Jan, Apr, Jul, Oct) on day": "every quarter (Jan, Apr, Jul, Oct) on day",
- "quarter": "quarter"
+ "quarter": "quarter",
+ "Not measured yet: needs {what}.": "Not measured yet: needs {what}.",
+ "the Google service account (Admin → Integrations → Google)": "the Google service account (Admin → Integrations → Google)",
+ "the Search Console site (Floor settings → Google)": "the Search Console site (Floor settings → Google)",
+ "the GA4 property (Floor settings → Google)": "the GA4 property (Floor settings → Google)",
+ "the site address (Floor settings → Google)": "the site address (Floor settings → Google)",
+ "a Bing Webmaster key (Admin → Integrations → Google)": "a Bing Webmaster key (Admin → Integrations → Google)"
 }

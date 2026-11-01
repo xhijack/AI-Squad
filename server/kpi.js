@@ -330,7 +330,7 @@ export async function tick(now = Date.now()) {
   for (const f of building.loadBuilding().floors) {
     for (const k of readDefs(f.path)) {
       if (!MEASURED.includes(k.source.kind)) continue;
-      if (k.source.kind === 'google' && googleWindow(k, now).empty) continue;   // Search Console has no data for this period yet
+      if (k.source.kind === 'google' && (googleWindow(k, now).empty || google.missing(integ.spaceOfRoot(f.path), k.source.call))) continue;   // no data for this period yet, or Google not connected
       const last = latestOf(f.id, k);
       if (last && now - last.ts < (EVERY[k.every] || EVERY.day) - 60e3 && (k.period === 'total' || last.ts >= periodStart(k.period, now))) continue;
       try { const r = await measure(f.id, f.path, k.id, { now }); out.push({ floorId: f.id, kpi: k.id, value: r.value, state: r.status.state }); }
@@ -349,7 +349,8 @@ export function list(floorId, root, now = Date.now()) {
     const stale = l && k.period !== 'total' && l.ts < periodStart(k.period, now) && k.source.kind !== 'manual';   // measured before this period started
     const err = vals.errors[k.id] && (!l || vals.errors[k.id].ts > l.ts) ? vals.errors[k.id] : null;              // the last measurement failed
     const lag = k.source.kind === 'google' ? googleWindow(k, now) : null;                                          // Search Console's period ends at today − 2
-    return { ...k, latest: l, status: statusOf(k, stale ? null : l?.value), series: series.slice(-30), ...(lag?.lag ? { lagTo: lag.to, lagEmpty: lag.empty } : {}), ...(since ? { switchedAt: since } : {}), stale: !!stale, ...(err ? { error: err } : {}), ...(vals.unreadable ? { unreadable: true } : {}) };
+    const needs = k.source.kind === 'google' ? google.missing(integ.spaceOfRoot(root), k.source.call) : '';
+    return { ...k, latest: l, status: statusOf(k, stale ? null : l?.value), series: series.slice(-30), ...(lag?.lag ? { lagTo: lag.to, lagEmpty: lag.empty } : {}), ...(needs ? { needs } : {}), ...(since ? { switchedAt: since } : {}), stale: !!stale, ...(err ? { error: err } : {}), ...(vals.unreadable ? { unreadable: true } : {}) };
   });
 }
 // all Spaces, for the cockpit and the digest

@@ -1,0 +1,19 @@
+# <Site name>
+
+> <One paragraph: what the business offers, for whom and where. Plain facts, no claims you cannot back.>
+
+<!-- Template for /llms.txt (format: llmstxt.org). The llms-txt skill fills it in; list only canonical, indexable pages.
+     Publishing it is a change to the live site: the owner approves it. Remove this comment before publishing. -->
+
+## Products
+- [<Product page>](https://www.example.com/...): <what it answers>
+
+## Guides
+- [<Guide>](https://www.example.com/...): <the question it answers>
+
+## Company
+- [About](https://www.example.com/about): <who we are>
+- [Contact](https://www.example.com/contact): <how to reach us>
+
+## Optional
+- [<Secondary page>](https://www.example.com/...): <what it answers>

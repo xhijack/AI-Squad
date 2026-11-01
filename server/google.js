@@ -339,6 +339,17 @@ async function indexnowSubmit(props, a) {
   return { site, submitted: a.urls.length, status: r.status };
 }
 const RUN = { 'gsc.performance': gscPerformance, 'gsc.inspect': gscInspect, 'ga4.report': ga4Report, 'ga4.aiReferrals': ga4AiReferrals, 'psi.run': psiRun, 'bing.stats': bingStats, 'indexnow.submit': indexnowSubmit };
+// what a Space still needs before a call can work ('' when nothing): the key, its property (a seeded target waits quietly)
+export function missing(space, name) {
+  if (!space) return 'the Space is not registered';
+  const p = propsFor(space);
+  if (name.startsWith('psi.')) return p.siteUrl ? '' : 'the site address (Floor settings → Google)';
+  if (name.startsWith('bing.')) return !(auth.readSecret('bing') || {}).apiKey ? 'a Bing Webmaster key (Admin → Integrations → Google)' : p.siteUrl ? '' : 'the site address (Floor settings → Google)';
+  if (!serviceAccount()) return 'the Google service account (Admin → Integrations → Google)';
+  if (name.startsWith('gsc.') && !p.gscSite) return 'the Search Console site (Floor settings → Google)';
+  if (name.startsWith('ga4.') && !p.ga4Property) return 'the GA4 property (Floor settings → Google)';
+  return '';
+}
 // the property a call reads, for the Log (never the key)
 export const propertyOf = (call, props) => (call.startsWith('gsc.') ? props.gscSite : call.startsWith('ga4.') ? props.ga4Property : props.siteUrl) || '';
 // one call for a Space ({ id, path, access }): its properties only; a write only when the caller says so
