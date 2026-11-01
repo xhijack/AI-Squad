@@ -7,7 +7,8 @@
 // period (day, week, month, total: the value counts from the period's start), source and how often it is measured.
 // Sources: manual (a person enters it), erpnext (count or sum of documents), csv (a file in the repository),
 // webhook (an outside system posts it to /api/kpi/hook/<token>), mcp (1.6: a read-only tool of an integration's MCP
-// server, server/integrations.js; its result read into one number by server/pick.js).
+// server, server/integrations.js; its result read into one number by server/pick.js), google (1.8: a read call of the
+// built-in Google connector, server/google.js, read the same way; Search Console's period ends at today − 2, its lag).
 // Every measurement goes to the Squad Log (kpi.measured); the status (met, behind, unset, unknown) is computed.
 // The Owner may change a target's source in place (1.7): the history stays, the switch is kept with the values
 // (`switches`) and logged (kpi.source.changed, the kinds only), and the status counts only from the new source's
@@ -20,12 +21,13 @@ import * as building from './building.js';
 import * as erp from './erpnext.js';
 import * as integ from './integrations.js';
 import * as pick from './pick.js';
+import * as google from './google.js';
 import { readJson, writeJson, writeText, readText, kebab, bad, notFound, oneLine } from './util.js';
 
 export const DIRECTIONS = ['up', 'down'];
 export const PERIODS = ['day', 'week', 'month', 'total'];
-export const SOURCES = ['manual', 'erpnext', 'csv', 'webhook', 'mcp'];
-export const MEASURED = ['erpnext', 'csv', 'mcp'];                      // the server measures these on their interval
+export const SOURCES = ['manual', 'erpnext', 'csv', 'webhook', 'mcp', 'google'];
+export const MEASURED = ['erpnext', 'csv', 'mcp', 'google'];                    // the server measures these on their interval
 export const ON_BEHIND = ['off', 'notify', 'suggest', 'act'];          // what a target behind its goal raises (1.5, server/behind.js)
 export const EVERY = { hour: 3600e3, day: 864e5, week: 7 * 864e5 };
 export const FILE = 'docs/squad/KPI.md';
@@ -57,6 +59,11 @@ export function cleanSource(s = {}) {
     if (!integ.ID.test(server)) throw bad('Integration source: the integration, e.g. user:postiz (Admin → Integrations)');
     if (!/^[\w./-]{1,128}$/.test(tool)) throw bad('Integration source: the tool to call, e.g. posts_this_week');
     return { kind, server, tool, args: pick.cleanArgs(s.args), pick: pick.cleanPick(s.pick) };
+  }
+  if (kind === 'google') {
+    const call = String(s.call || '').trim();
+    if (!google.CALLS.includes(call) || google.WRITES.includes(call)) throw bad(`Google source: a read call, one of ${google.CALLS.filter((c) => !google.WRITES.includes(c)).join(', ')}`);
+    return { kind, call, args: google.cleanArgs(call, pick.cleanArgs(s.args)), pick: pick.cleanPick(s.pick) };
   }
   return { kind };
 }
@@ -129,14 +136,17 @@ function switched(root, k, from, now, by) {
     delete vals.errors[k.id];
     saveVals(f.id, vals);
   } catch { /* the values file is unreadable: the switch is still logged */ }
-  const ends = (s, side) => (s.kind === 'mcp' ? { [`${side}Server`]: s.server, [`${side}Tool`]: s.tool } : {});
+  const ends = (s, side) => (s.kind === 'mcp' ? { [`${side}Server`]: s.server, [`${side}Tool`]: s.tool } : s.kind === 'google' ? { [`${side}Call`]: s.call } : {});
   deps.log(f.id, { type: 'kpi.source.changed', data: { kpi: k.id, name: k.name, from: from.kind, to: k.source.kind, ...ends(from, 'from'), ...ends(k.source, 'to'), ...(by ? { by } : {}) } });
   deps.invalidate();
 }
 // when the target's source last changed (0: never)
 const switchedAt = (vals, id) => vals.switches?.[id]?.at(-1)?.ts || 0;
 // a source from an integration must be usable here and now: known, read-only, allowed for this Space (plain words)
-function checkSource(root, s) { if (s.kind === 'mcp') integ.checkUse(integ.spaceOfRoot(root), s); }
+function checkSource(root, s) {
+  if (s.kind === 'mcp') integ.checkUse(integ.spaceOfRoot(root), s);
+  if (s.kind === 'google' && !integ.spaceOfRoot(root)) throw bad('The Space is not registered on this machine');
+}
 export function removeKpi(root, id) {
   const kpis = readDefs(root);
   if (!kpis.some((x) => x.id === id)) throw notFound('Target not found');
@@ -183,18 +193,22 @@ export function record(floorId, root, id, value, { source = 'manual', by = '', n
   delete vals.errors[id];
   saveVals(floorId, vals);
   const st = statusOf(k, v);
-  deps.log(floorId, { type: 'kpi.measured', data: { kpi: id, name: k.name, value: v, unit: k.unit, target: k.target, period: k.period, source, ...mcpFields(k, source), state: st.state, ...(by ? { by } : {}) } });
-  render(root, floorId);
+  deps.log(floorId, { type: 'kpi.measured', data: { kpi: id, name: k.name, value: v, unit: k.unit, target: k.target, period: k.period, source, ...mcpFields(k, source, root), state: st.state, ...(by ? { by } : {}) } });
+  render(root, floorId, now);
   deps.invalidate();
   deps.measured(floorId, root, id, now);                 // a target behind its goal may raise work (1.5)
   return { kpi: k, value: v, at: now, status: st };
 }
-function failed(floorId, k, error, now) {
+function failed(floorId, root, k, error, now) {
   try { const vals = loadVals(floorId, { strict: true }); vals.errors[k.id] = { ts: now, error: oneLine(error, 200) }; saveVals(floorId, vals); } catch { /* the file itself is the problem */ }
-  deps.log(floorId, { type: 'kpi.failed', data: { kpi: k.id, name: k.name, source: k.source.kind, ...mcpFields(k, k.source.kind), error: oneLine(error, 200) } });
+  deps.log(floorId, { type: 'kpi.failed', data: { kpi: k.id, name: k.name, source: k.source.kind, ...mcpFields(k, k.source.kind, root), error: oneLine(error, 200) } });
 }
-// which integration and tool measured it (the arguments stay out of the log)
-const mcpFields = (k, source) => (source === 'mcp' && k.source.kind === 'mcp' ? { server: k.source.server, tool: k.source.tool } : {});
+// which integration and tool measured it, or which Google call and property (the arguments and the key stay out of the log)
+const mcpFields = (k, source, root) => {
+  if (source === 'mcp' && k.source.kind === 'mcp') return { server: k.source.server, tool: k.source.tool };
+  if (source === 'google' && k.source.kind === 'google') return { call: k.source.call, property: google.propertyOf(k.source.call, google.propsFor(integ.spaceOfRoot(root))) };
+  return {};
+};
 // the Space's webhook token (made on first use, shown to the Owner); a new one when the old one leaked
 export function token(floorId, { rotate = false } = {}) {
   const vals = loadVals(floorId, { strict: true });
@@ -274,15 +288,24 @@ export async function measureOne(root, k, now = Date.now()) {
     const r = await integ.call(integ.spaceOfRoot(root), s, pick.fillArgs(s.args, periodRange(k.period, now)));
     return pick.pickValue(r, s.pick);
   }
+  if (s.kind === 'google') return pick.pickValue({ structuredContent: await googleCall(root, k, now) }, s.pick);
   throw bad(`A ${s.kind} target is not measured by the server: enter its value`);
+}
+// a Google target's call: {{from}}/{{to}} are the period's days, and Search Console's period ends at today − 2
+export const googleWindow = (k, now = Date.now()) => google.windowFor(k.source.call, periodRange(k.period, now), now);
+async function googleCall(root, k, now) {
+  const w = googleWindow(k, now);
+  if (w.empty) throw bad(`No Search Console data yet for this ${k.period}: it lags about ${google.GSC_LAG_DAYS} days`);
+  return google.call(integ.spaceOfRoot(root), k.source.call, pick.fillArgs(k.source.args, { from: w.from, to: w.to }));
 }
 // Try (Admin → Targets, 1.6): one call with a source from an integration before it is saved: the arguments as sent,
 // the raw result (clipped) and the number it picks, or why not
 export async function trySource(root, input = {}, now = Date.now()) {
   const s = cleanSource(input.source);
-  if (s.kind !== 'mcp') throw bad('Try works for a source from an integration');
-  const args = pick.fillArgs(s.args, periodRange(PERIODS.includes(input.period) ? input.period : 'month', now));
-  const r = await integ.call(integ.spaceOfRoot(root), s, args);
+  if (!['mcp', 'google'].includes(s.kind)) throw bad('Try works for a source from an integration or Google');
+  const period = PERIODS.includes(input.period) ? input.period : 'month';
+  const args = s.kind === 'google' ? pick.fillArgs(s.args, googleWindow({ source: s, period }, now)) : pick.fillArgs(s.args, periodRange(period, now));
+  const r = s.kind === 'google' ? { structuredContent: await googleCall(root, { source: s, period }, now) } : await integ.call(integ.spaceOfRoot(root), s, args);
   const raw = JSON.stringify(r, null, 2) || '';
   let value = null, error = '';
   try { value = pick.pickValue(r, s.pick); } catch (e) { error = e.message; }
@@ -297,7 +320,7 @@ export async function measure(floorId, root, id, { now = Date.now(), by = '' } =
   const k = readDefs(root).find((x) => x.id === id);
   if (!k) throw notFound('Target not found');
   let v;
-  try { v = await measureOne(root, k, now); } catch (e) { failed(floorId, k, e.message, now); throw e; }
+  try { v = await measureOne(root, k, now); } catch (e) { failed(floorId, root, k, e.message, now); throw e; }
   return record(floorId, root, id, v, { source: k.source.kind, by, now });
 }
 // the hourly tick: every erpnext, csv and mcp target whose interval passed, or whose last measurement is from
@@ -307,6 +330,7 @@ export async function tick(now = Date.now()) {
   for (const f of building.loadBuilding().floors) {
     for (const k of readDefs(f.path)) {
       if (!MEASURED.includes(k.source.kind)) continue;
+      if (k.source.kind === 'google' && googleWindow(k, now).empty) continue;   // Search Console has no data for this period yet
       const last = latestOf(f.id, k);
       if (last && now - last.ts < (EVERY[k.every] || EVERY.day) - 60e3 && (k.period === 'total' || last.ts >= periodStart(k.period, now))) continue;
       try { const r = await measure(f.id, f.path, k.id, { now }); out.push({ floorId: f.id, kpi: k.id, value: r.value, state: r.status.state }); }
@@ -324,7 +348,8 @@ export function list(floorId, root, now = Date.now()) {
     const l = series.findLast((p) => p.ts >= since) || null;                       // values from before a source change do not count
     const stale = l && k.period !== 'total' && l.ts < periodStart(k.period, now) && k.source.kind !== 'manual';   // measured before this period started
     const err = vals.errors[k.id] && (!l || vals.errors[k.id].ts > l.ts) ? vals.errors[k.id] : null;              // the last measurement failed
-    return { ...k, latest: l, status: statusOf(k, stale ? null : l?.value), series: series.slice(-30), ...(since ? { switchedAt: since } : {}), stale: !!stale, ...(err ? { error: err } : {}), ...(vals.unreadable ? { unreadable: true } : {}) };
+    const lag = k.source.kind === 'google' ? googleWindow(k, now) : null;                                          // Search Console's period ends at today − 2
+    return { ...k, latest: l, status: statusOf(k, stale ? null : l?.value), series: series.slice(-30), ...(lag?.lag ? { lagTo: lag.to, lagEmpty: lag.empty } : {}), ...(since ? { switchedAt: since } : {}), stale: !!stale, ...(err ? { error: err } : {}), ...(vals.unreadable ? { unreadable: true } : {}) };
   });
 }
 // all Spaces, for the cockpit and the digest
@@ -341,6 +366,7 @@ export function overview(now = Date.now()) {
   return { spaces, total: spaces.reduce((n, s) => n + s.kpis.length, 0), met: sum('met'), behind: sum('behind'), unset: sum('unset'), unknown: sum('unknown') };
 }
 const fmt = (v, unit) => (v === null || v === undefined ? '–' : `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ''}`);
+export const GOOGLE_TEXT = { gsc: 'Google Search Console', ga4: 'GA4', psi: 'PageSpeed Insights', bing: 'Bing Webmaster' };
 const PERIOD_TEXT = { day: 'today', week: 'this week', month: 'this month', total: 'in total' };
 // docs/squad/KPI.md: the agents' view (regenerated on every change and measurement)
 export function render(root, floorId, now = Date.now()) {
@@ -348,7 +374,7 @@ export function render(root, floorId, now = Date.now()) {
   const f = path.join(root, FILE);
   if (!kpis.length) { if (fs.existsSync(f) && (readText(f) || '').includes('GENERATED by The AI Squad')) fs.rmSync(f); return ''; }
   const cell = (s) => String(s).replace(/\|/g, '/');
-  const rows = kpis.map((k) => `| ${cell(k.name)}${k.note ? ` (${cell(k.note)})` : ''} | ${k.stale ? '–' : cell(fmt(k.latest?.value, k.unit))} | ${k.target === null ? 'not set' : cell(fmt(k.target, k.unit))} (${k.direction === 'down' ? 'at most' : 'at least'}, ${PERIOD_TEXT[k.period]}) | ${k.status.state}${k.status.pct != null ? ` (${k.status.pct} %)` : ''}${k.error ? ' · last measurement failed' : ''} | ${k.source.kind === 'mcp' ? `mcp ${cell(k.source.server.split(':').at(-1))}` : k.source.kind} | ${k.latest ? new Date(k.latest.ts).toISOString().slice(0, 16).replace('T', ' ') : 'never'} |`);
+  const rows = kpis.map((k) => `| ${cell(k.name)}${k.note ? ` (${cell(k.note)})` : ''} | ${k.stale ? '–' : cell(fmt(k.latest?.value, k.unit))} | ${k.target === null ? 'not set' : cell(fmt(k.target, k.unit))} (${k.direction === 'down' ? 'at most' : 'at least'}, ${PERIOD_TEXT[k.period]}) | ${k.status.state}${k.status.pct != null ? ` (${k.status.pct} %)` : ''}${k.error ? ' · last measurement failed' : ''} | ${k.source.kind === 'mcp' ? `mcp ${cell(k.source.server.split(':').at(-1))}` : k.source.kind === 'google' ? `${GOOGLE_TEXT[k.source.call.split('.')[0]]}${k.lagTo ? ` (data until ${k.lagTo})` : ''}` : k.source.kind} | ${k.latest ? new Date(k.latest.ts).toISOString().slice(0, 16).replace('T', ' ') : 'never'} |`);
   const text = ['# Targets', '', '<!-- GENERATED by The AI Squad from .claude/aisquad/kpi.json: the owner sets targets in Admin → Targets; do not edit this file. -->', '',
     'The numbers this Space works against. Plan the week against the targets that are behind, report progress on them, and never invent a value: a manual target is entered by a person in the app.', '',
     '| Target | Now | Goal | Status | Source | Measured |', '|---|---|---|---|---|---|', ...rows, ''].join('\n');

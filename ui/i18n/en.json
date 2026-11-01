@@ -2134,5 +2134,19 @@
  "No service account yet: upload its key in Admin → Integrations → Google.": "No service account yet: upload its key in Admin → Integrations → Google.",
  "IndexNow key (docs/seo/INDEXNOW.md)": "IndexNow key (docs/seo/INDEXNOW.md)",
  "Test": "Test",
- "Save Google properties": "Save Google properties"
+ "Save Google properties": "Save Google properties",
+ "from Google": "from Google",
+ "Search Console: clicks, impressions, queries": "Search Console: clicks, impressions, queries",
+ "GA4: sessions, key events": "GA4: sessions, key events",
+ "GA4: sessions from AI assistants": "GA4: sessions from AI assistants",
+ "PageSpeed: performance score": "PageSpeed: performance score",
+ "Bing Webmaster: query stats": "Bing Webmaster: query stats",
+ "URL Inspection: indexing of up to 20 URLs": "URL Inspection: indexing of up to 20 URLs",
+ "Google call": "Google call",
+ "The number at": "The number at",
+ "Arguments (JSON)": "Arguments (JSON)",
+ "Read with the service account in Admin → Integrations → Google, from the properties in Floor settings → Google. Search Console data lags about 2 days, so its period ends 2 days ago.": "Read with the service account in Admin → Integrations → Google, from the properties in Floor settings → Google. Search Console data lags about 2 days, so its period ends 2 days ago.",
+ "Arguments must be a JSON object": "Arguments must be a JSON object",
+ "Search Console data lags about 2 days: no data for this period yet.": "Search Console data lags about 2 days: no data for this period yet.",
+ "Search Console data lags about 2 days: this period is measured up to {date}.": "Search Console data lags about 2 days: this period is measured up to {date}."
 }

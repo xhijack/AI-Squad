@@ -4,7 +4,8 @@
 // the server measures ERPNext, CSV and integration targets; the Space's webhook address for outside systems. A target
 // from an integration (1.6): an MCP server the Space may use, one of its read-only tools, its arguments (a form from
 // the tool's input schema), how the number is read, and Try before saving. Edit (1.7) changes a target's source in
-// place: the history stays, and the first value from the new source starts a new line in the sparkline.
+// place: the history stays, and the first value from the new source starts a new line in the sparkline. From Google
+// (1.8): a read call of the built-in connector with its arguments and where the number is; Search Console lags 2 days.
 import { esc, api, toast, ago } from './lib.js';
 import { t, tx } from './i18n.js';
 import { KIND } from './admin-int.js';
@@ -12,8 +13,18 @@ import { KIND } from './admin-int.js';
 const STATE = { met: t('Met'), behind: t('Behind'), unset: t('No goal yet'), unknown: t('No value yet') };
 const TONE = { met: 'live', behind: 'bad', unset: '', unknown: '' };
 const PERIOD = { day: t('today'), week: t('this week'), month: t('this month'), total: t('in total') };
-const SOURCE = { manual: t('entered by a person'), erpnext: 'ERPNext', csv: 'CSV', webhook: t('webhook'), mcp: t('from an integration') };
-const MEASURED = ['erpnext', 'csv', 'mcp'];
+const SOURCE = { manual: t('entered by a person'), erpnext: 'ERPNext', csv: 'CSV', webhook: t('webhook'), mcp: t('from an integration'), google: t('from Google') };
+const MEASURED = ['erpnext', 'csv', 'mcp', 'google'];
+// the Google calls a target can read, with the arguments and the number a new target starts from
+const GCALL = {
+  'gsc.performance': [t('Search Console: clicks, impressions, queries'), { from: '{{from}}', to: '{{to}}' }, 'totals.clicks'],
+  'ga4.report': [t('GA4: sessions, key events'), { metrics: ['sessions'], where: { sessionDefaultChannelGroup: 'Organic Search' }, from: '{{from}}', to: '{{to}}' }, 'totals.sessions'],
+  'ga4.aiReferrals': [t('GA4: sessions from AI assistants'), { from: '{{from}}', to: '{{to}}' }, 'total.sessions'],
+  'psi.run': [t('PageSpeed: performance score'), { strategy: 'mobile' }, 'score'],
+  'bing.stats': [t('Bing Webmaster: query stats'), { report: 'queries' }, 'count'],
+  'gsc.inspect': [t('URL Inspection: indexing of up to 20 URLs'), { urls: [] }, 'count'],
+};
+const GTEXT = { gsc: 'Google Search Console', ga4: 'GA4', psi: 'PageSpeed Insights', bing: 'Bing Webmaster' };
 const PICK = { path: t('the value at a path'), count: t('the number of items in a list'), sum: t('a field added up across a list'), regex: t('a number in the text (regular expression)') };
 const EVERY = { hour: t('every hour'), day: t('every day'), week: t('every week') };
 // what a target behind its goal raises (1.5)
@@ -71,6 +82,19 @@ function mcpSource(f) {
   if (v('mcpArgsJson').trim()) { let j; try { j = JSON.parse(v('mcpArgsJson')); } catch { j = null; } if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error(t('More arguments must be a JSON object, e.g. {"status": "published"}')); Object.assign(args, j); }
   return { kind: 'mcp', server: v('mcpServer'), tool: v('mcpTool'), args, pick: { type: v('pickType'), path: v('pickPath'), field: v('pickField'), pattern: v('pickPattern') } };
 }
+function googleBlock(cur = null) {
+  const show = cur?.kind === 'google', call = show ? cur.call : 'gsc.performance';
+  return `<div class="ksrc" data-src="google" ${show ? '' : 'hidden'} style="grid-column: span 4"><div class="grid4">
+      <label class="span2">${t('Google call')}<select name="gCall">${Object.entries(GCALL).map(([k, [l]]) => `<option value="${esc(k)}" ${k === call ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="span2">${t('The number at')}<input name="gPath" value="${esc(show ? cur.pick?.path || '' : GCALL[call][2])}" placeholder="totals.clicks"></label>
+      <label style="grid-column: span 4">${t('Arguments (JSON)')}<input name="gArgs" class="mono" value="${esc(JSON.stringify(show ? cur.args : GCALL[call][1]))}"></label></div>
+    <div class="row"><span class="note grow">${t('Read with the service account in Admin → Integrations → Google, from the properties in Floor settings → Google. Search Console data lags about 2 days, so its period ends 2 days ago.')}</span><button type="button" class="small" data-ktry>${t('Try')}</button></div>
+    <div class="mcpTry"></div></div>`;
+}
+function googleSource(f) {
+  let args; try { args = JSON.parse(f.elements.gArgs.value || '{}'); } catch { throw new Error(t('Arguments must be a JSON object')); }
+  return { kind: 'google', call: f.elements.gCall.value, args, pick: { type: 'path', path: f.elements.gPath.value.trim() } };
+}
 // the fields of every source kind; `cur` fills them for Edit (1.7)
 function sourceFields(spId, cur = { kind: 'manual' }) {
   const e = cur.kind === 'erpnext' ? cur : {}, c = cur.kind === 'csv' ? cur : {};
@@ -78,6 +102,7 @@ function sourceFields(spId, cur = { kind: 'manual' }) {
   return `<div class="ksrc" data-src="erpnext" ${hid('erpnext')} style="grid-column: span 4"><div class="grid4"><label>DocType<input name="doctype" placeholder="Lead" value="${esc(e.doctype || '')}"></label><label>${t('Count or sum')}<select name="aggregate">${opts({ count: t('count'), sum: t('sum of a field') }, e.aggregate || 'count')}</select></label><label>${t('Field to sum')}<input name="field" placeholder="grand_total" value="${esc(e.field || '')}"></label><label>${t('Date field')}<input name="dateField" value="${esc(e.dateField || 'creation')}"></label></div>
       <label>${t('Filters (JSON, optional)')}<input name="filters" placeholder='[["status","=","Ordered"]]' value="${e.filters?.length ? esc(JSON.stringify(e.filters)) : ''}"></label></div>
     ${mcpBlock(spId, cur)}
+    ${googleBlock(cur)}
     <div class="ksrc" data-src="csv" ${hid('csv')} style="grid-column: span 4"><div class="grid4"><label>${t('File in the repository')}<input name="path" placeholder="docs/kpi/traffic.csv" value="${esc(c.path || '')}"></label><label>${t('Column')}<input name="column" value="${esc(c.column || 'value')}"></label><label>${t('Date column')}<input name="dateColumn" value="${esc(c.dateColumn || 'date')}"></label><label>${t('Take')}<select name="csvAggregate">${opts({ last: t('the last row'), sum: t('the sum in the period') }, c.aggregate || 'last')}</select></label></div></div>`;
 }
 // the source a form describes
@@ -87,6 +112,7 @@ function sourceOf(f) {
   if (kind === 'erpnext') { let filters = []; if (v('filters').trim()) { try { filters = JSON.parse(v('filters')); } catch { throw new Error(t('Filters must be JSON, e.g. [["status","=","Ordered"]]')); } } return { kind, doctype: v('doctype'), aggregate: v('aggregate'), field: v('field'), dateField: v('dateField'), filters }; }
   if (kind === 'csv') return { kind, path: v('path'), column: v('column'), dateColumn: v('dateColumn'), aggregate: v('csvAggregate') };
   if (kind === 'mcp') return mcpSource(f);
+  if (kind === 'google') return googleSource(f);
   return { kind };
 }
 const nameOf = (id) => (INTEG?.servers || []).find((s) => s.id === id)?.name || String(id).split(':').at(-1);
@@ -117,7 +143,8 @@ export function targetsHtml(x, d, me, integ = null) {
         ${s.unreadable ? `<div class="note badText">${t('The values file of this Space is not valid JSON; fix or remove it under ~/.aisquad/kpi/ and the values and webhook come back.')}</div>` : ''}
         ${s.kpis.length ? `<div class="adminList">${s.kpis.map((k) => `<div class="adminRow" data-kpi="${esc(k.id)}"><div class="row"><span class="badge ${TONE[k.status.state]}">${STATE[k.status.state]}${k.status.pct != null ? ` ${k.status.pct} %` : ''}</span><b class="grow">${esc(tx(k.name))}</b>
             <span class="kval">${fmt(k.stale ? null : k.latest?.value, k.unit)}</span><span class="note">/ ${k.target == null ? t('no goal') : fmt(k.target, k.unit)}</span>${spark(k.series, k.switchedAt)}</div>
-          <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : k.source.kind === 'mcp' ? ` (${esc(nameOf(k.source.server))} · <span class="mono">${esc(k.source.tool)}</span>)` : ''}${MEASURED.includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
+          <div class="note">${k.direction === 'down' ? t('at most') : t('at least')} · ${PERIOD[k.period]} · ${SOURCE[k.source.kind] || k.source.kind}${k.source.kind === 'erpnext' ? ` (${esc(k.source.aggregate)} ${esc(k.source.doctype)})` : k.source.kind === 'csv' ? ` (<span class="mono">${esc(k.source.path)}</span>)` : k.source.kind === 'mcp' ? ` (${esc(nameOf(k.source.server))} · <span class="mono">${esc(k.source.tool)}</span>)` : k.source.kind === 'google' ? ` (${esc(GTEXT[k.source.call.split('.')[0]] || k.source.call)} · <span class="mono">${esc(k.source.call)}</span>)` : ''}${MEASURED.includes(k.source.kind) ? ` · ${EVERY[k.every]}` : ''} · ${k.latest ? t('measured {ago}', { ago: ago(k.latest.ts) }) : t('never measured')}${k.stale ? ` · <span class="warnText">${t('from the previous period')}</span>` : ''}${k.error ? ` · <span class="badText">${t('last measurement failed: {error}', { error: esc(k.error.error) })}</span>` : ''}${k.note ? ` · ${esc(k.note)}` : ''}</div>
+          ${k.lagTo ? `<div class="note">${k.lagEmpty ? t('Search Console data lags about 2 days: no data for this period yet.') : t('Search Console data lags about 2 days: this period is measured up to {date}.', { date: esc(k.lagTo) })}</div>` : ''}
           ${k.requires && k.source.kind !== 'mcp' ? `<div class="note">${t('Connect {kind} to measure it (Admin → Integrations), then add it from an integration.', { kind: esc(KIND[k.requires.slice(4)] || k.requires) })}</div>` : ''}
           <div class="note whenBehind">${t('When behind:')} <b>${MODE[k.onBehind?.mode || 'off']}</b>${k.onBehind && k.onBehind.mode !== 'off' && k.onBehind.mode !== 'notify' ? ` · ${esc(agentName(s.agents, k.onBehind.agent))}` : ''}${k.onBehind?.task ? ` · ${esc(k.onBehind.task.slice(0, 80))}` : ''}</div>
           ${owner ? `<details class="kbehind"><summary class="note">${t('Change what happens when it is behind')}</summary><form class="grid4" data-kbehind>
@@ -167,6 +194,7 @@ export function bindTargets(body, again) {
     const server = () => (INTEG?.servers || []).find((s) => s.id === f.elements.mcpServer.value);
     if (n === 'mcpServer') f.elements.mcpTool.innerHTML = toolOpts(server());
     if (n === 'mcpServer' || n === 'mcpTool') { f.querySelector('.mcpArgs').innerHTML = argsHtml(toolsOf(server()).find((x) => x.name === f.elements.mcpTool.value)); f.querySelector('.mcpTry').innerHTML = ''; }
+    if (n === 'gCall') { const [, args, at] = GCALL[e.target.value]; f.elements.gArgs.value = JSON.stringify(args); f.elements.gPath.value = at; f.querySelector('[data-src="google"] .mcpTry').innerHTML = ''; }
     if (n === 'pickType') f.querySelectorAll('[data-pick]').forEach((el) => { el.hidden = !el.dataset.pick.split(' ').includes(e.target.value); });
   });
   body.addEventListener('submit', async (e) => {
@@ -194,10 +222,10 @@ export function bindTargets(body, again) {
     if (!sp) return;
     try {
       if (el.dataset.ktry !== undefined) {
-        const f = el.closest('form'), box = f.querySelector('.mcpTry');
+        const f = el.closest('form'), g = !!el.closest('[data-src="google"]'), box = el.closest('.ksrc').querySelector('.mcpTry');
         el.disabled = true;
         try {
-          const r = await api('POST', `/api/floors/${sp}/kpis/try`, { source: mcpSource(f), period: f.elements.period.value });
+          const r = await api('POST', `/api/floors/${sp}/kpis/try`, { source: g ? googleSource(f) : mcpSource(f), period: f.elements.period.value });
           box.innerHTML = `<div class="note">${r.error ? `<span class="badText">${esc(tx(r.error))}</span>` : `${t('The number:')} <b class="kval">${fmt(r.value)}</b>`} · ${t('sent')} <span class="mono">${esc(JSON.stringify(r.args))}</span></div>
             <details ${r.error ? 'open' : ''}><summary class="note">${t('The result as the tool returned it')}</summary><pre class="note pre mono">${esc(r.raw)}</pre></details>`;
         } finally { el.disabled = false; }
