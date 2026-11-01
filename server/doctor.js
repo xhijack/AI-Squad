@@ -11,12 +11,15 @@ import { readSchema, SCHEMA_VERSION } from './schema.js';
 import { readResources } from './watchdog.js';
 import * as backup from './backup.js';
 import * as google from './google.js';
+import * as sessions from './sessions.js';
+import * as limits from './limits.js';
 
 const run = (file, args) => { try { return execFileSync(file, args, { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); } catch { return null; } };
 const gb = (b) => `${(b / 2 ** 30).toFixed(1)} GB`;
 const modeOf = (f) => { try { return fs.statSync(f).mode & 0o777; } catch { return null; } };
 
-export function runDoctor({ service = null, now = Date.now() } = {}) {
+// online: what the running server saw (GET /api/online): { host, public, reason, proxied, https, plain, ownerPaired, cfAccess }
+export function runDoctor({ service = null, online = null, now = Date.now() } = {}) {
   const out = [];
   const add = (id, title, status, detail, fix = '') => out.push({ id, title, status, detail, fix });
 
@@ -46,6 +49,26 @@ export function runDoctor({ service = null, now = Date.now() } = {}) {
     pinMode == null ? 'Start the server once' : pinMode & 0o077 ? `chmod 600 ${paths.pin()}` : '');
   const secrets = path.join(config.home, 'secrets.json'), sMode = modeOf(secrets);
   if (sMode != null) add('secrets', 'Secrets file', sMode & 0o077 ? 'fail' : 'ok', `mode ${sMode.toString(8)}`, sMode & 0o077 ? `chmod 600 ${secrets}` : '');
+
+  // online access (1.9): how the server is reached, the session store, the PIN lock
+  if (online) {
+    const loop = /^(localhost|127(\.\d{1,3}){3}|::1|\[::1\])$/i.test(String(online.host || ''));
+    add('online-bind', 'Network address', !loop && !online.public ? 'warn' : 'ok', `bound to ${online.host}${online.public ? `, public mode (${online.reason})` : ''}`,
+      !loop && !online.public ? 'Anyone on this network reaches the server and reads need only a PIN: bind to 127.0.0.1 behind a proxy or tunnel, or turn on public mode (building.json prefs.public: true). See INSTALL.md, Online.' : '');
+    if (online.public) {
+      add('online-https', 'HTTPS in front', online.plain ? 'warn' : 'ok', online.proxied ? `${online.https} of ${online.proxied} requests through the proxy came over HTTPS` : 'no request through a proxy yet',
+        online.plain ? 'The proxy forwards plain HTTP (no X-Forwarded-Proto: https): serve the hostname over HTTPS only (Cloudflare, Caddy, or Nginx with a certificate)' : '');
+      add('second-factor', 'Owner\'s second factor', online.ownerPaired ? 'ok' : 'warn', online.ownerPaired ? 'a code to the Owner\'s Telegram before owner-level actions' : 'off: the Owner has no paired Telegram chat',
+        online.ownerPaired ? '' : 'Admin → Notifications: add the bot and pair the Owner\'s chat');
+      if (online.cfAccess) add('cf-access', 'Cloudflare Access', 'ok', `every request through the tunnel needs a token of ${online.cfAccess}`);
+    }
+  }
+  const sesMode = sessions.fileMode();
+  if (sesMode != null) add('sessions', 'Session store', sesMode !== '600' ? 'fail' : 'ok', `${sessions.count(now)} active, mode ${sesMode}`, sesMode !== '600' ? `chmod 600 ${sessions.file()}` : '');
+  const lock = limits.status(now);
+  add('lockout', 'PIN sign-in', lock.locked ? 'fail' : lock.failsToday >= limits.PER_DAY / 2 ? 'warn' : 'ok',
+    lock.locked ? `locked since ${new Date(lock.lockedAt).toISOString().slice(0, 16).replace('T', ' ')} after too many wrong PINs` : `${lock.failsToday} wrong PINs in the last day (locks at ${lock.perDay})`,
+    lock.locked ? 'aisquad unlock (or /unlock in the Owner\'s Telegram chat)' : lock.failsToday >= limits.PER_DAY / 2 ? 'Someone is guessing PINs: check auth.failed in the Building\'s Squad Log' : '');
 
   // the Google service account (1.8) is the Owner's secret: only in secrets.json, which must stay 0600
   const sa = google.serviceAccount();

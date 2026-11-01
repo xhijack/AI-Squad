@@ -217,7 +217,8 @@ async function unlockCmd() {
 
 async function doctorCmd() {
   const { runDoctor, doctorText } = await import('../server/doctor.js');
-  const r = runDoctor({ service: service.status() });
+  const on = await get('/api/online');                  // what the running server saw (1.9); null when it is not running
+  const r = runDoctor({ service: service.status(), online: on?.host ? on : null });
   const v = await get('/api/version');
   console.log(doctorText(r));
   console.log(v ? `Server: running ${v.version}${v.version === VERSION && v.root === ROOT ? '' : ' (outdated: run /aisquad to restart it)'}` : 'Server: not running (run /aisquad to start it)');

@@ -132,7 +132,8 @@ const routes = [
     if (b.squadsDir !== undefined) { if (!path.isAbsolute(String(b.squadsDir))) throw new HttpError(400, 'The squads folder must be an absolute path'); building.setPrefs({ squadsDir: path.resolve(String(b.squadsDir)) }); }
     squad.invalidate(); return { ok: true };
   }, { pin: true, history: () => ({ label: 'Building settings' }) }],
-  ['GET', /^\/api\/doctor$/, () => runDoctor({ service: (() => { try { return service.status(); } catch { return null; } })() }), { pin: true }],
+  ['GET', /^\/api\/doctor$/, (p, b, req) => runDoctor({ service: (() => { try { return service.status(); } catch { return null; } })(), online: req.online() }), { pin: true }],
+  ['GET', /^\/api\/online$/, (p, b, req) => req.online(), { pin: true }],
   ['GET', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); return { settings: s, defaultDir: backup.defaultDir(), status: backup.readStatus(), encrypted: !!backup.storedPassphrase(), backups: backup.listBackups(s.dir || backup.defaultDir()).slice(0, 30) }; }, { pin: true }],
   ['POST', /^\/api\/backups$/, () => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const r = backup.createBackup({ out: s.dir || backup.defaultDir(), passphrase: backup.storedPassphrase(), logs: s.logs }); return { ok: true, ...r }; }, { pin: true }],
   ['POST', /^\/api\/backups\/verify$/, (p, b) => { const s = backup.cleanSettings(building.loadBuilding().prefs.backup); const dir = s.dir || backup.defaultDir(); const f = backup.listBackups(dir).find((x) => x.name === String(b.name || '')); if (!f) throw notFound('Backup not found'); return backup.verifyBackup(f.file, { passphrase: backup.storedPassphrase() }); }, { pin: true }],
@@ -414,6 +415,9 @@ export function createHandler({ pin, host = '127.0.0.1', isPublic: flag = false,
     if (cf.key !== JSON.stringify(c)) cf = { key: JSON.stringify(c), v: cfaccess.verifier(c, { fetchFn }) };
     return cf.v;
   };
+  // what the doctor reports about online access (1.9): how requests came through the proxy
+  const seen = { proxied: 0, https: 0, plain: 0 };
+  const onlineState = () => { const o = onlineSettings(); return { host, public: pub.on(), reason: pub.reason(), ...seen, ownerPaired: notify.ownerPaired(), cfAccess: cfaccess.cleanCfAccess(o.cfAccess)?.teamDomain || '' }; };
   const secondOn = (c) => second.enabled({ setting: c.o.secondFactor, paired: notify.ownerPaired() });
   const secondState = (c) => (c.user?.role === 'owner' && c.isPublic && c.session && secondOn(c) ? (c.session.secondAt ? 'done' : 'needed') : 'off');
 
@@ -497,6 +501,7 @@ export function createHandler({ pin, host = '127.0.0.1', isPublic: flag = false,
     const c = { isPublic, o, hops, ip: proxy.clientAddress(req, hops), https: proxy.isHttps(req, hops), local: proxy.isLocalTool(req), email: '', user: null, session: null, sid: '' };
     // Secure over HTTPS and through a proxy in public mode; a browser on the LAN over plain HTTP still signs in
     c.secure = c.https || (isPublic && proxy.hasProxyHeaders(req) && proxy.trusted(req, hops));
+    if (proxy.hasProxyHeaders(req) && proxy.trusted(req, hops)) { seen.proxied++; seen[c.https ? 'https' : 'plain']++; }
     for (const [k, v] of Object.entries(harden.securityHeaders({ isPublic, https: c.https }))) res.setHeader(k, v);
     if (harden.tooLarge(req, limit)) return void send(res, 413, { error: 'Request too large' });
     if (harden.CHANGES.has(req.method) && !harden.originAllowed(req, { host: proxy.requestHost(req, hops), publicUrl: o.publicUrl })) return void send(res, 403, { error: 'Refused: this request came from another site' });
@@ -517,7 +522,7 @@ export function createHandler({ pin, host = '127.0.0.1', isPublic: flag = false,
       for (const r of routes) { if (r[0] !== req.method) continue; const m = url.pathname.match(r[1]); if (m) { hit = { r, m }; break; } }
       const c = await prepare(req, res, url, hit?.r[3]?.maxBody || harden.BODY_LIMIT);
       if (!c) return;
-      req.client = c;
+      req.client = c; req.online = onlineState;
       if (/^\/api\/session(\/(code|verify))?$/.test(url.pathname)) { const done = await sessionRoute(req, res, c, `${req.method} ${url.pathname}`); if (done !== undefined) return; }
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
         if (c.isPublic && !c.user && !OPEN_STATIC.test(url.pathname)) {
