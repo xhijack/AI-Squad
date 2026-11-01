@@ -9,6 +9,8 @@
 // ~/.aisquad/guide.json (the owner's; never in a repository). A division whose Blueprint is gone is listed as
 // "later", never built. The guide can be run again any time (add a division, change the goals). Since 1.7 every
 // division has a Blueprint (Finance, Owner-only; Support), and the same interview runs on Telegram (server/guide-tg.js).
+// Since 1.8 Marketing has a focus: everything (content, social, ads: Digital Marketing) or search only (SEO and AI
+// answers: SEO & GEO, whose targets are measured from Google and which needs Google access from the owner).
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, claudeBin } from './config.js';
@@ -20,6 +22,7 @@ import * as setup from './setup.js';
 import * as kpi from './kpi.js';
 import * as integ from './integrations.js';
 import * as cadence from './cadence.js';
+import * as google from './google.js';
 import { membersFor, defaultPicks, runClaude } from './recommend.js';
 import { readJson, writeJson, writeText, kebab, clip, oneLine, bad } from './util.js';
 
@@ -32,6 +35,12 @@ export const HOURS = ['day', 'night', 'always'];
 export const MACHINES = ['this', 'more'];
 // division -> Blueprint; the delivery division depends on the business (software or ERP implementation)
 export const DIVISIONS = { product: 'product', engineering: 'software-house', implementation: 'erp-consultant', marketing: 'digital-marketing', sales: 'sales-crm', legal: 'legal', finance: 'finance', support: 'support' };
+// Marketing's focus (1.8): everything, or search only (SEO and AI answers); an SEO agency picks search
+export const FOCUS = { marketing: { all: 'digital-marketing', search: 'seo-geo' } };
+export const FOCUS_HINT = { agency: { marketing: 'search' } };
+export const blueprintOf = (division, a) => FOCUS[division]?.[a?.focus?.[division]] || DIVISIONS[division];
+// a clinic or a shop is found near its customers: the search squad gets the local SEO specialist
+export const LOCAL_TYPES = ['clinic', 'retail'];
 export const LATER = [];                                      // divisions without a Blueprint: shown, never built (none since 1.7)
 const TITLE = { product: 'Product', engineering: 'Engineering', implementation: 'Implementation', marketing: 'Marketing', sales: 'Sales', legal: 'Legal', finance: 'Finance', support: 'Support' };
 export const SUGGEST = {
@@ -84,6 +93,7 @@ export function cleanAnswers(a = {}) {
     goals: { picks: pickList(g.picks, GOALS), revenue: num(g.revenue), currency: a.language === 'id' ? 'IDR' : 'USD', leads: num(g.leads), launch: oneLine(g.launch || '', 120) },
     have: pickList(a.have, HAVE),
     divisions, modes,
+    focus: { marketing: Object.keys(FOCUS.marketing).includes(a.focus?.marketing) ? a.focus.marketing : 'all' },
     capacity: { machines: MACHINES.includes(c.machines) ? c.machines : 'this', hours: HOURS.includes(c.hours) ? c.hours : 'day', budget: num(c.budget) },
   };
 }
@@ -93,7 +103,7 @@ const save = (st, via = '') => writeJson(file(), { ...st, updatedAt: Date.now(),
 // the state the UI shows: where the owner is, the answers so far, the plan, whether it was built
 export function state() {
   const st = load();
-  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, suggestIf: SUGGEST_IF, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, planAt: st.planAt || 0, via: st.via || '' };
+  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, suggestIf: SUGGEST_IF, focusHint: FOCUS_HINT, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, planAt: st.planAt || 0, via: st.via || '' };
 }
 export function answer(partial, step, { via = 'web' } = {}) {
   const st = load();
@@ -123,9 +133,16 @@ const kpiGoal = (bp, k, a) => {
   if (bp === 'product') return { 'feedback-handled': 5 }[k.id] ?? null;
   if (bp === 'support') return { 'first-response': 24, csat: 90 }[k.id] ?? null;
   if (bp === 'finance') return { 'days-to-close': 5 }[k.id] ?? null;
+  if (bp === 'seo-geo') return { 'mobile-score': 90, 'pages-published': 4 }[k.id] ?? null;
   return null;
 };
-const materialsFor = (division, a) => (MATERIALS[division] || []).map(([id, when]) => ({ id, status: when === 'have' ? 'have' : when === 'later' ? 'later' : when && a.have.includes(when) ? 'have' : 'missing' }));
+// SEO & GEO (1.8): the brief, the brand, the site and Google access (the service account's e-mail added in Search
+// Console and GA4, the properties entered in Floor settings → Google): a new Space never has them yet
+const SEARCH_MATERIALS = [['seo-brief', null], ['brand', 'brand'], ['website', 'website'], ['site-repo', 'repos'], ['google-access', null]];
+const materialsFor = (division, a, bpId = '') => (bpId === 'seo-geo' ? SEARCH_MATERIALS : MATERIALS[division] || []).map(([id, when]) => ({ id, status: when === 'have' ? 'have' : when === 'later' ? 'later' : when && a.have.includes(when) ? 'have' : 'missing', ...(id === 'google-access' ? { email: google.status().clientEmail } : {}) }));
+// where a target's number comes from when its Blueprint says (1.8): Google, or by hand
+export const GOOGLE_FROM = { gsc: 'Google Search Console', ga4: 'GA4', psi: 'PageSpeed', bing: 'Bing Webmaster' };
+const fromOf = (k, bp) => (k.source?.kind === 'google' ? { from: GOOGLE_FROM[String(k.source.call).split('.')[0]] } : bp.kpis.some((x) => x.source?.kind === 'google') && !k.requires ? { from: 'hand' } : {});
 // the deterministic plan from the answers: every Space with its Blueprint, mode, shift, budget, targets and materials
 // a division the guide built before (its Space is still registered), or a Space with the name the guide would give
 function existingSpace(division, spaceName, built) {
@@ -160,15 +177,16 @@ export function draftPlan(a, built = load().built) {
   const later = a.divisions.filter((d) => LATER.includes(d));
   const spaces = [];
   for (const division of a.divisions.filter((d) => DIVISIONS[d])) {
-    let bp; try { bp = blueprints.getBlueprint(DIVISIONS[division]); } catch { later.push(division); continue; }   // a Blueprint removed from the library
-    const spaceName = clip(`${name} ${TITLE[division]}`, 60);
+    let bp; try { bp = blueprints.getBlueprint(blueprintOf(division, a)); } catch { later.push(division); continue; }   // a Blueprint removed from the library
+    const spaceName = clip(`${name} ${bp.id === 'seo-geo' ? 'Search' : TITLE[division]}`, 60);
     const mode = a.modes[division] || defaultMode(division);    // Finance is always the Owner's, whatever its Blueprint says
     spaces.push({
       division, blueprint: bp.id, name: spaceName, mode, autopilot: AUTOPILOT[mode], access: division === 'finance' ? 'owner' : bp.space.access || 'team', shift: shiftFor(a.capacity.hours, mode), budget: 0,
       ...(existingSpace(division, spaceName, built) ? { exists: true, skip: true } : {}),   // run again: a Space that is already there is not built twice
-      kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode], ...measuredBy(k, { id: '', access: bp.space.access || 'team' }) })),
+      kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode], ...measuredBy(k, { id: '', access: bp.space.access || 'team' }), ...fromOf(k, bp) })),
       routines: routinesFor(bp, a.capacity.hours, mode),
-      materials: materialsFor(division, a),
+      materials: materialsFor(division, a, bp.id),
+      ...(bp.id === 'seo-geo' && LOCAL_TYPES.includes(a.business.type) ? { extraRoles: ['local-seo-specialist'] } : {}),
     });
   }
   const p = { company: { name, type: a.business.type, description: a.business.description, language: a.language }, goals: a.goals, capacity: a.capacity, spaces, later, summary: '', source: 'defaults' };
@@ -252,9 +270,12 @@ const LABEL = {
   brand: 'Brand rules (voice, colours, logo, words to use and to avoid)', website: 'The website (address, who can change it)', 'social-accounts': 'Social media accounts (which, who posts)', analytics: 'Analytics (GA4 or similar) for the traffic target',
   'price-list': 'Price list and discount rules (Owner only: pricing/ in the Company Brain)', 'lead-sources': 'Where leads come from (forms, WhatsApp, marketplace)', inbox: 'A shared inbox or WhatsApp for lead replies',
   'contract-templates': 'Contract templates (the bilingual ones are in the Company Brain)', 'company-documents': 'Company documents (deed, NPWP, signatory)',
+  'seo-brief': 'The SEO brief: goals, audience, offer, markets and languages', 'site-repo': 'The site\'s repository or CMS (Floor settings → Repositories), so fixes go as pull requests',
   'finance-key': 'A read-only ERPNext finance key (Admin → ERPNext → Finance; docs/ERPNEXT.md)', 'bank-statements': 'Bank statements each month (placed in docs/finance/bank/; agents never log in to a bank)', 'finance-policy': 'Approval limits, who pays, the close and tax calendars, the budget',
   'ticket-source': 'Where the tickets live (ERPNext Issues or a help desk connected as an integration)', 'kb-sources': 'What answers come from (product docs, FAQ, past replies without personal data)', 'support-policy': 'Channels, hours, SLAs per priority and what only the owner decides',
 };
+// Google access in plain words, with the service account's e-mail when it is uploaded
+export const googleLabel = (email) => (email ? `Google access: add ${email} to Search Console (Users and permissions) and GA4 (Viewer), then enter the properties in Floor settings → Google` : 'Google access: upload the service account\'s key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google');
 const STATUS_TEXT = { have: 'available: ask the owner where it is', missing: 'missing: interview the owner and draft it for approval', later: 'later: not needed for the first weeks' };
 const MODE_TEXT = { automatic: 'automatic: routine work runs and ships by itself; money, legal, production, secrets and deleting data still wait for the owner', supervised: 'supervised: the squad prepares, the owner approves what goes out', manual: 'manual: the squad drafts only; the owner decides everything' };
 const cell = (s) => String(s ?? '').replace(/\|/g, '/');
@@ -290,7 +311,7 @@ export function materialsMarkdown(sp) {
   return ['# Materials this Space needs', '', '<!-- GENERATED by The AI Squad\'s Company Guide. The lead keeps the status column current. -->', '',
     'Before real work, the lead asks the owner for what is missing and drafts it in `docs/` for approval. Never invent a material.', '',
     '| Material | Status |', '|---|---|',
-    ...sp.materials.map((m) => `| ${cell(m.label || LABEL[m.id] || m.id)}${m.why ? ` (${cell(m.why)})` : ''} | ${STATUS_TEXT[m.status] || m.status} |`), ''].join('\n');
+    ...sp.materials.map((m) => `| ${cell(m.label || (m.id === 'google-access' ? googleLabel(m.email) : LABEL[m.id]) || m.id)}${m.why ? ` (${cell(m.why)})` : ''} | ${STATUS_TEXT[m.status] || m.status} |`), ''].join('\n');
 }
 
 // ---------- build ----------
@@ -312,7 +333,8 @@ async function buildAll(st, p, create) {
   const out = [];
   for (const sp of p.spaces.filter((s) => !s.skip)) {
     const bp = blueprints.getBlueprint(sp.blueprint);
-    const team = membersFor(bp, defaultPicks(bp), templates).map((m) => ({ template: m.template, displayName: m.displayName, lead: m.lead }));
+    const picks = [...defaultPicks(bp), ...(sp.extraRoles || []).filter((r) => bp.roles.some((x) => x.template === r)).map((template) => ({ template, count: 1 }))];
+    const team = membersFor(bp, picks, templates).map((m) => ({ template: m.template, displayName: m.displayName, lead: m.lead }));
     try {
       const r = await create({ blueprint: bp.id, name: sp.name, goal: `${p.company.name}: ${TITLE[sp.division]}. ${p.summary || p.company.description || ''}`.trim(), team, autopilot: sp.autopilot, budget: sp.budget ? { usd: sp.budget, period: 'month' } : undefined, installSkills: true });
       const root = r.path;

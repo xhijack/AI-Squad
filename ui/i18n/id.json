@@ -2160,5 +2160,16 @@
  "the Search Console site (Floor settings → Google)": "situs Search Console (Pengaturan Lantai → Google)",
  "the GA4 property (Floor settings → Google)": "properti GA4 (Pengaturan Lantai → Google)",
  "the site address (Floor settings → Google)": "alamat situs (Pengaturan Lantai → Google)",
- "a Bing Webmaster key (Admin → Integrations → Google)": "kunci Bing Webmaster (Admin → Integrasi → Google)"
+ "a Bing Webmaster key (Admin → Integrations → Google)": "kunci Bing Webmaster (Admin → Integrasi → Google)",
+ "Everything (content, social, ads)": "Semuanya (konten, media sosial, iklan)",
+ "A general marketing team: content, social media, campaigns and SEO.": "Tim marketing umum: konten, media sosial, kampanye dan SEO.",
+ "Search only (SEO and AI answers)": "Pencarian saja (SEO dan jawaban AI)",
+ "A search team: Google rankings and citations in AI answers, measured from Search Console and GA4.": "Tim pencarian: peringkat Google dan kutipan di jawaban AI, diukur dari Search Console dan GA4.",
+ "Marketing: what should it focus on?": "Marketing: fokusnya ke mana?",
+ "An SEO agency picks Search only.": "Agensi SEO memilih Pencarian saja.",
+ "Enter by hand": "Diisi manual",
+ "Google access: add {email} to Search Console and GA4, then enter the properties in Floor settings → Google": "Akses Google: tambahkan {email} ke Search Console dan GA4, lalu isi propertinya di Pengaturan Lantai → Google",
+ "Google access: upload the service account key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google": "Akses Google: unggah kunci service account (Admin → Integrasi → Google), tambahkan e-mailnya ke Search Console dan GA4, lalu isi propertinya di Pengaturan Lantai → Google",
+ "The SEO brief: goals, audience, offer, markets and languages": "Brief SEO: tujuan, audiens, penawaran, pasar dan bahasa",
+ "The site's repository or CMS, so fixes go as pull requests": "Repositori atau CMS situs, supaya perbaikan dikirim sebagai pull request"
 }

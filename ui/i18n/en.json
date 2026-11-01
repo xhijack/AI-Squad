@@ -2160,5 +2160,16 @@
  "the Search Console site (Floor settings → Google)": "the Search Console site (Floor settings → Google)",
  "the GA4 property (Floor settings → Google)": "the GA4 property (Floor settings → Google)",
  "the site address (Floor settings → Google)": "the site address (Floor settings → Google)",
- "a Bing Webmaster key (Admin → Integrations → Google)": "a Bing Webmaster key (Admin → Integrations → Google)"
+ "a Bing Webmaster key (Admin → Integrations → Google)": "a Bing Webmaster key (Admin → Integrations → Google)",
+ "Everything (content, social, ads)": "Everything (content, social, ads)",
+ "A general marketing team: content, social media, campaigns and SEO.": "A general marketing team: content, social media, campaigns and SEO.",
+ "Search only (SEO and AI answers)": "Search only (SEO and AI answers)",
+ "A search team: Google rankings and citations in AI answers, measured from Search Console and GA4.": "A search team: Google rankings and citations in AI answers, measured from Search Console and GA4.",
+ "Marketing: what should it focus on?": "Marketing: what should it focus on?",
+ "An SEO agency picks Search only.": "An SEO agency picks Search only.",
+ "Enter by hand": "Enter by hand",
+ "Google access: add {email} to Search Console and GA4, then enter the properties in Floor settings → Google": "Google access: add {email} to Search Console and GA4, then enter the properties in Floor settings → Google",
+ "Google access: upload the service account key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google": "Google access: upload the service account key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google",
+ "The SEO brief: goals, audience, offer, markets and languages": "The SEO brief: goals, audience, offer, markets and languages",
+ "The site's repository or CMS, so fixes go as pull requests": "The site's repository or CMS, so fixes go as pull requests"
 }

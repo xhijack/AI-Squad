@@ -36,7 +36,11 @@ const L = {
       divisions: 'Which divisions should run? Each becomes a Space with its own squad. Suggested for you: {list}.',
       mode: '{division}: how much should it do by itself? Money, contracts, production deploys, secrets and deleting data always wait for you.',
       machines: 'Machines?', hours: 'When should the squads work?', budget: 'AI budget per month in USD (split across the divisions)?',
+      focus: 'Marketing: what should it focus on? Everything is content, social media and ads; Search only is Google rankings and citations in AI answers, measured from Search Console and GA4.',
+      focusHint: 'An SEO agency picks Search only.',
     },
+    focus: { all: 'Everything (content, social, ads)', search: 'Search only (SEO and AI answers)' },
+    google: 'Google access: add {email} to Search Console and GA4, then enter the properties in Floor settings → Google', googleNoKey: 'Google access: upload the service account key (Admin → Integrations → Google), then add its e-mail to Search Console and GA4',
     type: { saas: 'A SaaS product', 'erp-consultant': 'ERPNext consulting', consultant: 'Consulting', 'software-house': 'Software house', agency: 'Agency', clinic: 'Clinic or practice', retail: 'Shop or retail', other: 'Something else' },
     goal: { revenue: 'More revenue', leads: 'More leads', launch: 'Launch a product', cost: 'Lower costs', service: 'Better service' },
     have: { products: 'Products with prices', brand: 'Brand rules', website: 'A website', social: 'Social media', erpnext: 'ERPNext', tools: 'Other tools', repos: 'Code repositories', team: 'People on the team', legal: 'Company documents' },
@@ -70,7 +74,11 @@ const L = {
       divisions: 'Divisi mana yang dijalankan? Setiap divisi menjadi Space dengan squad sendiri. Saran untukmu: {list}.',
       mode: '{division}: seberapa banyak yang dikerjakan sendiri? Uang, kontrak, deploy ke production, rahasia dan menghapus data selalu menunggumu.',
       machines: 'Mesin?', hours: 'Kapan squad bekerja?', budget: 'Anggaran AI per bulan dalam USD (dibagi ke semua divisi)?',
+      focus: 'Marketing: fokusnya ke mana? Semuanya berarti konten, media sosial dan iklan; Pencarian saja berarti peringkat Google dan kutipan di jawaban AI, diukur dari Search Console dan GA4.',
+      focusHint: 'Agensi SEO memilih Pencarian saja.',
     },
+    focus: { all: 'Semuanya (konten, media sosial, iklan)', search: 'Pencarian saja (SEO dan jawaban AI)' },
+    google: 'Akses Google: tambahkan {email} ke Search Console dan GA4, lalu isi propertinya di Pengaturan Lantai → Google', googleNoKey: 'Akses Google: unggah kunci service account (Admin → Integrasi → Google), lalu tambahkan e-mailnya ke Search Console dan GA4',
     type: { saas: 'Produk SaaS', 'erp-consultant': 'Konsultan ERPNext', consultant: 'Konsultan', 'software-house': 'Software house', agency: 'Agensi', clinic: 'Klinik atau praktik', retail: 'Toko atau ritel', other: 'Lainnya' },
     goal: { revenue: 'Omzet naik', leads: 'Lead bertambah', launch: 'Meluncurkan produk', cost: 'Biaya turun', service: 'Layanan lebih baik' },
     have: { products: 'Produk dengan harga', brand: 'Aturan brand', website: 'Website', social: 'Media sosial', erpnext: 'ERPNext', tools: 'Tools lain', repos: 'Repositori kode', team: 'Orang di tim', legal: 'Dokumen perusahaan' },
@@ -100,6 +108,7 @@ export function questions(a) {
     ...(a.goals.picks.includes('launch') ? [{ id: 'launch', step: 'goals', kind: 'text' }] : []),
     { id: 'have', step: 'have', kind: 'multi', options: guide.HAVE },
     { id: 'divisions', step: 'divisions', kind: 'multi', options: Object.keys(guide.DIVISIONS), min: 1 },
+    ...(a.divisions.includes('marketing') ? [{ id: 'focus', step: 'divisions', kind: 'choice', options: Object.keys(guide.FOCUS.marketing) }] : []),
     ...a.divisions.filter((d) => guide.DIVISIONS[d]).map((d) => ({ id: `m.${d}`, step: 'modes', kind: 'choice', options: guide.MODES })),
     { id: 'machines', step: 'capacity', kind: 'choice', options: guide.MACHINES },
     { id: 'hours', step: 'capacity', kind: 'choice', options: guide.HOURS },
@@ -114,6 +123,7 @@ function valueOf(a, id) {
   if (['type', 'name', 'description'].includes(id)) return a.business[id];
   if (['picks', 'leads', 'revenue', 'launch'].includes(id)) return a.goals[id];
   if (['have', 'divisions'].includes(id)) return a[id];
+  if (id === 'focus') return a.focus?.marketing;
   if (id.startsWith('m.')) return a.modes[id.slice(2)];
   return a.capacity[id];
 }
@@ -122,6 +132,7 @@ function patchOf(a, id, v) {
   if (['type', 'name', 'description'].includes(id)) return { business: { ...a.business, [id]: v } };
   if (['picks', 'leads', 'revenue', 'launch'].includes(id)) return { goals: { ...a.goals, [id]: v } };
   if (['have', 'divisions'].includes(id)) return { [id]: v };
+  if (id === 'focus') return { focus: { ...(a.focus || {}), marketing: v } };
   if (id.startsWith('m.')) return { modes: { ...a.modes, [id.slice(2)]: v } };
   return { capacity: { ...a.capacity, [id]: v } };
 }
@@ -140,6 +151,7 @@ const label = (lang, q, v) => {
   if (q.id === 'picks') return T.goal[v] || v;
   if (q.id === 'have') return T.have[v] || v;
   if (q.id === 'divisions') return T.division[v] || v;
+  if (q.id === 'focus') return T.focus[v] || v;
   if (q.id.startsWith('m.')) return T.mode[v] || v;
   return (T[q.id] || {})[v] || v;
 };
@@ -147,6 +159,7 @@ const nowText = (lang, q, v) => (v == null || v === '' || (Array.isArray(v) && !
 export function questionMessage(q, a, lang, sel = null) {
   const T = L[lang], n = STEP_OF[q.step] + 1;
   let ask = q.id.startsWith('m.') ? fill(T.q.mode, { division: T.division[q.id.slice(2)] }) : fill(T.q[q.id], { currency: a.goals.currency, list: guide.suggestFor(a.business.type, a.have).map((d) => T.division[d]).join(', ') });
+  if (q.id === 'focus' && guide.FOCUS_HINT[a.business.type]?.marketing === 'search') ask += `\n${T.q.focusHint}`;
   if (q.id.startsWith('m.')) ask += `\n${guide.MODES.map((m) => `• ${T.mode[m]}: ${T.modeText[m]}`).join('\n')}`;
   // the type is "other" until the business step is answered (cleanAnswers' default): no "Now:" for it before a name
   const cur = q.id === 'type' && !a.business.name ? '' : nowText(lang, q, sel ?? valueOf(a, q.id));
@@ -177,6 +190,8 @@ export function planMessage(p, lang, publicUrl = '') {
     lines.push(`  ${on.length ? fill(T.routines, { list: on.map((r) => `${r.title} ${r.at}`).join('; ') }) : T.noRoutines}`);
     const missing = sp.materials.filter((m) => m.status === 'missing').length;
     if (missing) lines.push(`  ${fill(T.materials, { n: missing })}`);
+    const g = sp.materials.find((m) => m.id === 'google-access' && m.status === 'missing');
+    if (g) lines.push(`  ${g.email ? fill(T.google, { email: g.email }) : T.googleNoKey}`);
   }
   const modes = [...new Set(p.spaces.filter((x) => !x.skip).map((x) => x.mode))];
   lines.push('', fill(T.waits, { list: [...modes.map((m) => `${T.mode[m]}: ${T.modeText[m]}`), T.hardStops].join('; ') }));

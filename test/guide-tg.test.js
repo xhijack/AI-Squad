@@ -118,6 +118,10 @@ test('the interview: one question per message, buttons, toggles, text, numbers, 
   await notify.handleUpdate(press(555, 'g:t:divisions:legal'), { now: T });
   await tap('Selesai ✓', div);
   assert.deepEqual(guide.load().answers.divisions, ['marketing', 'sales', 'finance', 'support']);
+  // Marketing picked: its focus (1.8)
+  assert.match(last().text, /^Langkah 5\/7 · Divisi\n\nMarketing: fokusnya ke mana\?/);
+  await tap('Semuanya (konten, media sosial, iklan)');
+  assert.equal(guide.load().answers.focus.marketing, 'all');
   // one question per division for the mode
   for (const [d, mode] of [['Marketing', 'Otomatis'], ['Sales', 'Diawasi'], ['Keuangan', 'Manual'], ['Dukungan', 'Diawasi']]) {
     assert.match(last().text, new RegExp(`^Langkah 6/7 · Seberapa otomatis\\n\\n${d}`));
