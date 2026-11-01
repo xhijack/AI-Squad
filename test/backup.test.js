@@ -47,6 +47,8 @@ test('a backup holds ~/.aisquad without secrets or machine state, each Floor\'s 
   fs.writeFileSync(path.join(home, 'secrets.json'), '{"elevenlabs":"sk-x"}');
   fs.writeFileSync(path.join(home, 'approvals.json'), '{}');
   fs.writeFileSync(path.join(home, 'runtime.json'), '{}');
+  fs.writeFileSync(path.join(home, 'sessions.json'), '{}');
+  fs.writeFileSync(path.join(home, 'lockout.json'), '{}');
   fs.mkdirSync(path.join(home, 'voice-cache'), { recursive: true }); fs.writeFileSync(path.join(home, 'voice-cache', 'x.mp3'), 'x');
   fs.mkdirSync(path.join(home, 'logs', 'acme'), { recursive: true }); fs.writeFileSync(path.join(home, 'logs', 'acme', '2026-10-26.jsonl'), '{"type":"x"}\n');
   const mem = path.join(config.claudeHome, 'projects', encodeProjectPath(proj), 'memory');
@@ -63,7 +65,7 @@ test('a backup holds ~/.aisquad without secrets or machine state, each Floor\'s 
   assert.ok(names.includes('home/building.json'));
   assert.ok(names.some((n) => n.startsWith('home/roles/')), 'the Role Template library');
   assert.ok(names.includes('home/logs/acme/2026-10-26.jsonl'));
-  for (const n of ['home/secrets.json', 'home/pin', 'home/approvals.json', 'home/runtime.json', 'home/voice-cache/x.mp3']) assert.ok(!names.includes(n), `${n} stays out`);
+  for (const n of ['home/secrets.json', 'home/pin', 'home/approvals.json', 'home/runtime.json', 'home/sessions.json', 'home/lockout.json', 'home/voice-cache/x.mp3']) assert.ok(!names.includes(n), `${n} stays out`);
   const id = manifest.floors[0].id;
   assert.ok(names.includes(`floors/${id}/.claude/aisquad/floor.json`));
   assert.ok(names.includes(`floors/${id}/AISQUAD.md`));

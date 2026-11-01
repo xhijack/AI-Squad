@@ -103,9 +103,10 @@ export function decrypt(buf, pass) {
 
 // ---------- what goes in ----------
 // relative to ~/.aisquad. Caches and clones are rebuilt; runtime state belongs to the old machine's tmux
-// sessions; auto-merge approvals are given again on the new machine (a deliberate re-approval)
+// sessions; auto-merge approvals are given again on the new machine (a deliberate re-approval); sign-in sessions and
+// the PIN lock (1.9) stay with this machine: everyone signs in again on the new one
 const EXCLUDE = [/^voice-cache\//, /^libraries\//, /^backups\//, /^exports\//, /^server\.(pid|log)/, /^runtime\.json$/, /^independents\.json$/,
-  /^approvals\.json$/, /^backup-status\.json$/, /^backup-passphrase$/, /^usage\.json$/, /\.tmp$/, /(^|\/)\.DS_Store$/];
+  /^approvals\.json$/, /^backup-status\.json$/, /^backup-passphrase$/, /^usage\.json$/, /^sessions\.json$/, /^lockout\.json$/, /\.tmp$/, /(^|\/)\.DS_Store$/];
 export const SECRET_FILES = [/^secrets\.json$/, /^pin$/, /^users\.json$/];
 const isSecret = (rel) => SECRET_FILES.some((re) => re.test(rel));
 
