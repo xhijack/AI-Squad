@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
 // Headless Chrome screenshots over the DevTools protocol (no dependencies).
-//   node scripts/shot.js shots.json      shots: [{ url, out, w, h, pin?, storage?, wait?, eval?, keys? }]  (storage: localStorage keys, e.g. the renderer;
+//   node scripts/shot.js shots.json      shots: [{ url, out, w, h, pin?, storage?, wait?, eval?, keys? }]  (pin: signs in for a session cookie, 1.9;
+//                                        storage: localStorage keys, e.g. the renderer;
 //                                        keys: pressed after eval, e.g. ["Shift+Tab", "Tab"] to show the keyboard focus ring)
 //   SHOT_OFFLINE=1 blocks every host but 127.0.0.1 (checks the UI works without a CDN)
 import fs from 'node:fs';
@@ -15,7 +16,7 @@ for (const s of shots) {
   await send('Emulation.setDeviceMetricsOverride', { width: s.w, height: s.h, deviceScaleFactor: 1, mobile: s.w < 600 });
   if (s.pin !== undefined || s.storage) {
     await send('Page.navigate', { url: new URL('/', s.url).href }); await sleep(800);
-    if (s.pin !== undefined) await evaluate(`localStorage.setItem('aisquad.pin', ${JSON.stringify(s.pin)})`);
+    if (s.pin !== undefined) console.log(`sign-in: ${await evaluate(`fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: ${JSON.stringify(s.pin)} }) }).then((r) => r.status)`)}`);
     for (const [k, v] of Object.entries(s.storage || {})) await evaluate(`localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)})`);
   }
   await send('Page.navigate', { url: 'about:blank' }); await sleep(200);   // full load every time, not just a hash change

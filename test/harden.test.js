@@ -33,7 +33,7 @@ test('CSP: self only, the page\'s inline scripts by hash, no CDN; the real index
   assert.equal(h.length, 2, 'a script with src needs no hash');
   assert.equal(h[0], `'sha256-${crypto.createHash('sha256').update('a()').digest('base64')}'`);
   const c = harden.csp({ scripts: h });
-  for (const part of ["default-src 'self'", `script-src 'self' ${h.join(' ')}`, "frame-ancestors 'none'", "object-src 'none'", "connect-src 'self'"]) assert.ok(c.includes(part), part);
+  for (const part of ["default-src 'self'", `script-src 'self' ${h.join(' ')}`, "frame-ancestors 'none'", "object-src 'none'", "connect-src 'self' blob: data:"]) assert.ok(c.includes(part), part);
   assert.ok(!/https?:/.test(c), 'no outside origin anywhere');
   assert.ok(!c.includes("'unsafe-eval'"));
   const page = fs.readFileSync(new URL('../ui/index.html', import.meta.url), 'utf8');

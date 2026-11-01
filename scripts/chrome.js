@@ -26,6 +26,7 @@ export async function openChrome() {
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
     if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map((a) => a.value ?? a.description).join(' '));
+    if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') logs.push(`${m.params.entry.source}: ${m.params.entry.text}`);   // CSP violations, failed loads
   });
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++seq;
@@ -37,7 +38,7 @@ export async function openChrome() {
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
     return r.result?.value;
   };
-  await send('Page.enable'); await send('Runtime.enable');
+  await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable');
   const close = async () => { ws.close(); try { process.kill(-chrome.pid, 'SIGKILL'); } catch { chrome.kill(); }   // the whole group: GPU and renderer processes too
     await sleep(300); fs.rmSync(profile, { recursive: true, force: true }); };
   return { send, evaluate, logs, close };

@@ -5,11 +5,12 @@
 //     the server is reached at or prefs.publicUrl. A request with neither is not from a browser page (agent hooks, the
 //     command line, curl) and is left to the PIN and the session: cross-site requests from a browser always carry Origin.
 //   - Content-Security-Policy is self only (three.js is vendored, no CDN); the page's few inline scripts are allowed by
-//     their hashes. Inline style attributes stay allowed: the UI builds markup with them.
+//     their hashes. Inline style attributes stay allowed: the UI builds markup with them. connect-src also allows
+//     blob: and data: (the page's own memory): three.js fetches a model's embedded textures from them.
 import crypto from 'node:crypto';
 
 export const CHANGES = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-export const BODY_LIMIT = 256 * 1024;          // JSON bodies, unless a route says otherwise
+export const BODY_LIMIT = 2 ** 20;               // JSON bodies (1 MB), unless a route says otherwise
 export const MAX_BODY = 25 * 1024 * 1024;      // nothing is ever read beyond this
 
 const hostOf = (u) => { try { const x = new URL(u); return x.protocol === 'http:' || x.protocol === 'https:' ? x.host.toLowerCase() : null; } catch { return null; } };
@@ -32,7 +33,7 @@ export function scriptHashes(html) {
 export function csp({ scripts = [] } = {}) {
   return [
     "default-src 'self'", `script-src 'self'${scripts.length ? ' ' + scripts.join(' ') : ''}`, "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:", "media-src 'self' data: blob:", "font-src 'self' data:", "connect-src 'self'", "worker-src 'self' blob:",
+    "img-src 'self' data: blob:", "media-src 'self' data: blob:", "font-src 'self' data:", "connect-src 'self' blob: data:", "worker-src 'self' blob:",
     "frame-src 'self'", "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
   ].join('; ');
 }
