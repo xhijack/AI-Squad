@@ -2188,5 +2188,8 @@
  "Cloudflare Access sign-in required": "Cloudflare Access sign-in required",
  "Second factor required": "Second factor required",
  "No second factor is needed": "No second factor is needed",
- "The code could not be sent: pair the Owner's Telegram chat first": "The code could not be sent: pair the Owner's Telegram chat first"
+ "The code could not be sent: pair the Owner's Telegram chat first": "The code could not be sent: pair the Owner's Telegram chat first",
+ "Sign out": "Sign out",
+ "Sign out everywhere": "Sign out everywhere",
+ "Sign out every device, this one included?": "Sign out every device, this one included?"
 }

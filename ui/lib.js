@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Small shared helpers for the UI: DOM, formatting, API calls with the local PIN, toast, modal.
+// Small shared helpers for the UI: DOM, formatting, API calls behind the sign-in, toast, modal.
 import { t, tx } from './i18n.js';
 export const $ = (id) => document.getElementById(id);
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -73,37 +73,79 @@ export function toast(text, ms = 2800) {
   clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), ms);
 }
 
-// ---------- PIN + API ----------
-const PIN_KEY = 'aisquad.pin';
-let pin = (() => { try { return localStorage.getItem(PIN_KEY) || ''; } catch { return ''; } })();
-export const hasPin = () => !!pin;
+// ---------- sign-in + API ----------
+// 1.9: the PIN goes to the server once (POST /api/session) and the browser keeps only an HttpOnly session cookie,
+// sent with every request by itself. The Owner's second factor (public mode) is the code sent to Telegram.
+let signed = false, isPublic = false;
+export const signedIn = () => signed;
+export const publicMode = () => isPublic;
+try { localStorage.removeItem('aisquad.pin'); } catch { /* what releases before 1.9 kept */ }
+const signedChanged = () => document.dispatchEvent(new Event('aisquad:signed'));
+const postJson = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+// 401: wrong; 429: a wait in this language, or the lock in the server's words
+const refusal = (r, j, wrong) => (r.status === 401 ? wrong : r.status === 429 && !j.locked ? t('Too many wrong PINs: try again in {n} minutes', { n: Math.max(1, Math.ceil((j.retryAfter || 60) / 60)) }) : tx(j.error) || t('Request failed ({status})', { status: r.status }));
+
+export async function checkSession() {
+  try { const s = await (await fetch('/api/session')).json(); signed = !!s.signedIn; isPublic = !!s.public; } catch { /* offline: try again on the next action */ }
+  if (signed) signedChanged();
+  return signed;
+}
+
+// the code from the Owner's Telegram; sent: the server has already sent one (right after the PIN)
+export async function askSecondFactor(sent = false) {
+  if (!sent) {
+    const r = await fetch('/api/session/code', { method: 'POST' }).catch(() => null);
+    if (!r?.ok) { toast(tx((await r?.json().catch(() => ({})))?.error) || t('Could not reach the server'), 6000); return false; }
+  }
+  for (let i = 0; i < 3; i++) {
+    const code = prompt(t('We sent a 6-digit code to the Owner\'s Telegram.'));
+    if (!code) return false;
+    const r = await postJson('/api/session/verify', { code: code.trim() });
+    if (r.ok) return true;
+    toast(refusal(r, await r.json().catch(() => ({})), t('Wrong or expired code')), 6000);
+    if (r.status === 429) return false;
+  }
+  return false;
+}
 
 export function askPin() {
   return new Promise((resolve) => {
     const d = $('pinDlg');
     $('pinIn').value = '';
     d.showModal();
-    d.onclose = () => {
+    d.onclose = async () => {
       if (d.returnValue !== 'ok') return resolve(false);
-      pin = $('pinIn').value.trim();
-      try { localStorage.setItem(PIN_KEY, pin); } catch { /* private mode */ }
+      const pin = $('pinIn').value.trim();
+      $('pinIn').value = '';
+      let r, j;
+      try { r = await postJson('/api/session', { pin }); j = await r.json().catch(() => ({})); } catch { toast(t('Could not reach the server')); return resolve(false); }
+      if (!r.ok) { toast(refusal(r, j, t('Wrong PIN')), 6000); return resolve(false); }
+      signed = true;
+      if (j.secondFactor === 'sent') await askSecondFactor(true);
+      signedChanged();
       resolve(true);
     };
   });
 }
+export async function signOut({ everywhere = false } = {}) {
+  if (everywhere) await api('POST', '/api/sessions/revoke-all', {});
+  await fetch('/api/session', { method: 'DELETE' }).catch(() => {});
+  signed = false;
+  location.reload();
+}
 
-// reads: send the PIN too (servers bound off loopback lock every API call); 401 is reported, not prompted
+// reads: 401 is reported, not prompted (servers off loopback and public mode lock reads)
 export async function getJson(url) {
-  const r = await fetch(url, { headers: pin ? { 'x-aisquad-pin': pin } : {} });
+  const r = await fetch(url);
   if (r.status === 401) throw Object.assign(new Error(t('PIN required')), { status: 401 });
   if (r.status === 404) return { notFound: true };
   return r.json();
 }
 
-// image with the PIN header (servers off loopback lock reads); null on any failure
+// image behind the sign-in; null on any failure
 export async function fetchImage(url) {
   try {
-    const r = await fetch(url, { headers: pin ? { 'x-aisquad-pin': pin } : {} });
+    const r = await fetch(url);
     return r.ok ? await createImageBitmap(await r.blob()) : null;
   } catch { return null; }
 }
@@ -111,12 +153,15 @@ export async function fetchImage(url) {
 // key: an idempotency key for a submission (the server runs the same key once a minute, server/idempotency.js)
 export async function api(method, url, body, { raw = null, headers = {}, quiet401 = false, key = '' } = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const init = { method, headers: { 'x-aisquad-pin': pin, ...(key ? { 'x-idempotency-key': key } : {}), ...headers } };
+    const init = { method, headers: { ...(key ? { 'x-idempotency-key': key } : {}), ...headers } };
     if (raw) init.body = raw;
     else if (body !== undefined) { init.body = JSON.stringify(body); init.headers['content-type'] = 'application/json'; }
     const r = await fetch(url, init);
     if (r.status === 401) {
+      const j = await r.json().catch(() => ({}));
       if (quiet401) throw Object.assign(new Error(t('PIN required')), { status: 401 });
+      if (j.secondFactor) { if (!(await askSecondFactor())) throw Object.assign(new Error(t('Second factor required')), { status: 401 }); continue; }
+      signed = false;
       if (!(await askPin())) throw Object.assign(new Error(t('PIN required')), { status: 401 });
       continue;
     }

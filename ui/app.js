@@ -2,7 +2,7 @@
 // The AI Squad UI: routing (#/, #/floor/<id>, #/floor/<id>/desk/<agent>), polling, panels, actions.
 import { createSceneHost } from './renderer.js';
 import { OVERVIEWS, defaultOverview } from './scene-model.js';
-import { $, esc, money, gb, toast, api, askPin, hasPin, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago, oneAtATime, newKey } from './lib.js';
+import { $, esc, money, gb, toast, api, askPin, signedIn, checkSession, signOut, getJson, fetchImage, openModal, STATE_TEXT, drafts, answerItem, itemContext, mdLite, ago, oneAtATime, newKey } from './lib.js';
 import { lobbySections, floorSections, deskSections, attentionHtml, boardHtml, needsYou, standupAgents } from './views.js';
 import { ctx } from './ctx.js';
 import './dialogs.js';
@@ -113,7 +113,7 @@ async function refresh() {
     state.building = b;
     if (key === routeKey(state.route)) state.floor = f || null;
     if (state.floor?.notFound) { toast(tt('That Floor no longer exists')); location.hash = '#/'; }
-    if (r.mode === 'desk' && hasPin()) {
+    if (r.mode === 'desk' && signedIn()) {
       try { const d = await api('GET', `/api/floors/${r.floorId}/agents/${r.agentId}`, undefined, { quiet401: true }); if (key === routeKey(state.route)) state.desk = d; state.locked = false; }
       catch (e) { if (e.status === 401) state.locked = true; else if (e.status === 404) { toast(tt('That agent is no longer on this Floor')); location.hash = `#/floor/${r.floorId}`; } }
     } else if (r.mode === 'desk') state.locked = true;
@@ -761,7 +761,7 @@ $('menu').addEventListener('click', async (e) => {
   } else if (b.dataset.menu === 'voice') { ctx.actions['voice-settings']();
   } else if (b.dataset.menu === 'language') {                   // this browser, and with the PIN the Building's too (1.2.0)
     const next = LANG === 'en' ? 'id' : 'en';
-    if (hasPin()) await api('PATCH', '/api/building', { lang: next }).catch(() => {});
+    if (signedIn()) await api('PATCH', '/api/building', { lang: next }).catch(() => {});
     setLang(next);                                               // reloads in the other language
   } else if (b.dataset.menu === 'quality') {
     const order = ['auto', 'high', 'low'], next = order[(order.indexOf(scene.quality.chosen) + 1) % order.length];
@@ -770,6 +770,8 @@ $('menu').addEventListener('click', async (e) => {
     const order = ['auto', 'three', 'iso'], next = scene.choose(order[(order.indexOf(scene.chosen) + 1) % order.length]);
     scene._viewKey = null; applyTheme(); render(); showRenderer(); toast(tt('Scene view: {name}', { name: RENDERER_TEXT[next] }));
   } else if (b.dataset.menu === 'pin') askPin().then((ok) => ok && refresh());
+  else if (b.dataset.menu === 'signout') signOut();
+  else if (b.dataset.menu === 'signout-all') { if (confirm(tt('Sign out every device, this one included?'))) signOut({ everywhere: true }).catch((err) => toast(err.message)); }
   else if (b.dataset.menu === 'rename') {
     const name = prompt(tt('Building name'), state.building?.name || 'The AI Squad');
     if (name) api('PATCH', '/api/building', { name }).then(refresh, (err) => toast(err.message));
@@ -789,6 +791,7 @@ if (location.hash === '#/guide') {
   setTimeout(open, 300);
 }
 state.route = parseRoute();
+await checkSession();                                            // a session cookie from before (1.9)
 refresh();
 // the Company Guide (1.4): an owner's empty Building opens it once; after the language reload it comes back
 { let tries = 0; const open = () => { if (state.building && ctx.state.me) maybeOpenGuide(state.building, ctx.state.me); else if (tries++ < 20) setTimeout(open, 400); }; setTimeout(open, 600); }

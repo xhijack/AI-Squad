@@ -6,7 +6,7 @@ import { ctx } from './ctx.js';
 import { t } from './i18n.js';
 
 async function frameHtml(floorId, screen, file) {
-  const r = await fetch(`/api/floors/${floorId}/designs/${screen}/${encodeURIComponent(file)}`, { headers: { 'x-aisquad-pin': (() => { try { return localStorage.getItem('aisquad.pin') || ''; } catch { return ''; } })() } });
+  const r = await fetch(`/api/floors/${floorId}/designs/${screen}/${encodeURIComponent(file)}`, {});
   return r.ok ? r.text() : `<p style="font:14px sans-serif;color:#b91c1c">${t('Could not load {file} ({status})', { file: esc(file), status: r.status })}</p>`;
 }
 

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Menu → People (0.14): the Owner adds members (they work: agents, tasks, chat) and viewers (they read), each with
 // an own PIN that is shown once. The page knows who is signed in (GET /api/me) and hides what only the Owner can do.
-import { esc, api, toast, openModal, closeModal, hasPin } from './lib.js';
+import { esc, api, toast, openModal, closeModal, signedIn } from './lib.js';
 import { ctx } from './ctx.js';
 import { t } from './i18n.js';
 
 const ROLE = { owner: t('Owner'), member: t('Member'), viewer: t('Viewer') };
 export async function loadMe() {
-  if (!hasPin()) { document.body.dataset.role = ''; return null; }
+  if (!signedIn()) { document.body.dataset.role = ''; return null; }
   try { const { user } = await api('GET', '/api/me', undefined, { quiet401: true }); document.body.dataset.role = user.role; ctx.state.me = user; return user; }
   catch { document.body.dataset.role = ''; return null; }
 }
@@ -35,4 +35,4 @@ async function peopleDialog(shown = null) {
 }
 ctx.actions.people = () => peopleDialog();
 loadMe();
-document.getElementById('pinDlg')?.addEventListener('close', () => setTimeout(loadMe, 50));     // a new PIN: maybe another person
+document.addEventListener('aisquad:signed', () => loadMe());     // signed in (1.9): maybe another person

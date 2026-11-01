@@ -11,7 +11,6 @@ import { t, tx } from './i18n.js';
 let current = null;                 // { audio, stop } of the line playing now
 let actx = null;
 const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const pin = () => { try { return localStorage.getItem('aisquad.pin') || ''; } catch { return ''; } };
 
 // the browser's own speech (the fallback): Indonesian or English by the words used
 function browserSpeak(text, onLevel) {
@@ -36,7 +35,7 @@ export async function playLine(line, { onLevel = null, force = false } = {}) {
   const level = (v) => { onLevel?.(v); if (line.agentId) ctx.scene?.setTalk?.(line.floorId, line.agentId, v); };
   let r;
   try {
-    r = await fetch('/api/voice/speak', { method: 'POST', headers: { 'content-type': 'application/json', 'x-aisquad-pin': pin() }, body: JSON.stringify({ ...line, visible: !document.hidden }) });
+    r = await fetch('/api/voice/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...line, visible: !document.hidden }) });
   } catch { return; }
   if (!r.ok) return;
   if (!/audio\//.test(r.headers.get('content-type') || '')) {
@@ -92,7 +91,7 @@ export function readVoiceControls(root) {
 }
 // a sample line with the voice settings shown (not saved yet); errors from ElevenLabs go into err
 export async function previewVoice(body, err) {
-  const r = await fetch('/api/voice/preview', { method: 'POST', headers: { 'content-type': 'application/json', 'x-aisquad-pin': pin() }, body: JSON.stringify(body) });
+  const r = await fetch('/api/voice/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (/audio\//.test(r.headers.get('content-type') || '')) { err.innerHTML = ''; new Audio(URL.createObjectURL(await r.blob())).play().catch(() => toast(t('Could not play the preview'))); return; }
   const j = await r.json().catch(() => ({}));
   err.innerHTML = j.error ? errorHtml(j.error) : esc(tx(j.reason || j.error) || t('The test did not work'));
@@ -128,7 +127,7 @@ async function settingsDialog() {
   root.querySelector('[data-savekey]').onclick = async () => { try { await api('PUT', '/api/voice/key', { key: form.elements.key.value }); form.elements.key.value = ''; toast(t('Key saved')); settingsDialog(); } catch (e) { err.textContent = e.message; } };
   root.querySelector('[data-delkey]')?.addEventListener('click', async () => { await api('DELETE', '/api/voice/key'); toast(t('Key removed')); settingsDialog(); });
   root.querySelector('[data-test]').onclick = async () => {
-    const r = await fetch('/api/voice/test', { method: 'POST', headers: { 'x-aisquad-pin': pin() } });
+    const r = await fetch('/api/voice/test', { method: 'POST' });
     if (/audio\//.test(r.headers.get('content-type') || '')) { new Audio(URL.createObjectURL(await r.blob())).play(); toast(t('The voice works')); root.querySelector('#vLast').innerHTML = ''; }
     else { const j = await r.json().catch(() => ({})); if (j.error) root.querySelector('#vLast').innerHTML = `<label>${t('Last answer from ElevenLabs')}</label>${errorHtml(j.error)}`; else err.textContent = tx(j.reason || j.error) || t('The test did not work'); }
   };

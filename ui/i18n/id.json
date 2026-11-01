@@ -2188,5 +2188,8 @@
  "Cloudflare Access sign-in required": "Perlu masuk lewat Cloudflare Access",
  "Second factor required": "Perlu kode verifikasi kedua",
  "No second factor is needed": "Tidak perlu kode verifikasi kedua",
- "The code could not be sent: pair the Owner's Telegram chat first": "Kode tidak bisa dikirim: hubungkan dulu chat Telegram Owner"
+ "The code could not be sent: pair the Owner's Telegram chat first": "Kode tidak bisa dikirim: hubungkan dulu chat Telegram Owner",
+ "Sign out": "Keluar",
+ "Sign out everywhere": "Keluar dari semua perangkat",
+ "Sign out every device, this one included?": "Keluar dari semua perangkat, termasuk yang ini?"
 }
