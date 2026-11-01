@@ -27,6 +27,7 @@ import * as insight from './insight.js';
 import * as kpi from './kpi.js';
 import * as guide from './guide.js';
 import * as guideTg from './guide-tg.js';
+import * as limits from './limits.js';
 
 export const IMMEDIATE = ['question', 'permission', 'reply', 'crash', 'resource', 'scope', 'backup'];
 export const DEFAULTS = { enabled: false, lang: 'en', quiet: { enabled: true, from: '22:00', to: '07:00' }, digestAt: '07:30', maxPerHour: 20, immediate: IMMEDIATE, publicUrl: '' };
@@ -52,7 +53,7 @@ export const settings = () => cleanNotify(building.loadBuilding().prefs.notify);
 const TEXT = {
   en: { paired: 'Paired with The AI Squad as {name} ({role}). You get questions and alerts here. /help lists the commands.', badCode: 'That pairing code is wrong or expired. Make a new one in Admin → Notifications.',
     help: 'Commands:\n/status what the squad is doing\n/chat <agent> talk to an agent directly (then just type)\n/end stop chatting\n/digest the summary now\n/help this list',
-    helpOwner: 'Commands:\n/status what the squad is doing\n/chat <agent> talk to an agent directly (then just type)\n/end stop chatting\n/digest the summary now\n/guide set up the company (the company guide)\n/help this list',
+    helpOwner: 'Commands:\n/status what the squad is doing\n/chat <agent> talk to an agent directly (then just type)\n/end stop chatting\n/digest the summary now\n/guide set up the company (the company guide)\n/unlock allow PIN sign-in again after a lock\n/help this list',
     reply: 'Type your reply to {agent}.', confirm: 'Hard stop ({reasons}). Type {code} within 5 minutes to confirm "{choice}". Anything else cancels.', cancelled: 'Cancelled: nothing was sent.',
     done: 'Done: {choice}', gone: 'Already answered or no longer open.', noRole: 'Your role ({role}) can only read.', expired: 'This button has expired. Open The AI Squad.',
     chatOn: 'Chatting with {agent} in {space}. Type your message; /end stops.', chatOff: 'Chat ended.', noAgent: 'No agent called "{q}". Try its name or id.', many: 'Several agents match: {list}',
@@ -62,10 +63,12 @@ const TEXT = {
     askMany: 'Several questions (or several choices): answer them in The AI Squad.',
     routines: 'Routines today: {done} done, {failed} failed, {skipped} skipped.', triggered: 'Targets that raised work:', triggeredLine: '{space} · {name}: {what}',
     what_notify: 'a notice', what_suggest: 'a plan to approve', what_act: 'the agents act on it',
-    countsOnly: '{n} item(s) from an Owner-only Space wait for you in The AI Squad (details only in the app).' },
+    countsOnly: '{n} item(s) from an Owner-only Space wait for you in The AI Squad (details only in the app).',
+    lockAddress: 'Security: {fails} wrong PINs from {ip}. Sign-in from that address waits {minutes} minutes.', lockAccount: 'Security: {fails} wrong PINs today. PIN sign-in is locked for everyone until you send /unlock here or run `aisquad unlock` on the machine.',
+    unlocked: 'PIN sign-in is unlocked again.', notLocked: 'PIN sign-in was not locked.', ownerOnly: 'Only the Owner can do this.' },
   id: { paired: 'Terhubung ke The AI Squad sebagai {name} ({role}). Pertanyaan dan peringatan akan dikirim ke sini. /help untuk daftar perintah.', badCode: 'Kode pairing salah atau kedaluwarsa. Buat kode baru di Admin → Notifikasi.',
     help: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/help daftar ini',
-    helpOwner: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/guide siapkan perusahaan (panduan perusahaan)\n/help daftar ini',
+    helpOwner: 'Perintah:\n/status apa yang sedang dikerjakan squad\n/chat <agent> bicara langsung dengan agent (lalu ketik saja)\n/end berhenti chat\n/digest ringkasan sekarang\n/guide siapkan perusahaan (panduan perusahaan)\n/unlock izinkan masuk dengan PIN lagi setelah dikunci\n/help daftar ini',
     reply: 'Ketik balasanmu untuk {agent}.', confirm: 'Hard stop ({reasons}). Ketik {code} dalam 5 menit untuk mengonfirmasi "{choice}". Ketikan lain membatalkan.', cancelled: 'Dibatalkan: tidak ada yang dikirim.',
     done: 'Selesai: {choice}', gone: 'Sudah dijawab atau tidak terbuka lagi.', noRole: 'Peranmu ({role}) hanya bisa membaca.', expired: 'Tombol ini sudah kedaluwarsa. Buka The AI Squad.',
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
@@ -74,7 +77,9 @@ const TEXT = {
     status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.',
     routines: 'Rutinitas hari ini: {done} selesai, {failed} gagal, {skipped} dilewati.', triggered: 'Target yang memicu pekerjaan:', triggeredLine: '{space} · {name}: {what}',
     what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agen langsung bekerja',
-    countsOnly: '{n} hal dari Space khusus Owner menunggumu di The AI Squad (detail hanya di aplikasi).' },
+    countsOnly: '{n} hal dari Space khusus Owner menunggumu di The AI Squad (detail hanya di aplikasi).',
+    lockAddress: 'Keamanan: {fails} PIN salah dari {ip}. Masuk dari alamat itu harus menunggu {minutes} menit.', lockAccount: 'Keamanan: {fails} PIN salah hari ini. Masuk dengan PIN dikunci untuk semua orang sampai kamu kirim /unlock di sini atau jalankan `aisquad unlock` di mesin.',
+    unlocked: 'Masuk dengan PIN sudah dibuka lagi.', notLocked: 'Masuk dengan PIN tidak sedang dikunci.', ownerOnly: 'Hanya Owner yang bisa melakukan ini.' },
 };
 export const say = (key, vars = {}, lang = settings().lang) => String((TEXT[lang] || TEXT.en)[key] || TEXT.en[key]).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
@@ -271,6 +276,16 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
   return out;
 }
 
+// security messages for the Owner (1.9: lockouts, the second factor's code): every chat paired to the Owner, also
+// while notifications are switched off, since they are not about the work. -> the number of chats reached
+export const ownerPaired = () => !!botToken() && loadState().chats.some((c) => c.userId === users.OWNER.id);
+export async function toOwner(text, { fetchFn } = {}) {
+  if (!botToken()) return 0;
+  let n = 0;
+  for (const c of loadState().chats.filter((x) => x.userId === users.OWNER.id)) { try { await send(c.chatId, text, [], fetchFn); n++; } catch (e) { update((s) => { s.lastError = e.message; }); } }
+  return n;
+}
+
 export async function sendTest({ fetchFn } = {}) {
   const st = loadState();
   if (!botToken()) throw bad('Set the bot token first');
@@ -338,6 +353,10 @@ export async function handleUpdate(u, { fetchFn, now = Date.now() } = {}) {
   if (/^\/guide(@\w+)?$/.test(text)) return guideTg.start(guideIo(chatId, { fetchFn, now }), user);       // the Company Guide (1.7)
   if (pend?.mode === 'guide' && pend.exp >= now && /^\/cancel/.test(text)) return guideTg.press(guideIo(chatId, { fetchFn, now }), user, 'g:x');
   if (/^\/help/.test(text) || /^\/start/.test(text)) return reply(chatId, user.role === 'owner' ? 'helpOwner' : 'help');
+  if (/^\/unlock(@\w+)?$/.test(text)) {                       // the PIN sign-in lock (1.9): only the Owner lifts it
+    if (user.role !== 'owner') return reply(chatId, 'ownerOnly');
+    return reply(chatId, limits.unlock().wasLocked ? 'unlocked' : 'notLocked');
+  }
   if (/^\/status/.test(text)) {
     const b = squad.buildingSnapshot();
     const agents = b.floors.filter((f) => visible({ floorId: f.id }, user)).flatMap((f) => f.agents);
