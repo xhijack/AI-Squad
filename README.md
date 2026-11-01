@@ -89,7 +89,7 @@ The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`
 
 The server listens on `http://127.0.0.1:8097`. Pass `--port` to change it, and `--host 0.0.0.0` only if you really want it reachable from other machines.
 
-On `127.0.0.1` (the default) viewing is open and every change and every agent screen needs the local PIN. Bound to any other address (for example `--host 0.0.0.0`), every API call needs the PIN, reads included; the browser asks for it once. Find it with `cat ~/.aisquad/pin`.
+On `127.0.0.1` (the default) viewing is open and every change and every agent screen needs the local PIN. Bound to any other address (for example `--host 0.0.0.0`), every API call needs the PIN, reads included. The browser asks for the PIN once and keeps a session cookie, never the PIN (1.9). Find it with `cat ~/.aisquad/pin`. To reach it from anywhere, see **Online access** below.
 
 ### Set up the company: the Company Guide (1.4)
 
@@ -582,6 +582,18 @@ Checked every minute and shown in the Lobby:
 - **Budget**: estimated from transcript token usage; warning at 80 %, Attention at 100 %.
 - **Agents at once** (0.10): every Floor has its maximum (Floor settings, default 4) and the whole machine has one too (Menu → **Backups and health**, default 6). Starting one more asks first. The Desk shows each running agent's RAM and CPU: its Claude Code process and everything under it (MCP servers, shells, test runs). The averages and peaks per session are kept in `~/.aisquad/usage.json`; they tell how much memory one more agent needs.
 - **Backups**: a failed or late nightly backup, or a backup that no longer reads back, is an Attention item.
+
+### Online access (1.9)
+
+The 3D web can be reached from anywhere without opening a port on the machine: the server stays on `127.0.0.1` and a **Cloudflare Tunnel with Cloudflare Access** (recommended), **Caddy or Nginx with HTTPS** on a VPS, or **Tailscale** (private) stands in front. `INSTALL.md`, *Online (VPS or this machine)*, has the steps, sample configs and a VPS checklist. One code path serves all of them; only `~/.aisquad/building.json` → `prefs` differs (`public`, `publicUrl`, `trustProxy`, `cfAccess`).
+
+- **Public mode** (`--public`, `prefs.public: true`, or by itself on the first request with proxy headers; then on until a restart): every route needs a signed-in person, reads, agent screens, downloads and static files included; only the sign-in page loads before.
+- **Sessions**: the PIN is sent once; the browser keeps an `HttpOnly`, `SameSite=Strict` cookie (`Secure` over HTTPS). Sessions end after 12 h idle or 7 days, on Menu → **Sign out**, or for everyone with **Sign out everywhere** (Owner). The server keeps only their hashes, in `~/.aisquad/sessions.json` (mode 600).
+- **Wrong PINs**: 5 per address per 15 minutes, then a wait that doubles (5 minutes up to an hour). 20 in a day lock PIN sign-in for everyone until the Owner runs `/aisquad unlock` or sends `/unlock` on Telegram. Every lockout goes to the Owner's Telegram.
+- **The Owner's second factor**: with a paired Owner chat, an Owner session in public mode types a code sent to Telegram before settings, secrets, people, merges and Owner-only Spaces.
+- **Cloudflare Access check** (`prefs.cfAccess`): every request through the tunnel must carry a valid Access token; the PIN is still asked behind it.
+- **Browser hardening**: changes and WebSocket upgrades only from the server's own address or `publicUrl`; a self-only Content-Security-Policy (three.js is vendored), `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `Permissions-Policy` (the microphone stays for Voice), HSTS in public mode; request bodies are limited (`413`).
+- Sign-in events (`auth.signed_in`, `auth.failed`, `auth.locked`, `auth.signed_out`) go to the Building's Squad Log with the client address and the role, never the PIN. `/aisquad doctor` checks the address the server is bound to, HTTPS in front, the session store and the PIN lock.
 
 ### Backups and moving to another machine
 

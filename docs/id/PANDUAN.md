@@ -103,6 +103,23 @@ nasihat hukum.
   di mesin yang ada slot, konteks lewat git.
 - **Backup**: `aisquad backup` (terenkripsi bila ada passphrase), backup malam, `aisquad restore` di mesin baru.
 
+## Akses online (1.9)
+
+Web 3D bisa dibuka dari mana saja tanpa membuka port di mesin: server tetap di `127.0.0.1:8097`, di depannya
+**Cloudflare Tunnel + Cloudflare Access** (disarankan), **Caddy atau Nginx dengan HTTPS** di VPS, atau **Tailscale**
+(privat). Langkah, contoh konfigurasi dan daftar cek VPS ada di [INSTALL.md](../../INSTALL.md), bagian *Online*.
+
+- **Mode publik** (`--public`, `prefs.public: true` di `~/.aisquad/building.json`, atau otomatis begitu ada request
+  lewat proxy): semua halaman dan data butuh orang yang sudah masuk; sebelum itu hanya halaman masuk yang tampil.
+- **Masuk**: PIN dikirim sekali, browser hanya menyimpan cookie sesi (bukan PIN). Sesi berakhir setelah 12 jam tidak
+  dipakai atau 7 hari, lewat Menu → **Keluar**, atau untuk semua orang lewat **Keluar dari semua perangkat** (Owner).
+- **PIN salah**: 5 kali dari satu alamat dalam 15 menit membuat alamat itu menunggu (5 menit, berlipat sampai 1 jam).
+  20 kali dalam sehari mengunci masuk dengan PIN untuk semua orang sampai Owner menjalankan `/aisquad unlock` di mesin
+  atau mengirim `/unlock` di Telegram. Setiap penguncian dikabarkan ke Telegram Owner.
+- **Verifikasi kedua Owner**: bila chat Telegram Owner sudah terhubung, sesi Owner di mode publik memasukkan kode dari
+  Telegram sebelum mengubah pengaturan, rahasia, orang, merge, atau membuka Space khusus Owner.
+- `/aisquad doctor` memeriksa alamat server, HTTPS di depan, file sesi dan status kunci PIN.
+
 ## Keamanan singkat
 
 PIN untuk setiap perubahan; Owner/Member/Viewer; rahasia (API key, token) hanya disimpan di mesin ini dan tidak pernah

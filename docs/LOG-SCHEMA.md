@@ -5,6 +5,7 @@ The Squad Log is an append-only record of how a squad worked: who did what, who 
 ## Files
 
 - `~/.aisquad/logs/<floor-id>/<YYYY-MM-DD>.jsonl`, one file per local day. Floor 1 (independent agents) logs under `independents`.
+- Building-wide events (sign-in, 1.9) log under `_building` (no Floor id starts with `_`): `~/.aisquad/logs/_building/`. The Owner reads the last week of them at `GET /api/security`.
 - Machine-local, never in the project repository: the log can contain prompts and business data.
 - Files older than 7 days are gzipped (`<day>.jsonl.gz`); files older than `prefs.logRetentionDays` in `~/.aisquad/building.json` (default 90) are deleted. Both run once an hour.
 - `.state.json` in the same folder keeps the collectors' offsets and the last seen board; it is not part of the log.
@@ -406,4 +407,32 @@ grant access) when not. Never the key or a token.
 
 ```json
 {"v":1,"id":"7cafc25c4f2d","ts":"2026-10-26T02:30:00.000Z","floor":"pos","sprint":1,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"improvement.decided","summary":"improvement applied: role-template fullstack-developer","data":{"decision":"applied","target":"role-template fullstack-developer","version":6,"finding":"F2"}}
+```
+
+### Access (`access`)
+
+Sign-in to the server (1.9, `server/api.js`), in the Building's log `_building`. Each records the client address (`ip`: the peer, or through a trusted proxy the address `trustProxy` hops back) and, once known, the person and role. The PIN and the code are never logged. These events keep personal data (the e-mail from Cloudflare Access) unmasked: they are the record of who signed in.
+
+**`auth.signed_in`**: Someone signed in with a PIN (`data.secondFactor: true` when the Owner then passed the Telegram code). `email` is the Cloudflare Access identity when `prefs.cfAccess` is set.
+
+```json
+{"v":1,"id":"9b1f3c2a7d10","ts":"2026-11-01T08:00:00.000Z","floor":"_building","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"auth.signed_in","summary":"Owner signed in from 198.51.100.20 (sinta@example.com)","data":{"ip":"198.51.100.20","role":"owner","user":"Owner","email":"sinta@example.com"}}
+```
+
+**`auth.failed`**: A wrong PIN (`what: "PIN"`) or a wrong second-factor code (`what: "code"`).
+
+```json
+{"v":1,"id":"0c4e2b8a1f33","ts":"2026-11-01T08:01:00.000Z","floor":"_building","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"auth.failed","summary":"a wrong PIN from 203.0.113.66","data":{"ip":"203.0.113.66","what":"PIN"}}
+```
+
+**`auth.locked`**: A lockout started. `scope: "address"`: that address waits `waitS` seconds (5 minutes, doubling up to an hour). `scope: "account"`: 20 wrong PINs within a day locked PIN sign-in for everyone until the Owner unlocks it (`aisquad unlock`, or `/unlock` on Telegram). The Owner gets a Telegram message for each.
+
+```json
+{"v":1,"id":"5d7a9e0b2c41","ts":"2026-11-01T08:02:00.000Z","floor":"_building","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"auth.locked","summary":"sign-in from 203.0.113.66 waits 5 minutes after 5 wrong PINs","data":{"scope":"address","ip":"203.0.113.66","fails":5,"waitS":300}}
+```
+
+**`auth.signed_out`**: Someone signed out on one device, or the Owner signed everyone out (`everywhere: true`, `sessions`: how many ended).
+
+```json
+{"v":1,"id":"e2a8c4f60b19","ts":"2026-11-01T18:00:00.000Z","floor":"_building","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"auth.signed_out","summary":"Owner signed everyone out (3 sessions)","data":{"ip":"198.51.100.20","role":"owner","user":"Owner","everywhere":true,"sessions":3}}
 ```
