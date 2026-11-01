@@ -1090,6 +1090,72 @@ Closes the Sprint 14 and 16 "Not yet" items: Finance and Support had no Blueprin
 - **Screenshots pending** (swap at 90 % for the whole sprint, so Chrome was not run): Admin → Targets with *Edit the source* open on an integration target and the split sparkline; the Company Guide's divisions step with Finance and Support and its plan step with both Spaces; Admin → Spaces with the Telegram setting; Admin → ERPNext with the Finance key; the guide showing *Updated from Telegram*. At 1440 and 390 each, as `playground/reference/sprint17-*.png`.
 - Not yet: OAuth MCP servers as a target source (out of scope); a help desk hint (tool, arguments, pick) for Support's integration targets, which wait for a real help desk to test against; Build from Telegram (by design, never).
 
+## Phase 5, Sprint 18: the SEO & GEO Blueprint and a built-in Google connector, 1.8.0 (1 Nov 2026)
+
+The owner asked for a Floor that does only SEO and GEO, with no extra running cost and no extra service. The owner's decisions held: no OpenSEO, no paid data by default; free official sources only (Search Console, GA4 Data API, URL Inspection, PageSpeed Insights, Bing Webmaster, IndexNow).
+
+- **Google connector** (`server/google.js`, no dependencies; `70213dc`, `5259b33`).
+  - Service-account sign-in: an RS256 JWT signed with `node:crypto`, exchanged at `oauth2.googleapis.com/token` for the read-only scopes `webmasters.readonly` and `analytics.readonly`. The token is cached in memory until 5 minutes before it expires.
+  - **The key is the Owner's**: `~/.aisquad/secrets.json` (0600), `google.serviceAccount` (only the fields a sign-in needs). Admin → Integrations → **Google** has a write-only upload and shows only the client e-mail. Optional `google.psiKey` and `bing.apiKey`. `/aisquad doctor` checks the file mode (`google` check).
+  - **Properties per Space**: Floor settings → Google writes `.claude/aisquad/google.json` (committed, ids only: Search Console site, GA4 property id, site, IndexNow key). **Test** reports whether each property can be read and how to grant access (Search Console: add the client e-mail as a user; GA4: Viewer), and logs `google.tested`. An Owner-only Space falls back to the Owner's properties field by field; a team Space uses only its own.
+  - **Fixed, bounded calls**: `gsc.performance` (≤ 5,000 rows, ≤ 16 months, optional `minImpressions` / `maxPosition`), `gsc.inspect` (≤ 20 URLs), `ga4.report` (allow-listed metrics and dimensions, one exact `where` filter, ≤ 1,000 rows), `ga4.aiReferrals`, `psi.run` (works without a key), `bing.stats`, `indexnow.submit` (the only write: ≤ 100 URLs of the Space's own site, the key file checked on the site first). 10 s to connect, 30 s per call, replies over 2 MB refused, a 429 retried twice with backoff, errors in plain words.
+  - **GEO from free data**: `ga4.aiReferrals` counts sessions and key events whose source is one of `chatgpt.com`, `chat.openai.com`, `perplexity.ai`, `gemini.google.com`, `copilot.microsoft.com`, `claude.ai`, `you.com`, `phind.com` (or a subdomain), per assistant and in total.
+- **The `google` target source** (`f3829be`, `b2c2a37`): `{ kind: 'google', call, args, pick }`. It is measured like ERPNext, CSV and MCP (hourly tick, a new period, *Measure now*, Try, Edit the source).
+  - **The Search Console lag**: a GSC period ends at today − 2. In the first two days of a period the tick waits quietly, *Measure now* says why without logging a failure, and the card and `KPI.md` say so.
+  - `kpi.measured` and `kpi.failed` carry `call` and `property`; `kpi.source.changed` carries `toCall`. The key and the arguments are never logged.
+  - Until a Space has the key and its properties, its Google targets are not measured and the card says what is missing (`needs`). This way seeded targets do not fail every hour.
+  - `KPI.md` is now rendered at the measurement's time (the injected clock in tests).
+- **`aisquad-google` MCP server for agents** (`bin/google-mcp.js`, `b79083f`).
+  - It holds no key. Its tools ask the server (`POST /api/google/agent`) with the **Space's agent token**: `server/agenttoken.js`, `~/.aisquad/agent-tokens.json` (0600), handed to the Space's sessions as the hidden variable `AISQUAD_SPACE_TOKEN`, like the ERPNext keys. The server answers only with that Space's properties.
+  - Read tools carry `readOnlyHint: true`; `indexnow_submit` is the write. A Blueprint with `mcp: [aisquad-google]` gets the server in its `.mcp.json` at Set up Squad. That entry has no secrets and no absolute paths: `${AISQUAD_PLUGIN_ROOT}`, `${AISQUAD_URL}`, `${AISQUAD_SPACE_TOKEN}`, `${AISQUAD_RUN:-desk}`.
+  - The Space's `.claude/settings.json` allows the read tools (so background runs can use them) and puts `indexnow_submit` on **ask**.
+  - **Automated runs never submit**, at three levels: `--disallowedTools` for every background job (cadence, kpi and autopilot runs, and the owner's own background jobs, which cannot ask either); the tool refuses outside the Desk; and the server refuses any call that is not marked `run: desk`. A submit is logged as `google.submitted`.
+  - The built-in server is left out of the integrations registry (Admin → Integrations → Google stands for it).
+- **Paid integrations, future-proofing** (`79df9b4`): Admin → Integrations has a per-tool **costs money** box next to *read-only* (`paid` in `integrations.json`; a tool that disappears loses the mark).
+  - Such a tool is denied (`--disallowedTools mcp__<server>__<tool>`) in every background job of the Spaces that can reach it. A Desk session gets it as an **ask** rule through `--settings` at start (an agent cannot edit it away).
+  - It never feeds a target (refused when the target is saved and when it is measured, and never offered by the guide's match).
+  - New integration kind **`seo`**, guessed from `dataforseo`, `seo`, `serp`, `semrush`, `ahrefs`. Nothing paid is shipped.
+- **Quarterly routines** (`6370ca1`): `quarterly:<1..31>` runs on that day of January, April, July and October; the schedule looks back and ahead 93 days.
+- **Skills** (`3049a17`): `keyword-research`, `keyword-clustering`, `content-brief`, `content-refresh`, `ai-visibility-audit` (the GEO panel), `llms-txt`, `local-seo` and `seo-report`. OpenSEO's audit steps (orient on page families, shortlist then choose, size the benefit honestly) are merged into the existing `seo-audit`.
+  - The method is adapted from OpenSEO's MIT agent skills (read from github.com/every-app/open-seo). Each skill has a footer that says which part was adapted, plus a `LICENSE-NOTICE` with the MIT text; `NOTICE` names them too.
+  - `content-brief`, `content-refresh` and `llms-txt` have no OpenSEO counterpart. Their footers say which OpenSEO method they draw on (clustering's page briefs, the audit's underperforming pages, the visibility audit's access checks); the llms.txt format follows llmstxt.org.
+  - All skills name only `aisquad-google` tools, WebSearch / WebFetch and the site's repository, and each is at most 49 lines.
+- **SEO & GEO Blueprint** (`templates/blueprints/seo-geo`, team department, `free-team`, night shift; `a3708a9`).
+  - Roles: **seo-geo-strategist** (lead 1/1/1), **technical-seo-specialist**, **keyword-researcher**, **geo-analyst** (0/1/1 each), **content-writer v3** (0/1/2, now generic for both Marketing Blueprints: answer first, entities, FAQ, sources) and optional **local-seo-specialist** (0/0/1). Version 3 as briefed: there was no v2.
+  - Hard stops are in every role file and in `ownerOnly`. Roles that never submit also deny `mcp__aisquad-google__indexnow_submit` in their template.
+  - Targets: organic clicks, impressions, keywords in the top 10, organic sessions, organic key events, sessions from AI assistants, AI prompt citations (manual), mobile score (PSI, week), pages published (manual). They are seeded without goals, and each carries a "draft and research only" task for *When behind*.
+  - Seven routines, all off and at night: daily draft, the daily GSC anomaly check (>20 % week over week only), Monday report, Wednesday GEO panel (a third), monthly technical audit and decay list, quarterly strategy review.
+  - Seven gates; the pack (brief, brand, keywords, prompt panel, plan, audit, IndexNow, board, questions, `llms.txt` template, content-brief template, handoff template). The kickoff asks for Google access step by step in the owner's language.
+- **Company Guide** (`e4153a7`).
+  - Marketing gets a **focus** (web and Telegram): *Everything (content, social, ads)* → `digital-marketing`, *Search only (SEO and AI answers)* → `seo-geo` (the Space is named "<company> Search"). The agency hint ("An SEO agency picks Search only") is shown, but *Everything* stays the default.
+  - Clinic and retail add `local-seo-specialist` to the search team.
+  - The plan's materials include **Google access** with the client e-mail once it is uploaded ("add <e-mail> to Search Console and GA4…"). Each target says *Measured from: Google Search Console / GA4 / PageSpeed* or *Enter by hand*. The search plan sets goals for the mobile score (90) and pages published (4).
+- Docs (`f5166dd`): README "SEO & GEO" and "Google connector" (service-account setup step by step, where to grant access in GSC and GA4), `docs/GOOGLE.md`, LOG-SCHEMA (`google.tested`, `google.submitted`, the google fields of `kpi.measured`, `kpi.failed`, `kpi.source.changed`), `docs/id/PANDUAN.md`, 66 Indonesian UI strings, the README file list.
+- Tests (each module alone, no network: `test/fixtures/fake-google.js` fakes every Google and Bing endpoint on 127.0.0.1 and checks the JWT signature; clock and key injected):
+  - `google.test.js` (19): key, JWT and token cache, properties and scope, every call's limits and errors, 429, 2 MB, timeout, AI referrals, the lag window, Test, the Owner-only API, doctor.
+  - `kpi-google.test.js` (7): saving, the tick with dates and lag, Log fields, the when-behind notice, a new month, a failure, Edit the source, Try.
+  - `google-mcp.test.js` (5): tools/list hints; no key in the process (from `/proc/<pid>/environ`); Space scoping and unknown tokens; `indexnow_submit` denied to automated runs at all three levels and logged on the Desk.
+  - `integrations-paid.test.js` (7), `seo-geo.test.js` (3), `guide-seo.test.js` (4), `seo-skills.test.js` (3): the skills lint for attribution and no OpenSEO or DataForSEO tool names. Plus quarterly in `cadence.test.js`.
+  - Existing tests changed only where behaviour changed on purpose: template, Blueprint and skill counts; the Telegram interview now answers the Marketing focus.
+- `npm test`: 592 tests, 591 pass, 1 fails: `meter.test.js` "samples CPU…" reads the machine's real free disk (`statfs` of the scratch folder). With 6.5 GB free (94 % used), that is under its 10 GB "warn" line, so `levels.overall` is `warn`. It fails the same way on 1.7.0 on this disk and is not caused by this sprint; it is left as it is (it needs an injectable disk reading or free disk space). The Chrome typing test ran, since swap stayed at 71 %.
+- **Dogfood** (`playground/s18`: the real server on 8196 with the fake Claude, the fake Google on 8199 via `AISQUAD_GOOGLE_BASE`, a fixed meminfo; no real Google or Bing endpoint was called):
+  - Company Guide over the API: a dental clinic "Senyum", Marketing → *Search only*. Plan: `seo-geo`, "Senyum Search", the local SEO specialist added, Google access *missing*. After the key upload the plan named `aisquad@senyum-seo.iam.gserviceaccount.com`. Build made Floor 2 with 6 agents and 7 routines, all off.
+  - Floor settings → Google: Test showed both readable. A property it cannot read gave the plain message with the grant steps.
+  - Targets: *Organic sessions* 640 from GA4 (met), *Sessions from AI assistants* 43 (behind), *Mobile score* 72 from PageSpeed (behind). The monthly GSC targets waited because of the lag on 1 Nov. A weekly GSC target added in Admin → Targets measured 120 clicks for 26–30 Oct.
+  - No key or token appears in the Squad Log. The two targets behind raised *suggest* recovery plans. They waited for the night shift ("outside the Space's shift" at 15:53); with the shift turned off they became **suggestion cards** (Approve / Dismiss) in Needs you. The plan text is empty because the interactive fake Claude cannot run headless jobs. Those jobs started with `mcp__aisquad-google__indexnow_submit` among their denied tools.
+  - **GEO panel check by hand**: `ga4_ai_referrals` through the real `aisquad-google` server with the Space token gave 43 sessions (ChatGPT 30, Perplexity 9, Gemini 4). In the same automated environment `indexnow_submit` was refused. Three prompts were written into `docs/seo/PROMPTS.md` and one check recorded, clearly marked as a dogfood check without a web search (fictional brand). *AI prompt citations* was entered as 0 % with that note, and the *GEO panel check* routine was run once with *Run now*.
+- **Screenshots** (swap at 71 %): `playground/reference/sprint18-integrations-google-*.png` (Admin → Integrations → Google), `sprint18-targets-google-*.png` (Google target cards with the lag note), `sprint18-floor-google-test-*.png` (Floor settings → Google after Test), `sprint18-guide-focus-*.png` (the Marketing focus), at 1440 and 390. The 390 shot of Floor settings found the Test result squeezed beside its buttons; it now sits below them (`b2c2a37`).
+- **Assumptions** (the most conservative reading, noted here):
+  - "the Space's agent token" did not exist yet, so it was added (`server/agenttoken.js`).
+  - The *costs money* rules are given per session (`--disallowedTools` and an ask rule in `--settings`), not written into the Space's committed `settings.json`, so an agent cannot remove them.
+  - The agency hint does not change the default focus.
+  - Local SEO is added for clinic and retail only to the search team (Digital Marketing has no such role).
+  - Seeded Google targets wait silently until connected.
+  - `google.json` also holds the site address and the IndexNow key (public by design), which Bing, PageSpeed and IndexNow need.
+  - Background jobs started by the owner also never get `indexnow_submit`, since they cannot ask.
+  - A job sent to a worker machine does not get the Google tools.
+- Not yet: OAuth MCP servers as a target source (still out of scope); a real-browser check of the Search Console and GA4 sign-up steps against Google's current UI (the README follows Google's documented menus); the meter test's dependence on real free disk.
+
 ## How to run
 
 ```
