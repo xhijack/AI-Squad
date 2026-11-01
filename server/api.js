@@ -43,6 +43,7 @@ import * as behind from './behind.js';
 import * as guide from './guide.js';
 import * as promote from './promote.js';
 import * as integ from './integrations.js';
+import * as google from './google.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -103,6 +104,7 @@ const floorRoot = (id) => building.floorEntry(id).path;
 
 // [method, pattern, handler(params, body, req), { pin, raw }]
 // the Space's webhook address for the Owner; none while the values file is unreadable
+const spaceOf = (id) => { building.floorEntry(id); return integ.spaces().find((s) => s.id === id); };
 const hookOf = (id) => { try { return `/api/kpi/hook/${kpi.token(id)}`; } catch { return null; } };
 const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
@@ -287,6 +289,10 @@ const routes = [
   ['DELETE', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k]) => { const r = kpi.removeKpi(building.floorEntry(id).path, k); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target removed', floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/values$/, ([id, k], b, req) => kpi.record(id, building.floorEntry(id).path, k, b.value, { source: 'manual', by: req.user?.name || 'Owner', note: b.note }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/measure$/, ([id, k], b, req) => kpi.measure(id, building.floorEntry(id).path, k, { by: req.user?.name || '' }), { pin: true }],
+  // a Space's Google properties (1.8, .claude/aisquad/google.json: ids only) and Test: the Owner's (access.js)
+  ['GET', /^\/api\/floors\/([\w-]+)\/google$/, ([id]) => { const sp = spaceOf(id); return { props: google.readProps(sp.path), effective: google.propsFor(sp), access: sp.access, clientEmail: google.status().clientEmail }; }, { pin: true }],
+  ['PUT', /^\/api\/floors\/([\w-]+)\/google$/, ([id], b) => ({ props: google.saveProps(spaceOf(id).path, b || {}) }), { pin: true, history: ([id]) => ({ label: 'Google properties', floorId: id }) }],
+  ['POST', /^\/api\/floors\/([\w-]+)\/google\/test$/, ([id]) => google.test(spaceOf(id)), { pin: true }],
   // cadence (1.5): routines per Space; the Owner defines them, Members run and toggle them, Viewers read
   ['GET', /^\/api\/cadence$/, () => squad.cadenceOverview(), {}],
   ['GET', /^\/api\/floors\/([\w-]+)\/cadence$/, ([id]) => squad.routinesOf(id), {}],
@@ -304,7 +310,12 @@ const routes = [
   ['GET', /^\/api\/handoffs$/, (p, b, req) => squad.handoffsOverview(req.user), { pin: true }],
   ['POST', /^\/api\/handoffs\/scan$/, () => squad.handoffTick(), { pin: true }],
   // integrations (1.6): the MCP servers the Building knows (masked), Test connection, the Owner's kind and read-only marks
-  ['GET', /^\/api\/integrations$/, () => integ.list(), { pin: true }],
+  ['GET', /^\/api\/integrations$/, () => ({ ...integ.list(), google: google.status() }), { pin: true }],
+  // the Google connector (1.8): the service account's key and the optional keys are write-only; only the client e-mail is shown
+  ['PUT', /^\/api\/integrations\/google\/key$/, (p, b) => google.setServiceAccount(b?.key), { pin: true }],
+  ['DELETE', /^\/api\/integrations\/google\/key$/, () => google.clearServiceAccount(), { pin: true }],
+  ['PUT', /^\/api\/integrations\/google\/keys\/(psi|bing)$/, ([which], b) => google.setKey(which, b?.key), { pin: true }],
+  ['PATCH', /^\/api\/integrations\/google$/, (p, b) => ({ owner: google.saveOwnerProps(b || {}) }), { pin: true, history: () => ({ label: 'Google properties (Owner)' }) }],
   ['POST', /^\/api\/integrations\/test$/, (p, b) => integ.test(String(b.id || '')), { pin: true }],
   ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly }), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],

@@ -10,6 +10,7 @@ import { readJson } from './util.js';
 import { readSchema, SCHEMA_VERSION } from './schema.js';
 import { readResources } from './watchdog.js';
 import * as backup from './backup.js';
+import * as google from './google.js';
 
 const run = (file, args) => { try { return execFileSync(file, args, { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); } catch { return null; } };
 const gb = (b) => `${(b / 2 ** 30).toFixed(1)} GB`;
@@ -45,6 +46,10 @@ export function runDoctor({ service = null, now = Date.now() } = {}) {
     pinMode == null ? 'Start the server once' : pinMode & 0o077 ? `chmod 600 ${paths.pin()}` : '');
   const secrets = path.join(config.home, 'secrets.json'), sMode = modeOf(secrets);
   if (sMode != null) add('secrets', 'Secrets file', sMode & 0o077 ? 'fail' : 'ok', `mode ${sMode.toString(8)}`, sMode & 0o077 ? `chmod 600 ${secrets}` : '');
+
+  // the Google service account (1.8) is the Owner's secret: only in secrets.json, which must stay 0600
+  const sa = google.serviceAccount();
+  if (sa) add('google', 'Google service account', sMode & 0o077 ? 'fail' : 'ok', `${sa.client_email} in ${secrets} (mode ${sMode.toString(8)})`, sMode & 0o077 ? `chmod 600 ${secrets}: the key file of the service account is in it` : '');
 
   const b = readJson(path.join(config.home, 'building.json'), {}) || {};
   for (const f of Array.isArray(b.floors) ? b.floors : []) {

@@ -8,6 +8,7 @@ import { openTemplates } from './templates.js';
 import { ctx } from './ctx.js';
 import { voiceControlsHtml, bindVoiceControls, readVoiceControls, previewVoice } from './voice.js';
 import { loadRepos } from './repos.js';
+import { loadGoogle } from './google.js';
 import { t as tt, tx, LANG, LANGS, setLang } from './i18n.js';
 
 const floorId = () => ctx.state.route.floorId;
@@ -106,6 +107,7 @@ async function floorSettings() {
     <p class="note">${tt('The servers DevOps may reach: a host alias from ~/.ssh/config or user@host, and what it is for. Each one allows <code>ssh &lt;host&gt; …</code> in this Space (also in background runs) and is listed in the DevOps prompt; anything else is local development.')}</p>
     <div id="dServers">${(c.servers || []).map(serverRowHtml).join('')}</div>
     <button type="button" class="small" data-addserver>${tt('+ Add server')}</button>
+    <h3 style="margin-top:var(--sp-5)">Google</h3><div id="dGoogle" class="note">${tt('Loading…')}</div>
     <h3 style="margin-top:var(--sp-5)">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
     <h3 style="margin-top:var(--sp-5)">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
   `<button class="ghost danger" data-remove>${tt('Remove Floor')}</button><span class="spacer"></span><button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
@@ -116,6 +118,7 @@ async function floorSettings() {
   loadMerges(f.id, body.querySelector('#dMerges'));
   loadCadence(f.id, body.querySelector('#dCadence'));
   loadRepos(f.id, body.querySelector('#dRepos'), f.agents);
+  loadGoogle(f.id, body.querySelector('#dGoogle'), ctx.state.me?.role === 'owner');
   const servers = body.querySelector('#dServers');
   servers.onclick = (e) => e.target.closest('[data-rmserver]')?.closest('.serverRow').remove();
   body.querySelector('[data-addserver]').onclick = () => { servers.insertAdjacentHTML('beforeend', serverRowHtml({})); servers.lastElementChild.querySelector('input').focus(); };

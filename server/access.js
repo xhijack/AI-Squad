@@ -28,6 +28,7 @@ const OWNER_ROUTES = [
   /^(GET|PATCH) \/api\/tiering$/,
   /^(GET|POST) \/api\/promote(\/preview)?$/,
   /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/kpis(\/[\w-]+)?$/,
+  /^(GET|PUT|POST) \/api\/floors\/[\w-]+\/google(\/test)?$/,                // a Space's Google properties and Test (1.8)
   /^(POST|PATCH|DELETE) \/api\/floors\/[\w-]+\/cadence(\/[\w-]+)?$/,          // routines are the Owner's; run and toggle are Members'
   /^(PUT|DELETE) \/api\/erpnext\/keys\//,
   /^POST \/api\/erpnext\/(test|sync)$/,

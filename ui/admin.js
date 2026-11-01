@@ -8,6 +8,7 @@ import { t, tx } from './i18n.js';
 import { notifyHtml, improvementsHtml, machinesHtml, bindMore } from './admin-more.js';
 import { handoffsHtml, erpnextHtml, bindErp } from './admin-erp.js';
 import { integrationsHtml, bindIntegrations } from './admin-int.js';
+import { googleAdminHtml, bindGoogleAdmin } from './google.js';
 import { legalHtml, tieringHtml, bindLegal } from './admin-legal.js';
 import { trustHtml, bindTrust } from './admin-trust.js';
 import { targetsHtml, bindTargets } from './admin-kpi.js';
@@ -134,7 +135,7 @@ async function openAdmin(tab = 'spaces') {
     tab === 'dispatcher' ? api('GET', '/api/tiering').catch(() => null) : tab === 'targets' && ctx.state.me?.role === 'owner' ? api('GET', '/api/integrations').catch(() => null) : null]);
   const modal = openModal(`<div class="adminRoot"><div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
     <div class="mBody"><div class="tabs adminTabs" role="tablist">${TABS.map(([id, label]) => `<button role="tab" data-atab="${id}" aria-selected="${id === tab}">${esc(label)}</button>`).join('')}</div>
-    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp) + tieringHtml(extra), legal: () => legalHtml(disp), targets: (x) => targetsHtml(disp, x, ctx.state.me, extra), cadence: () => cadenceHtml(disp, ctx.state.me), notify: () => notifyHtml(disp), machines: () => machinesHtml(disp), handoffs: () => handoffsHtml(disp), erpnext: (x) => erpnextHtml(disp, x), integrations: (x) => integrationsHtml(disp, x), improve: () => trustHtml(disp) + improvementsHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
+    <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp) + tieringHtml(extra), legal: () => legalHtml(disp), targets: (x) => targetsHtml(disp, x, ctx.state.me, extra), cadence: () => cadenceHtml(disp, ctx.state.me), notify: () => notifyHtml(disp), machines: () => machinesHtml(disp), handoffs: () => handoffsHtml(disp), erpnext: (x) => erpnextHtml(disp, x), integrations: (x) => googleAdminHtml(disp?.google) + integrationsHtml(disp, x), improve: () => trustHtml(disp) + improvementsHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
   modal.closest('dialog').classList.add('xwide');
   const body = modal.querySelector('.adminRoot');          // new on every render: its listeners go with it
   body.querySelectorAll('[data-close]').forEach((x) => x.onclick = () => closeModal());
@@ -208,6 +209,7 @@ async function openAdmin(tab = 'spaces') {
   bindMore(body, again);
   bindErp(body, again);
   bindIntegrations(body, again);
+  bindGoogleAdmin(body, again);
   bindLegal(body, again);
   bindTrust(body, again);
   bindTargets(body, again);

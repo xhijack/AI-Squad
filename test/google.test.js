@@ -229,3 +229,42 @@ test('Test: what the service account can read, and how to grant access when it c
   assert.deepEqual(ev.map((x) => [x.id, x.data.gsc, x.data.ga4]), [['s-team', true, true], ['s-t4', false, false]]);
   assert.doesNotMatch(JSON.stringify(ev), /PRIVATE KEY|tok-\d/);
 });
+
+test('the API: Owner only, the key write-only (the browser sees the client e-mail), a Space\'s properties and Test', async () => {
+  const http = await import('node:http');
+  const { createHandler } = await import('../server/api.js');
+  const { loadPin } = await import('../server/pin.js');
+  const floors = await import('../server/floors.js');
+  const users = await import('../server/users.js');
+  const pin = loadPin();
+  const srv = http.createServer(createHandler({ pin }));
+  await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
+  after(() => srv.close());
+  const call = async (method, u, body, p = pin) => { const r = await fetch(`http://127.0.0.1:${srv.address().port}${u}`, { method, headers: { 'content-type': 'application/json', 'x-aisquad-pin': p }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, body: await r.json().catch(() => null) }; };
+  const dir = path.join(root, 'api-space');
+  const { entry } = await floors.createFloor({ name: 'Search', directory: { mode: 'new', path: dir }, team: [] });
+  const list = await call('GET', '/api/integrations');
+  assert.equal(list.body.google.clientEmail, KEY.client_email);
+  assert.doesNotMatch(JSON.stringify(list.body), /PRIVATE KEY/);
+  assert.equal((await call('PUT', '/api/integrations/google/key', { key: JSON.stringify(KEY) })).body.clientEmail, KEY.client_email);
+  assert.equal((await call('PUT', `/api/floors/${entry.id}/google`, { gscSite: 'sc-domain:example.com', ga4Property: '312345678' })).status, 200);
+  const got = await call('GET', `/api/floors/${entry.id}/google`);
+  assert.deepEqual([got.body.props.gscSite, got.body.clientEmail], ['sc-domain:example.com', KEY.client_email]);
+  const t = await call('POST', `/api/floors/${entry.id}/google/test`, {});
+  assert.deepEqual([t.body.gsc.ok, t.body.ga4.ok], [true, true]);
+  const member = users.addUser({ name: 'Mia', role: 'member' }, pin);
+  for (const [m, u] of [['GET', '/api/integrations'], ['PUT', '/api/integrations/google/key'], ['GET', `/api/floors/${entry.id}/google`], ['PUT', `/api/floors/${entry.id}/google`], ['POST', `/api/floors/${entry.id}/google/test`]]) {
+    assert.equal((await call(m, u, m === 'GET' ? undefined : {}, member.pin)).status, 403, `${m} ${u} is the Owner's`);
+  }
+});
+
+test('doctor: the key\'s file mode', async () => {
+  const { runDoctor } = await import('../server/doctor.js');
+  const f = path.join(config.home, 'secrets.json');
+  const check = () => runDoctor().checks.find((c) => c.id === 'google');
+  assert.equal(check().status, 'ok');
+  assert.match(check().detail, /aisquad@acme-seo.iam.gserviceaccount.com/);
+  fs.chmodSync(f, 0o644);
+  assert.deepEqual([check().status, check().fix], ['fail', `chmod 600 ${f}: the key file of the service account is in it`]);
+  fs.chmodSync(f, 0o600);
+});
