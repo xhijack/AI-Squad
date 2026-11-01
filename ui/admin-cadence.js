@@ -8,13 +8,13 @@ import { t, tx } from './i18n.js';
 
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DAY_NAME = { sun: t('Sunday'), mon: t('Monday'), tue: t('Tuesday'), wed: t('Wednesday'), thu: t('Thursday'), fri: t('Friday'), sat: t('Saturday') };
-const KIND = { daily: t('every day'), weekdays: t('every weekday'), weekly: t('every week on'), monthly: t('every month on day') };
+const KIND = { daily: t('every day'), weekdays: t('every weekday'), weekly: t('every week on'), monthly: t('every month on day'), quarterly: t('every quarter (Jan, Apr, Jul, Oct) on day') };
 const STATUS = { done: t('done'), failed: t('failed'), stopped: t('stopped'), skipped: t('skipped'), lost: t('lost') };
 const TONE = { done: 'live', failed: 'bad', stopped: '', skipped: 'warn', lost: 'bad' };
 export function everyText(every) {
   const [kind, day] = String(every).split(':');
   if (kind === 'weekly') return `${KIND.weekly} ${DAY_NAME[day] || day}`;
-  if (kind === 'monthly') return `${KIND.monthly} ${day}`;
+  if (kind === 'monthly' || kind === 'quarterly') return `${KIND[kind]} ${day}`;
   return KIND[kind] || every;
 }
 const opts = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
@@ -27,7 +27,7 @@ function formHtml(sp, r = null) {
     <label style="grid-column: span 2">${t('Title')}<input name="title" required value="${esc(r?.title || '')}" placeholder="${t('e.g. Weekly report vs targets')}"></label>
     <label>${t('Agent')}<select name="agent">${agentOpts(sp.agents, r?.agentId || r?.agent)}</select></label>
     <label>${t('Budget per run ($)')}<input name="budget" type="number" step="0.5" min="0" max="50" value="${r?.budget ?? ''}" placeholder="2"></label>
-    <label>${t('Every')}<select name="kind">${opts({ daily: t('day'), weekdays: t('weekday'), weekly: t('week'), monthly: t('month') }, kind)}</select></label>
+    <label>${t('Every')}<select name="kind">${opts({ daily: t('day'), weekdays: t('weekday'), weekly: t('week'), monthly: t('month'), quarterly: t('quarter') }, kind)}</select></label>
     <label>${t('Day')}<select name="day">${DAYS.map((d) => `<option value="${d}" ${d === day ? 'selected' : ''}>${DAY_NAME[d]}</option>`).join('')}${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${String(i + 1) === day ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
     <label>${t('At')}<input name="at" type="time" required value="${esc(r?.at || '09:00')}"></label>
     <span></span>
@@ -38,7 +38,7 @@ function formHtml(sp, r = null) {
 function everyOf(f) {
   const kind = f.elements.kind.value, day = f.elements.day.value;
   if (kind === 'weekly') return `weekly:${DAYS.includes(day) ? day : 'mon'}`;
-  if (kind === 'monthly') return `monthly:${/^\d+$/.test(day) ? day : '1'}`;
+  if (kind === 'monthly' || kind === 'quarterly') return `${kind}:${/^\d+$/.test(day) ? day : '1'}`;
   return kind;
 }
 

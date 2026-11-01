@@ -3,7 +3,8 @@
 //   <repo>/.claude/aisquad/cadence.json      the routines (committed; a change is recorded in Admin → Changes)
 //   ~/.aisquad/cadence/<floor>.json           when each routine last ran, what waits, what runs (this machine)
 // A routine: id, title, agent (a role id such as marketing-strategist, or an agent id), every (daily, weekdays,
-// weekly:<mon..sun>, monthly:<1..31>, the 31st meaning the last day of a short month), at (HH:MM, local time),
+// weekly:<mon..sun>, monthly:<1..31>, the 31st meaning the last day of a short month; quarterly:<1..31> (1.8), that
+// day of January, April, July and October), at (HH:MM, local time),
 // task (the prompt), budget (max $ per run, optional), enabled. At most 20 per Space.
 // A run is automated work: it goes through the dispatcher (via 'cadence'), so the Space's shift, the quota guard,
 // the free memory and the Space's budget decide when it starts. A run that cannot start within its window is
@@ -22,14 +23,14 @@ const defFile = (root) => path.join(root, '.claude', 'aisquad', 'cadence.json');
 const runFile = (floorId) => path.join(config.home, 'cadence', `${floorId}.json`);
 
 // ---------- definitions ----------
-// 'daily' | 'weekdays' | 'weekly:mon' | 'monthly:15' -> { kind, day } (null when it is not one of these)
+// 'daily' | 'weekdays' | 'weekly:mon' | 'monthly:15' | 'quarterly:1' -> { kind, day } (null when it is not one of these)
 export function parseEvery(every) {
   const s = String(every || '').trim().toLowerCase();
   if (s === 'daily' || s === 'weekdays') return { kind: s };
   const w = s.match(/^weekly:(\w{3})$/);
   if (w && DAYS.includes(w[1])) return { kind: 'weekly', day: DAYS.indexOf(w[1]) };
-  const m = s.match(/^monthly:(\d{1,2})$/);
-  if (m && +m[1] >= 1 && +m[1] <= 31) return { kind: 'monthly', day: +m[1] };
+  const m = s.match(/^(monthly|quarterly):(\d{1,2})$/);
+  if (m && +m[2] >= 1 && +m[2] <= 31) return { kind: m[1], day: +m[2] };
   return null;
 }
 export function cleanRoutine(r = {}, existing = null) {
@@ -40,7 +41,7 @@ export function cleanRoutine(r = {}, existing = null) {
   const agent = kebab(r.agent ?? existing?.agent ?? '', 60);
   if (!agent) throw bad('The routine needs an agent (a role such as marketing-strategist, or an agent id)');
   const every = String(r.every ?? existing?.every ?? 'daily').trim().toLowerCase();
-  if (!parseEvery(every)) throw bad('Every: daily, weekdays, weekly:<mon..sun> or monthly:<1..31>');
+  if (!parseEvery(every)) throw bad('Every: daily, weekdays, weekly:<mon..sun>, monthly:<1..31> or quarterly:<1..31>');
   const at = String(r.at ?? existing?.at ?? '09:00');
   if (!TIME.test(at)) throw bad('At: a time such as 09:00');
   const task = String(r.task ?? existing?.task ?? '').trim().slice(0, 4000);
@@ -102,13 +103,14 @@ export function occursOn(every, d) {
   if (e.kind === 'daily') return true;
   if (e.kind === 'weekdays') return d.getDay() >= 1 && d.getDay() <= 5;
   if (e.kind === 'weekly') return d.getDay() === e.day;
+  if (e.kind === 'quarterly' && d.getMonth() % 3 !== 0) return false;              // January, April, July, October
   return d.getDate() === Math.min(e.day, lastDay(d.getFullYear(), d.getMonth()));
 }
 const slotOn = (y, m, day, at) => { const [h, mi] = at.split(':').map(Number); return new Date(y, m, day, h, mi, 0, 0); };
-// the latest time the routine was due at or before now (null when none in the last two months)
+// the latest time the routine was due at or before now (null when none in the last three months)
 export function lastSlot(r, now = Date.now()) {
   const e = parseEvery(r.every), d = new Date(now);
-  for (let i = 0; i <= 62; i++) {
+  for (let i = 0; i <= 93; i++) {
     const s = slotOn(d.getFullYear(), d.getMonth(), d.getDate() - i, r.at);
     if (s.getTime() <= now && occursOn(e, s)) return s.getTime();
   }
@@ -117,7 +119,7 @@ export function lastSlot(r, now = Date.now()) {
 // the next time it is due, after now
 export function nextSlot(r, now = Date.now()) {
   const e = parseEvery(r.every), d = new Date(now);
-  for (let i = 0; i <= 62; i++) {
+  for (let i = 0; i <= 93; i++) {
     const s = slotOn(d.getFullYear(), d.getMonth(), d.getDate() + i, r.at);
     if (s.getTime() > now && occursOn(e, s)) return s.getTime();
   }
@@ -184,5 +186,6 @@ export function everyText(every) {
   if (!e) return every;
   if (EVERY_TEXT[e.kind]) return EVERY_TEXT[e.kind];
   if (e.kind === 'weekly') return `every ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][e.day]}`;
+  if (e.kind === 'quarterly') return `quarterly on day ${e.day} of January, April, July and October`;
   return e.day >= 29 ? `monthly on day ${e.day} (or the month's last day)` : `monthly on day ${e.day}`;
 }

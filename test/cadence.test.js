@@ -42,6 +42,16 @@ test('schedule maths: daily, weekdays, weekly, monthly (the 31st is the last day
   assert.equal(cadence.windowOf(R(), at(2026, 10, 28, 9, 0)), cadence.WINDOW_MS);
 });
 
+test('quarterly (1.8): that day of January, April, July and October', () => {
+  const q = R({ every: 'quarterly:1', at: '23:30' });
+  assert.equal(cadence.lastSlot(q, at(2026, 11, 1, 10, 0)), at(2026, 10, 1, 23, 30), 'October 1st');
+  assert.equal(cadence.nextSlot(q, at(2026, 11, 1, 10, 0)), at(2027, 1, 1, 23, 30), 'next: January 1st, two months on');
+  assert.equal(cadence.lastSlot(q, at(2026, 9, 30, 10, 0)), at(2026, 7, 1, 23, 30), 'three months back');
+  assert.equal(cadence.nextSlot(R({ every: 'quarterly:31', at: '09:00' }), at(2026, 2, 1, 0, 0)), at(2026, 4, 30, 9, 0), 'the 31st: April\'s last day');
+  assert.throws(() => R({ every: 'quarterly:0' }), /quarterly:<1..31>/);
+  assert.equal(cadence.everyText('quarterly:1'), 'quarterly on day 1 of January, April, July and October');
+});
+
 test('local time: 09:00 is 09:00 on the wall in Jakarta, Los Angeles (across the DST change) and UTC+14', () => {
   for (const tz of ['Asia/Jakarta', 'America/Los_Angeles', 'Pacific/Kiritimati', 'UTC']) {
     withTz(tz, () => {
