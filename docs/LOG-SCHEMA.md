@@ -95,15 +95,17 @@ slot; `queue` is true when work was waiting. Resume continues the session.
 **`kpi.measured`** (1.3): a target of the Space got a value: `kpi` (its id), `name`, `value`, `unit`, `target` (the goal, or
 null), `period`, `source` (manual, erpnext, csv, webhook, mcp), `state` (met, behind, unset, unknown), `by` for a value a person
 entered. A target from an integration (1.6, `source: mcp`) also has `server` (the integration's id: `user:<name>`,
-`space:<space>:<name>` or `erpnext`) and `tool`; the call's arguments are never logged.
+`space:<space>:<name>` or `erpnext`) and `tool`; the call's arguments are never logged. A target from Google (1.8,
+`source: google`) has `call` (`gsc.performance`, `ga4.report`, `ga4.aiReferrals`, `psi.run`, …) and `property` (the
+Search Console site, the GA4 property id, or the site for PageSpeed and Bing); never the key or the arguments.
 
 ```json
 {"v":1,"id":"6f2b1c9e0a47","ts":"2026-10-27T15:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.measured","summary":"target Leads from the site: 31 leads (behind, goal 50, manual)","data":{"kpi":"leads","name":"Leads from the site","value":31,"unit":"leads","target":50,"period":"month","source":"manual","state":"behind","by":"Ramdani"}}
 ```
 
 **`kpi.source.changed`** (1.7): the Owner changed where a target's value comes from, in place (Admin → Targets → Edit
-the source): `kpi`, `name`, `from` and `to` (the source kinds: manual, erpnext, csv, webhook, mcp), `fromServer` /
-`fromTool` and `toServer` / `toTool` when that side is an integration, `by` (the person). Never the arguments, filters,
+the source): `kpi`, `name`, `from` and `to` (the source kinds: manual, erpnext, csv, webhook, mcp, google), `fromServer` /
+`fromTool` and `toServer` / `toTool` when that side is an integration, `fromCall` / `toCall` when it is Google (1.8), `by` (the person). Never the arguments, filters,
 paths or anything secret. The history stays; the status counts from the new source's first value.
 
 ```json
@@ -111,7 +113,8 @@ paths or anything secret. The history stays; the status counts from the new sour
 ```
 
 **`kpi.failed`** (1.3): the server could not measure an ERPNext, CSV or integration target: `kpi`, `name`, `source`, `error`
-(one line, secrets removed); for `source: mcp` (1.6) also `server` and `tool`, never the arguments. The last value stays,
+(one line, secrets removed); for `source: mcp` (1.6) also `server` and `tool`, for `source: google` (1.8) `call` and
+`property`, never the arguments or the key. The last value stays,
 marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
 
 ```json
@@ -337,6 +340,21 @@ Since 0.14, an event caused by a person other than the Owner (a member's start, 
 
 ```json
 {"v":1,"id":"tool:toolu_01D","ts":"2026-10-26T02:24:00.000Z","floor":"pos","sprint":1,"module":"M01","agent":"budi-dev","role":"fullstack-developer","session":"8c1f2e4a-55d1-4c0e-9a7e-0b6f3f1d2a10","model":"claude-haiku-5-5","type":"tool.call","summary":"budi-dev Bash npm test FAILED (5 s)","data":{"tool":"Bash","target":"npm test","ms":5400,"ok":false,"error":"2 failing"}}
+```
+
+**`google.tested`** (1.8): the Owner pressed *Test* in Floor settings → Google: `gscSite` and `ga4Property` (the Space's
+properties), `gsc` and `ga4` (whether the service account can read each), `gscError` / `ga4Error` (one line, with how to
+grant access) when not. Never the key or a token.
+
+```json
+{"v":1,"id":"4b7e1d9c2a60","ts":"2026-11-01T10:00:00.000Z","floor":"acme-search","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"google.tested","summary":"Google tested: Search Console sc-domain:example.com readable, GA4 312345678 readable","data":{"gscSite":"sc-domain:example.com","ga4Property":"312345678","gsc":true,"ga4":true}}
+```
+
+**`google.submitted`** (1.8): an agent's `indexnow_submit` went through after the owner approved it on the Desk:
+`call` (`indexnow.submit`), `site`, `urls` (how many). Never the URLs' key file or a token.
+
+```json
+{"v":1,"id":"8e2c5a1f7d33","ts":"2026-11-01T10:05:00.000Z","floor":"acme-search","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"google.submitted","summary":"IndexNow: 2 URLs of https://www.example.com submitted (approved on the Desk)","data":{"call":"indexnow.submit","site":"https://www.example.com","urls":2}}
 ```
 
 **`integration.tested`** (1.6): the Owner pressed *Test connection* on an integration (Admin → Integrations): `server`

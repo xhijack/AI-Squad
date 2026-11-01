@@ -68,6 +68,25 @@ nasihat hukum.
   integrasi) tanpa menghapusnya. Riwayatnya tetap; nilai dari sumber baru memulai garis baru, dan perubahan tercatat di
   Squad Log (`kpi.source.changed`).
 
+## SEO & GEO dan konektor Google (1.8)
+
+- **SEO & GEO**: squad pencarian saja (di Panduan Perusahaan: Marketing → *Pencarian saja (SEO dan jawaban AI)*).
+  SEO & GEO Strategist (lead, satu-satunya yang bicara denganmu), Technical SEO Specialist, Keyword Researcher, Content
+  Writer, GEO Analyst (panel prompt AI di `docs/seo/PROMPTS.md`, dicek sebulan sekali) dan, untuk klinik dan toko,
+  Local SEO Specialist. Hanya data gratis: tanpa OpenSEO dan tanpa data SEO berbayar. Hard stop: tidak publikasi, tidak
+  mengubah halaman live, tidak IndexNow dan tidak email outreach tanpa persetujuanmu; tanpa teknik black-hat; tidak
+  pernah mengarang peringkat, volume, kutipan atau testimoni.
+- **Konektor Google**: buat service account di Google Cloud, aktifkan Search Console API dan Google Analytics Data
+  API, buat kunci JSON lalu unggah di Admin → Integrasi → Google (yang terlihat hanya e-mailnya). Tambahkan e-mail itu
+  di Search Console (Settings → Users and permissions) dan di GA4 (Property access management, peran Viewer), lalu isi
+  properti tiap Space di Pengaturan Lantai → Google dan tekan **Uji**. Kunci tidak pernah masuk ke repositori, Log,
+  browser atau agent. Data Search Console terlambat sekitar 2 hari, jadi periodenya berakhir 2 hari lalu.
+- **Target dari Google**: Admin → Target → Sumber *dari Google* (klik, impresi, sesi organik, sesi dari asisten AI,
+  skor PageSpeed). Agen membaca data yang sama lewat alat `aisquad-google`; IndexNow selalu menanyakanmu dulu di Meja
+  dan tidak pernah berjalan otomatis.
+- **Tool berbayar nanti**: di Admin → Integrasi setiap tool bisa ditandai **berbayar**: tidak pernah dipakai otomatis,
+  ditanyakan dulu di Meja, dan tidak pernah jadi sumber target.
+
 ## Biaya dan pembelajaran
 
 - **Tingkatan model** (Admin → Dispatcher): pekerjaan rutin di latar belakang memakai model lebih ringan; biaya per
