@@ -719,6 +719,11 @@ export function googleSession(floorId, root, run) {
   return { env: { AISQUAD_PLUGIN_ROOT: ROOT, AISQUAD_RUN: run }, secret: { [agentToken.ENV]: agentToken.tokenFor(floorId) }, deny: run === 'desk' ? [] : googleLib.WRITE_RULES };
 }
 
+// tools the Owner marked "costs money" (1.8, Admin → Integrations) that the Space can reach: on the Desk Claude Code asks
+// the owner first (an ask rule given at start, which an agent cannot edit away); a background run never gets them
+export function paidRules(floorId) { const sp = integ.spaces().find((s) => s.id === floorId); return sp ? integ.paidRules(sp) : []; }
+const withAsk = (settings, ask) => (ask.length ? { ...(settings || {}), permissions: { ...(settings?.permissions || {}), ask: [...new Set([...(settings?.permissions?.ask || []), ...ask])] } } : settings);
+
 // guard: the owner starts it from the Desk: it goes through the dispatcher, which starts it now or queues it (P0)
 // when the machine, the Space or the plan has no room. Without guard it starts now (internal, or the owner's
 // "start now anyway").
@@ -743,7 +748,8 @@ async function launchAgent(floorId, agentId, task = '', { resume = '', via = 'ai
   extraArgs.push(...reposLib.addDirArgs(repos));
   // the context layers: the Company Brain read-only, the identity guard, the Space's memory (server/context.js)
   const sc = floors.sessionContext(entry.path);
-  extraArgs.push(...sc.addDirs, ...(sc.settings ? ['--settings', JSON.stringify(sc.settings)] : []));
+  const deskSettings = withAsk(sc.settings, paidRules(floorId));
+  extraArgs.push(...sc.addDirs, ...(deskSettings ? ['--settings', JSON.stringify(deskSettings)] : []));
   // ERPNext through Frappe Assistant Core when the Space has a role (0.19): its key only as a hidden variable
   const ex = erp.sessionFor(floors.readFloor(entry.path).floor);
   if (ex) extraArgs.push(...ex.args, '--allowedTools', ...ex.allow);
@@ -812,7 +818,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const gs = general || remote ? null : googleSession(floorId, entry.path, automated ? 'automated' : 'job');
   if (gs) Object.assign(env, gs.env, gs.secret);
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
-    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : []), ...(gs ? gs.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : []), ...(gs ? gs.deny : []), ...(general ? [] : paidRules(floorId))], pluginDir: config.useHooks && !general ? ROOT : '',
     extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
   const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : cadence ? { cadence } : target ? { target } : null };
   let job;

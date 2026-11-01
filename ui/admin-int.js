@@ -2,10 +2,11 @@
 // Admin → Integrations (1.6): the MCP servers the Building knows, read from where they are (Claude Code's user scope,
 // each Space's .mcp.json, the ERPNext MCP), with secrets masked. Per server: Test connection (its tools and their
 // input schemas), what it measures (its kind), and the tools the Owner marks read-only: only those may feed a target.
+// A tool marked "costs money" (1.8) is never used by an automated run, is asked for on the Desk, and never feeds a target.
 import { esc, api, toast, ago } from './lib.js';
 import { t, tx } from './i18n.js';
 
-export const KIND = { 'social-scheduler': t('Social scheduler'), analytics: t('Analytics'), ads: t('Ads'), helpdesk: t('Help desk'), database: t('Database'), crm: t('CRM'), erp: 'ERP', other: t('Other') };
+export const KIND = { 'social-scheduler': t('Social scheduler'), analytics: t('Analytics'), seo: t('SEO data'), ads: t('Ads'), helpdesk: t('Help desk'), database: t('Database'), crm: t('CRM'), erp: 'ERP', other: t('Other') };
 const SOURCE = { user: t('Claude Code, your user scope (~/.claude.json)'), space: t('the Space\'s .mcp.json'), erpnext: t('AI Squad (ERPNext)') };
 const opts = (map, v) => Object.entries(map).map(([k, l]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
 const pairs = (o) => Object.entries(o || {}).map(([k, v]) => `<span class="mono">${esc(k)}: ${esc(v)}</span>`).join(' · ');
@@ -22,9 +23,10 @@ function toolsHtml(s) {
   const on = (tool) => (s.marked ? s.readOnly.includes(tool.name) : tool.readOnlyHint);
   return `<div class="adminList">${s.tested.tools.map((tool) => `<div class="adminRow"><label class="row"><input type="checkbox" data-ro="${esc(tool.name)}" ${on(tool) ? 'checked' : ''}><b class="mono grow">${esc(tool.name)}</b>
       ${tool.readOnlyHint ? `<span class="badge">${t('read-only by its server')}</span>` : ''}${s.readOnly.includes(tool.name) ? `<span class="badge live">${t('read-only')}</span>` : ''}</label>
+      <label class="row note"><input type="checkbox" data-paid="${esc(tool.name)}" ${(s.paid || []).includes(tool.name) ? 'checked' : ''}> ${t('costs money')}${(s.paid || []).includes(tool.name) ? ` <span class="badge update">${t('never automated, asked on the Desk, never a target')}</span>` : ''}</label>
       ${tool.description ? `<div class="note">${esc(tool.description.slice(0, 240))}</div>` : ''}
       <details><summary class="note">${t('Input schema')}</summary><pre class="note pre mono">${esc(JSON.stringify(tool.inputSchema, null, 2))}</pre></details></div>`).join('')}</div>
-    <div class="row"><span class="note grow">${s.marked ? t('Ticked tools may feed a target. The server calls only the tool a target names, never another.') : t('Pre-ticked from what the server says about its tools: check them, then save. Nothing is read-only until you save.')}</span><button class="small gold" data-isave>${t('Save read-only tools')}</button></div>`;
+    <div class="row"><span class="note grow">${s.marked ? t('Ticked tools may feed a target. The server calls only the tool a target names, never another.') : t('Pre-ticked from what the server says about its tools: check them, then save. Nothing is read-only until you save.')}</span><button class="small gold" data-isave>${t('Save the marks')}</button></div>`;
 }
 
 export function integrationsHtml(x, d) {
@@ -57,7 +59,7 @@ export function bindIntegrations(body, again) {
         return again(r.tested.ok ? t('{n} tools', { n: r.tested.tools.length }) : tx(r.tested.error));
       }
       if (el.dataset.isave !== undefined) {
-        await api('PATCH', '/api/integrations/marks', { id, readOnly: [...box.querySelectorAll('[data-ro]:checked')].map((c) => c.dataset.ro) });
+        await api('PATCH', '/api/integrations/marks', { id, readOnly: [...box.querySelectorAll('[data-ro]:checked')].map((c) => c.dataset.ro), paid: [...box.querySelectorAll('[data-paid]:checked')].map((c) => c.dataset.paid) });
         return again(t('Saved'));
       }
     } catch (err) { toast(err.message, 5000); }

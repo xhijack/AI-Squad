@@ -5,7 +5,8 @@
 //   erpnext  the ERPNext MCP that AI Squad writes (~/.aisquad/erpnext/mcp.json), with the Space's ERPNext key
 // What the Owner decides lives on this machine (~/.aisquad/integrations.json, 0600): a kind per server (what it
 // measures, for the Blueprints' `requires: mcp:<kind>`), the tools marked read-only (only those may feed a target;
-// none by default), and the last Test connection (tools and input schemas).
+// none by default), the tools marked "costs money" (1.8: never in an automated run, asked for on the Desk, never a
+// target), and the last Test connection (tools and input schemas).
 // Secrets never leave their place: header, env and argument values that are secrets are shown masked; ${VAR}
 // references are resolved from the server's environment (and the Space's ERPNext key) at call time only, and
 // a stdio server gets only those variables and a minimal environment, never the server's own.
@@ -21,7 +22,7 @@ import { redact } from './redact.js';
 import { maskValue, maskUrl, maskArgs, scrub, scrubDeep } from './mask.js';
 import { readJson, writeJson, bad, notFound, oneLine } from './util.js';
 
-export const KINDS = ['social-scheduler', 'analytics', 'ads', 'helpdesk', 'database', 'crm', 'erp', 'other'];
+export const KINDS = ['social-scheduler', 'analytics', 'seo', 'ads', 'helpdesk', 'database', 'crm', 'erp', 'other'];
 export const SOURCES = ['user', 'space', 'erpnext'];
 export const LOG_FALLBACK = 'independents';         // integration.tested when no Space can use the server
 const NAME = /^[\w.-]{1,64}$/;
@@ -66,6 +67,7 @@ const marksOf = (id) => loadState().servers[id] || {};
 // a kind from the name when the Owner has not chosen one
 export function guessKind(name = '') {
   const n = String(name).toLowerCase();
+  if (/dataforseo|seo|serp|semrush|ahrefs/.test(n)) return 'seo';                  // 1.8: paid SEO data, e.g. DataForSEO's own MCP
   if (/postiz|buffer|hootsuite|publer|later|social|meta|instagram|linkedin|twitter|tiktok/.test(n)) return 'social-scheduler';
   if (/analytic|\bga4?\b|plausible|matomo|posthog|umami|search-?console/.test(n)) return 'analytics';
   if (/\bads?\b|adwords|google-ads|meta-ads/.test(n)) return 'ads';
@@ -75,7 +77,7 @@ export function guessKind(name = '') {
   if (/erpnext|frappe|odoo/.test(n)) return 'erp';
   return 'other';
 }
-export function setMarks(id, { kind, readOnly } = {}) {
+export function setMarks(id, { kind, readOnly, paid } = {}) {
   if (!ID.test(String(id || '')) || !find(id)) throw notFound('Integration not found');
   const st = loadState(), cur = st.servers[id] || {};
   if (kind !== undefined && !KINDS.includes(kind)) throw bad(`Kind: ${KINDS.join(', ')}`);
@@ -87,7 +89,14 @@ export function setMarks(id, { kind, readOnly } = {}) {
     if (unknown.length) throw bad(`Test the connection first: ${unknown.slice(0, 3).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not among its tools`);
     ro = [...new Set(readOnly)].slice(0, 100);
   }
-  st.servers[id] = { ...cur, ...(kind !== undefined ? { kind } : {}), readOnly: ro, ...(readOnly !== undefined ? { markedAt: Date.now() } : {}) };
+  let pd = cur.paid || [];
+  if (paid !== undefined) {
+    if (!Array.isArray(paid)) throw bad('Tools that cost money: a list of tool names');
+    const known = new Set((cur.tested?.tools || []).map((t) => t.name)), unknown = paid.filter((t) => !known.has(t));
+    if (unknown.length) throw bad(`Test the connection first: ${unknown.slice(0, 3).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not among its tools`);
+    pd = [...new Set(paid)].slice(0, 100);
+  }
+  st.servers[id] = { ...cur, ...(kind !== undefined ? { kind } : {}), readOnly: ro, paid: pd, ...(readOnly !== undefined || paid !== undefined ? { markedAt: Date.now() } : {}) };
   saveState(st);
   return view(find(id));
 }
@@ -110,7 +119,7 @@ export function view(e) {
     id: e.id, name: e.name, source: e.source, sourceText: SOURCE_TEXT[e.source], ...(e.floorId ? { floorId: e.floorId } : {}), transport: e.transport,
     ...(e.url ? { url: maskUrl(e.url) } : {}), ...(e.command ? { command: maskValue(e.command, 'command'), args: maskArgs(e.args) } : {}),
     headers: Object.fromEntries(Object.entries(e.headers).map(([k, v]) => [k, maskValue(v, k)])), env: Object.fromEntries(Object.entries(e.env).map(([k, v]) => [k, maskValue(v, k)])),
-    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], marked: !!m.markedAt, tested: testedView(m.tested, e),
+    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], paid: m.paid || [], marked: !!m.markedAt, tested: testedView(m.tested, e),
     blocked: blocker(e, m), usableBy: spaces().filter((s) => usableBy(e, s)).map((s) => s.id),
   };
 }
@@ -127,7 +136,7 @@ export function match(kind, space, hint = null) {
   let re = null; try { re = hint?.tool ? new RegExp(String(hint.tool), 'i') : null; } catch { /* a bad pattern matches any tool */ }
   const of = registry().filter((e) => kindOf(e) === kind && !blocker(e)), mine = of.filter((x) => usableBy(x, space));
   for (const e of hint?.pick ? mine : []) {
-    const m = marksOf(e.id), tool = (m.readOnly || []).find((n) => !re || re.test(n));
+    const m = marksOf(e.id), tool = (m.readOnly || []).find((n) => (!re || re.test(n)) && !(m.paid || []).includes(n));
     if (!tool) continue;
     const props = (m.tested?.tools || []).find((t) => t.name === tool)?.inputSchema?.properties;
     const args = Object.fromEntries(Object.entries(hint.args && typeof hint.args === 'object' ? hint.args : {}).filter(([k]) => !props || k in props));
@@ -152,6 +161,9 @@ function scopeError(e, space) {
   if (e.source === 'space') return `${e.name} belongs to another Space's .mcp.json; a Space uses only its own`;
   return erp.settings().url ? 'This Space has no ERPNext key to use the ERPNext integration with (Admin → ERPNext)' : 'ERPNext is not set up (Admin → ERPNext)';
 }
+
+// the tools marked "costs money" a Space can reach, as Claude Code permission rules (mcp__<server>__<tool>)
+export const paidRules = (space) => registry().filter((e) => usableBy(e, space)).flatMap((e) => (marksOf(e.id).paid || []).map((t) => `mcp__${e.name}__${t}`));
 
 // ---------- ${VAR} at call time ----------
 const BASE_ENV = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'TZ', 'SystemRoot'];
@@ -204,7 +216,7 @@ export async function test(id, { now = Date.now(), opts } = {}) {
   const cur = st.servers[id] || {};
   // a tool that is gone is not read-only any more; the marks of the tools still there stay
   const names = new Set(tested.tools.map((t) => t.name));
-  st.servers[id] = { ...cur, tested, readOnly: tested.ok ? (cur.readOnly || []).filter((n) => names.has(n)) : cur.readOnly || [] };
+  st.servers[id] = { ...cur, tested, readOnly: tested.ok ? (cur.readOnly || []).filter((n) => names.has(n)) : cur.readOnly || [], paid: tested.ok ? (cur.paid || []).filter((n) => names.has(n)) : cur.paid || [] };
   saveState(st);
   const ev = { type: 'integration.tested', data: { server: id, name: e.name, source: e.source, transport: e.transport, ok: tested.ok, tools: tested.tools.length, ...(tested.ok ? {} : { error: tested.error }) } };
   const who = spaces().filter((s) => usableBy(e, s));
@@ -221,6 +233,7 @@ export function checkUse(space, source) {
   if (b) throw bad(`${e.name}: ${b}`);
   if (!space) throw bad('The Space is not registered on this machine');
   if (!usableBy(e, space)) throw bad(scopeError(e, space));
+  if ((marksOf(e.id).paid || []).includes(source.tool)) throw bad(`The tool "${source.tool}" of ${e.name} costs money (Admin → Integrations): it never feeds a target`);
   if (!(marksOf(e.id).readOnly || []).includes(source.tool)) throw bad(`The tool "${source.tool}" of ${e.name} is not marked read-only (Admin → Integrations): only read-only tools feed a target`);
   return e;
 }

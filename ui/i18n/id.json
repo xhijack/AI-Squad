@@ -2148,5 +2148,9 @@
  "Read with the service account in Admin → Integrations → Google, from the properties in Floor settings → Google. Search Console data lags about 2 days, so its period ends 2 days ago.": "Dibaca dengan service account di Admin → Integrasi → Google, dari properti di Pengaturan Lantai → Google. Data Search Console terlambat sekitar 2 hari, jadi periodenya berakhir 2 hari lalu.",
  "Arguments must be a JSON object": "Argumen harus berupa objek JSON",
  "Search Console data lags about 2 days: no data for this period yet.": "Data Search Console terlambat sekitar 2 hari: belum ada data untuk periode ini.",
- "Search Console data lags about 2 days: this period is measured up to {date}.": "Data Search Console terlambat sekitar 2 hari: periode ini diukur sampai {date}."
+ "Search Console data lags about 2 days: this period is measured up to {date}.": "Data Search Console terlambat sekitar 2 hari: periode ini diukur sampai {date}.",
+ "SEO data": "Data SEO",
+ "costs money": "berbayar",
+ "never automated, asked on the Desk, never a target": "tidak pernah otomatis, ditanyakan di Meja, tidak pernah jadi target",
+ "Save the marks": "Simpan tanda"
 }

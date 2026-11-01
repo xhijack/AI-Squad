@@ -320,7 +320,7 @@ const routes = [
   ['PUT', /^\/api\/integrations\/google\/keys\/(psi|bing)$/, ([which], b) => google.setKey(which, b?.key), { pin: true }],
   ['PATCH', /^\/api\/integrations\/google$/, (p, b) => ({ owner: google.saveOwnerProps(b || {}) }), { pin: true, history: () => ({ label: 'Google properties (Owner)' }) }],
   ['POST', /^\/api\/integrations\/test$/, (p, b) => integ.test(String(b.id || '')), { pin: true }],
-  ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly }), { pin: true }],
+  ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly, paid: b.paid }), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],
   ['PATCH', /^\/api\/erpnext$/, (p, b) => erp.saveSettings(b), { pin: true, history: () => ({ label: 'ERPNext settings' }) }],
   ['PUT', /^\/api\/erpnext\/keys\/(sales|delivery|finance|owner)$/, async ([role], b) => ({ keys: await erp.setKey(role, b.key, b.secret, { check: b.check !== false }) }), { pin: true }],
