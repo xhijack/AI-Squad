@@ -26,7 +26,7 @@ export async function openChrome() {
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
     if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map((a) => a.value ?? a.description).join(' '));
-    if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') logs.push(`${m.params.entry.source}: ${m.params.entry.text}`);   // CSP violations, failed loads
+    if (m.method === 'Log.entryAdded' && m.params.entry.source === 'security') logs.push(`security: ${m.params.entry.text}`);   // CSP violations (1.9)
   });
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++seq;
