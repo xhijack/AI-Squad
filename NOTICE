@@ -18,3 +18,9 @@ The realistic-look proof of concept (ui/assets/realistic) includes an avatar and
 Microsoft Rocketbox (https://github.com/microsoft/Microsoft-Rocketbox), Copyright (c) 2020 Microsoft,
 licensed under the MIT License (see ui/assets/realistic/LICENSE-rocketbox.txt), and CC0 models and
 textures from Poly Haven (https://polyhaven.com). See ASSETS.md.
+
+The SEO and GEO skills (skills/keyword-research, keyword-clustering, content-brief, content-refresh,
+ai-visibility-audit, llms-txt, local-seo, seo-report and the audit steps in seo-audit) adapt the method of
+OpenSEO's agent skills (https://github.com/every-app/open-seo), Copyright (c) 2026 Ben Senescu, licensed
+under the MIT License (see LICENSE-NOTICE in each skill). They use free data sources only; OpenSEO itself
+is not bundled or required.
