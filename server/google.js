@@ -366,3 +366,38 @@ export async function test(space, { now = deps.now() } = {}) {
   deps.log(space.id, { type: 'google.tested', data: { gscSite: props.gscSite, ga4Property: props.ga4Property, gsc: gsc.ok, ga4: ga4.ok, ...(gsc.ok ? {} : { gscError: oneLine(gsc.error, 200) }), ...(ga4.ok ? {} : { ga4Error: oneLine(ga4.error, 200) }) } });
   return { at: now, clientEmail: email, gsc, ga4 };
 }
+
+// ---------- agents: the aisquad-google MCP server (bin/google-mcp.js) ----------
+// Its tools ask this server (POST /api/google/agent with the Space's agent token); the key never leaves the server.
+// A Blueprint that asks for it (`mcp: [aisquad-google]`) gets it in the Space's .mcp.json at Set up Squad, with its
+// read tools allowed and indexnow_submit set to ask (the owner approves it on the Desk) and denied to automated runs.
+export const MCP_NAME = 'aisquad-google';
+export const TOOLS = { gsc_performance: 'gsc.performance', gsc_inspect: 'gsc.inspect', ga4_report: 'ga4.report', ga4_ai_referrals: 'ga4.aiReferrals', psi_run: 'psi.run', bing_stats: 'bing.stats', indexnow_submit: 'indexnow.submit' };
+export const rule = (tool) => `mcp__${MCP_NAME}__${tool}`;
+export const READ_RULES = Object.entries(TOOLS).filter(([, c]) => !WRITES.includes(c)).map(([t]) => rule(t));
+export const WRITE_RULES = Object.entries(TOOLS).filter(([, c]) => WRITES.includes(c)).map(([t]) => rule(t));
+// the entry in a Space's .mcp.json: no secrets and no absolute paths (Claude Code fills the variables at start)
+export const mcpEntry = () => ({ type: 'stdio', command: 'node', args: ['${AISQUAD_PLUGIN_ROOT}/bin/google-mcp.js'], env: { AISQUAD_URL: '${AISQUAD_URL}', AISQUAD_SPACE_TOKEN: '${AISQUAD_SPACE_TOKEN}', AISQUAD_RUN: '${AISQUAD_RUN:-desk}' } });
+export function addToSpace(root) {
+  const f = path.join(root, '.mcp.json');
+  const cur = readJson(f, null) || {};
+  if (cur.mcpServers?.[MCP_NAME]) return false;
+  writeJson(f, { ...cur, mcpServers: { ...(cur.mcpServers || {}), [MCP_NAME]: mcpEntry() } });
+  const sf = path.join(root, '.claude', 'settings.json'), st = readJson(sf, null) || {};
+  const perm = { ...(st.permissions || {}) };
+  perm.allow = [...new Set([...(perm.allow || []), ...READ_RULES])];
+  perm.ask = [...new Set([...(perm.ask || []), ...WRITE_RULES])];
+  writeJson(sf, { ...st, permissions: perm });
+  return true;
+}
+export const inSpace = (root) => !!readJson(path.join(root, '.mcp.json'), null)?.mcpServers?.[MCP_NAME];
+// a call from an agent's tool: the Space from its token; a write never from an automated run
+export async function agentCall(space, body = {}) {
+  const name = String(body.call || '');
+  if (!CALLS.includes(name)) throw bad(`Google call: ${CALLS.join(', ')}`);
+  const write = WRITES.includes(name);
+  if (write && body.run !== 'desk') throw bad(`${name} is not allowed in automated runs: the owner approves it in a Desk session`);
+  const out = await call(space, name, body.args || {}, { write });
+  if (write) deps.log(space.id, { type: 'google.submitted', data: { call: name, site: out.site, urls: out.submitted } });
+  return out;
+}

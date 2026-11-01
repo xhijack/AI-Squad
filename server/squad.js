@@ -54,6 +54,7 @@ import * as history from './history.js';
 import * as kpiLib from './kpi.js';
 import * as integ from './integrations.js';
 import * as googleLib from './google.js';
+import * as agentToken from './agenttoken.js';
 import * as guideLib from './guide.js';
 import * as cadenceLib from './cadence.js';
 import * as behind from './behind.js';
@@ -710,6 +711,14 @@ function locate(floorId, agentId) {
   return { entry, cfg, agent, name: tm.sessionName(floorId, agentId) };
 }
 
+// the aisquad-google tools (1.8), when the Space's .mcp.json has them: the plugin's folder, the kind of run and the
+// Space's agent token (hidden, like the ERPNext keys); a run the owner does not watch never gets the write tool
+export const AUTOMATED_VIA = ['cadence', 'kpi', 'autopilot'];
+export function googleSession(floorId, root, run) {
+  if (!googleLib.inSpace(root)) return null;
+  return { env: { AISQUAD_PLUGIN_ROOT: ROOT, AISQUAD_RUN: run }, secret: { [agentToken.ENV]: agentToken.tokenFor(floorId) }, deny: run === 'desk' ? [] : googleLib.WRITE_RULES };
+}
+
 // guard: the owner starts it from the Desk: it goes through the dispatcher, which starts it now or queues it (P0)
 // when the machine, the Space or the plan has no room. Without guard it starts now (internal, or the owner's
 // "start now anyway").
@@ -738,7 +747,9 @@ async function launchAgent(floorId, agentId, task = '', { resume = '', via = 'ai
   // ERPNext through Frappe Assistant Core when the Space has a role (0.19): its key only as a hidden variable
   const ex = erp.sessionFor(floors.readFloor(entry.path).floor);
   if (ex) extraArgs.push(...ex.args, '--allowedTools', ...ex.allow);
-  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], extraArgs, env, secretEnv: ex ? ex.env : {} });
+  const gs = googleSession(floorId, entry.path, 'desk');
+  if (gs) Object.assign(env, gs.env);
+  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], extraArgs, env, secretEnv: { ...(ex ? ex.env : {}), ...(gs ? gs.secret : {}) } });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -797,8 +808,11 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const ex = general ? null : erp.sessionFor(cfg.floor);                 // ERPNext (0.19): this machine only, never sent to a worker
   if (ex && remote) throw bad('A Space with ERPNext keys runs its jobs on this machine only');
   if (ex) Object.assign(env, ex.env);
+  const automated = AUTOMATED_VIA.includes(via) || routine || !!cadence || !!target;
+  const gs = general || remote ? null : googleSession(floorId, entry.path, automated ? 'automated' : 'job');
+  if (gs) Object.assign(env, gs.env, gs.secret);
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
-    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : []), ...(gs ? gs.deny : [])], pluginDir: config.useHooks && !general ? ROOT : '',
     extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
   const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : cadence ? { cadence } : target ? { target } : null };
   let job;

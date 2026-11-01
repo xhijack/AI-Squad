@@ -44,6 +44,7 @@ import * as guide from './guide.js';
 import * as promote from './promote.js';
 import * as integ from './integrations.js';
 import * as google from './google.js';
+import * as agentToken from './agenttoken.js';
 
 const UI = path.join(ROOT, 'ui');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain', '.glb': 'model/gltf-binary', '.hdr': 'image/vnd.radiance' };
@@ -289,6 +290,8 @@ const routes = [
   ['DELETE', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)$/, ([id, k]) => { const r = kpi.removeKpi(building.floorEntry(id).path, k); kpi.render(building.floorEntry(id).path, id); return r; }, { pin: true, history: ([id]) => ({ label: 'Target removed', floorId: id }) }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/values$/, ([id, k], b, req) => kpi.record(id, building.floorEntry(id).path, k, b.value, { source: 'manual', by: req.user?.name || 'Owner', note: b.note }), { pin: true }],
   ['POST', /^\/api\/floors\/([\w-]+)\/kpis\/([\w-]+)\/measure$/, ([id, k], b, req) => kpi.measure(id, building.floorEntry(id).path, k, { by: req.user?.name || '' }), { pin: true }],
+  // an agent's aisquad-google tool (1.8): the Space's agent token, never the PIN; the server makes the Google call
+  ['POST', /^\/api\/google\/agent$/, (p, b, req) => google.agentCall(req.space, b || {}), { space: true }],
   // a Space's Google properties (1.8, .claude/aisquad/google.json: ids only) and Test: the Owner's (access.js)
   ['GET', /^\/api\/floors\/([\w-]+)\/google$/, ([id]) => { const sp = spaceOf(id); return { props: google.readProps(sp.path), effective: google.propsFor(sp), access: sp.access, clientEmail: google.status().clientEmail }; }, { pin: true }],
   ['PUT', /^\/api\/floors\/([\w-]+)\/google$/, ([id], b) => ({ props: google.saveProps(spaceOf(id).path, b || {}) }), { pin: true, history: ([id]) => ({ label: 'Google properties', floorId: id }) }],
@@ -384,6 +387,13 @@ export function createHandler({ pin, host = '127.0.0.1' }) {
         if (!m) continue;
         // an outside system posting a target's value (1.3): the Space's token in the URL, nothing else
         if (opts.hook) return send(res, 200, await handler(m.slice(1), await readBody(req), req));
+        // a tool inside an agent's session (1.8): the Space's agent token, only for that Space
+        if (opts.space) {
+          const id = agentToken.floorOfToken(req.headers[agentToken.HEADER]);
+          req.space = id && integ.spaces().find((s) => s.id === id);
+          if (!req.space) return send(res, 401, { error: 'Unknown Space token: start the agent from its Space' });
+          return send(res, 200, await handler(m.slice(1), await readBody(req), req));
+        }
         // a worker machine (0.18): its own token, only for its own routes
         if (opts.node) {
           const node = nodes.authNode(req.headers['x-aisquad-node']);

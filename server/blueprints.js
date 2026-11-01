@@ -9,6 +9,7 @@ import { parseFrontmatter } from './frontmatter.js';
 import { safeReaddir, readText, writeText, readJson, writeJson, kebab, uniq, notFound, bad } from './util.js';
 import { listTemplates } from './roles.js';
 import { SECRET_DENY } from './sprint.js';
+import * as google from './google.js';
 
 export const SHIPPED = path.join(ROOT, 'templates', 'blueprints');
 export const libraryDir = () => path.join(config.home, 'blueprints');
@@ -38,6 +39,8 @@ export function parseBlueprint(text, fallbackId = '') {
     // routines (1.5): created disabled in a new Space; the Owner turns them on in Admin → Cadence
     cadence: Array.isArray(data.cadence) ? data.cadence.filter((r) => r && r.title && r.task) : [],
     // ERPNext key and Telegram (1.7): Finance reads with the finance key and sends only counts
+    // built-in MCP servers the squad's sessions get (1.8): aisquad-google
+    mcp: list(data.mcp).filter((x) => x === google.MCP_NAME),
     space: (({ kind, access, shift, erpnext, telegram }) => ({ ...(kind ? { kind } : {}), ...(access ? { access } : {}), ...(shift ? { shift } : {}), ...(erpnext ? { erpnext } : {}), ...(telegram ? { telegram } : {}) }))(data.space && typeof data.space === 'object' ? data.space : {}),
   };
 }
@@ -155,6 +158,7 @@ export function applyToRepo(root, bp) {
     writeText(dest, fs.readFileSync(f.abs, 'utf8'));
     created.push(f.rel);
   }
+  if (bp.mcp?.includes(google.MCP_NAME) && google.addToSpace(root)) created.push('.mcp.json');
   return created;
 }
 

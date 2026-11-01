@@ -42,7 +42,8 @@ function entry(name, raw, source, floorId = '', cwd = '') {
   };
 }
 // a Space's stdio servers start in the Space's folder, as Claude Code starts them (relative commands and args)
-const serversIn = (file, source, floorId, cwd) => { const j = readJson(file, null); const s = j?.mcpServers && typeof j.mcpServers === 'object' ? j.mcpServers : {}; return Object.entries(s).map(([n, raw]) => entry(n, raw, source, floorId, cwd)).filter(Boolean); };
+// aisquad-google (1.8) is built in: Admin → Integrations → Google shows it, and targets read Google directly
+const serversIn = (file, source, floorId, cwd) => { const j = readJson(file, null); const s = j?.mcpServers && typeof j.mcpServers === 'object' ? j.mcpServers : {}; return Object.entries(s).filter(([n]) => n !== 'aisquad-google').map(([n, raw]) => entry(n, raw, source, floorId, cwd)).filter(Boolean); };
 const floorJson = (root) => readJson(path.join(root, '.claude', 'aisquad', 'floor.json'), {}) || {};
 // the Spaces with what the scope rule needs
 export function spaces() {
