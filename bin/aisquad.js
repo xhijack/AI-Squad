@@ -12,6 +12,7 @@
 //   aisquad verify FILE [--passphrase-env VAR]            check that a backup reads back
 //   aisquad restore FILE [--dry-run] [--force] [--relink OLD=NEW]... [--projects-dir DIR] [--no-clone] [--passphrase-env VAR]
 //   aisquad doctor                                        check this machine and the Building
+//   aisquad unlock                                        lift the PIN sign-in lock after too many wrong PINs (1.9)
 //   aisquad quickstart [--blueprint ID --name NAME] [--dir PATH]   start, print the PIN, and set up a first squad (1.0)
 //   aisquad node --head URL --name NAME [--token TOKEN] [--max-agents 6]   run this machine as a worker of a Head
 //                                                         (the token from Admin → Machines, or AISQUAD_NODE_TOKEN)
@@ -207,6 +208,13 @@ async function restoreCmd() {
   console.log('Auto-merge approvals are not restored: approve them again per Floor. Then check the machine:');
   await doctorCmd();
 }
+// the lock lives in ~/.aisquad/lockout.json, which the server reads on every sign-in: no restart needed
+async function unlockCmd() {
+  const limits = await import('../server/limits.js');
+  const r = limits.unlock();
+  console.log(r.wasLocked ? 'PIN sign-in is unlocked again.' : 'PIN sign-in was not locked; the count of wrong PINs is cleared.');
+}
+
 async function doctorCmd() {
   const { runDoctor, doctorText } = await import('../server/doctor.js');
   const r = runDoctor({ service: service.status() });
@@ -250,6 +258,7 @@ async function main() {
   if (cmd === 'verify') return verifyCmd();
   if (cmd === 'restore') return restoreCmd();
   if (cmd === 'doctor') return doctorCmd();
+  if (cmd === 'unlock') return unlockCmd();
   if (cmd === 'quickstart') return quickstartCmd();
   if (cmd === 'node') return nodeCmd();
   if (cmd === 'audit') return audit();

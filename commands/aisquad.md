@@ -1,6 +1,6 @@
 ---
 description: Open The AI Squad (your Claude Code teams as a 3D building), create a Floor, show the status, audit a Floor, or stop the server
-argument-hint: "[new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export | backup | verify FILE | restore FILE | doctor]"
+argument-hint: "[new-floor | status | stop | uninstall | audit [floor] [--sprint N] | audit export | backup | verify FILE | restore FILE | doctor | unlock]"
 allowed-tools: Bash(node:*)
 ---
 
@@ -20,6 +20,7 @@ Tell the user the result in a few short lines:
 - `backup`: give the file, its size, whether it is encrypted, and every warning (uncommitted work, Floors without a remote). Suggest keeping it off this machine.
 - `verify FILE`: say whether the backup reads back.
 - `restore FILE`: show where each Floor goes. A dry run changes nothing; a real restore needs the server stopped (`/aisquad stop`) and, over a folder in use, `--force`. Repeat the warnings and the doctor's FAIL lines with their fixes.
+- `unlock`: say whether PIN sign-in was locked and is open again (after too many wrong PINs). Waits on single addresses end by themselves.
 - `doctor`: list the checks that are not ok with their fixes; say "everything needed is there" when all pass.
 
 If the output shows an error, explain it and suggest checking `~/.aisquad/server.log`. Do not start agents or change any Floor yourself; the user does that in the browser.
