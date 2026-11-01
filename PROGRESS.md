@@ -1137,7 +1137,7 @@ The owner asked for a Floor that does only SEO and GEO, with no extra running co
   - `google-mcp.test.js` (5): tools/list hints; no key in the process (from `/proc/<pid>/environ`); Space scoping and unknown tokens; `indexnow_submit` denied to automated runs at all three levels and logged on the Desk.
   - `integrations-paid.test.js` (7), `seo-geo.test.js` (3), `guide-seo.test.js` (4), `seo-skills.test.js` (3): the skills lint for attribution and no OpenSEO or DataForSEO tool names. Plus quarterly in `cadence.test.js`.
   - Existing tests changed only where behaviour changed on purpose: template, Blueprint and skill counts; the Telegram interview now answers the Marketing focus.
-- `npm test`: 592 tests, 591 pass, 1 fails: `meter.test.js` "samples CPU…" reads the machine's real free disk (`statfs` of the scratch folder). With 6.5 GB free (94 % used), that is under its 10 GB "warn" line, so `levels.overall` is `warn`. It fails the same way on 1.7.0 on this disk and is not caused by this sprint; it is left as it is (it needs an injectable disk reading or free disk space). The Chrome typing test ran, since swap stayed at 71 %.
+- `npm test`: 592 tests, all pass. At the release one failed: `meter.test.js` "samples CPU…" read the machine's real free disk, and this host's 94 % full disk (6.5 GB free, under the 10 GB "warn" line) made `levels.overall` `warn`. Fixed after the release: `createMeter` takes the disk reading as an option (`statfs`, default `fs.statfsSync`, so the server behaves as before), and the test passes a fixed reading. The Chrome typing test ran, since swap stayed at 71 %.
 - **Dogfood** (`playground/s18`: the real server on 8196 with the fake Claude, the fake Google on 8199 via `AISQUAD_GOOGLE_BASE`, a fixed meminfo; no real Google or Bing endpoint was called):
   - Company Guide over the API: a dental clinic "Senyum", Marketing → *Search only*. Plan: `seo-geo`, "Senyum Search", the local SEO specialist added, Google access *missing*. After the key upload the plan named `aisquad@senyum-seo.iam.gserviceaccount.com`. Build made Floor 2 with 6 agents and 7 routines, all off.
   - Floor settings → Google: Test showed both readable. A property it cannot read gave the plain message with the grant steps.
@@ -1154,7 +1154,7 @@ The owner asked for a Floor that does only SEO and GEO, with no extra running co
   - `google.json` also holds the site address and the IndexNow key (public by design), which Bing, PageSpeed and IndexNow need.
   - Background jobs started by the owner also never get `indexnow_submit`, since they cannot ask.
   - A job sent to a worker machine does not get the Google tools.
-- Not yet: OAuth MCP servers as a target source (still out of scope); a real-browser check of the Search Console and GA4 sign-up steps against Google's current UI (the README follows Google's documented menus); the meter test's dependence on real free disk.
+- Not yet: OAuth MCP servers as a target source (still out of scope); a real-browser check of the Search Console and GA4 sign-up steps against Google's current UI (the README follows Google's documented menus);.
 
 ## How to run
 

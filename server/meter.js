@@ -56,7 +56,8 @@ export function levels(s, limits = LIMITS) {
   return out;
 }
 
-export function createMeter({ proc = '/proc', diskPath = os.homedir(), ncpu = os.cpus().length } = {}) {
+// statfs: how the disk is read (fs.statfsSync); tests pass a fixed reading so they never depend on the real disk
+export function createMeter({ proc = '/proc', diskPath = os.homedir(), ncpu = os.cpus().length, statfs = fs.statfsSync } = {}) {
   const read = (f) => fs.readFileSync(`${proc}/${f}`, 'utf8');
   // tree: every process of the last sample (pid -> { ppid, rss, cpu }), for the RAM and CPU of each agent session
   const state = { hist: [], last: null, tree: new Map() };
@@ -89,7 +90,7 @@ export function createMeter({ proc = '/proc', diskPath = os.homedir(), ncpu = os
       prevCpu = c;
       const procs = sampleProcs(dTotal);
       let disk = null;
-      try { const st = fs.statfsSync(diskPath); disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize }; } catch { /* no statfs */ }
+      try { const st = statfs(diskPath); disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize }; } catch { /* no statfs */ }
       const groups = {};
       for (const p of procs) { const g = groups[p.group] ||= { name: p.group, cpu: 0, rss: 0, n: 0 }; g.cpu += p.cpu; g.rss += p.rss; g.n++; }
       const s = {

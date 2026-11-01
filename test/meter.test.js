@@ -31,7 +31,8 @@ test('samples CPU from the difference between two reads, history and danger leve
   put('stat', 'cpu  100 0 0 900 0 0 0 0 0 0\n'); put('meminfo', meminfo(8));
   put('42/stat', stat(42, 'claude', 100, 300000)); put('42/cmdline', 'claude\0--agent\0x\0SECRET=1');
   put('43/stat', stat(43, 'bash', 1, 10)); put('43/cmdline', 'bash');
-  const meter = m.createMeter({ proc, diskPath: proc, ncpu: 4 });
+  const statfs = (p) => { assert.equal(p, proc); return { bsize: 4096, blocks: 25e6, bavail: 12.5e6 }; };   // a fixed 51 GB free of 102 GB: never the real disk
+  const meter = m.createMeter({ proc, diskPath: proc, ncpu: 4, statfs });
   meter.sample();
   put('stat', 'cpu  400 0 100 1500 0 0 0 0 0 0\n');       // +1000 jiffies, 600 idle -> 40 % busy
   put('42/stat', stat(42, 'claude', 300, 300000));         // 200 of the 1000 jiffies -> 20 % of the machine
@@ -40,6 +41,7 @@ test('samples CPU from the difference between two reads, history and danger leve
   assert.deepEqual(s.top.map((p) => [p.pid, p.comm, p.cpu, p.group]), [[42, 'claude', 20, 'Claude Code']]);
   assert.equal(JSON.stringify(s).includes('SECRET'), false, 'command lines never leave the meter');
   assert.deepEqual(s.groups.map((g) => g.name), ['Claude Code']);
+  assert.deepEqual(s.disk, { total: 102.4e9, free: 51.2e9 });
   assert.equal(s.levels.overall, 'ok');
   assert.equal(meter.detail().hist.length, 2);
   assert.equal(meter.summary().top, undefined, 'the dock chip gets no process list');
