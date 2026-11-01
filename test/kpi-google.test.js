@@ -93,6 +93,7 @@ test('a new month: Search Console has no data yet for two days, so the tick wait
   assert.deepEqual(out.filter((x) => x.floorId === S.id).map((x) => x.kpi).sort(), ['ai', 'organic', 'psi'], 'the GSC targets wait');
   assert.equal(F.calls.filter((c) => c.path.endsWith('/searchAnalytics/query')).length, 0);
   await assert.rejects(kpi.measure(S.id, S.path, 'clicks', { now: clock }), /No Search Console data yet for this month: it lags about 2 days/);
+  assert.equal(squadLog.read(S.id, { type: 'kpi.failed' }).filter((e) => e.data.kpi === 'clicks').length, 0, 'no data yet is not a failure');
   const card = kpi.list(S.id, S.path, clock).find((k) => k.id === 'clicks');
   assert.deepEqual([card.lagEmpty, card.status.state], [true, 'unknown'], 'last month\'s value does not count for this one');
   clock = new Date(2026, 10, 3, 10, 0).getTime();                // Tuesday 3 Nov: one day of data

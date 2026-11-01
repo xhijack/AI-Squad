@@ -64,7 +64,8 @@ export async function loadGoogle(floorId, el, owner) {
       <div><label>${t('GA4 property id')}${hint('ga4Property')}</label><input data-g="ga4Property" value="${esc(p.ga4Property)}" placeholder="312345678"></div>
       <div><label>${t('Site')}${hint('siteUrl')}</label><input data-g="siteUrl" value="${esc(p.siteUrl)}" placeholder="https://www.example.com"></div>
       <div><label>${t('IndexNow key (docs/seo/INDEXNOW.md)')}</label><input data-g="indexNowKey" value="${esc(p.indexNowKey)}" placeholder="a1b2c3d4e5f6a7b8"></div></div>
-    <div class="row"><span class="grow" data-gtestout></span><button type="button" class="small ghost" data-gtest>${t('Test')}</button><button type="button" class="small" data-gsave>${t('Save Google properties')}</button></div>`;
+    <div class="row"><span class="spacer"></span><button type="button" class="small ghost" data-gtest>${t('Test')}</button><button type="button" class="small" data-gsave>${t('Save Google properties')}</button></div>
+    <div data-gtestout></div>`;
   const read = () => Object.fromEntries([...el.querySelectorAll('[data-g]')].map((i) => [i.dataset.g, i.value.trim()]));
   el.querySelector('[data-gsave]').onclick = async () => { try { await api('PUT', `/api/floors/${floorId}/google`, read()); toast(t('Saved')); } catch (e) { toast(e.message, 6000); } };
   el.querySelector('[data-gtest]').onclick = async (e) => {
