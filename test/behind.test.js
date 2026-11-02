@@ -138,8 +138,11 @@ test('notify: a measurement behind the goal raises one muted notice with a stabl
   assert.deepEqual(behind.history(fid).map((h) => h.action), ['notice']);
 });
 
+// Wednesday 10:00 of the n-th week from now: a later period, and two days later still the same one (whatever day it is)
+const midweek = (n) => kpi.periodStart('week', Date.now()) + (n * 7 + 2) * 864e5 + 10 * 3600e3;
+
 test('suggest: the rule\'s agent drafts a plan (read-only run); Approve starts it as a task with the numbers and the plan', async () => {
-  const now = Date.now() + 9 * 864e5;                                       // next period, after the cooldown
+  const now = midweek(1);                                                    // next period, after the cooldown
   kpi.updateKpi(proj, 'leads', { onBehind: { mode: 'suggest', agent: 'qa-engineer', task: 'Write two extra posts with a lead form.' } });
   kpi.record(fid, proj, 'leads', 3, { now });
   await sleep(50);
@@ -166,7 +169,7 @@ test('suggest: the rule\'s agent drafts a plan (read-only run); Approve starts i
 });
 
 test('suggest, Dismiss: the target is quiet for the rest of the period', async () => {
-  const now = Date.now() + 18 * 864e5;
+  const now = midweek(2);
   kpi.record(fid, proj, 'leads', 2, { now });
   await sleep(50);
   assert.ok(await settle(() => behind.stateOf(fid, 'leads').status === 'suggested'));
@@ -180,7 +183,7 @@ test('suggest, Dismiss: the target is quiet for the rest of the period', async (
 });
 
 test('act: without Autopilot full it asks instead; with it the task starts at once as automated work', async () => {
-  const now = Date.now() + 27 * 864e5;
+  const now = midweek(3);
   kpi.updateKpi(proj, 'leads', { onBehind: { mode: 'act', agent: '', task: 'Book two webinars.' } });
   kpi.record(fid, proj, 'leads', 2, { now });
   await sleep(50);
