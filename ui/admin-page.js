@@ -11,6 +11,7 @@ import { loadMe } from './people.js';
 import { openAdmin, TAB_IDS, setPageTitles } from './admin.js';
 import { openTemplates } from './templates.js';
 import { updateHtml, bindUpdate } from './update.js';
+import { learningPage } from './admin-learn.js';
 import './dialogs.js';
 import './health.js';
 import './signin.js';
@@ -23,7 +24,7 @@ const OWNER = true;
 // the sidebar: [id, label, ownerOnly]; ids that are Admin tabs render through openAdmin
 export const NAV = [
   [t('Overview'), [['overview', t('Overview')]]],
-  [t('Company'), [['guide', t('Company plan'), OWNER], ['targets', t('Targets')], ['cadence', t('Cadence')], ['company', t('Company Brain')]]],
+  [t('Company'), [['guide', t('Company plan'), OWNER], ['targets', t('Targets')], ['cadence', t('Cadence')], ['learning', t('Learning'), OWNER], ['company', t('Company Brain')]]],
   [t('Spaces and team'), [['spaces', t('Spaces')], ['agents', t('Agents')], ['templates', t('Role Templates')], ['skills', t('Skills')]]],
   [t('Work'), [['dispatcher', t('Queue')], ['handoffs', t('Handoffs')], ['improve', t('Improvements'), OWNER], ['changes', t('Changes')]]],
   [t('Connections'), [['integrations', t('Integrations'), OWNER], ['erpnext', 'ERPNext', OWNER], ['notify', t('Telegram and notifications'), OWNER], ['signin', t('Claude sign-in'), OWNER], ['voice', t('Voice')]]],
@@ -78,6 +79,7 @@ async function render(main) {
     if (route.id === 'overview') { const html = await overviewHtml(); if (main.isConnected) { main.innerHTML = html; bindOverview(main); } return; }
     if (route.id === 'general') { const html = await generalHtml(); if (main.isConnected) { main.innerHTML = html; bindGeneral(main); } return; }
     if (route.id === 'spaces' && route.arg) return await floorSettings(route.arg, main);
+    if (route.id === 'learning') return await learningPage(main);
     if (DIALOG[route.id]) return await DIALOG[route.id]();
     if (TAB_IDS.includes(route.id)) return await openAdmin(route.id);
     main.innerHTML = `<div class="empty">${t('Not found.')}</div>`;
@@ -112,6 +114,7 @@ function badge(id) {
   if (!b) return '';
   if (id === 'overview') { const n = (b.attention || []).filter((a) => !a.muted).length; return n ? `<span class="aBadge bad">${n}</span>` : ''; }
   if (id === 'targets' && b.targets?.behind) return `<span class="aBadge warn">${b.targets.behind}</span>`;
+  if (id === 'learning') { const n = (b.attention || []).filter((a) => a.kind === 'proposal').length; return n ? `<span class="aBadge info">${n}</span>` : ''; }
   if (id === 'general' && ctx.update?.available) return '<span class="aBadge info">1</span>';
   return '';
 }

@@ -876,3 +876,4 @@ body.adminPage { overflow: auto; height: auto; min-height: 100%; }
   .aSpace { flex-wrap: wrap; }
   .aHead h2 { flex-basis: 100%; }
 }
+.mdBox { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-3); max-height: 360px; overflow: auto; }
