@@ -135,7 +135,7 @@ export function inQuiet(q, now = Date.now()) {
 const isCritical = (item) => !!item.hardStop?.length || !!item.autopilot?.critical || (['question', 'permission', 'reply'].includes(item.kind) && autopilot.classify(item.text, { level: 'full' }).reasons.some((r) => r !== 'unclear'));
 const reasonsOf = (item) => [...new Set([...(item.hardStop || []), ...(item.autopilot?.reasons || []), ...autopilot.classify(item.text, { level: 'full' }).reasons])].filter((r) => r !== 'unclear');
 const short = (s, n) => { const t = redact(String(s || '').replace(/\s+/g, ' ').trim()); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', target: 'Target behind', 'target-plan': 'Target behind: plan to approve', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal', canary: 'Canary' };
+const KIND = { question: 'Question', permission: 'Permission', reply: 'Waiting for your reply', crash: 'Stopped unexpectedly', resource: 'Machine', scope: 'Scope change', backup: 'Backup', finished: 'Finished', taskdone: 'Task done', stall: 'Stalled', merge: 'Merge', budget: 'Budget', decided: 'Decided by Autopilot', target: 'Target behind', 'target-plan': 'Target behind: plan to approve', price: 'Price approval', handoff: 'Handoff', erpnext: 'ERPNext', contract: 'Contract', legal: 'Legal', canary: 'Canary', proposal: 'Learned: to approve' };
 
 // a person may see this item: Owner-only Spaces only for the Owner
 const visible = (item, user) => user && (user.role === 'owner' || (!item.ownerOnly && !access.ownerFloors().has(item.floorId)));
@@ -167,9 +167,9 @@ export function messageFor(item, tok, s = settings(), counts = countsOnly()) {
   if (tok) {
     if (opts.length) for (let i = 0; i < opts.length; i += 3) buttons.push(opts.slice(i, i + 3).map((o) => ({ text: `${o.n}. ${short(o.label, 24)}`, data: `a:${tok}:${o.n}` })));
     const row = [];
-    if (['question', 'permission', 'reply', 'finished', 'decided', 'price', 'contract'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
+    if (['question', 'permission', 'reply', 'finished', 'decided', 'price', 'contract', 'proposal'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
     if (item.kind === 'crash') buttons.push([{ text: 'Resume', data: `a:${tok}:1` }, { text: 'Start fresh', data: `a:${tok}:2` }]);
-    if (!['question', 'permission', 'price', 'contract', 'target-plan'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
+    if (!['question', 'permission', 'price', 'contract', 'target-plan', 'proposal'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
     if (s.publicUrl) row.push({ text: say('openBtn', {}, s.lang), url: item.floorId ? `${s.publicUrl}/#/floor/${item.floorId}${item.agentId ? `/agent/${item.agentId}` : ''}` : `${s.publicUrl}/` });
     buttons.push(row);
   }

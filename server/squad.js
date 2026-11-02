@@ -56,6 +56,7 @@ import * as integ from './integrations.js';
 import * as googleLib from './google.js';
 import * as agentToken from './agenttoken.js';
 import * as guideLib from './guide.js';
+import * as proposals from './proposals.js';
 import * as cadenceLib from './cadence.js';
 import * as behind from './behind.js';
 import { execFileSync, execFile } from 'node:child_process';
@@ -876,6 +877,7 @@ googleLib.deps.log = (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId
 integ.deps.log = (floorId, ev) => { if (realFloor(floorId) || floorId === ind.FLOOR_ID) logEvent(floorId, ev); };   // integration.tested (1.6)
 Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate(),
   measured: (floorId, root, id, now) => { if (realFloor(floorId)) targetCheck(floorId, { only: id, now }).catch((e) => console.error('[kpi]', floorId, id, e.message)); } });
+Object.assign(proposals.deps, { spaces: spacesForHandoff, log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate() });
 Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });
 Object.assign(legal.deps, {
   spaces: spacesForHandoff,
@@ -886,7 +888,7 @@ Object.assign(legal.deps, {
 
 // what only the Owner decides, on the Owner's desk: packages leaving an Owner-only Space, questions about ERPNext
 // work, price approvals (a hard stop: money) and ERPNext alerts. Hidden from everyone else (ownerOnly).
-const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary']);
+const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary', 'proposal']);
 function ownerDesk(states) {
   const where = (floorId, agentId) => {
     const s = states.find((x) => x.entry.id === floorId);
@@ -915,6 +917,10 @@ function ownerDesk(states) {
   for (const it of insightLib.loadInbox().items.filter((x) => x.status === 'canary-done')) out.push({ ...where(it.change?.floorId, it.change?.agentId), id: attId('canary', it.id), kind: 'canary', ownerOnly: true, answerable: true,
     suggestionId: it.id, text: trust.canaryText(it), ts: it.canaryUntil, options: [{ n: 1, label: 'Keep it' }, { n: 2, label: 'Roll it back' }] });
   for (const a of legal.alerts()) out.push({ ...where(a.floorId, ''), id: attId('legal', a.id), kind: 'legal', ownerOnly: true, alertId: a.id, text: a.text, ts: a.at });
+  // what an agent learned (1.11): a fact, a Company Brain document or a skill, for the Owner to approve
+  for (const p of proposals.pending()) out.push({ ...where(p.floorId, p.agentId), id: attId('proposal', p.id), kind: 'proposal', ownerOnly: true, answerable: true, proposalId: p.id, text: proposals.cardText(p), ts: p.createdAt,
+    // a fact is shown whole on the card; a document or a skill is read (with its changes) in Admin → Learning first
+    options: [...(p.kind === 'fact' ? [{ n: 1, label: 'Approve as proposed' }] : []), { n: 2, label: 'Not now, with a note…', free: true }] });
   return out;
 }
 async function answerOwnerDesk(item, option, text = '') {
@@ -927,6 +933,13 @@ async function answerOwnerDesk(item, option, text = '') {
   else if (item.kind === 'canary') {
     if (!n) throw bad('Keep it or roll it back');
     r = trust.decideCanary(item.suggestionId, n === 1, { by, rollback: history.rollback });
+  }
+  else if (item.kind === 'proposal') {
+    const p = proposals.get(item.proposalId);
+    if (n === 1 && p?.kind === 'fact') r = proposals.approve(item.proposalId, { by });
+    else if (n === 1) throw bad('Read it in Admin → Learning and approve it there');
+    else if (n === 2 || note) r = proposals.reject(item.proposalId, { reason: note, by });
+    else throw bad('Approve it or not');
   }
   else if (item.kind === 'contract') {
     if (n === 1) r = legal.approve(item.contractKey, item.contractHash, { by });
@@ -950,9 +963,10 @@ export async function kpiTick(now = Date.now()) { const r = await kpiLib.tick(no
 export async function handoffTick(now = Date.now()) {
   const sent = await hb.scan({ now });
   const reverted = legal.guard(now);                                     // contracts: nothing APPROVED behind the Owner's back
+  const learned = proposals.scan({ now });                               // what the agents propose to keep (1.11)
   const erpRun = await erp.tick(now).catch((e) => ({ error: e.message }));
   if (sent.length) invalidate();
-  return { sent, erp: erpRun, reverted };
+  return { sent, erp: erpRun, reverted, learned };
 }
 export const legalOverview = () => ({ contracts: legal.list(), metrics: legal.metrics(), alerts: legal.alerts() });
 export function contractText(key) {

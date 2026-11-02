@@ -12,7 +12,7 @@ import * as company from './company.js';
 import * as space from './space.js';
 import * as erp from './erpnext.js';
 
-const PRIVATE = ['secrets.json', 'pin', 'users.json', 'notify.json', 'handoffs.json', 'erpnext.json'];
+const PRIVATE = ['secrets.json', 'pin', 'users.json', 'notify.json', 'handoffs.json', 'erpnext.json', 'proposals.json'];
 // the rules that keep an agent's identity and the machine's shared memory out of reach of one Space's work
 export function identityDenyRules() {
   const claude = config.claudeHome, home = config.home;
@@ -22,7 +22,7 @@ export function identityDenyRules() {
     ...['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].map((t) => `${t}(/${home}/**)`),
     // the machine's secrets and the Owner's desk are not for reading either (0.19): keys, PINs, people, held packages,
     // price approvals, and other processes' environments
-    ...PRIVATE.map((f) => `Read(/${path.join(home, f)})`), 'Read(//proc/**)',
+    ...PRIVATE.map((f) => `Read(/${path.join(home, f)})`), `Read(/${path.join(home, 'learned-history')}/**)`, 'Read(//proc/**)',          // earlier versions of Company Brain files, Owner-only ones too (1.11)
     ...PRIVATE.filter((f) => f !== 'pin').map((f) => `Bash(*${f}*)`), `Bash(*${path.join(home, 'pin')}*)`, 'Bash(*.aisquad/pin*)', 'Bash(*/proc/*/environ*)', 'Bash(*AISQUAD_ERP_*)',
   ];
 }
@@ -51,6 +51,8 @@ export function contextLines(sp, dir, owner, { targets = false, plan = false, ma
     'Never write client or project facts to `~/.claude/CLAUDE.md`, `~/.aisquad` or the Company Brain: other Spaces would see them. Those paths are read-only for you.',
     ...(dir ? [`The Company Brain is at \`${dir}\` (read only): ${company.TEAM_DIRS.join(', ')}${owner ? `, and for this Owner Space ${company.OWNER_DIRS.join(', ')}` : ''}. Read what the task needs; follow the brand and the SOPs there.`] : []),
     ...(!owner && dir ? [`Legal, finance and pricing are not for this Space: ask the lead or the owner instead of looking for them.`] : []),
+    ...(dir ? [`Company facts every agent must know are in \`${dir}/FACTS.md\` (read only): read it before your first task.`] : []),
+    'When you learn something the company should keep (a fact everyone should know, a better procedure, a reusable way of working), propose it: write a file in `docs/squad/proposals/` with a header (kind: fact | brain | skill, from: your agent id, title, why, and target: <Company Brain file> for brain or skill: <name> for skill), then the fact, the whole document or the whole SKILL.md (see the propose-learning skill). The owner approves it; the answer comes to `docs/squad/proposals/answered/`. Never write to the Company Brain yourself.',
     'Work for another Space goes as a handoff package: a Markdown file in `docs/squad/handoffs/outbox/` with a header (`to:` the Space, `kind:`, `title:`), see the space-handoff skill; the server delivers it and wakes the receiver. Work handed to this Space arrives in `docs/squad/handoffs/inbox/`.',
     ...(erp.sessionFor(sp) ? [erp.contextLine(sp.erpnext)] : []),
     ...(targets ? ['This Space works against targets the owner set: `docs/squad/KPI.md` shows each one, its value now and its status. Plan against the ones that are behind, report progress on them in your handoffs and reports, and never invent a value.'] : []),

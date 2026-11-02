@@ -45,6 +45,7 @@ const OWNER_ROUTES = [
   /^POST \/api\/floors\/[\w-]+\/agents\/[\w-]+\/chat\/allow$/,          // allow rules: only the Owner widens permissions
   /^POST \/api\/sessions\/revoke-all$/,                                     // sign out everywhere (1.9)
   /^(GET|POST) \/api\/update(\/check)?$/,                                    // the app's own update (1.10)
+  /^(GET|POST) \/api\/(proposals|learned)(\/|$)/,                             // what the squads learned (1.11): the Owner decides
   /^GET \/api\/(security|online)$/,
 ];
 // -> 'viewer' | 'member' | 'owner'

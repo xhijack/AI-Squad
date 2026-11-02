@@ -44,6 +44,7 @@ import * as cadence from './cadence.js';
 import * as behind from './behind.js';
 import * as guide from './guide.js';
 import * as update from './update.js';
+import * as proposals from './proposals.js';
 import * as promote from './promote.js';
 import * as integ from './integrations.js';
 import * as google from './google.js';
@@ -289,6 +290,14 @@ const routes = [
   ['DELETE', /^\/api\/nodes\/([\w-]+)$/, ([name]) => nodes.removeNode(name), { pin: true }],
   // handoffs between Spaces and ERPNext (0.19): the list for everyone (Owner-only Spaces hidden), ERPNext for the Owner
   // the Company Guide (1.4): the owner's answers, the plan, the build
+  // what the squads learned (1.11): proposals to approve, the facts and skills kept, their versions
+  ['GET', /^\/api\/proposals$/, () => ({ pending: proposals.pending(), decided: proposals.load().filter((p) => p.status !== 'pending').slice(-50).reverse(), learned: proposals.learned() }), { pin: true }],
+  ['GET', /^\/api\/proposals\/(p-[\w-]+)$/, ([id]) => { const p = proposals.get(id); if (!p) throw notFound('Proposal not found'); const current = proposals.current(p.kind, p.target); return { ...p, current, diff: p.kind === 'fact' ? null : lineDiff(current || '', p.content) }; }, { pin: true }],
+  ['POST', /^\/api\/proposals\/(p-[\w-]+)\/approve$/, ([id], b, req) => proposals.approve(id, { content: typeof b.content === 'string' ? b.content : null, scope: b.scope === 'all' ? 'all' : 'space', by: req.user?.name || 'Owner' }), { pin: true }],
+  ['POST', /^\/api\/proposals\/(p-[\w-]+)\/reject$/, ([id], b, req) => proposals.reject(id, { reason: String(b.reason || ''), by: req.user?.name || 'Owner' }), { pin: true }],
+  ['GET', /^\/api\/learned\/(fact|brain|skill)\/versions$/, ([kind], b, req) => { const q = new URL(req.url, 'http://x').searchParams; const target = q.get('target') || ''; return { versions: proposals.versions(kind, target), current: proposals.current(kind, target) }; }, { pin: true }],
+  ['GET', /^\/api\/learned\/(fact|brain|skill)\/version$/, ([kind], b, req) => { const q = new URL(req.url, 'http://x').searchParams; return { text: proposals.versionText(kind, q.get('target') || '', q.get('v') || '') }; }, { pin: true }],
+  ['POST', /^\/api\/learned\/(fact|brain|skill)\/restore$/, ([kind], b, req) => proposals.restore(kind, String(b.target || ''), String(b.version || ''), { by: req.user?.name || 'Owner' }), { pin: true }],
   ['GET', /^\/api\/guide$/, () => guide.state(), { pin: true }],
   ['PUT', /^\/api\/guide$/, (p, b) => guide.answer(b?.answers || {}, b?.step), { pin: true }],
   ['DELETE', /^\/api\/guide$/, () => guide.reset(), { pin: true }],
