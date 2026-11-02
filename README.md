@@ -52,6 +52,8 @@ A user service stops when you log out unless lingering is on for your account (`
 
 The plugin moves to a new path when it updates; the next `/aisquad` notices that the service points to the old path, rewrites `aisquad.service` and restarts it ("Updated and restarted"). Agents keep running.
 
+**From the app (1.10).** An install from `install.sh` is a git checkout (`~/.aisquad-app`). **Admin → Building and update** (and the Overview) checks its branch every 6 hours or on **Check now**, shows the new version with its release lines, and **Update now** fast-forwards the checkout and restarts the server through its service (systemd and launchd bring it back; a detached server starts its successor first); the page reloads when the new version answers. Agents in tmux keep working. Nothing is merged: a checkout with local changes or its own commits, or a running background job, is not updated (the page says why). A plugin install shows the `/plugin update` steps instead. Owner only: `GET /api/update`, `POST /api/update/check`, `POST /api/update`.
+
 ### Contributors
 
 ```
@@ -90,6 +92,21 @@ The full command name is `/aisquad:aisquad` (plugin `aisquad`, command `aisquad`
 The server listens on `http://127.0.0.1:8097`. Pass `--port` to change it, and `--host 0.0.0.0` only if you really want it reachable from other machines.
 
 On `127.0.0.1` (the default) viewing is open and every change and every agent screen needs the local PIN. Bound to any other address (for example `--host 0.0.0.0`), every API call needs the PIN, reads included. The browser asks for the PIN once and keeps a session cookie, never the PIN (1.9). Find it with `cat ~/.aisquad/pin`. To reach it from anywhere, see **Online access** below.
+
+### The admin page (1.10)
+
+Every setting has one place: **`/admin`** (Menu → Admin and settings, ⚙ on a Floor, or the address itself). It is a page of its own without the 3D scene, light on a phone, with a link per section (`/admin#/targets`, `/admin#/spaces/<id>`), and **Ctrl/Cmd+K** jumps to any section or Space. The sidebar has six groups:
+
+| Group | Sections |
+|---|---|
+| Overview | what needs you, targets met and behind, agents working, today's cost, every Space with Settings and Office, the update |
+| Company | Company plan (the guide), Targets, Cadence, Company Brain |
+| Spaces and team | Spaces (and each Space's full settings, the former Floor settings), Agents, Role Templates, Skills |
+| Work | Queue, Handoffs, Improvements, Changes |
+| Connections | Integrations, ERPNext, Telegram and notifications, Claude sign-in, Voice |
+| Owner | People and access, Legal, Machines, Backups and health, Building and update (name, language, theme, update, sign out everywhere) |
+
+Members see the sections they may use; the Owner's are left out. The office (`/`) is where you watch and work with the agents; its menu keeps the view (theme, scene, graphics, language) and sign-in. The Company Guide's Telegram link opens `/admin#/guide`.
 
 ### Set up the company: the Company Guide (1.4)
 
@@ -225,7 +242,7 @@ A Floor is a **Space**: a `project` (one client or product) or a `department` (S
 
 A Space also has **access** (team or Owner only) and a **shift** (days and hours; a night shift past midnight belongs to the day it starts), which the dispatcher uses from 0.13.
 
-**Menu → Admin** is one place for the whole company: Spaces, agents across Spaces (model, effort, extra skills, add, remove), the skill catalog, the Company Brain, and **Changes**: every change made through The AI Squad to `building.json` or a Space's configuration files, with who made it and a diff. **Roll back** puts the files back (and asks first when they changed again since).
+**Admin** (since 1.10 the page `/admin`) is one place for the whole company: Spaces, agents across Spaces (model, effort, extra skills, add, remove), the skill catalog, the Company Brain, and **Changes**: every change made through The AI Squad to `building.json` or a Space's configuration files, with who made it and a diff. **Roll back** puts the files back (and asks first when they changed again since).
 
 ### Dispatcher, shifts and the quota guard (0.13)
 
@@ -241,7 +258,7 @@ Every start goes through one queue (`server/dispatcher.js`): the Desk's Start, R
 
 ### People and direct chat (0.14)
 
-**Menu → People** (Owner): add **members** (start and stop agents, send tasks, chat, answer questions, background jobs) and **viewers** (read only). Each person gets an own 8-digit PIN, shown once and stored only as a scrypt hash in `~/.aisquad/users.json`; the PIN in `~/.aisquad/pin` stays the Owner's. The Building's settings, money, secrets, people, merges, approvals of source documents and Owner-only Spaces stay with the Owner (403 for others). An **Owner-only Space** does not exist for anyone else: it is left out of the Building, Admin, Changes, jobs and the queue, and its routes answer 404 (also for reads without a PIN). Changes record who made them; Squad Log events done by someone other than the Owner carry `data.by`.
+**Admin → People and access** (Owner): add **members** (start and stop agents, send tasks, chat, answer questions, background jobs) and **viewers** (read only). Each person gets an own 8-digit PIN, shown once and stored only as a scrypt hash in `~/.aisquad/users.json`; the PIN in `~/.aisquad/pin` stays the Owner's. The Building's settings, money, secrets, people, merges, approvals of source documents and Owner-only Spaces stay with the Owner (403 for others). An **Owner-only Space** does not exist for anyone else: it is left out of the Building, Admin, Changes, jobs and the queue, and its routes answer 404 (also for reads without a PIN). Changes record who made them; Squad Log events done by someone other than the Owner carry `data.by`.
 
 **Desk → Chat**: talk to one agent directly.
 
@@ -615,7 +632,7 @@ Secrets (PIN, API keys) are only backed up encrypted: `--passphrase-env VAR` (or
 
 Floors missing on the new machine are cloned from their remote (`--no-clone` to skip), a Floor without its configuration gets it from the backup, auto memory lands under the Floor's new path, the data is migrated, and `doctor` runs at the end.
 
-**Nightly backups** (Menu → Backups and health): on at a time you pick, the newest N kept, into `~/.aisquad/backups` or a folder you choose (a synced folder or a USB disk keeps it off the machine). Once a month the newest backup is read back. With a saved passphrase (`~/.aisquad/backup-passphrase`, mode 600, never backed up itself) they are encrypted.
+**Nightly backups** (Admin → Backups and health): on at a time you pick, the newest N kept, into `~/.aisquad/backups` or a folder you choose (a synced folder or a USB disk keeps it off the machine). Once a month the newest backup is read back. With a saved passphrase (`~/.aisquad/backup-passphrase`, mode 600, never backed up itself) they are encrypted.
 
 **Data versions**: `~/.aisquad/schema.json` records which version the files follow. A newer release migrates them when the server starts, after a safety backup (`…-pre-migrate-v<N>.tar.gz`, without secrets).
 

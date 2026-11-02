@@ -38,7 +38,7 @@ Branch lain: tulis `AISQUAD_BRANCH=development` sebelum `bash`.
    rencananya ada di Company Brain (`PLAN.md`). Bisa dijalankan lagi dari Lobby untuk menambah divisi.
    Atau **Siapkan Squad** untuk satu tim saja: jelaskan apa yang ingin dibangun; pilih Blueprint dan timnya.
 2. Buka Space-nya dan jalankan lead-nya: lead akan meminta bahan dan dokumen sumber (PRD, BRD, brief…) lebih dulu.
-3. **Menu → Admin**: Space (jenis, akses, shift, mesin, ERPNext), pengguna dan PIN-nya, Telegram, backup.
+3. **Admin** (halaman `/admin`, dari Menu → Admin dan pengaturan): semua pengaturan di satu tempat, tanpa tampilan 3D: Space dan pengaturan lengkapnya, target, ritme, agent, orang dan PIN-nya, Telegram, integrasi, backup, dan **pembaruan aplikasi** (Perbarui sekarang). Ctrl/Cmd+K untuk mencari pengaturan.
 4. Opsional: **Admin → Notifikasi** untuk menjawab agent dari Telegram, **Admin → Mesin** untuk menambah mesin worker.
 
 ## 4. Sebagai plugin Claude Code

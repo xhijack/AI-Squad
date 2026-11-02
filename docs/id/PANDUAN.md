@@ -24,6 +24,19 @@ Dokumentasi lengkap (bahasa Inggris) ada di [README](../../README.md).
 - **Company Brain** (L0): SOP, brand, template, produk; folder legal, keuangan, dan harga hanya untuk Space Owner.
   Agent hanya membaca, tidak pernah mengubah.
 
+## Halaman Admin (1.10)
+
+Semua pengaturan ada di **`/admin`**: halaman sendiri tanpa scene 3D, ringan di HP, dengan alamat per bagian
+(`/admin#/targets`, `/admin#/spaces/<id>`). Sidebar dibagi enam kelompok: Ringkasan (yang butuh kamu, target,
+agent bekerja, biaya hari ini, semua Space), Perusahaan (rencana, target, ritme, Company Brain), Space dan tim,
+Pekerjaan (antrean, handoff, perbaikan, riwayat perubahan), Koneksi (integrasi, ERPNext, Telegram, login Claude,
+suara), dan Owner (orang dan akses, legal, mesin, backup, gedung dan pembaruan). **Ctrl/Cmd+K** mencari bagian
+atau Space. Kantor (`/`) tetap tempat melihat dan bekerja dengan agent.
+
+**Perbarui dari aplikasi**: kalau dipasang dengan `install.sh`, Admin → Gedung dan pembaruan menunjukkan versi baru
+beserta catatan rilisnya; **Perbarui sekarang** menarik versi baru dan memulai ulang server beberapa detik (agent
+di terminal tetap jalan). Tidak jalan kalau folder aplikasi punya perubahan lokal atau ada job latar belakang.
+
 ## Bekerja dengan agent
 
 - **Desk**: layar agent, tugas, pertanyaan (Attention), riwayat. **Chat**: pesan langsung ke agent mana pun.

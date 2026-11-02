@@ -1236,6 +1236,17 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
   4. Restart `aisquad.service` on 1.9.0. The live service still runs 1.8.0 with `--host 0.0.0.0`; until `prefs.public` is set, the 1.9 doctor warns about that address.
 - Not yet: a UI page for `GET /api/security` (the health dialog shows the doctor's lock line); WebSocket or SSE streams (none exist; the gate is ready for them); a proxy on another host (`trustProxy` from non-loopback peers).
 
+## Phase 5, Sprint 20: the admin page and updating from the app, 1.10.0 (2 Nov 2026)
+
+- **`/admin`** (`ui/admin.html`, `ui/admin-page.js`): every setting on one page without the scene (no three.js, light on a phone), a link per section (`#/targets`, `#/spaces/<id>`), a sidebar in six groups (Overview; Company; Spaces and team; Work; Connections; Owner), a drawer on a phone, **Ctrl/Cmd+K** to jump to a section or a Space, badges for what needs the owner, targets behind and an update. Owner-only sections are left out for members.
+- **Overview**: what needs the owner, targets met and behind, agents working, today's cost and the machine, every Space with Settings and Office, the update card.
+- What other pages open as a dialog (Floor settings, People, Role Templates, Claude sign-in, Voice, Backups and health, the Company Guide, Set up Squad) renders as the page itself (`lib.js` `setModalHost`); Save or Cancel draws the section again. Floor settings became **Spaces → a Space's settings**.
+- The office's menu keeps the view (Set up Squad, theme, scene, graphics, language, PIN, sign out) and links to **Admin and settings**; ⚙ Floor settings, the Autopilot chip, the targets tile and "Open Role Templates" open the admin page; the guide's Telegram link opens `/admin#/guide`.
+- **Updating from the app** (`server/update.js`, `ui/update.js`): an `install.sh` checkout fetches its branch (cached 6 h, Check now), shows the new version and the release lines, and **Update now** fast-forwards and restarts through the service (systemd/launchd bring it back; a detached server starts its successor); refused with local changes, its own commits or running background jobs; a plugin install shows the `/plugin update` steps. Owner only.
+- Server: `/admin` served like the office page (script hashes in the CSP, the Building's language), behind the sign-in page in public mode; the sign-in returns to `/admin`.
+- Tests: `admin-page.test.js` (the page, public mode, the update check against a real origin and checkout: behind, release lines, local changes, own commits, running jobs, fast-forward, Owner-only routes).
+- Ideas taken from Nakama (MIT, ahmadrosid/nakama): a dashboard with grouped navigation and a command palette, an in-app update with the new version. Not taken: its stack (Bun, React, SQLite, Docker), the chat-first model, multi-org.
+
 ## How to run
 
 ```
