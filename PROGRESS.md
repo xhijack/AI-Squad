@@ -1247,6 +1247,16 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `admin-page.test.js` (the page, public mode, the update check against a real origin and checkout: behind, release lines, local changes, own commits, running jobs, fast-forward, Owner-only routes).
 - Ideas taken from Nakama (MIT, ahmadrosid/nakama): a dashboard with grouped navigation and a command palette, an in-app update with the new version. Not taken: its stack (Bun, React, SQLite, Docker), the chat-first model, multi-org.
 
+## Phase 5, Sprint 21: what the squads learn, 1.11.0 (3 Nov 2026)
+
+- **Proposals** (`server/proposals.js`): an agent writes `docs/squad/proposals/<name>.md` in its own Space (`kind: fact | brain | skill`, `from`, `title`, `why`, `target` or `skill`); the handoff tick takes it (no model, never through a link, at most 64 KB, secrets removed), keeps it in `~/.aisquad/proposals.json` (0600), logs `proposal.received`, and puts a card on the Owner's desk (Telegram digest too).
+- **Approve** (the card: as proposed; Admin → Learning: edited, a skill in one Space or every Space): a fact becomes a pinned line in the Company Brain's `FACTS.md` (date and source), a document replaces a Company Brain file (team folders; the Owner's folders only from an Owner-only Space), a skill goes to `~/.aisquad/learned-skills/<name>` and the Space's `.claude/skills/<name>` (marked as learned; a hand-written skill is never overwritten). **Not now** with a note. The agent reads the decision in `docs/squad/proposals/answered/<id>.md`; invalid files come back there as `.invalid.md` with the reason.
+- **Versions**: the replaced version goes to `.history/` first (30 kept per file); Admin → Learning lists the facts and the learned skills with their versions to view and restore (restoring keeps the current one too; a restored skill is re-installed where it was learned).
+- **For the agents**: every agent file says that `FACTS.md` holds what every agent must know and how to propose; the bundled `propose-learning` skill says when it is worth it and the format.
+- Admin → Learning (Company group, a badge with what waits); the office labels the cards "Learned: to approve".
+- Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
+- Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
+
 ## How to run
 
 ```
