@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Menu → Admin (0.12): one place for the configuration of the whole company. Spaces (kind, access, memory, shift,
+// Admin (0.12; its own page /admin since 1.10, ui/admin-page.js): one place for the configuration of the whole company. Spaces (kind, access, memory, shift,
 // agents at once), agents across Spaces (model, effort, skills; add, remove), the skill catalog, the Company Brain,
 // and the change history with diff and rollback. It edits the same files as the Floor settings; nothing of its own.
-import { esc, api, toast, openModal, closeModal, diffHtml, ago } from './lib.js';
+import { esc, api, toast, openModal, closeModal, diffHtml, ago, modalHost } from './lib.js';
 import { ctx } from './ctx.js';
 import { t, tx } from './i18n.js';
 import { notifyHtml, improvementsHtml, machinesHtml, bindMore } from './admin-more.js';
@@ -29,7 +29,7 @@ function spacesHtml(d) {
   return `<p class="note">${t('A Floor is a Space. A department works for many clients over time; a project is one client or product. Owner-only Spaces may read legal, finance and pricing in the Company Brain. Memory in the Space keeps what Claude Code learns in the repository, so it travels with git and backups. The shift holds automated work outside its hours (from 0.13).')}</p>
     <div class="adminList">${d.spaces.map((s) => s.missing ? `<div class="adminRow"><b>${s.number} · ${esc(s.id)}</b> <span class="note warnText">${t('folder missing: {path}', { path: esc(s.path) })}</span></div>` : `
     <form class="adminRow" data-space="${esc(s.id)}">
-      <div class="row"><b class="grow">${s.number} · ${esc(s.name)}</b><span class="note">${t('{n} agents', { n: s.agents })}${s.blueprint ? ` · ${esc(s.blueprint)}` : ''}</span></div>
+      <div class="row"><b class="grow">${s.number} · ${esc(s.name)}</b><span class="note">${t('{n} agents', { n: s.agents })}${s.blueprint ? ` · ${esc(s.blueprint)}` : ''}</span><a class="btn small ghost" href="/admin#/spaces/${esc(s.id)}">${t('All settings')}</a></div>
       <div class="grid4">
         <label>${t('Kind')}<select name="kind">${opts(KIND, s.kind)}</select></label>
         <label>${t('Access')}<select name="access">${opts(ACCESS, s.access)}</select></label>
@@ -130,13 +130,14 @@ function dispatcherHtml(x) {
     </form>`;
 }
 
-async function openAdmin(tab = 'spaces') {
+export async function openAdmin(tab = 'spaces') {
   const [d, roles, disp, extra] = await Promise.all([api('GET', '/api/admin'), api('GET', '/api/roles'), tab === 'dispatcher' ? api('GET', '/api/dispatcher') : tab === 'notify' ? api('GET', '/api/notify') : tab === 'machines' ? api('GET', '/api/nodes') : tab === 'handoffs' ? api('GET', '/api/handoffs') : tab === 'erpnext' ? api('GET', '/api/erpnext') : tab === 'integrations' ? api('GET', '/api/integrations') : tab === 'improve' ? api('GET', '/api/insights') : tab === 'legal' ? api('GET', '/api/legal') : tab === 'targets' ? api('GET', '/api/kpis') : tab === 'cadence' ? api('GET', '/api/cadence') : null,
     tab === 'dispatcher' ? api('GET', '/api/tiering').catch(() => null) : tab === 'targets' && ctx.state.me?.role === 'owner' ? api('GET', '/api/integrations').catch(() => null) : null]);
-  const modal = openModal(`<div class="adminRoot"><div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
-    <div class="mBody"><div class="tabs adminTabs" role="tablist">${TABS.map(([id, label]) => `<button role="tab" data-atab="${id}" aria-selected="${id === tab}">${esc(label)}</button>`).join('')}</div>
+  const page = !!modalHost();                              // on the admin page the sidebar is the navigation
+  const modal = openModal(`<div class="adminRoot">${page ? `<div class="aHead"><h2 class="grow">${esc(pageTitles[tab] || TABS.find(([id]) => id === tab)?.[1] || '')}</h2></div>` : `<div class="mHead"><h3 class="grow">${t('Admin')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>`}
+    <div class="mBody">${page ? '' : `<div class="tabs adminTabs" role="tablist">${TABS.map(([id, label]) => `<button role="tab" data-atab="${id}" aria-selected="${id === tab}">${esc(label)}</button>`).join('')}</div>`}
     <div id="adminBody">${{ spaces: spacesHtml, dispatcher: () => dispatcherHtml(disp) + tieringHtml(extra), legal: () => legalHtml(disp), targets: (x) => targetsHtml(disp, x, ctx.state.me, extra), cadence: () => cadenceHtml(disp, ctx.state.me), notify: () => notifyHtml(disp), machines: () => machinesHtml(disp), handoffs: () => handoffsHtml(disp), erpnext: (x) => erpnextHtml(disp, x), integrations: (x) => googleAdminHtml(disp?.google) + integrationsHtml(disp, x), improve: () => trustHtml(disp) + improvementsHtml(disp), agents: (x) => agentsHtml(x, roles), skills: skillsHtml, company: companyHtml, changes: changesHtml }[tab](d)}</div></div></div>`);
-  modal.closest('dialog').classList.add('xwide');
+  modal.closest('dialog')?.classList.add('xwide');
   const body = modal.querySelector('.adminRoot');          // new on every render: its listeners go with it
   body.querySelectorAll('[data-close]').forEach((x) => x.onclick = () => closeModal());
   body.querySelectorAll('[data-atab]').forEach((b) => b.onclick = () => openAdmin(b.dataset.atab));
@@ -182,7 +183,7 @@ async function openAdmin(tab = 'spaces') {
       }
       if (el.dataset.qstart) { await api('POST', `/api/dispatcher/queue/${el.dataset.qstart}/start`, {}); return again(t('Started')); }
       if (el.dataset.qdrop) { await api('DELETE', `/api/dispatcher/queue/${el.dataset.qdrop}`); return again(t('Removed from the queue')); }
-      if (el.closest('[data-templates]')) { closeModal(); return ctx.actions.templates?.(); }
+      if (el.closest('[data-templates]')) return ctx.actions.admin({ dataset: { tab: 'templates' } });
       if (el.dataset.install) {
         const sp = body.querySelector(`[data-install-space="${el.dataset.install}"]`).value;
         const r = await api('POST', `/api/floors/${sp}/skills/install`, { names: [el.dataset.install] });
@@ -219,4 +220,8 @@ async function openAdmin(tab = 'spaces') {
     try { await api('PATCH', `/api/dispatcher/queue/${e.target.dataset.prio}`, { priority: e.target.value }); await again(t('Priority changed')); } catch (err) { toast(err.message, 5000); }
   });
 }
-ctx.actions.admin = (el) => openAdmin(el?.dataset?.tab || 'spaces');
+export const TAB_IDS = TABS.map(([id]) => id);
+let pageTitles = {};
+export const setPageTitles = (m) => { pageTitles = m || {}; };
+// everywhere: the admin page at that section (on the page itself only the hash changes)
+ctx.actions.admin = (el) => location.assign(`/admin#/${el?.dataset?.tab || 'overview'}`);

@@ -15,7 +15,7 @@ async function post(url, body) {
 }
 // 401: the wrong PIN or code; 429: a wait (in this language) or the lock (the server's words, translated)
 const why = (r, wrong) => (r.status === 401 ? wrong : r.status === 429 && !r.j.locked ? t('Too many wrong PINs: try again in {n} minutes', { n: Math.max(1, Math.ceil((r.j.retryAfter || 60) / 60)) }) : tx(r.j.error) || t('Could not reach the server'));
-const enter = () => location.replace('/' + location.hash);
+const enter = () => location.replace((/^\/admin(\.html)?$/.test(location.pathname) ? '/admin' : '/') + location.hash);   // back where the sign-in was asked
 
 $('loginForm').onsubmit = async (e) => {
   e.preventDefault();

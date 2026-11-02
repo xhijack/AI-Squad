@@ -199,7 +199,13 @@ export async function oneAtATime(el, fn) {
 export const itemContext = (el) => { const c = el?.closest?.('.att, [data-item-floor]'); return c ? { floorId: c.dataset.itemFloor || '', agentId: c.dataset.itemAgent || '', kind: c.dataset.itemKind || '' } : {}; };
 
 // ---------- modal ----------
+// The admin page (1.10) renders what other pages open as a dialog into its main pane instead: setModalHost(el,
+// { onClose }) makes openModal fill el and closeModal call onClose (the page goes back a level).
+let host = null, hostLeave = null;
+export function setModalHost(el, { onClose } = {}) { host = el; hostLeave = onClose || null; }
+export const modalHost = () => host;
 export function openModal(html, { onClose } = {}) {
+  if (host) { host.innerHTML = `<div class="pageModal">${html}</div>`; host._onClose = onClose || null; host.scrollTop = 0; window.scrollTo?.(0, 0); return host.firstElementChild; }
   const d = $('modal');
   $('modalBody').innerHTML = html;
   d.className = '';                                   // a wide dialog (board, performance) never leaks into the next one
@@ -207,7 +213,10 @@ export function openModal(html, { onClose } = {}) {
   d.onclose = () => { $('modalBody').innerHTML = ''; onClose?.(); };
   return $('modalBody');
 }
-export const closeModal = () => { if ($('modal').open) $('modal').close(); };
+export function closeModal() {
+  if (host) { const f = host._onClose; host._onClose = null; f?.(); hostLeave?.(); return; }
+  if ($('modal').open) $('modal').close();
+}
 
 export function segHtml(name, options, value) {
   return `<div class="seg" data-seg="${esc(name)}">${options.map(([v, label]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${v === value}">${esc(label)}</button>`).join('')}</div>`;
