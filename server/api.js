@@ -43,6 +43,7 @@ import * as kpi from './kpi.js';
 import * as cadence from './cadence.js';
 import * as behind from './behind.js';
 import * as guide from './guide.js';
+import * as update from './update.js';
 import * as promote from './promote.js';
 import * as integ from './integrations.js';
 import * as google from './google.js';
@@ -88,7 +89,7 @@ async function readBody(req, max = harden.BODY_LIMIT) {
 }
 
 function serveStatic(res, pathname) {
-  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
+  const rel = pathname === '/' ? 'index.html' : pathname === '/admin' ? 'admin.html' : decodeURIComponent(pathname.slice(1));   // /admin: the settings page (1.10)
   const file = path.resolve(UI, rel);
   if (!file.startsWith(UI + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return false;
   if (rel.startsWith('vendor/') || rel.startsWith('assets/')) {   // vendored libraries and assets (models, HDRI): let the browser cache them
@@ -97,7 +98,7 @@ function serveStatic(res, pathname) {
     return true;
   }
   // the page carries the Building's language, so the first paint is already in it (ui/i18n.js)
-  if (rel === 'index.html' || rel === 'login.html') {
+  if (rel === 'index.html' || rel === 'login.html' || rel === 'admin.html') {
     const lang = building.loadBuilding().prefs.lang;
     const html = fs.readFileSync(file, 'utf8');
     // its inline scripts (theme, import map, boot) are allowed by hash, nothing else inline (server/harden.js)
@@ -120,6 +121,10 @@ const hookOf = (id) => { try { return `/api/kpi/hook/${kpi.token(id)}`; } catch 
 const routes = [
   ['GET', /^\/api\/building$/, () => squad.buildingSnapshot()],
   ['GET', /^\/api\/version$/, () => ({ version: VERSION, root: ROOT })],
+  // the app updates itself (1.10): check (cached 6 hours), check now, update and restart
+  ['GET', /^\/api\/update$/, () => update.check(), { pin: true }],
+  ['POST', /^\/api\/update\/check$/, () => update.check({ force: true }), { pin: true }],
+  ['POST', /^\/api\/update$/, async (p, b, req) => { const r = await update.apply(); console.log(`[update] ${r.from} -> ${r.to} by ${req.user?.name || 'Owner'}, restarting (${r.restart})`); return r; }, { pin: true }],
   ['GET', /^\/api\/watchdog$/, () => squad.watchdogStatus()],
   ['GET', /^\/api\/meter$/, () => meter.detail()],
   ['PATCH', /^\/api\/building$/, (p, b) => {
@@ -526,7 +531,7 @@ export function createHandler({ pin, host = '127.0.0.1', isPublic: flag = false,
       if (/^\/api\/session(\/(code|verify))?$/.test(url.pathname)) { const done = await sessionRoute(req, res, c, `${req.method} ${url.pathname}`); if (done !== undefined) return; }
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
         if (c.isPublic && !c.user && !OPEN_STATIC.test(url.pathname)) {
-          if ((url.pathname === '/' || url.pathname === '/index.html') && serveStatic(res, '/login.html')) return;
+          if (['/', '/index.html', '/admin', '/admin.html'].includes(url.pathname) && serveStatic(res, '/login.html')) return;
           return send(res, 401, 'Sign in first', 'text/plain');
         }
         if (serveStatic(res, url.pathname)) return;
