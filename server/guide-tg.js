@@ -197,7 +197,7 @@ export function planMessage(p, lang, publicUrl = '') {
   lines.push('', fill(T.waits, { list: [...modes.map((m) => `${T.mode[m]}: ${T.modeText[m]}`), T.hardStops].join('; ') }));
   if (p.later?.length) lines.push(fill(T.later, { list: p.later.map((d) => T.division[d] || d).join(', ') }));
   if (p.capacity?.budget) lines.push(fill(T.budget, { usd: p.capacity.budget }));
-  lines.push('', T.buildInApp, publicUrl ? fill(T.openLink, { url: `${publicUrl}/#/guide` }) : T.openApp);
+  lines.push('', T.buildInApp, publicUrl ? fill(T.openLink, { url: `${publicUrl}/admin#/guide` }) : T.openApp);
   return lines.join('\n');
 }
 
@@ -219,7 +219,7 @@ async function makePlan(io) {
   await io.send(L[lang].makingPlan, []);
   let p;
   try { p = await io.plan({ via: 'telegram' }); } catch (e) { return io.send(fill(L[lang].noPlan, { error: e.message }), []); }
-  return io.send(planMessage(p, langOf(), io.publicUrl), io.publicUrl ? [[{ text: lang === 'id' ? 'Buka rencana' : 'Open the plan', url: `${io.publicUrl}/#/guide` }]] : []);
+  return io.send(planMessage(p, langOf(), io.publicUrl), io.publicUrl ? [[{ text: lang === 'id' ? 'Buka rencana' : 'Open the plan', url: `${io.publicUrl}/admin#/guide` }]] : []);
 }
 const nextAfter = (a, id) => { const qs = questions(a), i = qs.findIndex((q) => q.id === id); return i < 0 ? qs[0] : qs[i + 1] || null; };
 const firstOfStep = (a, step) => questions(a).find((q) => STEP_OF[q.step] >= step) || null;

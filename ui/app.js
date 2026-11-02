@@ -21,7 +21,6 @@ import './ship.js';
 import './design.js';
 import './health.js';
 import './signin.js';
-import './admin.js';
 import './people.js';
 import { maybeOpen as maybeOpenGuide } from './guide.js';
 import './chat.js';
@@ -577,6 +576,9 @@ async function guarded(url, body = {}, force = false, key = '') {
 // ---------- actions (event delegation on data-act / data-href / data-tab) ----------
 const shouts = {};
 const actions = Object.assign(ctx.actions, {
+  // settings live on the admin page (1.10): /admin, without the scene
+  admin(el) { location.assign(`/admin#/${el?.dataset?.tab || 'overview'}`); },
+  'floor-settings'() { location.assign(`/admin#/spaces/${encodeURIComponent(state.route.floorId || '')}`); },
   'hide-side'() { state.sideHidden = true; try { localStorage.setItem('aisquad.sideHidden', '1'); } catch { /* private mode */ } render(); },
   board() {
     const f = state.floor; if (!f) return;
@@ -784,12 +786,8 @@ if (location.hash === '#/new-floor') {
   const open = () => (state.building ? actions['new-floor']() : setTimeout(open, 300));
   setTimeout(open, 300);
 }
-// #/guide (the link in the Company Guide's Telegram message, 1.7) opens the guide over the Lobby
-if (location.hash === '#/guide') {
-  history.replaceState(null, '', '#/');
-  let tries = 0; const open = () => (state.building && ctx.state.me ? ctx.state.me.role === 'owner' && actions.guide?.() : tries++ < 20 && setTimeout(open, 300));
-  setTimeout(open, 300);
-}
+// #/guide (the link in the Company Guide's Telegram message, 1.7) opens the guide on the admin page (1.10)
+if (location.hash === '#/guide') location.replace('/admin#/guide');
 state.route = parseRoute();
 await checkSession();                                            // a session cookie from before (1.9)
 refresh();

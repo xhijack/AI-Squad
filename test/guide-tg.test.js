@@ -144,8 +144,8 @@ test('the interview: one question per message, buttons, toggles, text, numbers, 
   assert.match(plan.text, /• Kasir Support \(Diawasi\)\n  Target: First response time 24 hours; Open tickets; Tickets resolved; Customer satisfaction 90 %\n  Rutinitas: Morning triage 08:00/);
   assert.match(plan.text, /Yang menunggumu: .*uang, kontrak, deploy ke production, rahasia dan menghapus data, di setiap Space/);
   assert.match(plan.text, /Anggaran AI: 1000 USD per bulan/);
-  assert.match(plan.text, /Build hanya dari aplikasi[\s\S]*Tinjau dan bangun: https:\/\/squad\.sopwer\.id\/#\/guide$/);
-  assert.deepEqual(buttons(plan).map((b) => b.url), ['https://squad.sopwer.id/#/guide']);
+  assert.match(plan.text, /Build hanya dari aplikasi[\s\S]*Tinjau dan bangun: https:\/\/squad\.sopwer\.id\/admin#\/guide$/);
+  assert.deepEqual(buttons(plan).map((b) => b.url), ['https://squad.sopwer.id/admin#/guide']);
   assert.ok(!buttons(plan).some((b) => /build/i.test(b.text)), 'no Build button on Telegram');
   const st = guide.state();
   assert.deepEqual([st.step, st.done, st.via, st.plan.spaces.length], [7, false, 'telegram', 4], 'the web opens on the plan');
