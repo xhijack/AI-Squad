@@ -122,6 +122,10 @@ marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
 {"v":1,"id":"0c4e9a7d2b18","ts":"2026-10-29T08:00:00.000Z","floor":"dtamu-marketing","sprint":null,"module":null,"agent":null,"role":null,"session":null,"model":null,"type":"kpi.failed","summary":"target Posts published: not measured from mcp space:dtamu-marketing:scheduler posts_this_week: scheduler: The server answered with an error: quota exceeded","data":{"kpi":"posts","name":"Posts published","source":"mcp","server":"space:dtamu-marketing:scheduler","tool":"posts_this_week","error":"scheduler: The server answered with an error: quota exceeded"}}
 ```
 
+**`proposal.received`**, **`proposal.approved`**, **`proposal.rejected`**, **`proposal.invalid`** (1.11): an agent proposed
+what the company should keep (`id`, `kind`: fact, brain or skill, `target`, `title`), the Owner approved it (`by`, `edited`)
+or did not take it (`reason`), or the file could not be taken (`file`, `reason`). The proposed text is never logged.
+
 **`guide.built`** (1.2, lifecycle): the Company Guide built this Space: `division`, `blueprint`, `mode` (automatic, supervised,
 manual), `targets` (how many targets got a goal), `routines` (1.5: how many routines the plan kept; they are made off).
 

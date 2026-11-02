@@ -108,6 +108,18 @@ Every setting has one place: **`/admin`** (Menu → Admin and settings, ⚙ on a
 
 Members see the sections they may use; the Owner's are left out. The office (`/`) is where you watch and work with the agents; its menu keeps the view (theme, scene, graphics, language) and sign-in. The Company Guide's Telegram link opens `/admin#/guide`.
 
+### What the squads learn (1.11)
+
+Agents propose what the company should keep; the Owner decides; every version is kept. An agent never writes the Company Brain or another Space: it writes a **proposal** in its own Space, `docs/squad/proposals/<name>.md`, with a header (`kind: fact | brain | skill`, `from`, `title`, `why`, and `target: <Company Brain file>` or `skill: <name>`) and the fact, the whole document or the whole SKILL.md below it (the bundled `propose-learning` skill explains when and how; every agent file says so). The handoff tick picks it up (no model), keeps it in `~/.aisquad/proposals.json` (0600) and puts a card on the Owner's desk (also in the Telegram digest).
+
+| Kind | Approved, it goes to | Who reads it |
+|---|---|---|
+| fact | a pinned line in the Company Brain's `FACTS.md`, with the date and where it came from | every agent, before its first task |
+| brain | a document of the Company Brain (`brand/`, `sop/`, `templates/`, `products/`; `legal/`, `finance/`, `pricing/` only from an Owner-only Space) | agents, read only |
+| skill | `~/.aisquad/learned-skills/<name>/SKILL.md` and the Space's `.claude/skills/<name>` (or every Space); a skill someone wrote by hand is never overwritten | the agents of those Spaces |
+
+**Admin → Learning**: what waits (the change against the current version, edit before approving, *Not now* with a note the agent reads in `docs/squad/proposals/answered/`), the pinned facts and the learned skills, each with its earlier versions to view and **Restore** (the version being replaced is kept too; 30 per file). A fact can be approved on its card as proposed; a document or a skill is read and approved in Admin → Learning. A learned skill is written into the Space's own repository (`.claude/skills/<name>/SKILL.md`, marked `learned`): commit it with the Space's work or ignore it there, as you prefer. Version history lives outside the Company Brain, in `~/.aisquad/learned-history/` and `learned-skills/.history/`, so agents never read old versions. Invalid proposals (unknown kind, a path outside the allowed folders, a link, over 64 KB, a skill without its header, a header with keys other than `name`, `description`, `argument-hint`, the name of a bundled skill) go back to `answered/` as `.invalid.md` with the reason. Secrets are removed before anything is kept. Owner only: `GET /api/proposals`, `GET /api/proposals/:id`, `POST /api/proposals/:id/approve` (`content`, `scope: space|all`), `POST /api/proposals/:id/reject` (`reason`), `GET /api/learned/:kind/versions|version`, `POST /api/learned/:kind/restore`. Squad Log: `proposal.received`, `proposal.approved`, `proposal.rejected`, `proposal.invalid`.
+
 ### Set up the company: the Company Guide (1.4)
 
 An owner's empty Building opens the **Company Guide** by itself (later: **Set up the company** in the Lobby, also to add a division or change the goals). It assumes nothing: eight short steps with buttons, in the owner's language, and nothing happens before **Build**.

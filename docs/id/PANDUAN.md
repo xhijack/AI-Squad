@@ -37,6 +37,16 @@ atau Space. Kantor (`/`) tetap tempat melihat dan bekerja dengan agent.
 beserta catatan rilisnya; **Perbarui sekarang** menarik versi baru dan memulai ulang server beberapa detik (agent
 di terminal tetap jalan). Tidak jalan kalau folder aplikasi punya perubahan lokal atau ada job latar belakang.
 
+## Agent belajar, Owner menyetujui (1.11)
+
+Agent tidak pernah menulis Company Brain sendiri. Kalau ia belajar sesuatu yang perlu disimpan perusahaan, ia
+menulis **usulan** di Space-nya (`docs/squad/proposals/`): sebuah **fakta** (masuk `FACTS.md` di Company Brain dan
+dibaca semua agent), sebuah **dokumen** Company Brain (SOP, template, aturan brand, produk), atau sebuah **skill**
+(dipasang di Space itu atau semua Space). Usulan muncul sebagai kartu "Pembelajaran: perlu disetujui" dan di
+**Admin → Pembelajaran**: lihat perubahannya, ubah dulu bila perlu, Setujui atau Jangan sekarang (dengan catatan yang
+dibaca agent). Fakta bisa disetujui langsung dari kartunya; dokumen dan skill dibaca dan disetujui di Admin →
+Pembelajaran. Setiap versi lama disimpan (di luar Company Brain) dan bisa **dikembalikan**.
+
 ## Bekerja dengan agent
 
 - **Desk**: layar agent, tugas, pertanyaan (Attention), riwayat. **Chat**: pesan langsung ke agent mana pun.
