@@ -47,6 +47,17 @@ dibaca semua agent), sebuah **dokumen** Company Brain (SOP, template, aturan bra
 dibaca agent). Fakta bisa disetujui langsung dari kartunya; dokumen dan skill dibaca dan disetujui di Admin →
 Pembelajaran. Setiap versi lama disimpan (di luar Company Brain) dan bisa **dikembalikan**.
 
+## Jenis usaha sebagai file, tim Product, dan saran dari target (1.13)
+
+Jenis usaha di Pemandu (SaaS, konsultan ERPNext, klinik, toko, dan lain-lain) sekarang berupa **file** di
+`templates/presets/`. Untuk jenis usaha baru (misalnya klinik gigi), cukup tambahkan satu file di `~/.aisquad/presets/`
+tanpa mengubah kode: judul dan keterangannya (Inggris dan Indonesia), divisi yang disarankan, fokus Marketing, dan
+apakah pelanggannya dari sekitar (SEO lokal). Tim **Product** sekarang dipimpin **Product Manager** (menulis PRD dari
+bukti) bersama **Market Researcher**; hasil riset untuk seluruh perusahaan masuk folder `research/` di Company Brain
+lewat antrean Pembelajaran. **Saran harian** (Admin → Perbaikan) kini juga membaca target: target yang tertinggal dua
+periode berturut-turut, target yang terlampaui jauh (usulan target baru), target yang gagal diukur, atau target manual
+yang tidak pernah diisi.
+
 ## Penerbitan dengan aturan (1.12)
 
 Agent tidak pernah menerbitkan sendiri. Post, pesan ke lead atau pelanggan, iklan, atau deploy ditulis sebagai
