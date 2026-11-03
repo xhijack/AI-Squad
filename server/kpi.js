@@ -177,6 +177,8 @@ function loadVals(floorId, { strict = false } = {}) {
 }
 const saveVals = (floorId, v) => writeJson(valFile(floorId), v, 0o600);
 export const latest = (floorId, id) => (loadVals(floorId).series[id] || []).at(-1) || null;
+// every value of a target, oldest first (Daily Insight reads them, 1.13)
+export const series = (floorId, id) => [...(loadVals(floorId).series[id] || [])];
 // the last measurement that came the way the target is defined (a hand-entered value never stands in for ERPNext)
 const latestOf = (floorId, k) => { const v = loadVals(floorId); return (v.series[k.id] || []).findLast((p) => p.source === k.source.kind && p.ts >= switchedAt(v, k.id)) || null; };
 // who may feed a target: a person enters manual and webhook targets (a fallback when the outside system is down),

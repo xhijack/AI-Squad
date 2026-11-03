@@ -11,6 +11,12 @@
 //   queue waits      p95 wait 2+ hours (5+ starts)                           → capacity advice: another worker when RAM or
 //                    CPU is the limit (0.21: machines can be added), one agent more when the Building limit is
 //   repeated asks    the same chat question 3+ times                         → a skill candidate
+// Targets (1.13, analyzeTargets): read from the targets' own values, closed periods only
+//   behind again     behind in the last 2 closed periods (3 days for a daily target), nothing raised → plans to approve
+//                    (the lead drafts a plan when it is behind); already raising plans → advice to look at the goal
+//   met easily       met by 50 %+ in the last 2 closed periods                 → a goal near what is reached now
+//   measure failing  the server could not measure it 3+ times this week       → advice: fix the source
+//   not entered      a hand-entered target without a value for 2 closed periods → advice: enter it, or measure it
 import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -160,3 +166,78 @@ export function updateItem(id, patch, { log = '', by = '' } = {}, now = Date.now
 export const newSince = (since) => loadInbox().items.filter((x) => x.createdAt >= since && x.status === 'open').length;
 export const writeReport = (day, report) => writeJson(path.join(dir(), `${day}.json`), report);
 export const WINDOW_MS = WEEK;
+
+// ---------- targets (1.13) ----------
+// the last n closed periods of a target: [{ start, end, value }] newest first (value: the last one in the period, or null)
+export function closedPeriods(points, period, n, now, periodStart) {
+  const out = [];
+  let end = periodStart(period, now);
+  for (let i = 0; i < n; i++) {
+    const start = periodStart(period, end - 1);
+    const inIt = points.filter((p) => p.ts >= start && p.ts < end);
+    out.push({ start, end, value: inIt.length ? inIt.at(-1).value : null });
+    end = start;
+  }
+  return out;
+}
+// 2 significant digits, rounded the cautious way (down for a goal that goes up, up for one that goes down)
+export const roundGoal = (v, dir) => { if (!(v > 0)) return v; const m = 10 ** (Math.floor(Math.log10(v)) - 1); return (dir === 'down' ? Math.ceil(v / m) : Math.floor(v / m)) * m; };
+const behindOf = (k, v) => v != null && (k.direction === 'down' ? v > k.target : v < k.target);
+// spaces: [{ id, name, targets: [{ id, name, unit, target, direction, period, onBehind: { mode }, source: { kind }, closed: [{ value }] }] }],
+// events: { floorId: [kpi.failed events of the week] }
+export function analyzeTargets({ spaces = [], events = {} } = {}) {
+  const out = [];
+  for (const s of spaces) {
+    for (const k of s.targets || []) {
+      const label = `${k.name} (${s.name})`, unit = k.unit ? ` ${k.unit}` : '';
+      const per = { day: 'days', week: 'weeks', month: 'months' }[k.period];
+      if (!per) continue;
+      const need = k.period === 'day' ? 3 : 2, last = (k.closed || []).slice(0, need), vals = last.map((p) => p.value);
+      // measure failing
+      const fails = (events[s.id] || []).filter((e) => e.type === 'kpi.failed' && e.data?.kpi === k.id);
+      if (fails.length >= 3) {
+        out.push({ key: `kpi-failing:${s.id}:${k.id}`, category: 'target', title: `${label} could not be measured ${fails.length} times this week`,
+          evidence: [{ floorId: s.id, ids: ids(fails), summary: `last error: ${String(fails.at(-1).data?.error || '').slice(0, 160)}` }],
+          impact: 'The target shows a real number again, and what reacts to it works.', risk: 'None by itself: advice only.', change: null,
+          advice: `Open Admin → Targets, try the source of "${k.name}" and fix it (a key, an integration that changed, a CSV path), or switch it to another source; its history stays.`,
+          verify: `Measurement failures of ${k.name} for 7 days`, metric: { name: 'failures/week', before: fails.length } });
+      }
+      if (k.target == null) continue;
+      // not entered
+      if (['manual', 'webhook'].includes(k.source?.kind) && k.period !== 'day' && last.length === need && vals.every((v) => v == null)) {
+        out.push({ key: `kpi-empty:${s.id}:${k.id}`, category: 'target', title: `${label} has no value for ${need} ${per}`,
+          evidence: [{ floorId: s.id, ids: [], summary: `no value in the last ${need} closed ${per}` }],
+          impact: 'The squad and you see whether the goal is reached.', risk: 'None by itself: advice only.', change: null,
+          advice: `Enter it at the end of each ${k.period} (Admin → Targets, or tell the lead), or measure it from an integration or ERPNext so nobody has to.`,
+          verify: `Values of ${k.name} for 2 ${per}`, metric: { name: 'values', before: 0 } });
+        continue;
+      }
+      if (last.length < need || vals.some((v) => v == null)) continue;
+      // behind again
+      if (vals.every((v) => behindOf(k, v))) {
+        const mode = k.onBehind?.mode || 'notify';
+        const quiet = mode === 'off' || mode === 'notify';
+        out.push({ key: `kpi-behind:${s.id}:${k.id}`, category: 'target', title: `${label} was behind its goal ${need} ${per} in a row (${vals.join(', ')}${unit} for ${k.target}${unit})`,
+          evidence: [{ floorId: s.id, ids: [], summary: `last ${need} closed ${per}: ${vals.join(', ')}${unit}; goal ${k.target}${unit}` }],
+          impact: quiet ? 'When it is behind, the lead drafts a plan for you to approve instead of only a notice.' : 'A goal and an approach that fit what the squad can reach.',
+          risk: quiet ? 'Low: a plan is a draft; nothing is done before you approve it (costs a short run of the lead).' : 'None by itself: advice only.',
+          change: quiet ? { kind: 'kpi', floorId: s.id, kpiId: k.id, patch: { onBehind: { ...(k.onBehind || {}), mode: 'suggest' } } } : null,
+          ...(quiet ? {} : { advice: `It stays behind although plans are raised: look at the goal (is ${k.target}${unit} right for now?), the squad's approach, or what it is missing (materials, an integration, a person).` }),
+          verify: `${k.name} at the end of the next ${k.period}`, metric: { name: k.name, before: vals[0] } });
+        continue;
+      }
+      // met easily
+      const easy = k.direction === 'down' ? vals.every((v) => v <= k.target * 0.67) : k.target > 0 && vals.every((v) => v >= k.target * 1.5);
+      if (easy) {
+        const goal = roundGoal(k.direction === 'down' ? Math.max(...vals) : Math.min(...vals), k.direction);
+        if (goal === k.target || !(goal > 0)) continue;
+        out.push({ key: `kpi-easy:${s.id}:${k.id}:${goal}`, category: 'target', title: `${label} beat its goal by far ${need} ${per} in a row (${vals.join(', ')}${unit} for ${k.target}${unit})`,
+          evidence: [{ floorId: s.id, ids: [], summary: `last ${need} closed ${per}: ${vals.join(', ')}${unit}; goal ${k.target}${unit}` }],
+          impact: `A goal near what is reached now (${goal}${unit}) keeps the squad pushing and the cockpit honest.`, risk: 'Low: only the goal changes; Admin → Changes undoes it.',
+          change: { kind: 'kpi', floorId: s.id, kpiId: k.id, patch: { target: goal } },
+          verify: `${k.name} against ${goal}${unit} at the end of the next ${k.period}`, metric: { name: k.name, before: vals[0] } });
+      }
+    }
+  }
+  return out;
+}

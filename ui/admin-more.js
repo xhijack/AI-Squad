@@ -40,7 +40,7 @@ export function notifyHtml(x) {
     </form>`;
 }
 
-const CAT = { 'agent-rule': t('Agent rule'), model: t('Model'), autopilot: t('Autopilot'), notifications: t('Notifications'), capacity: t('Capacity'), skill: t('Skill candidate') };
+const CAT = { 'agent-rule': t('Agent rule'), model: t('Model'), autopilot: t('Autopilot'), notifications: t('Notifications'), capacity: t('Capacity'), skill: t('Skill candidate'), target: t('Target') };
 export function improvementsHtml(x) {
   const open = x.items.filter((i) => i.status === 'open'), done = x.items.filter((i) => i.status !== 'open').slice(0, 20);
   const card = (i) => `<div class="adminRow" data-sug="${esc(i.id)}"><div class="row"><span class="badge">${esc(CAT[i.category] || i.category)}</span><b class="grow">${esc(i.title)}</b><span class="note">${ago(i.createdAt)}</span></div>
@@ -65,6 +65,7 @@ function changeText(c) {
   if (c.kind === 'floor') return `${c.floorId}: ${Object.entries(c.patch).map(([k, v]) => `${k} → ${v}`).join(', ')}`;
   if (c.kind === 'agent-model') return `${c.floorId}/${c.agentId}: model → ${c.model}`;
   if (c.kind === 'agent-rule') return `${c.floorId}/${c.agentId}: + rule "${c.rule}"`;
+  if (c.kind === 'kpi') return `${c.floorId}/${c.kpiId}: ${c.patch?.target !== undefined ? t('goal → {v}', { v: c.patch.target }) : t('when behind → a plan to approve')}`;
   return JSON.stringify(c);
 }
 

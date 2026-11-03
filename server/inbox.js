@@ -11,6 +11,7 @@ import * as squad from './squad.js';
 import * as dispatcher from './dispatcher.js';
 import * as trust from './trust.js';
 import * as nodes from './nodes.js';
+import * as kpi from './kpi.js';
 import { bad } from './util.js';
 
 const settings = () => insight.cleanInsight(building.loadBuilding().prefs.insight);
@@ -18,9 +19,14 @@ const dayKey = (now) => new Date(now - new Date(now).getTimezoneOffset() * 60e3)
 
 export function run(now = Date.now()) {
   const b = building.loadBuilding();
-  const spaces = [], events = {};
+  const spaces = [], events = {}, targets = [], kpiEvents = {};
   for (const f of b.floors) {
     let cfg; try { cfg = floors.readFloor(f.path); } catch { continue; }
+    // the targets with their last closed periods (1.13)
+    try {
+      targets.push({ id: f.id, name: cfg.floor.name, targets: kpi.readDefs(f.path).map((k) => ({ ...k, closed: insight.closedPeriods(kpi.series(f.id, k.id), k.period, 3, now, kpi.periodStart) })) });
+      kpiEvents[f.id] = squadLog.read(f.id, { from: now - insight.WINDOW_MS, to: now, type: 'kpi.failed' });
+    } catch { /* no targets here */ }
     spaces.push({ id: f.id, name: cfg.floor.name, autopilot: cfg.floor.autopilot, agents: cfg.team.agents.map((a) => {
       let model = ''; try { model = floors.effectiveOf(f.path, a).model; } catch { /* template missing */ }
       return { id: a.id, name: a.displayName, model, lead: !!a.lead };
@@ -30,7 +36,8 @@ export function run(now = Date.now()) {
   let limiting = '';
   try { limiting = squad.dispatchStatus(now).capacity.limiting; } catch { /* no snapshot yet */ }
   const workers = nodes.listNodes(now).filter((n) => n.online && !n.drain);
-  const found = insight.analyze({ spaces, events, prefs: { maxAgents: b.prefs.maxAgents }, limiting, workers: { count: workers.length, free: nodes.clusterFree(now) } });
+  const found = [...insight.analyze({ spaces, events, prefs: { maxAgents: b.prefs.maxAgents }, limiting, workers: { count: workers.length, free: nodes.clusterFree(now) } }),
+    ...insight.analyzeTargets({ spaces: targets, events: kpiEvents })];
   const added = insight.addSuggestions(found, now);
   // level 1 (0.21): low-risk suggestions of a trusted category start as canaries; last week's canaries are measured
   trust.startCanaries(added, applyChange, now).catch((e) => console.error('[insight] canary:', e.message));
@@ -63,6 +70,16 @@ export async function applyChange(c, actor, { onRecord = null } = {}) {
   const root = building.floorEntry(c.floorId).path;
   const track = (label, fn) => history.track(label, { root, floorId: c.floorId, actor, onRecord }, () => { fn(); floors.generate(root); return { applied: true }; });
   if (c.kind === 'floor') return track('Improvement: Space settings', () => floors.updateFloorConfig(root, c.patch));
+  // a target's goal or what it raises when behind (1.13)
+  if (c.kind === 'kpi') {
+    const k = kpi.readDefs(root).find((x) => x.id === c.kpiId);
+    if (!k) throw bad(`The target ${c.kpiId} is no longer in this Space`);
+    const patch = {};
+    if (c.patch?.target !== undefined) patch.target = Number(c.patch.target);
+    if (c.patch?.onBehind?.mode !== undefined) patch.onBehind = { ...(k.onBehind || {}), mode: c.patch.onBehind.mode };
+    if (!Object.keys(patch).length) throw bad('Nothing to change');
+    return track(`Improvement: target ${k.name}`, () => { kpi.updateKpi(root, k.id, patch, { by: actor }); kpi.render(root, c.floorId); });
+  }
   const a = floors.readFloor(root).team.agents.find((x) => x.id === c.agentId);
   if (!a) throw bad(`The agent ${c.agentId} is no longer in this Space`);
   if (c.kind === 'agent-rule') return track(`Improvement: rule for ${a.displayName}`, () => floors.updateAgent(root, a.id, { overrides: { ...a.overrides, rules: [...new Set([...(a.overrides?.rules || []), c.rule])] } }));
