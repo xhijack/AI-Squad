@@ -537,7 +537,7 @@ export function createHandler({ pin, host = '127.0.0.1', isPublic: flag = false,
       const c = await prepare(req, res, url, hit?.r[3]?.maxBody || harden.BODY_LIMIT);
       if (!c) return;
       req.client = c; req.online = onlineState;
-      if (/^\/api\/session(\/(code|verify))?$/.test(url.pathname)) { const done = await sessionRoute(req, res, c, `${req.method} ${url.pathname}`); if (done !== undefined) return; }
+      if (/^\/api\/session(\/(code|verify))?$/.test(url.pathname)) { const done = await sessionRoute(req, res, c, `${req.method} ${url.pathname}`); if (done !== undefined || res.headersSent) return; }   // send() returns nothing: answered is answered
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
         if (c.isPublic && !c.user && !OPEN_STATIC.test(url.pathname)) {
           if (['/', '/index.html', '/admin', '/admin.html'].includes(url.pathname) && serveStatic(res, '/login.html')) return;
