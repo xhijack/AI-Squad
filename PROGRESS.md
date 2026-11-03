@@ -1257,6 +1257,14 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## Phase 5, Sprint 23: business presets, product and research, suggestions from targets, 1.13.0 (3 Nov 2026)
+
+- **Business presets** (`server/presets.js`, `templates/presets/*.md`, the Owner's `~/.aisquad/presets/`): the Company Guide's kinds of business, their labels (en, id), suggested divisions, Marketing's focus and local search, and a paragraph for Claude Code, moved out of code (`guide.types()`, `presetOf()`, `suggestFor()`; the web guide and the Telegram guide list them). Acceptance: a dental clinic from one file is listed, suggested, gets local SEO, is described to Claude and is built.
+- **Product squad v2**: Role Templates `product-manager` (lead) and `market-researcher`, skills `prd-writing` and `market-research`; the Product Blueprint (v2) uses them (the research seat was the sales SDR template by mistake).
+- **Research library**: `research/` in the Company Brain (a team folder: read by every agent, updated through proposals).
+- **Daily Insight from targets** (`insight.analyzeTargets`, `inbox.run`): behind twice → plans to approve (or advice), beaten by far → a new goal, failing measurement and empty hand-entered targets → advice; change kind `kpi` (goal, what it raises when behind) applied through the change history.
+- Tests: `presets.test.js` (3), `insight-targets.test.js` (4); guide, roles, Company Brain and API counts updated.
+
 ## Phase 5, Sprint 22: publishing under rules, 1.12.0 (3 Nov 2026)
 
 - **Outbox** (`server/outbox.js`): an agent asks for a post, a message, an ad or a deploy with `docs/squad/outbox/<name>.md` (the exact tool arguments in a json block); the handoff tick takes it (never through a link, at most 32 KB, no secrets, a known publishing tool of that channel, at most 20 open per Space), keeps it in `~/.aisquad/outbox.json` (0600) and applies the Space's rules (`~/.aisquad/autonomy.json`): owner, review or auto per channel with a limit per day; ads and production deploys owner only; money and legal, paid tools, over the limit and Legal Spaces always the Owner.
