@@ -58,9 +58,9 @@ const newId = (now) => `p-${new Date(now).toISOString().slice(0, 10).replace(/-/
 
 // ---------- files in the Space: never through a link ----------
 const NOFOLLOW = fs.constants.O_NOFOLLOW || 0;
-export function safeDir(root, sub = '', { create = false } = {}) {
+export function safeDir(root, sub = '', { create = false, dir = DIR } = {}) {
   let d = root;
-  for (const part of [...DIR.split('/'), ...(sub ? [sub] : [])]) {
+  for (const part of [...dir.split('/'), ...(sub ? [sub] : [])]) {
     d = path.join(d, part);
     let st = null; try { st = fs.lstatSync(d); } catch { /* missing */ }
     if (!st) { if (!create) return null; try { fs.mkdirSync(d); } catch (e) { if (e.code !== 'EEXIST') return null; } st = fs.lstatSync(d); }
@@ -68,7 +68,7 @@ export function safeDir(root, sub = '', { create = false } = {}) {
   }
   return d;
 }
-function readSafe(f, max = MAX_BYTES) {
+export function readSafe(f, max = MAX_BYTES) {
   let fd;
   try {
     fd = fs.openSync(f, fs.constants.O_RDONLY | NOFOLLOW);
@@ -79,8 +79,8 @@ function readSafe(f, max = MAX_BYTES) {
     return { text: buf.subarray(0, n).toString('utf8'), size: st.size };
   } catch { return null; } finally { if (fd !== undefined) fs.closeSync(fd); }
 }
-function writeSafe(root, sub, name, text) {
-  const d = safeDir(root, sub, { create: true });
+export function writeSafe(root, sub, name, text, { dir = DIR } = {}) {
+  const d = safeDir(root, sub, { create: true, dir });
   if (!d) return null;
   const f = path.join(d, name);
   try { fs.unlinkSync(f); } catch { /* new */ }
@@ -88,10 +88,10 @@ function writeSafe(root, sub, name, text) {
   try { fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
   return f;
 }
-export function pendingFiles(root) {
-  const d = safeDir(root);
+export function pendingFiles(root, { dir = DIR, skip = /^readme\.md$/i } = {}) {
+  const d = safeDir(root, '', { dir });
   if (!d) return [];
-  return safeReaddir(d).filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f)).map((f) => path.join(d, f))
+  return safeReaddir(d).filter((f) => f.endsWith('.md') && !skip.test(f)).map((f) => path.join(d, f))
     .filter((f) => { try { const st = fs.lstatSync(f); return st.isFile() && !st.isSymbolicLink(); } catch { return false; } }).sort();
 }
 

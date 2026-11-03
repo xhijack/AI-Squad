@@ -57,6 +57,7 @@ import * as googleLib from './google.js';
 import * as agentToken from './agenttoken.js';
 import * as guideLib from './guide.js';
 import * as proposals from './proposals.js';
+import * as outbox from './outbox.js';
 import * as cadenceLib from './cadence.js';
 import * as behind from './behind.js';
 import { execFileSync, execFile } from 'node:child_process';
@@ -723,6 +724,8 @@ export function googleSession(floorId, root, run) {
 // tools the Owner marked "costs money" (1.8, Admin → Integrations) that the Space can reach: on the Desk Claude Code asks
 // the owner first (an ask rule given at start, which an agent cannot edit away); a background run never gets them
 export function paidRules(floorId) { const sp = integ.spaces().find((s) => s.id === floorId); return sp ? integ.paidRules(sp) : []; }
+// publishing tools (1.12): no run of an agent ever gets them; the Outbox sends after its checks
+export function publishRules(floorId) { return integ.publishRules(integ.spaces().find((s) => s.id === floorId) || null); }
 const withAsk = (settings, ask) => (ask.length ? { ...(settings || {}), permissions: { ...(settings?.permissions || {}), ask: [...new Set([...(settings?.permissions?.ask || []), ...ask])] } } : settings);
 
 // guard: the owner starts it from the Desk: it goes through the dispatcher, which starts it now or queues it (P0)
@@ -756,7 +759,7 @@ async function launchAgent(floorId, agentId, task = '', { resume = '', via = 'ai
   if (ex) extraArgs.push(...ex.args, '--allowedTools', ...ex.allow);
   const gs = googleSession(floorId, entry.path, 'desk');
   if (gs) Object.assign(env, gs.env);
-  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : [])], extraArgs, env, secretEnv: { ...(ex ? ex.env : {}), ...(gs ? gs.secret : {}) } });
+  const r = await runnerFor('tmux').start({ name, cwd: entry.path, agentId, disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : []), ...publishRules(floorId)], extraArgs, env, secretEnv: { ...(ex ? ex.env : {}), ...(gs ? gs.secret : {}) } });
   if (!r.ok) throw bad('Could not start the agent (is tmux installed?)');
   if (task) pending.set(workKey(floorId, agentId), { text: task, since: Date.now(), startedAt: r.already ? 0 : Date.now() });
   if (!r.already) {
@@ -819,7 +822,7 @@ function launchJob(floorId, agentId, prompt, { budgetUsd = jobsLib.DEFAULT_BUDGE
   const gs = general || remote ? null : googleSession(floorId, entry.path, automated ? 'automated' : 'job');
   if (gs) Object.assign(env, gs.env, gs.secret);
   const args = jobsLib.buildArgs({ agentId, model: eff.model, effort: eff.effort, budgetUsd, permissionMode, resume, settings: sc.settings,
-    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : []), ...(gs ? gs.deny : []), ...(general ? [] : paidRules(floorId))], pluginDir: config.useHooks && !general ? ROOT : '',
+    disallowedTools: [...eff.permissions.deny, ...reposLib.denyRules(repos), ...sc.deny, ...(ex ? ex.deny : []), ...(gs ? gs.deny : []), ...publishRules(general ? '' : floorId), ...(general ? [] : paidRules(floorId))], pluginDir: config.useHooks && !general ? ROOT : '',
     extraArgs: [...reposLib.addDirArgs(repos), ...sc.addDirs, ...(ex ? [...ex.args, '--allowedTools', ...ex.allow] : [])] });
   const spec = { floorId, agentId, kind, title, prompt, cwd, args, env, model: eff.model, ...(tierPick ? { tier: tierPick.tier } : {}), budgetUsd: Number(budgetUsd) || jobsLib.DEFAULT_BUDGET_USD, permissionMode, via, meta: chat ? { chat } : cadence ? { cadence } : target ? { target } : null };
   let job;
@@ -878,6 +881,9 @@ integ.deps.log = (floorId, ev) => { if (realFloor(floorId) || floorId === ind.FL
 Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate(),
   measured: (floorId, root, id, now) => { if (realFloor(floorId)) targetCheck(floorId, { only: id, now }).catch((e) => console.error('[kpi]', floorId, id, e.message)); } });
 Object.assign(proposals.deps, { spaces: spacesForHandoff, log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate() });
+Object.assign(outbox.deps, { spaces: spacesForHandoff, log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate(),
+  // a deploy that got its go: the agent does it now, in the background (P1)
+  wake: ({ floorId, agentId, prompt, title, auto }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: auto ? 'autopilot' : 'owner', opts: { kind: 'task', permissionMode: 'acceptEdits', headOnly: true } }) });
 Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });
 Object.assign(legal.deps, {
   spaces: spacesForHandoff,
@@ -888,7 +894,7 @@ Object.assign(legal.deps, {
 
 // what only the Owner decides, on the Owner's desk: packages leaving an Owner-only Space, questions about ERPNext
 // work, price approvals (a hard stop: money) and ERPNext alerts. Hidden from everyone else (ownerOnly).
-const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary', 'proposal']);
+const OWNER_DESK = new Set(['handoff', 'price', 'erpnext', 'contract', 'legal', 'canary', 'proposal', 'outbox']);
 function ownerDesk(states) {
   const where = (floorId, agentId) => {
     const s = states.find((x) => x.entry.id === floorId);
@@ -921,6 +927,12 @@ function ownerDesk(states) {
   for (const p of proposals.pending()) out.push({ ...where(p.floorId, p.agentId), id: attId('proposal', p.id), kind: 'proposal', ownerOnly: true, answerable: true, proposalId: p.id, text: proposals.cardText(p), ts: p.createdAt,
     // a fact is shown whole on the card; a document or a skill is read (with its changes) in Admin → Learning first
     options: [...(p.kind === 'fact' ? [{ n: 1, label: 'Approve as proposed' }] : []), { n: 2, label: 'Not now, with a note…', free: true }] });
+  // what waits to go out (1.12): a post, a message, an ad or a deploy held by the rules, or a send that failed
+  for (const x of outbox.waiting()) {
+    const c = outbox.card(x);
+    out.push({ ...where(x.floorId, x.agentId), id: attId('outbox', x.id, x.status, c.digest), kind: 'outbox', ownerOnly: true, answerable: true, outboxId: x.id, outboxStatus: x.status, outboxDigest: c.digest, channel: x.channel,
+      hardStop: x.channel === 'ad' ? ['money'] : x.channel === 'deploy-production' ? ['production'] : [], text: c.text, options: c.options, ts: x.heldAt || x.doneAt || x.createdAt });
+  }
   return out;
 }
 async function answerOwnerDesk(item, option, text = '') {
@@ -940,6 +952,20 @@ async function answerOwnerDesk(item, option, text = '') {
     else if (n === 1) throw bad('Read it in Admin → Learning and approve it there');
     else if (n === 2 || note) r = proposals.reject(item.proposalId, { reason: note, by });
     else throw bad('Approve it or not');
+  }
+  else if (item.kind === 'outbox') {
+    const x = outbox.get(item.outboxId);
+    if (!x || x.status !== item.outboxStatus || outbox.digest(x) !== item.outboxDigest) throw bad('This request changed meanwhile: look at it again');
+    const c = outbox.card(x);
+    if (x.status === 'failed') {
+      if (n === 1 && c.options.some((o) => o.n === 1)) r = await outbox.retry(x.id, { by, seen: item.outboxDigest });
+      else if (n === 1) throw bad('Check the channel, then try it again in Admin → Publishing');
+      else if (n === 2 || note) r = outbox.reject(x.id, { reason: note, by });
+      else throw bad('Try again or drop it');
+    } else if (n === 1 && c.full) r = await outbox.approve(x.id, { by, seen: item.outboxDigest });
+    else if (n === 1) throw bad('Read all of it in Admin → Publishing and approve it there');
+    else if (n === 2 || note) r = outbox.reject(x.id, { reason: note, by });
+    else throw bad('Send it or not');
   }
   else if (item.kind === 'contract') {
     if (n === 1) r = legal.approve(item.contractKey, item.contractHash, { by });
@@ -964,9 +990,11 @@ export async function handoffTick(now = Date.now()) {
   const sent = await hb.scan({ now });
   const reverted = legal.guard(now);                                     // contracts: nothing APPROVED behind the Owner's back
   const learned = proposals.scan({ now });                               // what the agents propose to keep (1.11)
+  const outgoing = outbox.scan({ now });                                 // what the agents want to send (1.12)
+  outbox.work({ now }).catch((e) => console.error('[outbox]', e.message));   // reviews and sends, not in the tick
   const erpRun = await erp.tick(now).catch((e) => ({ error: e.message }));
   if (sent.length) invalidate();
-  return { sent, erp: erpRun, reverted, learned };
+  return { sent, erp: erpRun, reverted, learned, outgoing };
 }
 export const legalOverview = () => ({ contracts: legal.list(), metrics: legal.metrics(), alerts: legal.alerts() });
 export function contractText(key) {

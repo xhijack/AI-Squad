@@ -24,6 +24,7 @@ import * as integ from './integrations.js';
 import * as cadence from './cadence.js';
 import * as google from './google.js';
 import { membersFor, defaultPicks, runClaude } from './recommend.js';
+import * as outbox from './outbox.js';
 import { readJson, writeJson, writeText, kebab, clip, oneLine, bad } from './util.js';
 
 export const LANGUAGES = ['en', 'id'];
@@ -339,6 +340,8 @@ async function buildAll(st, p, create) {
       const r = await create({ blueprint: bp.id, name: sp.name, goal: `${p.company.name}: ${TITLE[sp.division]}. ${p.summary || p.company.description || ''}`.trim(), team, autopilot: sp.autopilot, budget: sp.budget ? { usd: sp.budget, period: 'month' } : undefined, installSkills: true });
       const root = r.path;
       floors.updateFloorConfig(root, { shift: sp.shift || { enabled: false }, ...(sp.division === 'finance' ? { access: 'owner', erpnext: 'finance', telegram: 'counts' } : {}) });
+      // what may go out by itself (1.12): automatic posts after a reviewer, staging deploys; never ads or production
+      try { const rules = outbox.rulesForMode(sp.mode); if (Object.keys(rules).length) outbox.setRules(r.id, rules, { by: 'Company Guide' }); } catch { /* a Legal Space keeps every rule at owner */ }
       for (const k of sp.kpis) { try { kpi.updateKpi(root, k.id, { ...(k.target != null ? { target: k.target } : {}), ...(k.onBehind ? { onBehind: { mode: k.onBehind } } : {}) }); } catch { /* not seeded */ } }
       // measured from the integration the plan named; it stays manual when that is not possible any more
       for (const k of sp.kpis.filter((x) => x.measure)) { try { kpi.updateKpi(root, k.id, { every: 'hour', source: { kind: 'mcp', server: k.measure.server, tool: k.measure.tool, args: k.measure.args, pick: k.measure.pick } }); } catch { /* the integration changed */ } }

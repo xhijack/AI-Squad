@@ -13,6 +13,7 @@
 // Scope: an Owner-only Space uses the Owner's servers, its own .mcp.json and ERPNext with the owner key; a team Space
 // its own .mcp.json and ERPNext with its role's key, never the Owner's personal servers (the ERPNext key rule).
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { config } from './config.js';
 import * as building from './building.js';
@@ -77,7 +78,19 @@ export function guessKind(name = '') {
   if (/erpnext|frappe|odoo/.test(n)) return 'erp';
   return 'other';
 }
-export function setMarks(id, { kind, readOnly, paid } = {}) {
+// tools that publish (1.12): the server calls them after the Outbox's checks; agents never get them
+export const PUBLISH_CHANNELS = ['post', 'message', 'ad'];
+// what a server is (where it points, what it runs, which keys it sends): a publishing mark holds only while it stays so
+export function fingerprint(e) {
+  if (!e) return '';
+  const keys = (o) => Object.keys(o || {}).sort().join(',');
+  return crypto.createHash('sha256').update(JSON.stringify([e.source, e.transport, e.url, e.command, e.args, keys(e.headers), keys(e.env), e.cwd || ''])).digest('hex').slice(0, 24);
+}
+// Claude Code's own spelling of a tool's rule name: anything outside [A-Za-z0-9_-] becomes _
+const ruleName = (server, tool) => `mcp__${String(server).replace(/[^A-Za-z0-9_-]/g, '_')}__${String(tool).replace(/[^A-Za-z0-9_-]/g, '_')}`;
+// the same server under another name (a copy in a Space's .mcp.json): the same URL, or the same command and arguments
+const sameServer = (a, b) => (a.url && a.url === b.url) || (a.command && a.command === b.command && JSON.stringify(a.args) === JSON.stringify(b.args));
+export function setMarks(id, { kind, readOnly, paid, publish } = {}) {
   if (!ID.test(String(id || '')) || !find(id)) throw notFound('Integration not found');
   const st = loadState(), cur = st.servers[id] || {};
   if (kind !== undefined && !KINDS.includes(kind)) throw bad(`Kind: ${KINDS.join(', ')}`);
@@ -96,7 +109,20 @@ export function setMarks(id, { kind, readOnly, paid } = {}) {
     if (unknown.length) throw bad(`Test the connection first: ${unknown.slice(0, 3).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not among its tools`);
     pd = [...new Set(paid)].slice(0, 100);
   }
-  st.servers[id] = { ...cur, ...(kind !== undefined ? { kind } : {}), readOnly: ro, paid: pd, ...(readOnly !== undefined || paid !== undefined ? { markedAt: Date.now() } : {}) };
+  let pub = cur.publish || {};
+  if (publish !== undefined) {
+    if (!publish || typeof publish !== 'object' || Array.isArray(publish)) throw bad('Publishing tools: { tool: post | message | ad }');
+    const known = new Set((cur.tested?.tools || []).map((t) => t.name));
+    const entries = Object.entries(publish).filter(([, c]) => c);
+    const unknown = entries.map(([t]) => t).filter((t) => !known.has(t));
+    if (unknown.length) throw bad(`Test the connection first: ${unknown.slice(0, 3).join(', ')} ${unknown.length === 1 ? 'is' : 'are'} not among its tools`);
+    const wrong = entries.find(([, c]) => !PUBLISH_CHANNELS.includes(c));
+    if (wrong) throw bad(`A publishing tool is for ${PUBLISH_CHANNELS.join(', ')}`);
+    pub = Object.fromEntries(entries.slice(0, 50));
+  }
+  const both = (readOnly !== undefined ? ro : cur.readOnly || []).filter((t) => pub[t]);
+  if (both.length) throw bad(`${both[0]} cannot be read-only and publishing at once: a target never calls a publishing tool`);
+  st.servers[id] = { ...cur, ...(kind !== undefined ? { kind } : {}), readOnly: ro, paid: pd, publish: pub, ...(publish !== undefined ? { publishFp: Object.keys(pub).length ? fingerprint(find(id)) : '' } : {}), ...(readOnly !== undefined || paid !== undefined || publish !== undefined ? { markedAt: Date.now() } : {}) };
   saveState(st);
   return view(find(id));
 }
@@ -119,7 +145,7 @@ export function view(e) {
     id: e.id, name: e.name, source: e.source, sourceText: SOURCE_TEXT[e.source], ...(e.floorId ? { floorId: e.floorId } : {}), transport: e.transport,
     ...(e.url ? { url: maskUrl(e.url) } : {}), ...(e.command ? { command: maskValue(e.command, 'command'), args: maskArgs(e.args) } : {}),
     headers: Object.fromEntries(Object.entries(e.headers).map(([k, v]) => [k, maskValue(v, k)])), env: Object.fromEntries(Object.entries(e.env).map(([k, v]) => [k, maskValue(v, k)])),
-    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], paid: m.paid || [], marked: !!m.markedAt, tested: testedView(m.tested, e),
+    kind: KINDS.includes(m.kind) ? m.kind : guessKind(e.name), kindSet: KINDS.includes(m.kind), readOnly: m.readOnly || [], paid: m.paid || [], publish: m.publish || {}, marked: !!m.markedAt, tested: testedView(m.tested, e),
     blocked: blocker(e, m), usableBy: spaces().filter((s) => usableBy(e, s)).map((s) => s.id),
   };
 }
@@ -163,7 +189,32 @@ function scopeError(e, space) {
 }
 
 // the tools marked "costs money" a Space can reach, as Claude Code permission rules (mcp__<server>__<tool>)
-export const paidRules = (space) => registry().filter((e) => usableBy(e, space)).flatMap((e) => (marksOf(e.id).paid || []).map((t) => `mcp__${e.name}__${t}`));
+export const paidRules = (space) => registry().filter((e) => usableBy(e, space)).flatMap((e) => (marksOf(e.id).paid || []).map((t) => ruleName(e.name, t)));
+// the publishing tools a Space can reach (1.12), denied to every run of its agents: only the server calls them
+// Claude Code loads the Owner's user-scope servers in every folder, so their publishing tools are denied to every run
+// (a General chat too, space null); a copy of a marked server under another name is denied the same tools
+export function publishRules(space) {
+  const all = registry(), st = loadState().servers, out = new Set();
+  const marked = all.filter((e) => Object.keys(st[e.id]?.publish || {}).length);
+  for (const m of marked) {
+    const tools = Object.keys(st[m.id].publish);
+    for (const e of all) {
+      const reach = e.id === m.id ? (e.source === 'user' || (space && usableBy(e, space))) : (space && usableBy(e, space) && sameServer(e, m)) || (e.source === 'user' && sameServer(e, m));
+      if (reach) for (const t of tools) out.add(ruleName(e.name, t));
+    }
+  }
+  return [...out];
+}
+// the publishing tools a Space may ask the Outbox for: [{ server, name, tool, channel, paid, inputSchema, description }]
+export function publishTools(space) {
+  return registry().filter((e) => usableBy(e, space) && !blocker(e)).flatMap((e) => {
+    const m = marksOf(e.id);
+    return Object.entries(m.publish || {}).map(([tool, channel]) => {
+      const t = (m.tested?.tools || []).find((x) => x.name === tool) || {};
+      return { server: e.id, name: e.name, tool, channel, paid: (m.paid || []).includes(tool), changed: m.publishFp !== fingerprint(e), inputSchema: t.inputSchema || null, description: t.description || '' };
+    });
+  });
+}
 
 // ---------- ${VAR} at call time ----------
 const BASE_ENV = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'TZ', 'SystemRoot'];
@@ -216,6 +267,7 @@ export async function test(id, { now = Date.now(), opts } = {}) {
   const cur = st.servers[id] || {};
   // a tool that is gone is not read-only any more; the marks of the tools still there stay
   const names = new Set(tested.tools.map((t) => t.name));
+  // publishing marks stay even when a tool seems gone: dropping one would hand the tool back to the agents
   st.servers[id] = { ...cur, tested, readOnly: tested.ok ? (cur.readOnly || []).filter((n) => names.has(n)) : cur.readOnly || [], paid: tested.ok ? (cur.paid || []).filter((n) => names.has(n)) : cur.paid || [] };
   saveState(st);
   const ev = { type: 'integration.tested', data: { server: id, name: e.name, source: e.source, transport: e.transport, ok: tested.ok, tools: tested.tools.length, ...(tested.ok ? {} : { error: tested.error }) } };
@@ -234,6 +286,7 @@ export function checkUse(space, source) {
   if (!space) throw bad('The Space is not registered on this machine');
   if (!usableBy(e, space)) throw bad(scopeError(e, space));
   if ((marksOf(e.id).paid || []).includes(source.tool)) throw bad(`The tool "${source.tool}" of ${e.name} costs money (Admin → Integrations): it never feeds a target`);
+  if ((marksOf(e.id).publish || {})[source.tool]) throw bad(`The tool "${source.tool}" of ${e.name} publishes (Admin → Integrations): it never feeds a target`);
   if (!(marksOf(e.id).readOnly || []).includes(source.tool)) throw bad(`The tool "${source.tool}" of ${e.name} is not marked read-only (Admin → Integrations): only read-only tools feed a target`);
   return e;
 }
@@ -243,4 +296,19 @@ export async function call(space, source, args, opts) {
   let def = { url: e.url, headers: e.headers, env: e.env, args: e.args };
   try { def = defFor(e, space); return scrubDeep(await mcp.callTool(e.id, def, source.tool, args, opts), def); }   // a result that echoes a key: masked too
   catch (err) { throw bad(`${e.name}: ${clean(err.message, def)}`); }
+}
+
+// ---------- a publishing call (1.12), only from the Outbox after its checks ----------
+export async function publishCall(space, serverId, tool, channel, args, opts) {
+  const e = find(serverId);
+  if (!e) throw bad(`The integration "${serverId}" is not known on this machine any more (Admin → Integrations)`);
+  const b = blocker(e);
+  if (b) throw bad(`${e.name}: ${b}`);
+  if (!space || !usableBy(e, space)) throw bad(space ? scopeError(e, space) : 'The Space is not registered on this machine');
+  const m = marksOf(e.id);
+  if ((m.publish || {})[tool] !== channel) throw bad(`The tool "${tool}" of ${e.name} is not marked as publishing ${channel === 'post' ? 'posts' : channel === 'message' ? 'messages' : 'ads'} any more (Admin → Integrations)`);
+  if (m.publishFp !== fingerprint(e)) throw bad(`${e.name} changed since its publishing tools were marked (where it points or what it runs): test it and mark them again in Admin → Integrations`);
+  let def = { url: e.url, headers: e.headers, env: e.env, args: e.args };
+  try { def = defFor(e, space); return scrubDeep(await mcp.callTool(e.id, def, tool, args, opts), def); }
+  catch (err) { const x = bad(`${e.name}: ${clean(err.message, def)}`); x.mcpCode = err.code || ''; throw x; }
 }

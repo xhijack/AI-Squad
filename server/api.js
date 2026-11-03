@@ -45,6 +45,7 @@ import * as behind from './behind.js';
 import * as guide from './guide.js';
 import * as update from './update.js';
 import * as proposals from './proposals.js';
+import * as outbox from './outbox.js';
 import * as promote from './promote.js';
 import * as integ from './integrations.js';
 import * as google from './google.js';
@@ -297,6 +298,13 @@ const routes = [
   ['POST', /^\/api\/proposals\/(p-[\w-]+)\/reject$/, ([id], b, req) => proposals.reject(id, { reason: String(b.reason || ''), by: req.user?.name || 'Owner' }), { pin: true }],
   ['GET', /^\/api\/learned\/(fact|brain|skill)\/versions$/, ([kind], b, req) => { const q = new URL(req.url, 'http://x').searchParams; const target = q.get('target') || ''; return { versions: proposals.versions(kind, target), current: proposals.current(kind, target) }; }, { pin: true }],
   ['GET', /^\/api\/learned\/(fact|brain|skill)\/version$/, ([kind], b, req) => { const q = new URL(req.url, 'http://x').searchParams; return { text: proposals.versionText(kind, q.get('target') || '', q.get('v') || '') }; }, { pin: true }],
+  // publishing under rules (1.12): what waits, the receipts, the rules per Space; the Owner decides
+  ['GET', /^\/api\/outbox$/, () => outbox.overview(), { pin: true }],
+  ['GET', /^\/api\/outbox\/(o-[\w-]+)$/, ([id]) => { const x = outbox.get(id); if (!x) throw notFound('Request not found'); return x; }, { pin: true }],
+  ['POST', /^\/api\/outbox\/(o-[\w-]+)\/approve$/, ([id], b, req) => outbox.approve(id, { by: req.user?.name || 'Owner', seen: String(b.digest || '') }), { pin: true }],
+  ['POST', /^\/api\/outbox\/(o-[\w-]+)\/reject$/, ([id], b, req) => outbox.reject(id, { reason: String(b.reason || ''), by: req.user?.name || 'Owner' }), { pin: true }],
+  ['POST', /^\/api\/outbox\/(o-[\w-]+)\/retry$/, ([id], b, req) => outbox.retry(id, { by: req.user?.name || 'Owner', seen: String(b.digest || '') }), { pin: true }],
+  ['PUT', /^\/api\/outbox\/rules\/([\w-]+)$/, ([floorId], b, req) => outbox.setRules(floorId, b?.rules, { by: req.user?.name || 'Owner' }), { pin: true, history: () => ({ label: 'Publishing rules' }) }],
   ['POST', /^\/api\/learned\/(fact|brain|skill)\/restore$/, ([kind], b, req) => proposals.restore(kind, String(b.target || ''), String(b.version || ''), { by: req.user?.name || 'Owner' }), { pin: true }],
   ['GET', /^\/api\/guide$/, () => guide.state(), { pin: true }],
   ['PUT', /^\/api\/guide$/, (p, b) => guide.answer(b?.answers || {}, b?.step), { pin: true }],
@@ -349,7 +357,7 @@ const routes = [
   ['PUT', /^\/api\/integrations\/google\/keys\/(psi|bing)$/, ([which], b) => google.setKey(which, b?.key), { pin: true }],
   ['PATCH', /^\/api\/integrations\/google$/, (p, b) => ({ owner: google.saveOwnerProps(b || {}) }), { pin: true, history: () => ({ label: 'Google properties (Owner)' }) }],
   ['POST', /^\/api\/integrations\/test$/, (p, b) => integ.test(String(b.id || '')), { pin: true }],
-  ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly, paid: b.paid }), { pin: true }],
+  ['PATCH', /^\/api\/integrations\/marks$/, (p, b) => integ.setMarks(String(b.id || ''), { kind: b.kind, readOnly: b.readOnly, paid: b.paid, publish: b.publish }), { pin: true }],
   ['GET', /^\/api\/erpnext$/, () => erp.status(), { pin: true }],
   ['PATCH', /^\/api\/erpnext$/, (p, b) => erp.saveSettings(b), { pin: true, history: () => ({ label: 'ERPNext settings' }) }],
   ['PUT', /^\/api\/erpnext\/keys\/(sales|delivery|finance|owner)$/, async ([role], b) => ({ keys: await erp.setKey(role, b.key, b.secret, { check: b.check !== false }) }), { pin: true }],

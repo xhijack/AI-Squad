@@ -25,7 +25,7 @@ export const TYPES = {
   'dispatch.queued': 'work', 'dispatch.started': 'work', 'dispatch.failed': 'work', 'dispatch.removed': 'work', 'dispatch.idle-stopped': 'lifecycle', 'node.lost': 'lifecycle',
   'handoff.sent': 'communication', 'handoff.received': 'communication', 'handoff.held': 'communication', 'handoff.rejected': 'communication', 'handoff.invalid': 'communication',
   'erpnext.lead': 'work', 'erpnext.won': 'work', 'erpnext.approval': 'work', 'erpnext.approved': 'work', 'erpnext.sent-back': 'work', 'erpnext.alert': 'work',
-  'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work', 'kpi.measured': 'work', 'kpi.failed': 'work', 'kpi.source.changed': 'work', 'guide.built': 'lifecycle', 'proposal.received': 'communication', 'proposal.approved': 'work', 'proposal.rejected': 'work', 'proposal.invalid': 'communication',
+  'legal.reverted': 'work', 'legal.approved': 'work', 'legal.changes': 'work', 'kpi.measured': 'work', 'kpi.failed': 'work', 'kpi.source.changed': 'work', 'guide.built': 'lifecycle', 'proposal.received': 'communication', 'proposal.approved': 'work', 'proposal.rejected': 'work', 'proposal.invalid': 'communication', 'publish.requested': 'communication', 'publish.held': 'communication', 'publish.reviewed': 'work', 'publish.approved': 'work', 'publish.done': 'work', 'publish.failed': 'work', 'publish.rejected': 'work', 'publish.invalid': 'communication', 'publish.rules': 'lifecycle',
   'cadence.started': 'work', 'cadence.skipped': 'work', 'cadence.done': 'work', 'kpi.behind': 'work', 'kpi.action': 'work', 'integration.tested': 'tools', 'google.tested': 'tools', 'google.submitted': 'tools',
   'doc.status': 'work', 'doc.approved': 'work', 'debug.attempt': 'work', 'debug.escalated': 'work', 'sprint.scope': 'work', 'scope.changed': 'work', 'plan.reviewed': 'work', 'standup.held': 'work', 'ship.blocked': 'work', 'design.picked': 'work', 'review.second': 'work', 'commit': 'work',
   'message.sent': 'communication', 'task.delegated': 'communication', 'question.asked': 'communication', 'question.answered': 'communication',
@@ -127,6 +127,15 @@ function summarize(e) {
     case 'proposal.approved': return `the owner approved ${d.kind === 'fact' ? 'the fact' : d.kind === 'brain' ? d.target : `the skill ${d.target}`}${d.edited ? ' (with changes)' : ''}: ${d.title}`;
     case 'proposal.rejected': return `the owner did not take ${d.title}${d.reason ? `: ${d.reason}` : ''}`;
     case 'proposal.invalid': return `a proposal was not taken (${d.file}): ${d.reason}`;
+    case 'publish.requested': return `asked to send ${d.channel}${d.via ? ` via ${d.via} → ${d.tool}` : ''}: ${d.title}`;
+    case 'publish.held': return `${d.channel} "${d.title}" waits for the owner: ${d.reason}`;
+    case 'publish.reviewed': return `the reviewer ${d.pass ? 'passed' : `found ${d.problems} problem${d.problems === 1 ? '' : 's'} in`} ${d.channel} "${d.title}"`;
+    case 'publish.approved': return `${d.channel} "${d.title}" approved ${d.auto ? 'by the rules' : `by ${d.by}`}`;
+    case 'publish.done': return `sent ${d.channel} "${d.title}" via ${d.via} → ${d.tool} (${d.auto ? 'by the rules' : `approved by ${d.by}`})`;
+    case 'publish.failed': return `${d.channel} "${d.title}" not sent: ${d.error}`;
+    case 'publish.rejected': return `the owner did not send ${d.channel} "${d.title}"${d.reason ? `: ${d.reason}` : ''}`;
+    case 'publish.invalid': return `a request to send was not taken (${d.file}): ${d.reason}`;
+    case 'publish.rules': return `publishing rules changed by ${d.by}: ${Object.entries(d.modes || {}).map(([c, m]) => `${c} ${m}`).join(', ')}`;
     case 'guide.built': return `built by the Company Guide: ${d.division} (${d.blueprint}, ${d.mode}, ${d.targets} targets with a goal)`;
     case 'legal.reverted': return `${d.file} is a DRAFT again: ${d.reason}`;
     case 'legal.approved': return `the owner approved the contract ${d.file}`;

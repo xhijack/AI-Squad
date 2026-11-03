@@ -12,7 +12,7 @@ import * as company from './company.js';
 import * as space from './space.js';
 import * as erp from './erpnext.js';
 
-const PRIVATE = ['secrets.json', 'pin', 'users.json', 'notify.json', 'handoffs.json', 'erpnext.json', 'proposals.json'];
+const PRIVATE = ['secrets.json', 'pin', 'users.json', 'notify.json', 'handoffs.json', 'erpnext.json', 'proposals.json', 'outbox.json', 'autonomy.json'];
 // the rules that keep an agent's identity and the machine's shared memory out of reach of one Space's work
 export function identityDenyRules() {
   const claude = config.claudeHome, home = config.home;
@@ -53,6 +53,7 @@ export function contextLines(sp, dir, owner, { targets = false, plan = false, ma
     ...(!owner && dir ? [`Legal, finance and pricing are not for this Space: ask the lead or the owner instead of looking for them.`] : []),
     ...(dir ? [`Company facts every agent must know are in \`${dir}/FACTS.md\` (read only): read it before your first task.`] : []),
     'When you learn something the company should keep (a fact everyone should know, a better procedure, a reusable way of working), propose it: write a file in `docs/squad/proposals/` with a header (kind: fact | brain | skill, from: your agent id, title, why, and target: <Company Brain file> for brain or skill: <name> for skill), then the fact, the whole document or the whole SKILL.md (see the propose-learning skill). The owner approves it; the answer comes to `docs/squad/proposals/answered/`. Never write to the Company Brain yourself.',
+    'Nothing leaves the company from your own hands: a post, a message to a lead or a customer, an ad or a deploy is a request in `docs/squad/outbox/` (see the publish-request skill and `docs/squad/outbox/TOOLS.md` for the tools and the rules of this Space). Publishing tools are blocked for you; the server sends after its checks, and the answer comes to `docs/squad/outbox/answered/`.',
     'Work for another Space goes as a handoff package: a Markdown file in `docs/squad/handoffs/outbox/` with a header (`to:` the Space, `kind:`, `title:`), see the space-handoff skill; the server delivers it and wakes the receiver. Work handed to this Space arrives in `docs/squad/handoffs/inbox/`.',
     ...(erp.sessionFor(sp) ? [erp.contextLine(sp.erpnext)] : []),
     ...(targets ? ['This Space works against targets the owner set: `docs/squad/KPI.md` shows each one, its value now and its status. Plan against the ones that are behind, report progress on them in your handoffs and reports, and never invent a value.'] : []),
