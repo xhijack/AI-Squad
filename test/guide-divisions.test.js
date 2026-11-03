@@ -24,7 +24,7 @@ test('nothing is "later" any more; Finance and Support are divisions with a Blue
 test('the suggestion: Support for saas, software house and ERP consultants; Finance wherever ERPNext is', () => {
   for (const type of ['saas', 'software-house', 'erp-consultant']) assert.ok(guide.suggestFor(type, []).includes('support'), type);
   for (const type of ['consultant', 'agency', 'clinic', 'retail', 'other']) assert.ok(!guide.suggestFor(type, []).includes('support'), type);
-  for (const type of guide.TYPES) {
+  for (const type of guide.types()) {
     assert.ok(guide.suggestFor(type, ['erpnext']).includes('finance'), `${type} with ERPNext`);
     assert.ok(!guide.suggestFor(type, ['website']).includes('finance'), `${type} without ERPNext`);
   }

@@ -25,10 +25,10 @@ import * as cadence from './cadence.js';
 import * as google from './google.js';
 import { membersFor, defaultPicks, runClaude } from './recommend.js';
 import * as outbox from './outbox.js';
+import * as presets from './presets.js';
 import { readJson, writeJson, writeText, kebab, clip, oneLine, bad } from './util.js';
 
 export const LANGUAGES = ['en', 'id'];
-export const TYPES = ['saas', 'erp-consultant', 'consultant', 'software-house', 'agency', 'clinic', 'retail', 'other'];
 export const GOALS = ['revenue', 'leads', 'launch', 'cost', 'service'];
 export const HAVE = ['products', 'brand', 'website', 'social', 'erpnext', 'tools', 'repos', 'team', 'legal'];
 export const MODES = ['automatic', 'supervised', 'manual'];
@@ -36,27 +36,19 @@ export const HOURS = ['day', 'night', 'always'];
 export const MACHINES = ['this', 'more'];
 // division -> Blueprint; the delivery division depends on the business (software or ERP implementation)
 export const DIVISIONS = { product: 'product', engineering: 'software-house', implementation: 'erp-consultant', marketing: 'digital-marketing', sales: 'sales-crm', legal: 'legal', finance: 'finance', support: 'support' };
-// Marketing's focus (1.8): everything, or search only (SEO and AI answers); an SEO agency picks search
+// Marketing's focus (1.8): everything, or search only (SEO and AI answers); a preset may hint search (an SEO agency)
 export const FOCUS = { marketing: { all: 'digital-marketing', search: 'seo-geo' } };
-export const FOCUS_HINT = { agency: { marketing: 'search' } };
 export const blueprintOf = (division, a) => FOCUS[division]?.[a?.focus?.[division]] || DIVISIONS[division];
-// a clinic or a shop is found near its customers: the search squad gets the local SEO specialist
-export const LOCAL_TYPES = ['clinic', 'retail'];
+// the kinds of business (1.13): files in templates/presets/ and ~/.aisquad/presets/ (server/presets.js), not code
+export const presetList = () => presets.list(Object.keys(DIVISIONS));
+export const types = () => presetList().map((p) => p.id);
+export const presetOf = (type) => { const l = presetList(); return l.find((p) => p.id === type) || l.find((p) => p.id === 'other'); };
+export const focusHint = () => Object.fromEntries(presetList().filter((p) => p.marketing === 'search').map((p) => [p.id, { marketing: 'search' }]));
 export const LATER = [];                                      // divisions without a Blueprint: shown, never built (none since 1.7)
 const TITLE = { product: 'Product', engineering: 'Engineering', implementation: 'Implementation', marketing: 'Marketing', sales: 'Sales', legal: 'Legal', finance: 'Finance', support: 'Support' };
-export const SUGGEST = {
-  saas: ['product', 'engineering', 'marketing', 'sales', 'support', 'legal'],
-  'erp-consultant': ['implementation', 'sales', 'marketing', 'support', 'legal'],
-  consultant: ['sales', 'marketing', 'legal'],
-  'software-house': ['engineering', 'sales', 'marketing', 'support', 'legal'],
-  agency: ['marketing', 'sales', 'legal'],
-  clinic: ['marketing', 'sales', 'legal'],
-  retail: ['marketing', 'sales', 'legal'],
-  other: ['marketing', 'sales', 'legal'],
-};
 // Finance is suggested to every business that already runs ERPNext (it reads the books there)
 export const SUGGEST_IF = { finance: 'erpnext' };
-export const suggestFor = (type, have = []) => [...(SUGGEST[type] || SUGGEST.other), ...Object.entries(SUGGEST_IF).filter(([, h]) => have.includes(h)).map(([d]) => d)];
+export const suggestFor = (type, have = []) => [...presetOf(type).divisions, ...Object.entries(SUGGEST_IF).filter(([, h]) => have.includes(h)).map(([d]) => d)];
 // Legal and Finance start manual: the owner decides everything there
 const OWNER_DESKS = ['legal', 'finance'];
 export const defaultMode = (division) => (OWNER_DESKS.includes(division) ? 'manual' : 'supervised');
@@ -84,7 +76,7 @@ const pickList = (list, allowed) => (Array.isArray(list) ? [...new Set(list.map(
 const num = (v) => { const n = Number(v); return v === '' || v == null || !Number.isFinite(n) || n < 0 ? null : Math.round(n * 100) / 100; };
 export function cleanAnswers(a = {}) {
   const b = a.business || {}, g = a.goals || {}, c = a.capacity || {};
-  const type = TYPES.includes(b.type) ? b.type : 'other';
+  const type = types().includes(b.type) ? b.type : 'other';
   const divisions = pickList(a.divisions, [...Object.keys(DIVISIONS), ...LATER]);
   const modes = {};
   for (const d of divisions) if (DIVISIONS[d]) modes[d] = MODES.includes(a.modes?.[d]) ? a.modes[d] : defaultMode(d);
@@ -104,7 +96,7 @@ const save = (st, via = '') => writeJson(file(), { ...st, updatedAt: Date.now(),
 // the state the UI shows: where the owner is, the answers so far, the plan, whether it was built
 export function state() {
   const st = load();
-  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: SUGGEST, suggestIf: SUGGEST_IF, focusHint: FOCUS_HINT, divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, planAt: st.planAt || 0, via: st.via || '' };
+  return { step: Number(st.step) || 0, answers: st.answers || null, plan: st.plan || null, done: !!st.done, builtAt: st.builtAt || null, suggest: Object.fromEntries(presetList().map((p) => [p.id, p.divisions])), suggestIf: SUGGEST_IF, focusHint: focusHint(), presets: presetList().map(({ id, title, hint, source }) => ({ id, title, hint, source })), divisions: Object.keys(DIVISIONS), later: LATER, hasClaude: hasClaude(), updatedAt: st.updatedAt || 0, planAt: st.planAt || 0, via: st.via || '' };
 }
 export function answer(partial, step, { via = 'web' } = {}) {
   const st = load();
@@ -187,7 +179,7 @@ export function draftPlan(a, built = load().built) {
       kpis: bp.kpis.map((k) => ({ id: kebab(k.id || k.name, 40), name: k.name, unit: k.unit || '', target: kpiGoal(bp.id, { ...k, id: kebab(k.id || k.name, 40) }, a), onBehind: BEHIND[mode], ...measuredBy(k, { id: '', access: bp.space.access || 'team' }), ...fromOf(k, bp) })),
       routines: routinesFor(bp, a.capacity.hours, mode),
       materials: materialsFor(division, a, bp.id),
-      ...(bp.id === 'seo-geo' && LOCAL_TYPES.includes(a.business.type) ? { extraRoles: ['local-seo-specialist'] } : {}),
+      ...(bp.id === 'seo-geo' && presetOf(a.business.type).local ? { extraRoles: ['local-seo-specialist'] } : {}),
     });
   }
   const p = { company: { name, type: a.business.type, description: a.business.description, language: a.language }, goals: a.goals, capacity: a.capacity, spaces, later, summary: '', source: 'defaults' };
@@ -206,7 +198,7 @@ export function claudePrompt(plan) {
   const g = plan.goals;
   return [
     'You help a small company owner set up an AI agent company (The AI Squad). From the interview below, write a plan summary and sharpen the starting targets. Be concrete and modest; never promise results.',
-    `Language of the summary: ${plan.company.language === 'id' ? 'Bahasa Indonesia' : 'English'}. Business: ${plan.company.type}, "${plan.company.name}". ${plan.company.description}`,
+    `Language of the summary: ${plan.company.language === 'id' ? 'Bahasa Indonesia' : 'English'}. Business: ${presetOf(plan.company.type).title.en} (${plan.company.type}), "${plan.company.name}". ${plan.company.description}${presetOf(plan.company.type).about ? `\nAbout this kind of business: ${presetOf(plan.company.type).about}` : ''}`,
     `Goals: ${g.picks.join(', ') || 'not stated'}${g.revenue ? `; revenue ${g.revenue} ${g.currency} per month` : ''}${g.leads ? `; ${g.leads} leads per month` : ''}${g.launch ? `; launch: ${g.launch}` : ''}.`,
     `Works ${plan.capacity.hours}, ${plan.capacity.machines === 'more' ? 'more machines later' : 'one machine'}${plan.capacity.budget ? `, API budget ${plan.capacity.budget} USD per month` : ''}.`,
     '', 'Spaces (division: Blueprint, mode; targets with their current suggested goal or null):',

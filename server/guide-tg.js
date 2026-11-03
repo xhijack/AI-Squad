@@ -100,7 +100,7 @@ const answersOf = (st = guide.load()) => guide.cleanAnswers(st.answers || {});
 export function questions(a) {
   const qs = [
     { id: 'language', step: 'language', kind: 'choice', options: guide.LANGUAGES },
-    { id: 'type', step: 'business', kind: 'choice', options: guide.TYPES },
+    { id: 'type', step: 'business', kind: 'choice', options: guide.types() },
     { id: 'name', step: 'business', kind: 'text', required: true },
     { id: 'description', step: 'business', kind: 'text' },
     { id: 'picks', step: 'goals', kind: 'multi', options: guide.GOALS, min: 1 },
@@ -147,7 +147,7 @@ export function parseNumber(text) {
 const label = (lang, q, v) => {
   const T = L[lang];
   if (q.id === 'language') return v === 'id' ? 'Bahasa Indonesia' : 'English';
-  if (q.id === 'type') return T.type[v] || v;
+  if (q.id === 'type') return T.type[v] || guide.presetOf(v)?.title?.[lang] || v;
   if (q.id === 'picks') return T.goal[v] || v;
   if (q.id === 'have') return T.have[v] || v;
   if (q.id === 'divisions') return T.division[v] || v;
@@ -159,7 +159,7 @@ const nowText = (lang, q, v) => (v == null || v === '' || (Array.isArray(v) && !
 export function questionMessage(q, a, lang, sel = null) {
   const T = L[lang], n = STEP_OF[q.step] + 1;
   let ask = q.id.startsWith('m.') ? fill(T.q.mode, { division: T.division[q.id.slice(2)] }) : fill(T.q[q.id], { currency: a.goals.currency, list: guide.suggestFor(a.business.type, a.have).map((d) => T.division[d]).join(', ') });
-  if (q.id === 'focus' && guide.FOCUS_HINT[a.business.type]?.marketing === 'search') ask += `\n${T.q.focusHint}`;
+  if (q.id === 'focus' && guide.presetOf(a.business.type).marketing === 'search') ask += `\n${T.q.focusHint}`;
   if (q.id.startsWith('m.')) ask += `\n${guide.MODES.map((m) => `• ${T.mode[m]}: ${T.modeText[m]}`).join('\n')}`;
   // the type is "other" until the business step is answered (cleanAnswers' default): no "Now:" for it before a name
   const cur = q.id === 'type' && !a.business.name ? '' : nowText(lang, q, sel ?? valueOf(a, q.id));

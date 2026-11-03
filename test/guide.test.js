@@ -92,7 +92,7 @@ test('Claude Code sharpens the plan when it answers, the defaults stand when it 
   const asked = [];
   guide.deps.ask = async (prompt) => { asked.push(prompt); return { summary: 'DTamu menjual undangan digital; fokus 3 bulan: 50 lead per bulan dari situs.', targets: [{ space: 'marketing', kpi: 'organic-traffic', target: 3000, why: 'lead 50 pada konversi 2 %' }, { space: 'nowhere', kpi: 'x', target: 1, why: '' }], materials: [{ space: 'sales', item: 'Daftar paket undangan dan harga per tier', why: 'sales butuh harga' }] }; };
   const p = (await call('POST', '/api/guide/plan', {})).body;
-  assert.match(asked[0], /Business: saas, "DTamu"/); assert.match(asked[0], /Bahasa Indonesia/); assert.match(asked[0], /- marketing \(digital-marketing, automatic\): organic-traffic \[sessions\] = null, leads \[leads\] = 50/);
+  assert.match(asked[0], /Business: A SaaS product \(saas\), "DTamu"\.[^\n]*\nAbout this kind of business: A software product people subscribe to/); assert.match(asked[0], /Bahasa Indonesia/); assert.match(asked[0], /- marketing \(digital-marketing, automatic\): organic-traffic \[sessions\] = null, leads \[leads\] = 50/);
   assert.equal(p.source, 'claude');
   assert.equal(p.spaces.find((s) => s.division === 'marketing').kpis.find((k) => k.id === 'organic-traffic').target, 3000);
   assert.deepEqual(p.spaces.find((s) => s.division === 'sales').materials.at(-1), { id: 'custom', label: 'Daftar paket undangan dan harga per tier', why: 'sales butuh harga', status: 'missing' });

@@ -67,13 +67,16 @@ export function maybeOpen(b, me) {
   if (resume || (b.guide.firstRun && !dismissed && !document.getElementById('modal')?.open)) ctx.actions.guide();
 }
 
+// the kinds of business come from the server's presets (1.13: files, an Owner's own included); the built-in labels
+// are the fallback for an older server
+const typeMap = () => (s.st?.presets?.length ? Object.fromEntries(s.st.presets.map((p) => [p.id, TYPE[p.id] && p.source !== 'own' ? TYPE[p.id] : [p.title?.[LANG] || p.title?.en || p.id, p.hint?.[LANG] || p.hint?.en || '']])) : TYPE);
 const choice = (name, map, value, { multi = false } = {}) => `<div class="choice" data-choice="${esc(name)}" data-multi="${multi}">${Object.entries(map).map(([k, v]) => { const on = multi ? value.includes(k) : value === k; const [b, small] = Array.isArray(v) ? v : [v, '']; return `<button type="button" data-v="${esc(k)}" aria-pressed="${on}"><b>${esc(b)}</b>${small ? `<small>${esc(small)}</small>` : ''}</button>`; }).join('')}</div>`;
 
 function stepHtml() {
   const a = s.a, id = STEPS[s.step];
   if (id === 'language') return `<p class="note">${t('Welcome. This guide asks a few questions about your business and builds your AI company from the answers: a squad per division, with targets, working hours and a list of what each squad needs from you. Nothing happens before you say "Build". First: which language do you want to work in?')}</p>
     ${choice('language', { en: ['English', 'The app, the Telegram bot and the agents talk to you in English'], id: ['Bahasa Indonesia', 'Aplikasi, bot Telegram dan agent bicara denganmu dalam bahasa Indonesia'] }, a.language)}`;
-  if (id === 'business') return `<p class="note">${t('What is your business? Pick the closest; the squads are built from it.')}</p>${choice('type', TYPE, a.business.type)}
+  if (id === 'business') return `<p class="note">${t('What is your business? Pick the closest; the squads are built from it.')}</p>${choice('type', typeMap(), a.business.type)}
     <div class="grid2" style="margin-top:12px"><label>${t('Company or product name')}<input name="name" value="${esc(a.business.name)}" maxlength="60" placeholder="${esc(t('e.g. DTamu'))}" required></label>
     <label>${t('In one sentence, what do you sell and to whom?')}<input name="description" value="${esc(a.business.description)}" maxlength="300" placeholder="${esc(t('e.g. digital invitations and a guest book for weddings and corporate events'))}"></label></div>`;
   if (id === 'goals') return `<p class="note">${t('What should the company reach in the next 3 months? Pick one or two. A number helps: it becomes the first targets.')}</p>${choice('picks', GOAL, a.goals.picks, { multi: true })}
