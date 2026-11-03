@@ -126,6 +126,14 @@ marked as failed in Admin → Targets and in `docs/squad/KPI.md`.
 what the company should keep (`id`, `kind`: fact, brain or skill, `target`, `title`), the Owner approved it (`by`, `edited`)
 or did not take it (`reason`), or the file could not be taken (`file`, `reason`). The proposed text is never logged.
 
+**`publish.requested`**, **`publish.held`**, **`publish.reviewed`**, **`publish.approved`**, **`publish.done`**,
+**`publish.failed`**, **`publish.rejected`**, **`publish.invalid`**, **`publish.rules`** (1.12): an agent asked for something
+to go out (`id`, `channel`: post, message, ad, deploy-staging or deploy-production, `title`, `via` and `tool` for the
+publishing tool); it waits for the Owner (`reason`); the second reviewer judged it (`pass`, `problems`: how many); it was
+approved (`by`, `auto`: by the Space's rules); the server sent it (`via`, `tool`, `by`, `auto`) or the send failed
+(`error`); the Owner did not send it (`reason`); the file could not be taken (`file`, `reason`); the Owner changed a
+Space's rules (`by`, `modes`). What is sent is never logged; the receipt is in `~/.aisquad/outbox.json`.
+
 **`guide.built`** (1.2, lifecycle): the Company Guide built this Space: `division`, `blueprint`, `mode` (automatic, supervised,
 manual), `targets` (how many targets got a goal), `routines` (1.5: how many routines the plan kept; they are made off).
 

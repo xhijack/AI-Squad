@@ -47,6 +47,16 @@ dibaca semua agent), sebuah **dokumen** Company Brain (SOP, template, aturan bra
 dibaca agent). Fakta bisa disetujui langsung dari kartunya; dokumen dan skill dibaca dan disetujui di Admin →
 Pembelajaran. Setiap versi lama disimpan (di luar Company Brain) dan bisa **dikembalikan**.
 
+## Penerbitan dengan aturan (1.12)
+
+Agent tidak pernah menerbitkan sendiri. Post, pesan ke lead atau pelanggan, iklan, atau deploy ditulis sebagai
+**permintaan** di Space-nya (`docs/squad/outbox/`). Tool penerbitan (misalnya Postiz) ditandai Owner di
+**Admin → Integrasi** ("Menerbitkan: post / pesan / iklan"); tool itu diblokir untuk semua agent dan hanya server yang
+memanggilnya. Di **Admin → Penerbitan** kamu atur per Space dan per kanal: *menunggu kamu*, *setelah reviewer* (Claude
+mengecek terhadap brand dan fakta perusahaan), atau *sendiri*, dengan batas per hari. Iklan, deploy production, tool
+berbayar, topik uang dan legal, serta Space Legal selalu menunggu kamu. Kartunya bisa disetujui satu ketuk (juga di
+Telegram) bila seluruh isinya muat; kalau tidak, baca dulu di Admin → Penerbitan. Bukti kirim (jawaban kanal) disimpan.
+
 ## Bekerja dengan agent
 
 - **Desk**: layar agent, tugas, pertanyaan (Attention), riwayat. **Chat**: pesan langsung ke agent mana pun.

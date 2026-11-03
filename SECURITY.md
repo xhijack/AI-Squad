@@ -44,6 +44,14 @@ answer within 3 working days and credit you in the release notes unless you pref
   files with the usual tools, but an agent allowed to run arbitrary shell commands could still find a way to them.
   Keys an agent's role uses are in its own session's environment anyway. Keep the most powerful key (ERPNext
   owner) off the machine if that matters to you: approvals then end with you pressing Submit in ERPNext.
+- **Publishing under rules (1.12) stops mistakes, not a determined agent.** Publishing tools are denied to every agent
+  run and only the server sends, after the Space's rules, a second reviewer or the owner. An agent with a shell runs as
+  your user, so it could still call a channel's API with a key it finds in its environment, start a nested `claude`,
+  or edit `~/.aisquad/autonomy.json` (a hand-edited `outbox.json` sends nothing: every send needs an approval the
+  server process gave for that exact content). Keep publishing keys out of the environment agents inherit (put them
+  in the MCP server's own config, not in exported variables), keep `Bash` narrow in Marketing roles, and run agents as
+  a separate OS user if that matters to you. The reviewer reads agent-written text and can be steered by it; the day's
+  limit and the money and legal hard stops still apply.
 - **Other users on a shared machine** who can read your home directory can read `~/.aisquad`.
 
 ## Hardening checklist
