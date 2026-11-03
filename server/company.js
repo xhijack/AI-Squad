@@ -9,14 +9,15 @@ import path from 'node:path';
 import { config, ROOT } from './config.js';
 import { safeReaddir, writeText, bad } from './util.js';
 
-export const TEAM_DIRS = ['brand', 'sop', 'templates', 'products'];
+export const TEAM_DIRS = ['brand', 'sop', 'templates', 'products', 'research'];
 export const OWNER_DIRS = ['legal', 'finance', 'pricing'];
 const README = {
-  '': '# Company Brain\n\nWhat every agent of the company may read: brand, standard procedures, templates and products. Agents read it; they never change it. Legal, finance and pricing are read only by agents of Owner Spaces.\n\nPut client facts in the client\'s Space, never here.\n',
+  '': '# Company Brain\n\nWhat every agent of the company may read: brand, standard procedures, templates, products and research. Agents read it; they never change it. Legal, finance and pricing are read only by agents of Owner Spaces.\n\nPut client facts in the client\'s Space, never here.\n',
   brand: '# Brand\n\nVoice, tone, colours, logo use, words we use and words we avoid.\n',
   sop: '# Standard procedures\n\nHow we work: proposals, onboarding, implementation steps, support.\n',
   templates: '# Templates\n\nReusable documents: proposal outline, project brief, handoff, report.\n',
   products: '# Products\n\nWhat we sell and what each product does.\n',
+  research: '# Research library\n\nWhat the company knows about its market, competitors and customers: one document per topic, every finding with its source and date. Researchers propose updates (propose-learning); the owner approves them.\n',
   legal: '# Legal (Owner only)\n\nContract templates (`templates/`, bilingual, locked: the Legal Space copies them, never edits them), clauses, the privacy (UU PDP) checklist. Only agents of Owner Spaces read this folder.\n',
   finance: '# Finance (Owner only)\n\nRates, payment terms, invoicing rules. Only agents of Owner Spaces read this folder.\n',
   pricing: '# Pricing (Owner only)\n\nPrice lists and discount rules. Only agents of Owner Spaces read this folder.\n',

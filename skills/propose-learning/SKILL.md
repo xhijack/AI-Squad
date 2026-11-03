@@ -11,7 +11,7 @@ writes the answer to `docs/squad/proposals/answered/<id>.md` (read it before you
 ## When it is worth proposing
 - A **fact** that every agent of the company should know and that is not in the Company Brain yet ("Wedding
   leads answer best after 19:00", "Prices include VAT since November").
-- A **document** of the Company Brain that is missing or wrong: a procedure that worked, a template you made twice,
+- A **document** of the Company Brain that is missing or wrong: a procedure that worked, a template you made twice, a research finding (market, competitors, customers) with its sources,
   a brand rule the owner gave you in a chat.
 - A **skill**: a way of working you repeated, with steps another agent can follow (a checklist, a triage flow).
 
@@ -25,7 +25,7 @@ kind: fact                 fact | brain | skill
 from: rina-sales           your agent id
 title: Wedding leads answer best after 19:00
 why: 3 of 4 replies this month came after 19:00 (CRM-LEAD-12, 15, 19)
-target: sop/lead-follow-up.md     only for brain: the file in the Company Brain (brand/, sop/, templates/, products/)
+target: sop/lead-follow-up.md     only for brain: the file in the Company Brain (brand/, sop/, templates/, products/, research/)
 skill: lead-follow-up              only for skill: its name in kebab case
 ---
 ```

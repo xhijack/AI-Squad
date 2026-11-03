@@ -63,7 +63,7 @@ test('the Company Brain: folders and READMEs, Owner folders, summary', () => {
   assert.equal(company.companyDir({ company: { path: '/srv/brain' } }), '/srv/brain');
   assert.throws(() => company.cleanCompany({ path: 'relative' }), /absolute/);
   const s = company.ensure(dir);
-  assert.deepEqual(s.dirs.map((d) => d.name), ['brand', 'finance', 'legal', 'pricing', 'products', 'sop', 'templates']);
+  assert.deepEqual(s.dirs.map((d) => d.name), ['brand', 'finance', 'legal', 'pricing', 'products', 'research', 'sop', 'templates']);
   assert.deepEqual(s.dirs.filter((d) => d.ownerOnly).map((d) => d.name), ['finance', 'legal', 'pricing']);
   fs.writeFileSync(path.join(dir, 'brand', 'voice.md'), 'Warm, short.');
   assert.equal(company.summary(dir).dirs.find((d) => d.name === 'brand').files, 1);

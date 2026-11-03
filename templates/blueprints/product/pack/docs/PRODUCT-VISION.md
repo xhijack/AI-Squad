@@ -1,7 +1,7 @@
 # Product Vision
 
 STATUS: DRAFT
-Owner: project-manager
+Owner: product-manager
 Approved by the owner on:
 
 <!-- STATUS: DRAFT while it is being written; APPROVED once the owner approved it. Every agent treats this as a main reference. -->

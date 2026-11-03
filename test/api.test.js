@@ -65,7 +65,7 @@ test('create a Floor through the wizard API and read it back', async () => {
   const d = (await call('GET', '/api/floors/acme')).body;
   assert.equal(d.team.length, 2);
   assert.match(d.brief, /Coffee shop/);
-  assert.equal((await call('GET', '/api/roles')).body.templates.length, 33);                    // 1.8: the five SEO & GEO roles
+  assert.equal((await call('GET', '/api/roles')).body.templates.length, 35);                    // 1.8: the five SEO & GEO roles, 1.13: product manager, market researcher
   assert.equal((await call('GET', '/api/floors/nope')).status, 404);
 });
 

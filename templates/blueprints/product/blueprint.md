@@ -1,7 +1,7 @@
 ---
 id: product
 title: Product
-version: 1
+version: 2
 category: general
 description: A product team that turns research, user feedback and the company's goals into a product vision, a roadmap and PRDs the engineering squad builds from.
 keywords: [product, "product management", prd, roadmap, discovery, research, "user research", feedback, feature, features, "product vision", backlog, prioritise, prioritize, "product market fit", mvp]
@@ -9,13 +9,13 @@ workflow: free-team
 layout: open-space
 space: { kind: department }
 roles:
-  - { template: project-manager, min: 1, default: 1, max: 1, lead: true, why: "Leads the squad as the product lead: keeps the vision and the roadmap, writes PRDs from research and feedback, and hands them to engineering." }
-  - { template: lead-researcher, min: 0, default: 1, max: 1, why: "Researches the market, competitors and users; every finding has a source and a date." }
+  - { template: product-manager, min: 1, default: 1, max: 1, lead: true, why: "Leads the squad: keeps the vision and the roadmap, writes PRDs from research and feedback, and hands them to engineering." }
+  - { template: market-researcher, min: 0, default: 1, max: 2, why: "Researches users, the market and competitors; every finding has a source and a date, and the company's research library stays current." }
   - { template: ui-ux-designer, min: 0, default: 1, max: 1, why: "Turns a PRD into flows and screens before engineering starts, within the brand rules." }
 sourceDocs:
-  - { path: docs/PRODUCT-VISION.md, title: Product Vision, purpose: "Who it is for, the problem, what we build and what we do not", owner: project-manager, readers: all }
-  - { path: docs/ROADMAP.md, title: Roadmap, purpose: "What comes next and why, by quarter", owner: project-manager, readers: all }
-  - { path: docs/RESEARCH.md, title: Research log, purpose: "Findings about users, market and competitors, each with its source", owner: lead-researcher, readers: all }
+  - { path: docs/PRODUCT-VISION.md, title: Product Vision, purpose: "Who it is for, the problem, what we build and what we do not", owner: product-manager, readers: all }
+  - { path: docs/ROADMAP.md, title: Roadmap, purpose: "What comes next and why, by quarter", owner: product-manager, readers: all }
+  - { path: docs/RESEARCH.md, title: Research log, purpose: "Findings about users, market and competitors, each with its source", owner: market-researcher, readers: all }
 kpis:
   - { id: activation, name: Activation (new users who finish the first key action), unit: "%", direction: up, period: month, source: { kind: manual } }
   - { id: cycle-time, name: Idea to shipped feature, unit: days, direction: down, period: month, source: { kind: manual } }
@@ -33,7 +33,7 @@ The documents below are the main reference for every agent. Each starts with a `
 |---|---|---|---|
 | `docs/PRODUCT-VISION.md` | Who it is for, the problem, what we build and what we do not | Product lead | everyone |
 | `docs/ROADMAP.md` | What comes next and why, by quarter | Product lead | everyone |
-| `docs/RESEARCH.md` | Findings about users, market and competitors, each with its source | Lead Researcher | everyone |
+| `docs/RESEARCH.md` | Findings about users, market and competitors, each with its source | Market Researcher | everyone |
 
 ## Channels
 - **Owner ↔ squad:** only the lead ({{lead}}) talks to the owner. Everyone else writes questions to `docs/QUESTIONS.md` and tells the lead.
@@ -58,13 +58,14 @@ A PRD is done when engineering shipped it and its result was measured against th
 
 ## Rules per role
 
-### project-manager
-- You are the product lead: before anything else, ask the owner for the product vision and the roadmap; draft missing ones from an interview and get them approved.
-- Write PRDs from evidence, not from taste: cite the research or the feedback item. Propose priorities with reasons; the owner decides.
+### product-manager
+- Before anything else, ask the owner for the product vision and the roadmap; draft missing ones from an interview and get them approved.
+- Write PRDs with the prd-writing skill, from evidence, not from taste: cite the research or the feedback item. Propose priorities with reasons; the owner decides.
 - Hand an approved PRD to engineering as a handoff package; answer their questions within the same package thread.
 
-### lead-researcher
+### market-researcher
 - Every finding goes to `docs/RESEARCH.md` with its source and date; separate what you read from what you conclude.
+- Start from the Company Brain's `research/`; propose what the whole company should keep there (propose-learning).
 
 ### ui-ux-designer
 - Design from the approved PRD and the brand rules in the Company Brain; hand flows and screens over with the PRD.
