@@ -4,9 +4,9 @@
 import { esc, api, toast, ago } from './lib.js';
 import { t, tx } from './i18n.js';
 
-const KINDS = ['question', 'permission', 'reply', 'crash', 'resource', 'scope', 'backup', 'finished', 'stall', 'merge', 'budget'];
+const KINDS = ['question', 'permission', 'reply', 'crash', 'resource', 'scope', 'backup', 'finished', 'stall', 'merge', 'budget', 'routine'];
 const KIND_TEXT = { question: t('Questions'), permission: t('Permissions'), reply: t('Waiting for a reply'), crash: t('Crashes'), resource: t('Machine alerts'), scope: t('Scope changes'), backup: t('Backups'),
-  finished: t('Finished work'), stall: t('Stalls'), merge: t('Merges'), budget: t('Budget') };
+  finished: t('Finished work'), stall: t('Stalls'), merge: t('Merges'), budget: t('Budget'), routine: t('Routines without an agent') };
 
 export function notifyHtml(x) {
   const s = x.settings, tk = x.token;

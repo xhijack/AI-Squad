@@ -4,7 +4,7 @@
 // itself, the machine and the budget), then the plan in plain words to edit and build. Every answer is saved on
 // the server (GET/PUT /api/guide), so the owner can stop and come back; the language choice reloads the page in
 // that language and the guide opens again where it was.
-import { esc, api, toast, openModal, closeModal, segHtml, bindSegs } from './lib.js';
+import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, stepperHtml } from './lib.js';
 import { ctx } from './ctx.js';
 import { t, tx, LANG, setLang } from './i18n.js';
 import { KIND } from './admin-int.js';
@@ -74,29 +74,29 @@ const choice = (name, map, value, { multi = false } = {}) => `<div class="choice
 
 function stepHtml() {
   const a = s.a, id = STEPS[s.step];
-  if (id === 'language') return `<p class="note">${t('Welcome. This guide asks a few questions about your business and builds your AI company from the answers: a squad per division, with targets, working hours and a list of what each squad needs from you. Nothing happens before you say "Build". First: which language do you want to work in?')}</p>
+  if (id === 'language') return `<p class="stepLead">${t('Welcome. This guide asks a few questions about your business and builds your AI company from the answers: a squad per division, with targets, working hours and a list of what each squad needs from you. Nothing happens before you say "Build". First: which language do you want to work in?')}</p>
     ${choice('language', { en: ['English', 'The app, the Telegram bot and the agents talk to you in English'], id: ['Bahasa Indonesia', 'Aplikasi, bot Telegram dan agent bicara denganmu dalam bahasa Indonesia'] }, a.language)}`;
-  if (id === 'business') return `<p class="note">${t('What is your business? Pick the closest; the squads are built from it.')}</p>${choice('type', typeMap(), a.business.type)}
-    <div class="grid2" style="margin-top:12px"><label>${t('Company or product name')}<input name="name" value="${esc(a.business.name)}" maxlength="60" placeholder="${esc(t('e.g. DTamu'))}" required></label>
+  if (id === 'business') return `<p class="stepLead">${t('What is your business? Pick the closest; the squads are built from it.')}</p>${choice('type', typeMap(), a.business.type)}
+    <div class="grid2 cgFields"><label>${t('Company or product name')}<input name="name" value="${esc(a.business.name)}" maxlength="60" placeholder="${esc(t('e.g. DTamu'))}" required></label>
     <label>${t('In one sentence, what do you sell and to whom?')}<input name="description" value="${esc(a.business.description)}" maxlength="300" placeholder="${esc(t('e.g. digital invitations and a guest book for weddings and corporate events'))}"></label></div>`;
-  if (id === 'goals') return `<p class="note">${t('What should the company reach in the next 3 months? Pick one or two. A number helps: it becomes the first targets.')}</p>${choice('picks', GOAL, a.goals.picks, { multi: true })}
-    <div class="grid2" style="margin-top:12px">
+  if (id === 'goals') return `<p class="stepLead">${t('What should the company reach in the next 3 months? Pick one or two. A number helps: it becomes the first targets.')}</p>${choice('picks', GOAL, a.goals.picks, { multi: true })}
+    <div class="grid2 cgFields">
       ${a.goals.picks.includes('leads') ? `<label>${t('Leads per month')}<input name="leads" type="number" min="0" step="1" value="${esc(a.goals.leads ?? '')}" placeholder="50"></label>` : ''}
       ${a.goals.picks.includes('revenue') ? `<label>${t('Revenue per month ({currency})', { currency: a.language === 'id' ? 'IDR' : 'USD' })}<input name="revenue" type="number" min="0" step="1" value="${esc(a.goals.revenue ?? '')}"></label>` : ''}
       ${a.goals.picks.includes('launch') ? `<label>${t('What launches, and when?')}<input name="launch" value="${esc(a.goals.launch || '')}" maxlength="120" placeholder="${esc(t('e.g. the guest book app, December'))}"></label>` : ''}
     </div>`;
-  if (id === 'have') return `<p class="note">${t('What do you already have? Everything you leave unticked becomes a task for the squads: they interview you and draft it for your approval.')}</p>${choice('have', HAVE, a.have, { multi: true })}`;
+  if (id === 'have') return `<p class="stepLead">${t('What do you already have? Everything you leave unticked becomes a task for the squads: they interview you and draft it for your approval.')}</p>${choice('have', HAVE, a.have, { multi: true })}`;
   if (id === 'divisions') {
     const sug = suggestion();
-    return `<p class="note">${t('Which divisions should run? The suggestion fits your business; one division alone is fine. Each becomes a Space with its own squad.')}</p>${choice('divisions', DIVISION, a.divisions, { multi: true })}
+    return `<p class="stepLead">${t('Which divisions should run? The suggestion fits your business; one division alone is fine. Each becomes a Space with its own squad.')}</p>${choice('divisions', DIVISION, a.divisions, { multi: true })}
       <p class="note">${t('Suggested for you: {list}.', { list: sug.map((d) => esc(DIVISION[d]?.[0] || d)).join(', ') })} <button type="button" class="small ghost" data-suggest>${t('Use the suggestion')}</button></p>
       ${a.divisions.includes('marketing') ? `<div class="card"><b>${t('Marketing: what should it focus on?')}</b>${segHtml('focus:marketing', Object.entries(FOCUS).map(([k, v]) => [k, v[0]]), a.focus?.marketing || 'all')}
         <p class="note">${esc(FOCUS[a.focus?.marketing || 'all'][1])}${s.st.focusHint?.[a.business.type]?.marketing === 'search' ? ` ${t('An SEO agency picks Search only.')}` : ''}</p></div>` : ''}`;
   }
-  if (id === 'modes') return `<p class="note">${t('How much should each division do by itself? Money, contracts, production deploys, secrets and deleting data always wait for you, whatever you pick.')}</p>
+  if (id === 'modes') return `<p class="stepLead">${t('How much should each division do by itself? Money, contracts, production deploys, secrets and deleting data always wait for you, whatever you pick.')}</p>
     ${a.divisions.filter((d) => s.st.divisions.includes(d)).map((d) => `<div class="card"><b>${esc(DIVISION[d][0])}</b><div class="note" style="margin-bottom:6px">${esc(DIVISION[d][1])}</div>${segHtml(`mode:${d}`, Object.entries(MODE).map(([k, v]) => [k, v[0]]), a.modes[d] || defaultMode(d))}</div>`).join('')}
     <p class="note">${Object.values(MODE).map(([b, small]) => `<b>${esc(b)}</b>: ${esc(small)}`).join(' · ')}</p>`;
-  if (id === 'capacity') return `<p class="note">${t('Where and when does the company work, and what may it spend on the AI per month?')}</p>
+  if (id === 'capacity') return `<p class="stepLead">${t('Where and when does the company work, and what may it spend on the AI per month?')}</p>
     <div class="grid2"><div><label>${t('Machines')}</label>${segHtml('machines', Object.entries(MACHINES), a.capacity.machines)}</div><div><label>${t('Working hours')}</label>${segHtml('hours', Object.entries(HOURS), a.capacity.hours)}</div></div>
     <label style="margin-top:12px">${t('AI budget per month (USD, optional; split across the divisions)')}<input name="budget" type="number" min="0" step="1" value="${esc(a.capacity.budget ?? '')}" placeholder="100" style="max-width:200px"></label>
     <p class="note">${t('At night the squads work 22:00–05:00 and their results are in your morning digest; the machine stays free for you by day.')}</p>
@@ -124,7 +124,7 @@ function planHtml() {
   const p = s.plan;
   if (!p) return `<div class="empty">${t('No plan yet.')}</div>`;
   const e = s.edits;
-  return `<p class="note">${p.source === 'claude' ? t('Claude Code wrote the summary and sharpened the targets; change anything you like.') : t('Claude Code was not available, so these are the defaults; change anything you like.')}</p>
+  return `<p class="stepLead">${p.source === 'claude' ? t('Claude Code wrote the summary and sharpened the targets; change anything you like.') : t('Claude Code was not available, so these are the defaults; change anything you like.')}</p>
     <label>${t('Summary')}<textarea name="summary" rows="3" maxlength="700">${esc(e.summary ?? p.summary ?? '')}</textarea></label>
     ${p.spaces.map((sp) => { const x = e.spaces?.[sp.division] || {}; return `<div class="card" data-space="${esc(sp.division)}"><div class="row wrap cgHead"><label class="inline" style="margin:0"><input type="checkbox" data-skip ${(x.skip ?? sp.skip) ? '' : 'checked'}> <b>${esc(DIVISION[sp.division]?.[0] || sp.division)}</b>${sp.exists ? ` <span class="note">${t('(already there)')}</span>` : ''}</label><input data-name value="${esc(x.name ?? sp.name)}" maxlength="60" class="grow" aria-label="${t('Space name')}"><select data-mode>${Object.entries(MODE).map(([k, v]) => `<option value="${k}" ${(x.mode || sp.mode) === k ? 'selected' : ''}>${esc(v[0])}</option>`).join('')}</select></div>
       <div class="note">${t('Blueprint {name}', { name: esc(sp.blueprint) })}${sp.access === 'owner' ? ` · ${t('Owner only')}` : ''}${sp.shift ? ` · ${t('at night')}` : ''}${sp.budget ? ` · ${t('{usd} USD per month', { usd: sp.budget })}` : ''}</div>
@@ -138,7 +138,7 @@ function planHtml() {
 }
 function resultHtml() {
   const r = s.result;
-  return `<p class="note">${t('Done. Your company is set up; open a Space and start its lead: it asks you for the materials that are missing first.')}</p>
+  return `<p class="stepLead">${t('Done. Your company is set up; open a Space and start its lead: it asks you for the materials that are missing first.')}</p>
     <ul class="list">${r.built.map((x) => `<li class="row">${x.error ? `<b class="grow">${esc(DIVISION[x.division]?.[0] || x.division)}</b><span class="badText">${esc(x.error)}</span>` : `<b class="grow">${x.number} · ${esc(x.name)}</b>${x.routines ? `<button type="button" class="small" data-enable="${esc(x.id)}">${t('Turn on routines ({n})', { n: x.routines })}</button>` : ''}<a class="small" href="#/floor/${esc(x.id)}" data-open>${t('Open')}</a>`}</li>`).join('')}</ul>
     <p class="note">${t('The plan is in the Company Brain: {file}. Run the guide again from the Lobby to add a division or change the goals.', { file: `<code>${esc(r.planFile)}</code>` })}</p>`;
 }
@@ -146,10 +146,10 @@ function resultHtml() {
 function draw(error = '') {
   const last = s.step === STEPS.length - 1, first = s.step === 0;
   const body = openModal(`<div class="mHead"><h3 class="grow">${t('Set up the company')}</h3><button class="ghost iconBtn" data-close aria-label="${t('Close')}">×</button></div>
-    <div class="steps wrap">${STEPS.map((x, i) => `<span class="${i === s.step ? 'on' : i < s.step ? 'done' : ''}">${i + 1}. ${STEP_TITLE[x]}</span>`).join('')}</div>
-    <form class="mBody" id="cgForm" novalidate>${stepHtml()}</form>
+    ${stepperHtml(STEPS.map((x) => STEP_TITLE[x]), s.step)}
+    <form class="mBody" id="cgForm" novalidate>${s.busy && s.step === STEPS.length - 2 ? `<div class="ssBusy" role="status"><span class="spinner" aria-hidden="true"></span><div><b>${t('Claude Code is writing your plan')}</b><div class="note">${t('It reads your answers, sharpens the targets and lists what each squad needs. This takes up to 2 minutes.')}</div></div></div>` : ''}${stepHtml()}</form>
     <div class="mFoot"><div class="err grow" id="cgErr">${esc(error)}</div>${!first && !s.result ? `<button class="ghost" data-back ${s.busy ? 'disabled' : ''}>${t('Back')}</button>` : ''}
-      ${s.result ? `<button class="gold" data-close>${t('Close')}</button>` : `<button class="gold" data-next ${s.busy ? 'disabled' : ''}>${s.busy ? (last ? t('Building…') : s.step === STEPS.length - 2 ? t('Making the plan…') : t('Saving…')) : last ? t('Build') : s.step === STEPS.length - 2 ? t('Make the plan') : t('Next')}</button>`}</div>`, { onClose: () => { try { if (!s?.result) localStorage.setItem('aisquad.guide.dismissed', '1'); } catch { /* private mode */ } } });
+      ${s.result ? `<button class="gold" data-close>${t('Close')}</button>` : `<button class="gold${s.busy ? ' busy' : ''}" data-next ${s.busy ? 'disabled aria-busy="true"' : ''}>${s.busy ? (last ? t('Building…') : s.step === STEPS.length - 2 ? t('Making the plan…') : t('Saving…')) : last ? t('Build') : s.step === STEPS.length - 2 ? t('Make the plan') : t('Next')}</button>`}</div>`, { onClose: () => { try { if (!s?.result) localStorage.setItem('aisquad.guide.dismissed', '1'); } catch { /* private mode */ } } });
   body.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => { closeModal(); if (s.result) ctx.refresh(); });
   body.querySelector('[data-back]')?.addEventListener('click', () => { collect(); s.step--; draw(); });
   body.querySelector('[data-next]')?.addEventListener('click', () => next());

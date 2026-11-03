@@ -218,6 +218,10 @@ export function closeModal() {
   if ($('modal').open) $('modal').close();
 }
 
+// a wizard's steps (1.14): numbered, the current one named on phones too, done ones ticked
+export function stepperHtml(titles, current) {
+  return `<ol class="stepper">${titles.map((x, i) => `<li class="${i === current ? 'on' : i < current ? 'done' : ''}"${i === current ? ' aria-current="step"' : ''}><span class="dot" aria-hidden="true">${i < current ? '<svg><use href="#i-check"/></svg>' : i + 1}</span><span class="lbl">${esc(x)}</span></li>`).join('')}</ol>`;
+}
 export function segHtml(name, options, value) {
   return `<div class="seg" data-seg="${esc(name)}">${options.map(([v, label]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${v === value}">${esc(label)}</button>`).join('')}</div>`;
 }

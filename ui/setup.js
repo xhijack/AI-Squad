@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 // Set up Squad wizard: What do you want to build? → Team → Folder → Review and create.
-// The recommendation comes from Claude Code (haiku) with a keyword fallback; the owner edits the team freely.
-import { esc, api, toast, openModal, closeModal, segHtml, bindSegs } from './lib.js';
+// The recommendation comes from Claude Code (the advisor model, opus at high effort by default) with a keyword
+// fallback; the owner edits the team freely. The Team step shows the squad's loop (1.14): every routine and source
+// document of the Blueprint with the agent that keeps it running, and what stops when a role is left out.
+import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, stepperHtml } from './lib.js';
 import { ctx } from './ctx.js';
 import { t as tt, tx } from './i18n.js';
 
 const STEPS = [tt('What'), tt('Team'), tt('Folder'), tt('Review')];
-const CATEGORY = { software: tt('Software'), marketing: tt('Marketing'), sales: tt('Sales'), general: tt('General') };
+const CATEGORY = { software: tt('Software'), marketing: tt('Marketing'), sales: tt('Sales'), general: tt('General'), erp: 'ERPNext', finance: tt('Finance'), legal: tt('Legal'), support: tt('Support') };
 const kebab = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 let s = null;
 
 ctx.actions['setup-squad'] = async () => {
-  const [{ blueprints, squadsDir, nextFloorNumber }, { templates }] = await Promise.all([api('GET', '/api/blueprints'), api('GET', '/api/catalog')]);
+  const [{ blueprints, squadsDir, nextFloorNumber, advisor }, { templates }] = await Promise.all([api('GET', '/api/blueprints'), api('GET', '/api/catalog')]);
   const order = ['software-house', 'digital-marketing', 'sales-crm'];
   blueprints.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-  s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, autopilot: 'balanced', prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
+  s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, advisor: advisor || { model: 'opus', effort: 'high' }, ackGaps: false, autopilot: 'balanced', prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
     dirMode: 'new', path: '', pathTouched: false, repos: [], startLead: true, installSkills: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
   draw();
 };
@@ -23,21 +25,58 @@ ctx.actions['setup-squad'] = async () => {
 const bpOf = () => s.blueprints.find((b) => b.id === s.blueprint);
 const tplOf = (role) => s.templates.find((t) => t.role === role) || { title: role, skills: [], model: '?' };
 
+const ic = (name) => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const advisorText = (a = s.advisor) => tt('{model}, {effort} effort', { model: a.model, effort: a.effort });
+
 function whatHtml() {
-  return `<label for="ssPrompt">${tt('What do you want to build?')}</label>
-    <textarea id="ssPrompt" rows="4" placeholder="${esc(tt('I want a software house that builds my restaurant POS'))}">${esc(s.prompt)}</textarea>
-    <p class="note">${tt('Describe it in your own words, or pick a Blueprint. The AI Squad recommends a team <b>and how that team communicates</b>: a Blueprint is the squad\'s standard for roles, source documents, channels, gates and the definition of done.')}</p>
-    <div class="choice bpCards" data-choice="blueprint">${s.blueprints.map((b) => `<button type="button" data-v="${b.id}" aria-pressed="${s.blueprint === b.id}">
-      <b>${esc(b.title)}</b><small>${esc(b.description)}</small><small class="note">${b.roles.map((r) => `${esc(tplOf(r.template).title)}${r.max > 1 ? ` ×${r.min}-${r.max}` : ''}${r.lead ? ` ${tt('(lead)')}` : ''}`).join(' · ')}</small></button>`).join('')}</div>`;
+  const busy = s.busy ? `<div class="ssBusy" role="status"><span class="spinner" aria-hidden="true"></span><div><b>${tt('Claude Code is building your team')}</b>
+      <div class="note">${tt('{model} reads your request and the Blueprints, then picks a complete team. This takes up to 2 minutes.', { model: esc(advisorText()) })}</div></div></div>` : '';
+  return `<div class="ssField"><label for="ssPrompt">${tt('What do you want to build?')}</label>
+    <textarea id="ssPrompt" rows="5" placeholder="${esc(tt('I want a software house that builds my restaurant POS'))}" ${s.busy ? 'disabled' : ''}>${esc(s.prompt)}</textarea>
+    <p class="hint">${tt('Name the business, the market and the target. Claude Code ({model}) recommends a complete team that can run the whole loop by itself.', { model: esc(advisorText()) })}</p></div>
+    ${busy}
+    <div class="sectionHead ssSection"><h3 class="grow">${tt('Blueprint')}</h3><span class="note">${tt('Optional: how the team works together (roles, documents, routines, gates)')}</span></div>
+    <div class="choice bpGrid" data-choice="blueprint">${s.blueprints.map((b) => {
+      const lead = b.roles.find((r) => r.lead), size = b.roles.reduce((n, r) => n + r.default, 0);
+      return `<button type="button" class="bpCard" data-v="${b.id}" aria-pressed="${s.blueprint === b.id}" ${s.busy ? 'disabled' : ''}>
+        <span class="bpTop"><b>${esc(b.title)}</b><span class="chip">${esc(CATEGORY[b.category] || b.category)}</span><span class="bpTick" aria-hidden="true">${ic('check')}</span></span>
+        <small class="bpDesc">${esc(b.description)}</small>
+        <span class="bpMeta">${size === 1 ? tt('{n} agent', { n: 1 }) : tt('{n} agents', { n: size })} · ${tt('lead: {name}', { name: esc(tplOf(lead?.template).title) })}${b.cadence?.length ? ` · ${b.cadence.length === 1 ? tt('{n} routine', { n: 1 }) : tt('{n} routines', { n: b.cadence.length })}` : ''}</span></button>`;
+    }).join('')}</div>`;
+}
+
+// the squad's loop against the team being edited: what each loop role keeps running, and who does it
+const loopOf = () => (bpOf()?.loop || []).map((r) => ({ ...r, have: s.team.filter((m) => m.template === r.template).length, need: r.duties.some((d) => d.kind === 'min') ? r.min : 1 }));
+const gapsOf = () => loopOf().filter((r) => r.have < r.need);
+const dutyText = (d) => (d.kind === 'lead' ? tt('Leads the squad and is the one who talks to you') : d.kind === 'min' ? tt('Required by the Blueprint (at least {n})', { n: d.text.match(/\d+/)?.[0] || 1 })
+  : d.kind === 'routine' ? tt('Routine: {title}', { title: tx(d.text.replace(/^Routine: /, '')) }) : tt('Owns {title}', { title: tx(d.text.replace(/^Owns /, '')) }));
+function loopHtml() {
+  const loop = loopOf();
+  if (!loop.length) return '';
+  const gaps = loop.filter((r) => r.have < r.need), routines = (bpOf().cadence || []).length;
+  const head = gaps.length ? `<span class="loopState warn">${ic('alert')}${gaps.length === 1 ? tt('{n} role is missing: its work never runs', { n: 1 }) : tt('{n} roles are missing: their work never runs', { n: gaps.length })}</span>`
+    : `<span class="loopState ok">${ic('check')}${tt('Complete: every routine and document has an agent')}</span>`;
+  return `<section class="card loopCard" aria-labelledby="ssLoopH"><div class="row wrap"><h4 id="ssLoopH" class="grow">${tt('Squad loop')}</h4>${head}</div>
+    <p class="note">${tt('The work this Blueprint repeats by itself ({n} routines), and the role that keeps each part running.', { n: routines })}</p>
+    <ul class="loopList">${loop.map((r) => {
+      const miss = r.have < r.need;
+      return `<li class="${miss ? 'miss' : ''}"><span class="loopIcon">${ic(miss ? 'alert' : 'check')}</span><div class="grow"><b>${esc(tplOf(r.template).title)}</b>${r.need > 1 ? ` <span class="note">${tt('×{n} needed', { n: r.need })}</span>` : ''}
+        <div class="note">${r.duties.map(dutyText).map(esc).join(' · ')}</div></div>${miss ? `<button type="button" class="small" data-addloop="${esc(r.template)}">${tt('Add')}</button>` : ''}</li>`;
+    }).join('')}</ul></section>`;
 }
 
 function memberCard(m, i) {
-  const t = tplOf(m.template);
-  return `<div class="card memberCard"><div class="row"><input data-name="${i}" value="${esc(m.displayName)}" maxlength="60" aria-label="${tt('Display name')}" class="grow">
-      <label class="inline" style="margin:0"><input type="radio" name="ssLead" data-lead="${i}" ${m.lead ? 'checked' : ''}> ${tt('Lead')}</label>
-      <button type="button" class="small ghost danger" data-rm="${i}" aria-label="${tt('Remove {name}', { name: esc(m.displayName) })}">${tt('Remove')}</button></div>
-    <div class="chips"><span class="chip">${esc(t.title)}</span><span class="chip">${esc(t.model)}</span>${(t.skills || []).map((k) => `<span class="pill">${esc(k)}</span>`).join('')}</div>
-    ${m.reason ? `<div class="note" style="margin-top:var(--sp-2)"><b>${tt('Why:')}</b> ${esc(m.reason)}</div>` : ''}</div>`;
+  const t = tplOf(m.template), loop = loopOf().find((r) => r.template === m.template);
+  const sole = loop && loop.have <= loop.need;
+  return `<li class="card memberCard${m.lead ? ' isLead' : ''}"><div class="memberTop">
+      <div class="grow memberId"><span class="memberRole">${esc(t.title)}</span>
+        <div class="chips"><span class="chip model">${esc(t.model)}</span>${loop ? `<span class="chip info">${tt('Loop')}</span>` : ''}</div></div>
+      <label class="inline leadPick"><input type="radio" name="ssLead" data-lead="${i}" ${m.lead ? 'checked' : ''}> ${tt('Lead')}</label>
+      <button type="button" class="ghost iconBtn danger" data-rm="${i}" aria-label="${tt('Remove {name}', { name: esc(m.displayName) })}" title="${tt('Remove')}">×</button></div>
+    <label class="memberName"><span class="note">${tt('Display name')}</span><input data-name="${i}" value="${esc(m.displayName)}" maxlength="60"></label>
+    ${m.reason ? `<p class="memberWhy">${esc(m.reason)}</p>` : ''}
+    ${sole ? `<p class="note loopNote">${ic('info')}<span>${loop.duties.length === 1 ? tt('Removing it stops 1 part of the loop: {what}', { what: esc(dutyText(loop.duties[0])) }) : tt('Removing it stops {n} parts of the loop (see Squad loop)', { n: loop.duties.length })}</span></p>` : ''}
+    ${(t.skills || []).length ? `<details class="skills"><summary>${t.skills.length === 1 ? tt('{n} skill', { n: 1 }) : tt('{n} skills', { n: t.skills.length })}</summary><div class="chips">${t.skills.map((k) => `<span class="pill">${esc(k)}</span>`).join('')}</div></details>` : ''}</li>`;
 }
 
 function catalogHtml() {
@@ -51,14 +90,17 @@ function catalogHtml() {
 
 function teamHtml() {
   const r = s.rec, bp = bpOf();
-  const src = r?.source === 'claude' ? tt('Recommended by Claude Code (haiku).') : r?.source === 'keywords' ? `${tt('Recommended by keyword match (Claude Code was not available).')} ${esc(tx(r.note))}` : tt('The Blueprint\'s default team.');
-  return `<div class="card" style="margin-top:var(--sp-3)"><div class="row"><b class="grow">${esc(bp.title)} v${bp.version}</b><span class="note">${src}</span></div>
-      <div class="grid2"><div><label for="ssName">${tt('Squad name')}</label><input id="ssName" value="${esc(s.name)}" maxlength="60"></div>
-      <div><label>${tt('Workflow')}</label><div class="note" style="margin-top:var(--sp-2)">${bp.workflow === 'squad-sprint' ? tt('Squad Sprint (lead, board, QA gate)') : tt('Free Team led by the lead')}</div></div></div>
-      <label for="ssGoal">${tt('Goal (written to AISQUAD.md)')}</label><textarea id="ssGoal" rows="3">${esc(s.goal)}</textarea></div>
-    <div class="sectionHead" style="margin-top:var(--sp-3)"><h3 class="grow">${s.team.length === 1 ? tt('Team · {n} agent', { n: 1 }) : tt('Team · {n} agents', { n: s.team.length })}</h3><button type="button" class="small gold" data-catalog="open">${tt('+ Add agent')}</button></div>
+  const src = r?.source === 'claude' ? `<span class="chip ok">${ic('spark')}${tt('Recommended by Claude Code ({model})', { model: esc(advisorText(r.model || s.advisor)) })}</span>`
+    : r?.source === 'keywords' ? `<span class="chip warn" title="${esc(tx(r.note))}">${tt('Keyword match: Claude Code was not available')}</span>` : `<span class="chip">${tt('The Blueprint\'s default team.')}</span>`;
+  const added = (r?.loopAdded || []).filter((x) => s.team.some((m) => m.template === x));
+  return `<div class="card ssSummary"><div class="row wrap"><b class="grow">${esc(bp.title)} <span class="note">v${bp.version} · ${bp.workflow === 'squad-sprint' ? tt('Squad Sprint (lead, board, QA gate)') : tt('Free Team led by the lead')}</span></b>${src}</div>
+      <div class="ssField"><label for="ssName">${tt('Squad name')}</label><input id="ssName" value="${esc(s.name)}" maxlength="60"></div>
+      <div class="ssField"><label for="ssGoal">${tt('Goal (written to AISQUAD.md)')}</label><textarea id="ssGoal" rows="4">${esc(s.goal)}</textarea></div>
+      ${added.length ? `<p class="note loopNote">${ic('info')}<span>${tt('Added back so the loop is complete: {list}.', { list: added.map((x) => esc(tplOf(x).title)).join(', ') })}</span></p>` : ''}</div>
+    ${loopHtml()}
+    <div class="sectionHead ssSection"><h3 class="grow">${s.team.length === 1 ? tt('Team · {n} agent', { n: 1 }) : tt('Team · {n} agents', { n: s.team.length })}</h3><button type="button" class="small" data-catalog="${s.catalog ? 'close' : 'open'}" aria-expanded="${s.catalog}">${s.catalog ? tt('Close the catalog') : tt('+ Add agent')}</button></div>
     ${s.catalog ? catalogHtml() : ''}
-    ${s.team.map(memberCard).join('') || `<div class="empty">${tt('No agents yet. Add them from the catalog.')}</div>`}`;
+    ${s.team.length ? `<ul class="memberList">${s.team.map(memberCard).join('')}</ul>` : `<div class="empty">${tt('No agents yet. Add them from the catalog.')}</div>`}`;
 }
 
 function suggestPath() { if (!s.pathTouched) s.path = `${s.squadsDir.replace(/\/$/, '')}/${kebab(s.name) || s.blueprint}`; }
@@ -110,10 +152,10 @@ function draw(error = '') {
   const last = s.step === STEPS.length - 1;
   const html = [whatHtml, teamHtml, folderHtml, reviewHtml][s.step]();
   const body = openModal(`<div class="mHead"><h3 class="grow">${tt('Set up Squad')}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
-    <div class="steps">${STEPS.map((x, i) => `<span class="${i === s.step ? 'on' : i < s.step ? 'done' : ''}">${i + 1}. ${x}</span>`).join('')}</div>
+    ${stepperHtml(STEPS, s.step)}
     <form class="mBody" id="ssForm" novalidate>${html}</form>
     <div class="mFoot"><div class="err grow" id="ssErr">${esc(error)}</div>${s.step ? `<button class="ghost" data-back>${tt('Back')}</button>` : ''}
-      <button class="gold" data-next ${s.busy ? 'disabled' : ''}>${s.busy ? (s.step === 0 ? tt('Asking Claude Code…') : tt('Creating…')) : s.step === 0 ? tt('Recommend a team') : last ? tt('Create squad') : tt('Next')}</button></div>`);
+      <button class="gold${s.busy ? ' busy' : ''}" data-next ${s.busy ? 'disabled aria-busy="true"' : ''}>${s.busy ? (s.step === 0 ? tt('Asking Claude Code…') : tt('Creating…')) : s.step === 0 ? tt('Recommend a team') : last ? tt('Create squad') : tt('Next')}</button></div>`);
   body.querySelector('[data-close]').onclick = () => closeModal();
   body.querySelector('[data-back]')?.addEventListener('click', () => { collect(); s.step--; draw(); });
   body.querySelector('[data-next]').onclick = () => next();
@@ -129,7 +171,14 @@ function draw(error = '') {
     toast(tt('{name} added', { name: t.title }));
     draw();
   }));
-  body.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { collect(); const [m] = s.team.splice(+b.dataset.rm, 1); if (m.lead && s.team[0]) s.team[0].lead = true; draw(); }));
+  body.querySelectorAll('[data-addloop]').forEach((b) => b.addEventListener('click', () => {
+    collect();
+    const r = loopOf().find((x) => x.template === b.dataset.addloop), t = tplOf(r.template);
+    for (let k = r.have; k < r.need; k++) s.team.push({ template: t.role, displayName: k ? `${t.title} ${k + 1}` : t.title, lead: !s.team.length, reason: r.duties.map(dutyText).join(' · ') });
+    toast(tt('{name} added', { name: t.title }));
+    draw();
+  }));
+  body.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', () => { collect(); const [m] = s.team.splice(+b.dataset.rm, 1); if (m.lead && s.team[0]) s.team[0].lead = true; s.ackGaps = false; draw(); }));
   body.querySelector('#ssPath')?.addEventListener('input', () => { s.pathTouched = true; });
   body.querySelector('[data-addrepo]')?.addEventListener('click', () => { collect(); s.repos.push({ where: '', access: 'read', team: [] }); draw(); });
   body.querySelectorAll('[data-rmrepo]').forEach((b) => b.addEventListener('click', () => { collect(); s.repos.splice(+b.dataset.rmrepo, 1); draw(); }));
@@ -173,6 +222,8 @@ async function next() {
     if (!s.name) return draw(tt('Give the squad a name.'));
     if (!s.team.length) return draw(tt('Add at least one agent.'));
     if (s.team.some((m) => !m.displayName)) return draw(tt('Every agent needs a display name.'));
+    const gaps = gapsOf();
+    if (gaps.length && !s.ackGaps) { s.ackGaps = true; return draw(tt('Without {list} part of the loop never runs. Add them in Squad loop, or press Next again to continue anyway.', { list: gaps.map((r) => tplOf(r.template).title).join(', ') })); }
     suggestPath();
   }
   if (s.step === 2 && !s.path.startsWith('/')) return draw(tt('The folder must be an absolute path (starting with /).'));
