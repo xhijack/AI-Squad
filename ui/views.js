@@ -9,7 +9,7 @@ import { primaryAction, deskActionsHtml } from './desk-actions.js';
 import { statusOf, statusPill, activityLine } from './status.js';
 import { feedHtml } from './feed.js';
 
-const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary'), target: tt('Target behind'), 'target-plan': tt('Target behind: plan to approve'), proposal: tt('Learned: to approve') };
+const KIND_TEXT = { question: tt('Question'), permission: tt('Permission'), reply: tt('Waiting for your reply'), stall: tt('Stalled'), budget: tt('Budget'), resource: tt('Resources'), merge: tt('Merge'), crash: tt('Stopped unexpectedly'), decided: tt('Decided by autopilot'), finished: tt('Finished'), taskdone: tt('Command ended'), scope: tt('Scope change'), design: tt('Pick a design'), price: tt('Price approval'), handoff: tt('Handoff'), erpnext: 'ERPNext', contract: tt('Contract'), legal: tt('Legal'), canary: tt('Canary'), target: tt('Target behind'), 'target-plan': tt('Target behind: plan to approve'), proposal: tt('Learned: to approve'), outbox: tt('To send') };
 // cards whose text the server writes (translated); questions, replies and reports are the agent's own words
 const SYSTEM_KINDS = new Set(['stall', 'budget', 'resource', 'merge', 'crash', 'scope']);
 

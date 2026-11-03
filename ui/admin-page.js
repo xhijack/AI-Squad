@@ -12,6 +12,7 @@ import { openAdmin, TAB_IDS, setPageTitles } from './admin.js';
 import { openTemplates } from './templates.js';
 import { updateHtml, bindUpdate } from './update.js';
 import { learningPage } from './admin-learn.js';
+import { publishingPage } from './admin-publish.js';
 import './dialogs.js';
 import './health.js';
 import './signin.js';
@@ -26,7 +27,7 @@ export const NAV = [
   [t('Overview'), [['overview', t('Overview')]]],
   [t('Company'), [['guide', t('Company plan'), OWNER], ['targets', t('Targets')], ['cadence', t('Cadence')], ['learning', t('Learning'), OWNER], ['company', t('Company Brain')]]],
   [t('Spaces and team'), [['spaces', t('Spaces')], ['agents', t('Agents')], ['templates', t('Role Templates')], ['skills', t('Skills')]]],
-  [t('Work'), [['dispatcher', t('Queue')], ['handoffs', t('Handoffs')], ['improve', t('Improvements'), OWNER], ['changes', t('Changes')]]],
+  [t('Work'), [['publishing', t('Publishing'), OWNER], ['dispatcher', t('Queue')], ['handoffs', t('Handoffs')], ['improve', t('Improvements'), OWNER], ['changes', t('Changes')]]],
   [t('Connections'), [['integrations', t('Integrations'), OWNER], ['erpnext', 'ERPNext', OWNER], ['notify', t('Telegram and notifications'), OWNER], ['signin', t('Claude sign-in'), OWNER], ['voice', t('Voice')]]],
   [t('Owner'), [['people', t('People and access'), OWNER], ['legal', t('Legal'), OWNER], ['machines', t('Machines'), OWNER], ['health', t('Backups and health'), OWNER], ['general', t('Building and update'), OWNER]]],
 ];
@@ -80,6 +81,7 @@ async function render(main) {
     if (route.id === 'general') { const html = await generalHtml(); if (main.isConnected) { main.innerHTML = html; bindGeneral(main); } return; }
     if (route.id === 'spaces' && route.arg) return await floorSettings(route.arg, main);
     if (route.id === 'learning') return await learningPage(main);
+    if (route.id === 'publishing') return await publishingPage(main);
     if (DIALOG[route.id]) return await DIALOG[route.id]();
     if (TAB_IDS.includes(route.id)) return await openAdmin(route.id);
     main.innerHTML = `<div class="empty">${t('Not found.')}</div>`;
@@ -114,6 +116,7 @@ function badge(id) {
   if (!b) return '';
   if (id === 'overview') { const n = (b.attention || []).filter((a) => !a.muted).length; return n ? `<span class="aBadge bad">${n}</span>` : ''; }
   if (id === 'targets' && b.targets?.behind) return `<span class="aBadge warn">${b.targets.behind}</span>`;
+  if (id === 'publishing') { const n = (b.attention || []).filter((a) => a.kind === 'outbox').length; return n ? `<span class="aBadge warn">${n}</span>` : ''; }
   if (id === 'learning') { const n = (b.attention || []).filter((a) => a.kind === 'proposal').length; return n ? `<span class="aBadge info">${n}</span>` : ''; }
   if (id === 'general' && ctx.update?.available) return '<span class="aBadge info">1</span>';
   return '';

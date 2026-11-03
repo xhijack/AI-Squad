@@ -24,6 +24,7 @@ function toolsHtml(s) {
   return `<div class="adminList">${s.tested.tools.map((tool) => `<div class="adminRow"><label class="row"><input type="checkbox" data-ro="${esc(tool.name)}" ${on(tool) ? 'checked' : ''}><b class="mono grow">${esc(tool.name)}</b>
       ${tool.readOnlyHint ? `<span class="badge">${t('read-only by its server')}</span>` : ''}${s.readOnly.includes(tool.name) ? `<span class="badge live">${t('read-only')}</span>` : ''}</label>
       <label class="row note"><input type="checkbox" data-paid="${esc(tool.name)}" ${(s.paid || []).includes(tool.name) ? 'checked' : ''}> ${t('costs money')}${(s.paid || []).includes(tool.name) ? ` <span class="badge update">${t('never automated, asked on the Desk, never a target')}</span>` : ''}</label>
+      <label class="row note">${t('Publishes')}<select data-pub="${esc(tool.name)}">${[['', t('nothing')], ['post', t('posts')], ['message', t('messages to leads and customers')], ['ad', t('ads')]].map(([v, l]) => `<option value="${v}" ${(s.publish || {})[tool.name] === v || (!v && !(s.publish || {})[tool.name]) ? 'selected' : ''}>${l}</option>`).join('')}</select>${(s.publish || {})[tool.name] ? ` <span class="badge update">${t('agents never get it; sent through Publishing (sessions already running: after their restart)')}</span>` : ''}</label>
       ${tool.description ? `<div class="note">${esc(tool.description.slice(0, 240))}</div>` : ''}
       <details><summary class="note">${t('Input schema')}</summary><pre class="note pre mono">${esc(JSON.stringify(tool.inputSchema, null, 2))}</pre></details></div>`).join('')}</div>
     <div class="row"><span class="note grow">${s.marked ? t('Ticked tools may feed a target. The server calls only the tool a target names, never another.') : t('Pre-ticked from what the server says about its tools: check them, then save. Nothing is read-only until you save.')}</span><button class="small gold" data-isave>${t('Save the marks')}</button></div>`;
@@ -59,7 +60,8 @@ export function bindIntegrations(body, again) {
         return again(r.tested.ok ? t('{n} tools', { n: r.tested.tools.length }) : tx(r.tested.error));
       }
       if (el.dataset.isave !== undefined) {
-        await api('PATCH', '/api/integrations/marks', { id, readOnly: [...box.querySelectorAll('[data-ro]:checked')].map((c) => c.dataset.ro), paid: [...box.querySelectorAll('[data-paid]:checked')].map((c) => c.dataset.paid) });
+        const pub = new Set([...box.querySelectorAll('[data-pub]')].filter((x) => x.value).map((x) => x.dataset.pub));
+        await api('PATCH', '/api/integrations/marks', { id, readOnly: [...box.querySelectorAll('[data-ro]:checked')].map((c) => c.dataset.ro).filter((n) => !pub.has(n)), paid: [...box.querySelectorAll('[data-paid]:checked')].map((c) => c.dataset.paid), publish: Object.fromEntries([...box.querySelectorAll('[data-pub]')].filter((x) => x.value).map((x) => [x.dataset.pub, x.value])) });
         return again(t('Saved'));
       }
     } catch (err) { toast(err.message, 5000); }

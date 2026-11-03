@@ -12,7 +12,8 @@ const when = (ts) => new Date(ts).toLocaleString([], { day: 'numeric', month: 's
 const vdate = (v) => { const m = String(v).match(/^(\d{4}-\d\d-\d\d)T(\d\d)-(\d\d)/); return m ? `${m[1]} ${m[2]}:${m[3]}` : v; };
 
 function pendingHtml(p) {
-  return `<div class="adminRow" data-prop="${esc(p.id)}"><div class="row wrap"><span class="badge update">${esc(KIND[p.kind])}</span><b class="grow">${esc(p.title)}</b><span class="note">${esc([p.floorName, p.agentName].filter(Boolean).join(' · '))} · ${ago(p.createdAt)}</span></div>
+  return `<div class="adminRow" data-prop="${esc(p.id)}"><div class="row wrap"><span class="badge update">${esc(KIND[p.kind])}</span><b class="grow">${esc(p.title)}</b></div>
+    <div class="note">${esc([p.floorName, p.agentName].filter(Boolean).join(' · '))} · ${ago(p.createdAt)}</div>
     ${p.target && p.kind !== 'fact' ? `<div class="note mono">${esc(p.target)}</div>` : ''}
     ${p.why ? `<div class="note">${t('Why: {why}', { why: esc(p.why) })}</div>` : ''}
     <div data-review></div>
@@ -22,7 +23,7 @@ function reviewHtml(p) {
   return `${p.current == null && p.kind !== 'fact' ? `<div class="note" style="margin-top:var(--sp-2)">${t('A new file.')}</div>` : p.diff ? `<div class="note" style="margin-top:var(--sp-2)">${t('Changes to the current version:')}</div>${diffHtml(p.diff)}` : ''}
     <label style="margin-top:var(--sp-2)">${p.kind === 'fact' ? t('The fact (one line each); edit before approving if needed') : t('What will be kept; edit before approving if needed')}<textarea data-content rows="${p.kind === 'fact' ? 3 : 12}" class="mono">${esc(p.content)}</textarea></label>
     ${p.kind === 'skill' ? `<label class="inline"><input type="checkbox" data-all> ${t('Install it in every Space (otherwise only in {space})', { space: esc(p.floorName) })}</label>` : ''}
-    <div class="row wrap"><input data-reason placeholder="${esc(t('Why not (the agent reads it)'))}" class="grow"><button class="small ghost danger" data-reject>${t('Not now')}</button><button class="small gold" data-approve>${t('Approve')}</button></div>`;
+    <div class="row wrap"><input data-reason placeholder="${esc(t('Why not (the agent reads it)'))}" class="grow" style="min-width:min(16em,100%)"><button class="small ghost danger" data-reject>${t('Not now')}</button><button class="small gold" data-approve>${t('Approve')}</button></div>`;
 }
 function keptHtml(l) {
   return `<div class="section"><div class="sectionHead"><h3 class="grow">${t('Company facts')}</h3><button class="small ghost" data-hist="fact" data-target="FACTS.md">${t('Versions ({n})', { n: l.factVersions })}</button></div>
