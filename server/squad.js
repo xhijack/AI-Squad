@@ -525,6 +525,13 @@ export function buildingSnapshot() {
     ...states.flatMap((s) => s.attention || []),
     ...ownerDesk(states),
   ];
+  // a routine that is on but has nobody to run it is skipped every time it is due (1.14): say so instead
+  for (const s of states) {
+    if (!s.cfg?.team) continue;
+    let defs = []; try { defs = cadenceLib.readDefs(s.entry.path); } catch { /* no cadence file */ }
+    for (const r of defs.filter((x) => x.enabled && !routineAgent(s.cfg.team, x))) attention.push({ id: attId('routine-agent', s.entry.id, r.id), kind: 'routine', level: 'warn', floorId: s.entry.id, floorNumber: s.entry.number, floorName: s.cfg.floor.name,
+      text: `Routine "${r.title}" never runs: no agent with the role "${r.agent}" in this Space. Add one (Floor → + Add agent) or turn the routine off in Admin → Cadence.`, ts: Date.now() });
+  }
   for (const s of states) if (s.budget?.level === 'warn') attention.push({ id: attId('budget-warn', s.entry.id), kind: 'budget', level: 'warn', floorId: s.entry.id, floorNumber: s.entry.number, floorName: s.cfg.floor.name, text: `Budget at ${s.budget.pct} %: $${s.budget.used.toFixed(2)} of $${s.cfg.floor.budget.usd} this ${s.cfg.floor.budget.period}`, ts: Date.now() });
   stampAlerts(attention);
   const floorPaths = new Set(b.floors.map((f) => f.path));

@@ -4,8 +4,8 @@
 // the budget), then a plan in plain words: the Spaces to build, their starting targets, what runs automatically and
 // what waits for the owner, and the materials each division needs. "Build" creates it all: the plan goes to the
 // Company Brain (PLAN.md, read by every agent), each Space gets its materials list (docs/squad/MATERIALS.md) and its
-// targets. Claude Code (haiku) sharpens the plan when it is there (a summary, target numbers, materials specific to
-// the business); without it the plan is the defaults, and the guide still works. The answers and the plan live in
+// targets. Claude Code (the advisor model: opus at high effort unless the Owner picked another) sharpens the plan when
+// it is there (a summary, target numbers, materials specific to the business); without it the plan is the defaults, and the guide still works. The answers and the plan live in
 // ~/.aisquad/guide.json (the owner's; never in a repository). A division whose Blueprint is gone is listed as
 // "later", never built. The guide can be run again any time (add a division, change the goals). Since 1.7 every
 // division has a Blueprint (Finance, Owner-only; Support), and the same interview runs on Telegram (server/guide-tg.js).

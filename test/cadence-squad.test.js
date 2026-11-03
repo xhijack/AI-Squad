@@ -145,6 +145,12 @@ test('Run now: the person\'s own work (the shift does not hold it), refused whil
   floors.updateFloorConfig(proj, { shift: { enabled: false } });
   const ghost = cadence.add(proj, { title: 'Ghost', agent: 'legal-counsel', every: 'daily', at: hhmm(Date.now() - 60e3), task: 't', enabled: true });
   assert.match((await squad.cadenceTick()).find((x) => x.routine === ghost.id).skipped, /no agent with the role or id "legal-counsel"/);
+  // the owner hears about it once, as an Attention card (1.14), not only in the Squad Log; off means no card
+  squad.invalidate();
+  const card = squad.attentionItems().find((a) => a.kind === 'routine' && a.floorId === fid);
+  assert.match(card.text, /^Routine "Ghost" never runs: no agent with the role "legal-counsel" in this Space\./);
+  cadence.update(proj, ghost.id, { enabled: false }); squad.invalidate();
+  assert.ok(!squad.attentionItems().some((a) => a.kind === 'routine'));
   cadence.remove(proj, ghost.id); cadence.remove(proj, r.id);
 });
 

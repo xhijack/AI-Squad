@@ -61,23 +61,67 @@ test('keyword fallback picks the Blueprint and explains the match', async () => 
   assert.ok(r.team.every((m) => m.reason.length > 10), 'every agent says why');
 });
 
-test('Claude Code answer: unknown roles dropped, counts clamped to the Blueprint, the lead added', async () => {
+test('Claude Code answer: unknown roles dropped, counts clamped to the Blueprint, the lead and the loop added', async () => {
   configure({ claudeBin: FAKE });
   const log = path.join(root, 'claude.log');
   process.env.FAKE_CLAUDE_LOG = log;
   const r = await rec.recommend({ prompt: 'I want a software house that builds my restaurant POS' });
   assert.equal(r.source, 'claude');
   assert.equal(r.name, 'Resto POS');
-  assert.deepEqual(r.team.map((m) => [m.displayName, m.lead]), [['Project Manager', true], ['Fullstack Developer 1', false], ['Fullstack Developer 2', false], ['Fullstack Developer 3', false], ['QA Engineer', false]]);
+  assert.deepEqual(r.team.map((m) => [m.displayName, m.lead]), [['Project Manager', true], ['Fullstack Developer 1', false], ['Fullstack Developer 2', false], ['Fullstack Developer 3', false], ['QA Engineer', false],
+    ['UI/UX Designer', false], ['DevOps Engineer', false]], 'the owners of the Design and Environments documents are kept (1.14)');
+  assert.deepEqual(r.loopAdded, ['ui-ux-designer', 'devops-engineer']);
+  assert.match(r.team[5].reason, /Kept for the squad's loop: Owns Design Document/);
   assert.match(r.team[1].reason, /parallel/);
+  assert.deepEqual(r.model, { model: 'opus', effort: 'high' }, 'the advisor model answered');
   const args = JSON.parse(fs.readFileSync(log, 'utf8').trim());
-  assert.deepEqual(args.slice(0, 6), ['-p', '--model', 'haiku', '--output-format', 'json', '--tools']);
+  assert.deepEqual(args.slice(0, 8), ['-p', '--model', 'opus', '--effort', 'high', '--output-format', 'json', '--tools']);
+  assert.match(args.at(-1), /COMPLETE team/);
+  assert.match(args.at(-1), /- qa-engineer: min 1, default 1, max 1, loop \(Required by the Blueprint \(at least 1\)\)/);
   process.env.FAKE_CLAUDE_MODE = 'garbage';
   assert.equal((await rec.recommend({ prompt: 'a POS app' })).source, 'keywords', 'unreadable answer falls back');
   delete process.env.FAKE_CLAUDE_MODE; delete process.env.FAKE_CLAUDE_LOG;
   const pickedCard = await rec.recommend({ blueprint: 'sales-crm' });
   assert.equal(pickedCard.source, 'blueprint');
   assert.equal(pickedCard.team.length, 5);
+});
+
+test('the loop of a Blueprint: lead, minimums, routine agents and document owners; gaps and completion', () => {
+  const seo = bp.getBlueprint('seo-geo');
+  const loop = bp.loopRoles(seo);
+  assert.deepEqual(loop.map((r) => r.template), ['seo-geo-strategist', 'content-writer', 'technical-seo-specialist', 'geo-analyst', 'keyword-researcher']);
+  assert.deepEqual(loop.find((r) => r.template === 'geo-analyst').duties, [{ kind: 'routine', id: 'geo-panel', text: 'Routine: GEO panel check (a third of the prompts)' }]);
+  assert.ok(loop[0].duties.some((d) => d.kind === 'lead') && loop[0].duties.some((d) => d.text === 'Owns SEO brief'));
+  // the team Claude Code once gave for sopwer.id: four roles, no GEO Analyst
+  const four = ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer'].map((template) => ({ template }));
+  assert.deepEqual(bp.loopGaps(seo, four).map((r) => r.template), ['geo-analyst']);
+  const done = rec.completeLoop(seo, four.map((m) => ({ ...m, count: 1, reason: 'x' })));
+  assert.deepEqual(done.map((p) => p.template), [...four.map((m) => m.template), 'geo-analyst']);
+  assert.match(done.at(-1).reason, /^Checks every month whether AI answers cite you.*Kept for the squad's loop: Routine: GEO panel check/);
+  // a minimum is raised, not just present
+  const sh = bp.getBlueprint('software-house');
+  const raised = rec.completeLoop({ ...sh, roles: sh.roles.map((r) => (r.template === 'fullstack-developer' ? { ...r, min: 2 } : r)) }, [{ template: 'project-manager', count: 1 }, { template: 'fullstack-developer', count: 1 }]);
+  assert.equal(raised.find((p) => p.template === 'fullstack-developer').count, 2);
+  assert.deepEqual(bp.loopGaps(bp.getBlueprint('product'), []).map((r) => r.template), ['product-manager', 'market-researcher']);
+});
+
+test('Claude Code leaves a loop role out: it is put back with the reason; the advisor model comes from the Building', async () => {
+  const r = await rec.recommend({ prompt: 'Tim digital marketing untuk sopwer.id, konsultan ERPNext; riset keyword yang pas', blueprint: 'seo-geo',
+    ask: async (prompt) => {
+      assert.match(prompt, /- geo-analyst: min 0, default 1, max 1, loop \(Routine: GEO panel check/);
+      assert.match(prompt, /- local-seo-specialist: min 0, default 0, max 1, optional/);
+      assert.match(prompt, /Routines: Daily content draft by content-writer, daily;/);
+      return { blueprint: 'seo-geo', name: 'Squad SEO Sopwer', goal: 'Keywords for sopwer.id', team: ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer'].map((template) => ({ template, count: 1, reason: 'for sopwer.id' })) };
+    } });
+  assert.equal(r.source, 'claude');
+  assert.deepEqual(r.team.map((m) => m.template), ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer', 'geo-analyst']);
+  assert.deepEqual(r.loopAdded, ['geo-analyst']);
+  assert.deepEqual(rec.advisor(), { model: 'opus', effort: 'high' });
+  assert.deepEqual(rec.advisor({ advisor: { model: 'sonnet', effort: 'medium' } }), { model: 'sonnet', effort: 'medium' });
+  assert.deepEqual(rec.advisor({ advisor: { model: 'gpt', effort: 'huge' } }), { model: 'opus', effort: 'high' }, 'unknown values fall back');
+  building.setPrefs({ advisor: { model: 'sonnet', effort: 'medium' } });
+  assert.deepEqual(rec.advisor(), { model: 'sonnet', effort: 'medium' });
+  building.setPrefs({ advisor: undefined });
 });
 
 test('Set up Squad: next free Floor from 2, a new folder under the squads folder, the Blueprint recorded', async () => {

@@ -109,6 +109,30 @@ export function catalog() {
   });
 }
 
+// The squad's loop (1.14): the roles the Blueprint's own work cycle cannot run without. The lead, every role with a
+// minimum, every role a routine names and every source document's owner; each with the duties that need it, so a
+// team that drops one can say what stops (a routine without its agent is skipped every time it is due).
+// -> [{ template, min, duties: [{ kind: 'lead' | 'min' | 'routine' | 'doc', text, id? }] }]
+export function loopRoles(bp) {
+  const by = new Map(), add = (template, duty) => {
+    const t = kebab(template || '');
+    if (!t) return;
+    if (!by.has(t)) by.set(t, { template: t, min: Math.max(1, bp.roles.find((r) => r.template === t)?.min || 0), duties: [] });
+    by.get(t).duties.push(duty);
+  };
+  if (bp.lead) add(bp.lead, { kind: 'lead', text: 'Leads the squad and is the one who talks to you' });
+  for (const r of bp.roles) if (r.min > 0 && r.template !== bp.lead) add(r.template, { kind: 'min', text: `Required by the Blueprint (at least ${r.min})` });
+  for (const r of bp.cadence || []) add(r.agent, { kind: 'routine', id: kebab(r.id || r.title, 40), text: `Routine: ${r.title}` });
+  for (const d of bp.sourceDocs || []) if (d?.owner) add(d.owner, { kind: 'doc', text: `Owns ${d.title || d.path}` });
+  return [...by.values()];
+}
+// the loop roles a team (members with a template) leaves out, with what stops without them
+export function loopGaps(bp, team) {
+  const have = new Map();
+  for (const m of team || []) have.set(m.template, (have.get(m.template) || 0) + 1);
+  return loopRoles(bp).filter((r) => (have.get(r.template) || 0) < (r.duties.some((d) => d.kind === 'min') ? r.min : 1));
+}
+
 // ---------- the communication standard in the repo ----------
 // body sections by "## " heading; "Rules per role" holds "### role-a, role-b" subsections
 export function sections(body) {

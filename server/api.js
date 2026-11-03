@@ -18,7 +18,7 @@ import { setApproval } from './merge.js';
 import { recentEvents as hooksRecent } from './events.js';
 import { meter } from './meter.js';
 import * as blueprints from './blueprints.js';
-import { recommend } from './recommend.js';
+import { recommend, advisor, ADVISOR_MODELS, ADVISOR_EFFORTS } from './recommend.js';
 import { createSquad, squadsDir } from './setup.js';
 import * as voice from './voice.js';
 import * as backup from './backup.js';
@@ -136,6 +136,8 @@ const routes = [
     if (b.maxAgents !== undefined) building.setPrefs({ maxAgents: Math.max(1, Math.min(40, parseInt(b.maxAgents, 10) || 6)) });
     if (b.backup !== undefined) building.setPrefs({ backup: backup.cleanSettings({ ...building.loadBuilding().prefs.backup, ...b.backup }) });
     if (b.backupPassphrase !== undefined) backup.setPassphrase(String(b.backupPassphrase || ''));
+    // the model that recommends teams and sharpens the Company Guide's plan (1.14)
+    if (b.advisor !== undefined) { const a = { ...advisor(), ...(b.advisor || {}) }; if (!ADVISOR_MODELS.includes(a.model) || !ADVISOR_EFFORTS.includes(a.effort)) throw new HttpError(400, 'Unknown advisor model or effort'); building.setPrefs({ advisor: { model: a.model, effort: a.effort } }); }
     if (b.squadsDir !== undefined) { if (!path.isAbsolute(String(b.squadsDir))) throw new HttpError(400, 'The squads folder must be an absolute path'); building.setPrefs({ squadsDir: path.resolve(String(b.squadsDir)) }); }
     squad.invalidate(); return { ok: true };
   }, { pin: true, history: () => ({ label: 'Building settings' }) }],
@@ -167,7 +169,7 @@ const routes = [
   ['GET', /^\/api\/jobs$/, (p, b, req) => { const q = new URL(req.url, 'http://x').searchParams; return { jobs: jobs.listJobs({ floorId: q.get('floor') || '', agentId: q.get('agent') || '', limit: 50 }).map(({ prompt, ...j }) => j) }; }, { pin: true }],
   ['GET', /^\/api\/jobs\/(j-[\w-]+)$/, ([id]) => jobs.jobDetail(id), { pin: true }],
   ['POST', /^\/api\/jobs\/(j-[\w-]+)\/stop$/, ([id]) => { const j = jobs.stopJob(id); squad.stopRemote(j); squad.logJobEnded(j); return { ok: true, job: j }; }, { pin: true }],
-  ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => b), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber() })],
+  ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => ({ ...b, loop: blueprints.loopRoles(b) })), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber(), advisor: advisor() })],
   ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
   ['POST', /^\/api\/floors\/([\w-]+)\/skills\/install$/, ([id], b) => squad.installSkills(id, b.names || b.name), { pin: true }],
   ['POST', /^\/api\/squads\/recommend$/, (p, b) => recommend({ prompt: b.prompt, blueprint: b.blueprint, useClaude: b.useClaude !== false }), { pin: true }],
