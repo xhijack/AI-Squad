@@ -895,6 +895,13 @@ body.adminPage { overflow: auto; height: auto; min-height: 100%; }
 .hint { font-size: var(--fs-xs); color: var(--text-muted); margin: var(--sp-1) 0 0; line-height: 1.5; }
 .ssField > label { font-size: var(--fs-sm); color: var(--text); }
 .ssField textarea { line-height: 1.5; }
+.intakeQ { margin: 0 0 var(--sp-4); }
+fieldset.intakeQ { border: 0; padding: 0; min-width: 0; }
+.intakeQ legend { font-size: var(--fs-sm); color: var(--text); padding: 0; margin-bottom: var(--sp-2); }
+.intakeQ .req { color: var(--danger-ink); }
+.intakeOpts { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.siteRepo { margin: var(--sp-2) 0; }
+.siteRepo .chip { margin-left: var(--sp-2); }
 .ssSection { margin-top: var(--sp-5); gap: var(--sp-3); flex-wrap: wrap; }
 .ssSection .note { flex: 1 1 260px; text-align: right; }
 .cgFields { margin-top: var(--sp-3); }

@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Set up Squad wizard: What do you want to build? → Team → Folder → Review and create.
+// Set up Squad wizard: What do you want to build? → Team → (the Blueprint's first questions) → Folder → Review and create.
 // The recommendation comes from Claude Code (the advisor model, opus at high effort by default) with a keyword
 // fallback; the owner edits the team freely. The Team step shows the squad's loop (1.14): every routine and source
-// document of the Blueprint with the agent that keeps it running, and what stops when a role is left out.
+// document of the Blueprint with the agent that keeps it running, and what stops when a role is left out. A Blueprint
+// with first questions (1.15, e.g. how the site is managed) asks them in their own step; the answers reach the lead's
+// kickoff and the Blueprint's intake document, and a repository answer becomes a linked repository with write access.
 import { esc, api, toast, openModal, closeModal, segHtml, bindSegs, stepperHtml } from './lib.js';
 import { ctx } from './ctx.js';
 import { t as tt, tx } from './i18n.js';
 
-const STEPS = [tt('What'), tt('Team'), tt('Folder'), tt('Review')];
+const STEP_TITLE = { what: tt('What'), team: tt('Team'), intake: tt('Details'), folder: tt('Folder'), review: tt('Review') };
+const stepKeys = () => ['what', 'team', ...(bpOf()?.intake?.length ? ['intake'] : []), 'folder', 'review'];
+const stepKey = () => stepKeys()[s.step];
 const CATEGORY = { software: tt('Software'), marketing: tt('Marketing'), sales: tt('Sales'), general: tt('General'), erp: 'ERPNext', finance: tt('Finance'), legal: tt('Legal'), support: tt('Support') };
 const kebab = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -17,7 +21,7 @@ ctx.actions['setup-squad'] = async () => {
   const [{ blueprints, squadsDir, nextFloorNumber, advisor }, { templates }] = await Promise.all([api('GET', '/api/blueprints'), api('GET', '/api/catalog')]);
   const order = ['software-house', 'digital-marketing', 'sales-crm'];
   blueprints.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-  s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, advisor: advisor || { model: 'opus', effort: 'high' }, ackGaps: false, autopilot: 'balanced', prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
+  s = { step: 0, blueprints, templates, squadsDir, number: nextFloorNumber, advisor: advisor || { model: 'opus', effort: 'high' }, ackGaps: false, intake: {}, autopilot: 'balanced', prompt: '', blueprint: '', rec: null, team: [], name: '', goal: '',
     dirMode: 'new', path: '', pathTouched: false, repos: [], startLead: true, installSkills: true, catalog: false, filter: { category: '', skill: '' }, busy: false };
   draw();
 };
@@ -64,6 +68,27 @@ function loopHtml() {
         <div class="note">${r.duties.map(dutyText).map(esc).join(' · ')}</div></div>${miss ? `<button type="button" class="small" data-addloop="${esc(r.template)}">${tt('Add')}</button>` : ''}</li>`;
     }).join('')}</ul></section>`;
 }
+
+// the Blueprint's first questions: a question shows only while its condition holds (as intakeAsked on the server)
+const asked = (q) => !q.when || Object.entries(q.when).every(([k, vals]) => vals.includes(String(s.intake[k] || '')));
+const intakeQs = () => (bpOf()?.intake || []).filter(asked);
+const answerOf = (q) => s.intake[q.id] ?? q.default ?? '';
+function intakeHtml() {
+  return `<p class="stepLead">${tt('A few questions about how {name} works, so the lead starts from your answers instead of asking again.', { name: esc(bpOf().title) })}</p>
+    ${intakeQs().map((q) => (q.kind === 'choice'
+    ? `<fieldset class="ssField intakeQ"><legend>${esc(tx(q.label))}${q.required ? ' <span class="req" aria-hidden="true">*</span>' : ''}</legend>
+        <div class="choice bpGrid intakeOpts">${q.options.map((o) => `<button type="button" class="bpCard" data-iqchoice="${esc(q.id)}" data-v="${esc(o.value)}" aria-pressed="${answerOf(q) === o.value}">
+          <span class="bpTop"><b>${esc(tx(o.label))}</b><span class="bpTick" aria-hidden="true">${ic('check')}</span></span>${o.hint ? `<small class="bpDesc">${esc(tx(o.hint))}</small>` : ''}</button>`).join('')}</div></fieldset>`
+    : `<div class="ssField intakeQ"><label for="iq-${esc(q.id)}">${esc(tx(q.label))}${q.required ? ' <span class="req" aria-hidden="true">*</span>' : ''}</label>
+        <input id="iq-${esc(q.id)}" data-iq="${esc(q.id)}" value="${esc(answerOf(q))}" placeholder="${esc(q.placeholder)}" spellcheck="false" ${q.kind === 'url' ? 'type="url" inputmode="url" autocomplete="url"' : ''}>
+        ${q.hint ? `<p class="hint">${esc(tx(q.hint))}</p>` : ''}</div>`)).join('')}`;
+}
+// the repositories the answers name, with the team members that may commit there (indexes into s.team)
+const intakeRepos = () => intakeQs().filter((q) => q.kind === 'repo' && answerOf(q)).map((q) => ({
+  where: answerOf(q), access: 'write', branch: answerOf(intakeQs().find((b) => b.kind === 'branch' && b.repo === q.id) || {}) || 'main', fromIntake: true,
+  team: s.team.map((m, k) => (q.agents.includes(m.template) ? k : -1)).filter((k) => k >= 0),
+}));
+const answersText = () => intakeQs().filter((q) => answerOf(q)).map((q) => `${esc(tx(q.label).replace(/[:?]\s*$/, ''))}: <b>${esc(q.kind === 'choice' ? tx(q.options.find((o) => o.value === answerOf(q))?.label || answerOf(q)) : answerOf(q))}</b>`);
 
 function memberCard(m, i) {
   const t = tplOf(m.template), loop = loopOf().find((r) => r.template === m.template);
@@ -113,6 +138,8 @@ function folderHtml() {
     ${s.dirMode === 'new' ? `<p class="note">${tt('New squads go to <code>{dir}</code> by default (a setting in <code>~/.aisquad/building.json</code>).', { dir: esc(s.squadsDir) })} <button type="button" class="small ghost" data-squadsdir>${tt('Change the default')}</button></p>` : ''}
     <div class="sectionHead" style="margin-top:var(--sp-4)"><h3 class="grow">${tt('Linked repositories')}</h3><button type="button" class="small" data-addrepo>${tt('+ Add linked repository')}</button></div>
     <p class="note">${tt('This folder is the primary repository (the Floor, the board, the docs). A squad can also read or write other repositories: a path on this machine or a clone URL.')}</p>
+    ${intakeRepos().map((r) => `<div class="card siteRepo"><b>${esc(r.where)}</b> <span class="chip">${tt('branch {name}', { name: esc(r.branch) })}</span>
+      <p class="note">${tt('From your answers: linked with write access for {names}. They commit on their own branches; you push and merge.', { names: esc(r.team.map((k) => String(s.team[k].displayName).split(' - ')[0]).join(', ') || tt('nobody yet')) })}</p></div>`).join('')}
     ${s.repos.map((r, i) => `<div class="card" data-repoi="${i}"><div class="grid2"><div><label>${tt('Path or clone URL')}</label><input data-rk="where" value="${esc(r.where)}" placeholder="../dtamu-landing-page"></div>
       <div><label>${tt('Access')}</label><select data-rk="access"><option value="read" ${r.access !== 'write' ? 'selected' : ''}>${tt('Read only (context)')}</option><option value="write" ${r.access === 'write' ? 'selected' : ''}>${tt('Write (its agents commit there)')}</option></select></div></div>
       <label>${tt('Agents')}</label><div class="row wrap">${s.team.map((m, k) => `<label class="inline" style="margin:0 var(--sp-3) 0 0"><input type="checkbox" data-rteam="${k}" ${r.team.includes(k) ? 'checked' : ''}> ${esc(String(m.displayName).split(' - ')[0])}</label>`).join('')}</div>
@@ -129,7 +156,7 @@ function relative(from, to) {
 function repoEntry(r, ids) {
   const where = r.where.trim(), name = (isUrl(where) ? where.replace(/\.git$/, '').split(/[/:]/).pop() : where.replace(/\/$/, '').split('/').pop()) || 'repo';
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'repo';
-  return { id, path: isUrl(where) ? `../${name}` : where.startsWith('/') ? relative(s.path, where) : where, ...(isUrl(where) ? { remote: where } : {}), access: r.access, agents: r.team.map((k) => ids[k]).filter(Boolean) };
+  return { id, path: isUrl(where) ? `../${name}` : where.startsWith('/') ? relative(s.path, where) : where, ...(isUrl(where) ? { remote: where } : {}), access: r.access, ...(r.branch ? { branch: { strategy: 'agent-branches', main: r.branch } } : {}), agents: r.team.map((k) => ids[k]).filter(Boolean) };
 }
 
 const AUTOPILOT = [['balanced', tt('Balanced (recommended)')], ['full', tt('Full')], ['off', tt('Off')]];
@@ -140,7 +167,8 @@ function reviewHtml() {
       <dt>${tt('Squad')}</dt><dd>${esc(s.name)}</dd><dt>Blueprint</dt><dd>${esc(bp.title)} v${bp.version}</dd>
       <dt>${tt('Folder')}</dt><dd><code>${esc(s.path)}</code> <span class="note">(${s.dirMode === 'new' ? tt('new, git init') : tt('existing')})</span></dd>
       <dt>${tt('Lead')}</dt><dd>${esc(lead?.displayName || '')}</dd>
-      <dt>${tt('Team')}</dt><dd>${s.team.map((m) => `${esc(m.displayName)} <span class="note">(${esc(tplOf(m.template).title)})</span>`).join(', ')}</dd></dl></div>
+      <dt>${tt('Team')}</dt><dd>${s.team.map((m) => `${esc(m.displayName)} <span class="note">(${esc(tplOf(m.template).title)})</span>`).join(', ')}</dd>
+      ${answersText().length ? `<dt>${tt('Details')}</dt><dd>${answersText().join('<br>')}</dd>` : ''}</dl></div>
     <p class="note">${tt('Creates the Floor files in <code>.claude/aisquad/</code>, an agent file per member in <code>.claude/agents/</code>, <code>AISQUAD.md</code> with the goal, the team and the Blueprint\'s communication standard, and the Blueprint\'s workflow pack.')}</p>
     <label class="inline"><input type="checkbox" id="ssSkills" ${s.installSkills ? 'checked' : ''}> ${tt('Install the team\'s skills into <code>.claude/skills/</code> ({n} skills)', { n: [...new Set(s.team.flatMap((m) => tplOf(m.template).skills || []))].length })}</label>
     <label class="inline"><input type="checkbox" id="ssStart" ${s.startLead ? 'checked' : ''}> ${tt('Start the lead after creating (it asks you for the source documents first)')}</label>
@@ -149,10 +177,10 @@ function reviewHtml() {
 }
 
 function draw(error = '') {
-  const last = s.step === STEPS.length - 1;
-  const html = [whatHtml, teamHtml, folderHtml, reviewHtml][s.step]();
+  const keys = stepKeys(), last = s.step === keys.length - 1;
+  const html = { what: whatHtml, team: teamHtml, intake: intakeHtml, folder: folderHtml, review: reviewHtml }[stepKey()]();
   const body = openModal(`<div class="mHead"><h3 class="grow">${tt('Set up Squad')}</h3><button class="ghost iconBtn" data-close aria-label="${tt('Close')}">×</button></div>
-    ${stepperHtml(STEPS, s.step)}
+    ${stepperHtml(keys.map((k) => STEP_TITLE[k]), s.step)}
     <form class="mBody" id="ssForm" novalidate>${html}</form>
     <div class="mFoot"><div class="err grow" id="ssErr">${esc(error)}</div>${s.step ? `<button class="ghost" data-back>${tt('Back')}</button>` : ''}
       <button class="gold${s.busy ? ' busy' : ''}" data-next ${s.busy ? 'disabled aria-busy="true"' : ''}>${s.busy ? (s.step === 0 ? tt('Asking Claude Code…') : tt('Creating…')) : s.step === 0 ? tt('Recommend a team') : last ? tt('Create squad') : tt('Next')}</button></div>`);
@@ -160,6 +188,7 @@ function draw(error = '') {
   body.querySelector('[data-back]')?.addEventListener('click', () => { collect(); s.step--; draw(); });
   body.querySelector('[data-next]').onclick = () => next();
   body.querySelector('#ssForm').addEventListener('submit', (e) => { e.preventDefault(); });
+  body.querySelectorAll('[data-iqchoice]').forEach((b) => b.addEventListener('click', () => { collect(); s.intake[b.dataset.iqchoice] = b.dataset.v; draw(); }));
   body.querySelectorAll('[data-choice] button').forEach((b) => b.addEventListener('click', () => { collect(); s.blueprint = s.blueprint === b.dataset.v ? '' : b.dataset.v; draw(); }));
   bindSegs(body, (name, v) => { collect(); if (name === 'category') s.filter.category = v; if (name === 'dirMode') { s.dirMode = v; s.pathTouched = false; if (v === 'new') suggestPath(); else s.path = ''; } draw(); });
   body.querySelector('#ssSkill')?.addEventListener('input', (e) => { s.filter.skill = e.target.value; const pos = e.target.selectionStart; collect(); draw(); const el = document.getElementById('ssSkill'); el.focus(); el.setSelectionRange(pos, pos); });
@@ -187,28 +216,31 @@ function draw(error = '') {
     if (!dir) return;
     try { await api('PATCH', '/api/building', { squadsDir: dir }); s.squadsDir = dir; suggestPath(); draw(); } catch (e) { draw(e.message); }
   });
-  (body.querySelector('#ssPrompt') || body.querySelector('#ssName'))?.focus();
+  (body.querySelector('#ssPrompt') || body.querySelector('#ssName') || body.querySelector('[data-iq]'))?.focus();
 }
 
 function collect() {
   const v = (id) => document.getElementById(id);
-  if (s.step === 0) s.prompt = v('ssPrompt').value.trim();
-  if (s.step === 1) {
+  const key = stepKey();
+  if (key === 'what') s.prompt = v('ssPrompt').value.trim();
+  if (key === 'intake') document.querySelectorAll('[data-iq]').forEach((el) => { s.intake[el.dataset.iq] = el.value.trim(); });
+  if (key === 'team') {
     s.name = v('ssName').value.trim(); s.goal = v('ssGoal').value.trim();
     document.querySelectorAll('[data-name]').forEach((el) => { s.team[+el.dataset.name].displayName = el.value.trim(); });
     const lead = document.querySelector('[data-lead]:checked');
     if (lead) s.team.forEach((m, i) => { m.lead = i === +lead.dataset.lead; });
   }
-  if (s.step === 2) {
+  if (key === 'folder') {
     s.path = v('ssPath').value.trim();
     document.querySelectorAll('[data-repoi]').forEach((el) => { const r = s.repos[+el.dataset.repoi]; r.where = el.querySelector('[data-rk=where]').value.trim(); r.access = el.querySelector('[data-rk=access]').value; r.team = [...el.querySelectorAll('[data-rteam]:checked')].map((x) => +x.dataset.rteam); });
   }
-  if (s.step === 3) { s.startLead = v('ssStart').checked; s.installSkills = v('ssSkills').checked; s.autopilot = v('ssAutopilot').value; }
+  if (key === 'review') { s.startLead = v('ssStart').checked; s.installSkills = v('ssSkills').checked; s.autopilot = v('ssAutopilot').value; }
 }
 
 async function next() {
   collect();
-  if (s.step === 0) {
+  const key = stepKey();
+  if (key === 'what') {
     if (!s.prompt && !s.blueprint) return draw(tt('Describe what you want to build, or pick a Blueprint.'));
     s.busy = true; draw();
     try {
@@ -218,7 +250,7 @@ async function next() {
       return draw();
     } catch (e) { s.busy = false; return draw(e.message); }
   }
-  if (s.step === 1) {
+  if (key === 'team') {
     if (!s.name) return draw(tt('Give the squad a name.'));
     if (!s.team.length) return draw(tt('Add at least one agent.'));
     if (s.team.some((m) => !m.displayName)) return draw(tt('Every agent needs a display name.'));
@@ -226,12 +258,17 @@ async function next() {
     if (gaps.length && !s.ackGaps) { s.ackGaps = true; return draw(tt('Without {list} part of the loop never runs. Add them in Squad loop, or press Next again to continue anyway.', { list: gaps.map((r) => tplOf(r.template).title).join(', ') })); }
     suggestPath();
   }
-  if (s.step === 2 && !s.path.startsWith('/')) return draw(tt('The folder must be an absolute path (starting with /).'));
-  if (s.step < STEPS.length - 1) { s.step++; return draw(); }
+  if (key === 'intake') {
+    const missing = intakeQs().filter((q) => q.required && !answerOf(q));
+    if (missing.length) return draw(tt('Answer: {list}', { list: missing.map((q) => tx(q.label).replace(/[:?]\s*$/, '')).join(', ') }));
+  }
+  if (key === 'folder' && !s.path.startsWith('/')) return draw(tt('The folder must be an absolute path (starting with /).'));
+  if (s.step < stepKeys().length - 1) { s.step++; return draw(); }
   s.busy = true; draw();
   try {
-    const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead, installSkills: s.installSkills, autopilot: s.autopilot });
-    const linked = s.repos.filter((x) => x.where);
+    const r = await api('POST', '/api/squads', { blueprint: s.blueprint, name: s.name, goal: s.goal, team: s.team, directory: { mode: s.dirMode, path: s.path }, startLead: s.startLead, installSkills: s.installSkills, autopilot: s.autopilot,
+      ...(bpOf()?.intake?.length ? { intake: Object.fromEntries(intakeQs().map((q) => [q.id, answerOf(q)])) } : {}) });
+    const linked = [...intakeRepos(), ...s.repos.filter((x) => x.where && !intakeRepos().some((i) => i.where === x.where))];
     if (linked.length) {
       // the agents now have ids: map the team by display name, save the list, clone what was given as a URL
       try {
