@@ -6,18 +6,21 @@ import path from 'node:path';
 import fs from 'node:fs';
 import * as building from './building.js';
 import * as floors from './floors.js';
-import { getBlueprint } from './blueprints.js';
+import { getBlueprint, intakeAnswers, intakeMarkdown, intakeKickoff } from './blueprints.js';
 import * as company from './company.js';
 import { kebab, clip, bad } from './util.js';
 
 export const squadsDir = (b = building.loadBuilding()) => b.prefs.squadsDir || path.join(os.homedir(), 'aisquad-squads');
 
-// input: { blueprint, name, goal, team: [{ template, displayName, lead }], directory: { mode: new|existing, path? }, budget }
+// input: { blueprint, name, goal, team: [{ template, displayName, lead }], directory: { mode: new|existing, path? }, budget,
+//   intake: { questionId: answer } (the Blueprint's first questions; written to its intakeDoc and into the kickoff) }
 export async function createSquad(input) {
   const bp = getBlueprint(String(input.blueprint || ''));
   const name = clip(String(input.name || '').trim(), 60) || bp.title;
   const team = (Array.isArray(input.team) ? input.team : []).filter((m) => m && m.template);
   if (!team.length) throw bad('A squad needs at least one agent');
+  const intake = input.intake && typeof input.intake === 'object' ? intakeAnswers(bp, input.intake) : { answers: {}, errors: [] };
+  if (intake.errors.length) throw bad(intake.errors.join('; '));
   if (!team.some((m) => m.lead)) (team.find((m) => m.template === bp.lead) || team[0]).lead = true;
   if (team.filter((m) => m.lead).length > 1) throw bad('Only one agent can be the lead');
   const dir = input.directory || {};
@@ -32,6 +35,8 @@ export async function createSquad(input) {
     ...bp.space,                                       // cleaned by the Space rules (server/space.js)
   });
   if (bp.space.access === 'owner') company.ensure(company.companyDir(building.loadBuilding().prefs));   // the locked templates it works from
+  const md = intakeMarkdown(bp, intake.answers), doc = path.join(r.entry.path, bp.intakeDoc);
+  if (md && doc.startsWith(r.entry.path + path.sep)) { fs.mkdirSync(path.dirname(doc), { recursive: true }); fs.writeFileSync(doc, md); }
   const lead = r.team.agents.find((a) => a.lead);
-  return { ok: true, id: r.entry.id, number: r.entry.number, path: r.entry.path, lead: lead?.id || null, blueprint: { id: bp.id, version: bp.version } };
+  return { ok: true, kickoff: intakeKickoff(bp, intake.answers), id: r.entry.id, number: r.entry.number, path: r.entry.path, lead: lead?.id || null, blueprint: { id: bp.id, version: bp.version } };
 }

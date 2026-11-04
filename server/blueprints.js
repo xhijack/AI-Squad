@@ -38,6 +38,8 @@ export function parseBlueprint(text, fallbackId = '') {
     kpis: Array.isArray(data.kpis) ? data.kpis.filter((k) => k && k.name) : [],
     // routines (1.5): created disabled in a new Space; the Owner turns them on in Admin → Cadence
     cadence: Array.isArray(data.cadence) ? data.cadence.filter((r) => r && r.title && r.task) : [],
+    // first questions (1.15): asked in Set up Squad, so the lead starts from the answers instead of asking again
+    intake: cleanIntake(data.intake), intakeDoc: String(data.intakeDoc || 'docs/SETUP.md'),
     // ERPNext key and Telegram (1.7): Finance reads with the finance key and sends only counts
     // built-in MCP servers the squad's sessions get (1.8): aisquad-google
     mcp: list(data.mcp).filter((x) => x === google.MCP_NAME),
@@ -131,6 +133,58 @@ export function loopGaps(bp, team) {
   const have = new Map();
   for (const m of team || []) have.set(m.template, (have.get(m.template) || 0) + 1);
   return loopRoles(bp).filter((r) => (have.get(r.template) || 0) < (r.duties.some((d) => d.kind === 'min') ? r.min : 1));
+}
+
+// ---------- first questions (1.15) ----------
+// intake: [{ id, label, kind: choice|text|url|repo|branch, options: [{ value, label, hint }], when: { id: value | [values] },
+// required, placeholder, hint, default, agents (repo: the templates that may commit there), repo (branch: its repo question) }]
+export const INTAKE_KINDS = ['choice', 'text', 'url', 'repo', 'branch'];
+export function cleanIntake(input) {
+  return (Array.isArray(input) ? input : []).filter((q) => q && q.id && q.label).map((q) => {
+    const kind = INTAKE_KINDS.includes(q.kind) ? q.kind : 'text';
+    return {
+      id: kebab(q.id, 40), label: String(q.label), kind, required: !!q.required, placeholder: String(q.placeholder || ''), hint: String(q.hint || ''), default: String(q.default || ''),
+      ...(kind === 'choice' ? { options: (Array.isArray(q.options) ? q.options : []).filter((o) => o && o.value).map((o) => ({ value: kebab(o.value, 40), label: String(o.label || o.value), hint: String(o.hint || '') })) } : {}),
+      ...(q.when && typeof q.when === 'object' ? { when: Object.fromEntries(Object.entries(q.when).map(([k, v]) => [kebab(k, 40), list(v).map((x) => kebab(x, 40))])) } : {}),
+      ...(kind === 'repo' ? { agents: list(q.agents).map((x) => kebab(x)) } : {}),
+      ...(kind === 'branch' ? { repo: kebab(q.repo || '', 40) } : {}),
+    };
+  });
+}
+// a question shows (and counts) only while its condition holds
+export const intakeAsked = (q, answers = {}) => !q.when || Object.entries(q.when).every(([k, vals]) => vals.includes(String(answers[k] || '')));
+const URL_RE = /^https?:\/\/[^\s/]+\.[^\s]+$/i, REPO_RE = /^(https:\/\/\S+|ssh:\/\/\S+|git@[^\s:]+:\S+|\/\S*)$/, BRANCH_RE = /^[\w./-]{1,100}$/;
+// the owner's answers, checked against the Blueprint -> { answers, errors: [label] } (answers only for asked questions)
+export function intakeAnswers(bp, input = {}) {
+  const answers = {}, errors = [];
+  for (const q of bp.intake || []) {
+    if (!intakeAsked(q, answers)) continue;
+    let v = String(input?.[q.id] ?? '').trim().slice(0, 300) || q.default;
+    if (q.kind === 'choice' && v && !q.options.some((o) => o.value === v)) v = '';
+    if (q.kind === 'url' && v && !/^https?:\/\//i.test(v)) v = `https://${v}`;
+    const ok = !v || (q.kind === 'url' ? URL_RE.test(v) : q.kind === 'repo' ? REPO_RE.test(v) : q.kind === 'branch' ? BRANCH_RE.test(v) : true);
+    const name = q.label.replace(/[:?]\s*$/, '');
+    if (!ok) errors.push(`${name}: not valid`);
+    else if (v) answers[q.id] = v;
+    else if (q.required) errors.push(`${name}: required`);
+  }
+  return { answers, errors };
+}
+const answerText = (q, v) => (q.kind === 'choice' ? q.options.find((o) => o.value === v)?.label || v : v);
+// the answers as Markdown (written to the Blueprint's intakeDoc and added to the lead's kickoff)
+export function intakeMarkdown(bp, answers = {}) {
+  const rows = (bp.intake || []).filter((q) => answers[q.id]).map((q) => `- **${q.label}** ${answerText(q, answers[q.id])}`);
+  return rows.length ? `# Set up answers\n\nThe owner answered these in Set up Squad (The AI Squad). Treat them as given; ask only what is missing or unclear.\n\n${rows.join('\n')}\n` : '';
+}
+export function intakeKickoff(bp, answers = {}) {
+  const md = intakeMarkdown(bp, answers);
+  return md ? `${bp.kickoff}\n\nThe owner already answered the first questions in Set up Squad (also in \`${bp.intakeDoc}\`); do not ask them again:\n${md.split('\n').filter((l) => l.startsWith('- ')).join('\n')}`.trim() : bp.kickoff;
+}
+// the repositories the answers name -> [{ where, branch, templates }] (a Linked repository with write access)
+export function intakeRepos(bp, answers = {}) {
+  return (bp.intake || []).filter((q) => q.kind === 'repo' && answers[q.id]).map((q) => ({
+    where: answers[q.id], branch: answers[(bp.intake.find((b) => b.kind === 'branch' && b.repo === q.id) || {}).id] || 'main', templates: q.agents,
+  }));
 }
 
 // ---------- the communication standard in the repo ----------

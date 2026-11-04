@@ -175,7 +175,7 @@ const routes = [
   ['POST', /^\/api\/squads\/recommend$/, (p, b) => recommend({ prompt: b.prompt, blueprint: b.blueprint, useClaude: b.useClaude !== false }), { pin: true }],
   ['POST', /^\/api\/squads$/, async (p, b) => {
     const r = await createSquad(b);
-    if (b.startLead && r.lead) { try { const s = await squad.startAgent(r.id, r.lead, b.kickoff || blueprints.getBlueprint(r.blueprint.id).kickoff, { guard: true }); r.leadStarted = !s.waiting; if (s.waiting) r.leadQueued = s.dispatch; } catch (e) { r.leadError = e.message; } }
+    if (b.startLead && r.lead) { try { const s = await squad.startAgent(r.id, r.lead, b.kickoff || r.kickoff, { guard: true }); r.leadStarted = !s.waiting; if (s.waiting) r.leadQueued = s.dispatch; } catch (e) { r.leadError = e.message; } }
     squad.invalidate();
     return r;
   }, { pin: true }],

@@ -2,7 +2,8 @@
 // The SEO & GEO Blueprint (1.8): parsed with its roles and counts, the built-in Google MCP and the night shift; the hard
 // stops in every role file and in ownerOnly; a Space set up from it gets the pack, the Google MCP in .mcp.json with
 // IndexNow on ask, its targets (seeded without goals, measured from Google, waiting quietly until Google is connected)
-// and its routines (all off, at night, a quarterly one among them); content-writer is v3.
+// and its routines (all off, at night, a quarterly one among them); content-writer is v3. Since 1.15 (v2) a web developer
+// puts approved pages on the site, and the first questions (how the site is managed) reach docs/SITE.md and the kickoff.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,19 +22,19 @@ import { createSquad } from '../server/setup.js';
 const root = scratch();
 configure({ useHooks: false, useSystemd: false });
 building.setPrefs({ squadsDir: path.join(root, 'squads') });
-const ROLES = ['seo-geo-strategist', 'technical-seo-specialist', 'keyword-researcher', 'content-writer', 'geo-analyst', 'local-seo-specialist'];
+const ROLES = ['seo-geo-strategist', 'technical-seo-specialist', 'keyword-researcher', 'content-writer', 'web-developer', 'geo-analyst', 'local-seo-specialist'];
 
 test('the Blueprint: roles and counts, the lead, the Google MCP, a team department working nights', () => {
   const b = bp.getBlueprint('seo-geo');
   assert.equal(b.title, 'SEO & GEO');
   assert.equal(b.workflow, 'free-team');
   assert.equal(b.lead, 'seo-geo-strategist');
-  assert.deepEqual(b.roles.map((r) => [r.template, r.min, r.default, r.max]), [['seo-geo-strategist', 1, 1, 1], ['technical-seo-specialist', 0, 1, 1], ['keyword-researcher', 0, 1, 1], ['content-writer', 0, 1, 2], ['geo-analyst', 0, 1, 1], ['local-seo-specialist', 0, 0, 1]]);
+  assert.deepEqual(b.roles.map((r) => [r.template, r.min, r.default, r.max]), [['seo-geo-strategist', 1, 1, 1], ['technical-seo-specialist', 0, 1, 1], ['keyword-researcher', 0, 1, 1], ['content-writer', 0, 1, 2], ['web-developer', 0, 1, 1], ['geo-analyst', 0, 1, 1], ['local-seo-specialist', 0, 0, 1]]);
   assert.deepEqual(b.mcp, ['aisquad-google']);
   assert.equal(b.space.access, undefined, 'a team Space');
   assert.deepEqual([b.space.kind, b.space.shift.from, b.space.shift.to], ['department', '22:00', '05:00']);
   assert.deepEqual(b.sourceDocs.map((d) => d.path), ['docs/SEO-BRIEF.md', 'docs/BRAND.md', 'docs/seo/KEYWORDS.md', 'docs/seo/PROMPTS.md']);
-  assert.equal(b.gates.length, 7);
+  assert.equal(b.gates.length, 8);
   assert.match(b.kickoff, /Google access/);
 });
 
@@ -49,7 +50,7 @@ test('hard stops: in every role file and in ownerOnly', () => {
     assert.ok(tpl[r], `${r} is a template`);
   }
   for (const r of ['seo-geo-strategist', 'technical-seo-specialist', 'keyword-researcher', 'geo-analyst', 'local-seo-specialist']) assert.match(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'templates', 'roles', `${r}.md`), 'utf8'), /paid SEO tool/, `${r}: paid tools`);
-  for (const r of ['keyword-researcher', 'content-writer', 'geo-analyst', 'local-seo-specialist']) assert.ok(tpl[r].permissions.deny.includes('mcp__aisquad-google__indexnow_submit'), `${r} never submits`);
+  for (const r of ['keyword-researcher', 'content-writer', 'web-developer', 'geo-analyst', 'local-seo-specialist']) assert.ok(tpl[r].permissions.deny.includes('mcp__aisquad-google__indexnow_submit'), `${r} never submits`);
   assert.equal(tpl['content-writer'].version, 3);
   assert.ok(['content-brief', 'content-refresh'].every((s) => tpl['content-writer'].skills.includes(s)));
 });
@@ -72,7 +73,7 @@ test('Set up Squad: the pack, the Google MCP on ask, targets measured from Googl
     ['ai-citations', 'manual', '', 'month', null], ['mobile-score', 'google', 'psi.run', 'week', null], ['pages-published', 'manual', '', 'month', null]]);
   assert.match(k[0].onBehind.task, /publish, submit and send nothing/);
   const routines = cadence.readDefs(r.path);
-  assert.deepEqual(routines.map((x) => [x.id, x.every, x.enabled]), [['daily-content-draft', 'daily', false], ['gsc-anomaly', 'daily', false], ['weekly-report', 'weekly:mon', false], ['geo-panel', 'weekly:wed', false], ['technical-audit', 'monthly:1', false], ['decay-list', 'monthly:1', false], ['strategy-review', 'quarterly:1', false]]);
+  assert.deepEqual(routines.map((x) => [x.id, x.every, x.enabled]), [['daily-content-draft', 'daily', false], ['approved-to-site', 'daily', false], ['gsc-anomaly', 'daily', false], ['weekly-report', 'weekly:mon', false], ['geo-panel', 'weekly:wed', false], ['technical-audit', 'monthly:1', false], ['decay-list', 'monthly:1', false], ['strategy-review', 'quarterly:1', false]]);
   assert.ok(routines.every((x) => x.at >= '22:00' || x.at < '05:00'), 'at night');
   assert.match(routines.find((x) => x.id === 'gsc-anomaly').task, /more than 20 %/);
   for (const s of ['seo-report', 'keyword-research', 'ai-visibility-audit', 'llms-txt', 'seo-audit']) assert.equal(skills.skillStatus(r.path, s).status, 'project', s);
@@ -84,4 +85,31 @@ test('Set up Squad: the pack, the Google MCP on ask, targets measured from Googl
   assert.equal(cards.find((x) => x.id === 'organic-clicks').needs, 'the Google service account (Admin → Integrations → Google)');
   assert.equal(cards.find((x) => x.id === 'mobile-score').needs, 'the site address (Floor settings → Google)');
   assert.equal(cards.find((x) => x.id === 'pages-published').needs, undefined);
+});
+
+test('first questions (1.15): asked by condition, checked, written to docs/SITE.md and the kickoff; a repository answer is linked', async () => {
+  const b = bp.getBlueprint('seo-geo');
+  assert.equal(b.intakeDoc, 'docs/SITE.md');
+  assert.deepEqual(b.intake.map((q) => [q.id, q.kind]), [['platform', 'choice'], ['url', 'url'], ['cms', 'text'], ['repo', 'repo'], ['branch', 'branch']]);
+  assert.deepEqual(b.intake[0].options.map((o) => o.value), ['wordpress', 'cms', 'code']);
+  // WordPress: no CMS name, no repository asked; the URL gets its scheme
+  assert.deepEqual(bp.intakeAnswers(b, { platform: 'wordpress', url: 'sopwer.id', repo: 'ignored' }), { answers: { platform: 'wordpress', url: 'https://sopwer.id' }, errors: [] });
+  assert.deepEqual(bp.intakeAnswers(b, { platform: 'cms', url: 'https://sopwer.id' }).errors, ['Which CMS: required']);
+  assert.deepEqual(bp.intakeAnswers(b, { platform: 'code', url: 'https://sopwer.id', repo: 'not a repo', branch: 'bad branch' }).errors, ['Repository (clone URL or folder on this machine): not valid', 'Base branch for changes: not valid']);
+  const code = bp.intakeAnswers(b, { platform: 'code', url: 'https://sopwer.id', repo: 'git@github.com:sopwer/sopwer.id.git' });
+  assert.deepEqual(code, { answers: { platform: 'code', url: 'https://sopwer.id', repo: 'git@github.com:sopwer/sopwer.id.git', branch: 'main' }, errors: [] }, 'the branch defaults to main');
+  assert.deepEqual(bp.intakeRepos(b, code.answers), [{ where: 'git@github.com:sopwer/sopwer.id.git', branch: 'main', templates: ['web-developer', 'technical-seo-specialist'] }]);
+  const team = [['seo-geo-strategist', 'Sinta - Lead', true], ['content-writer', 'Wulan - Writer'], ['web-developer', 'Dodi - Web']].map(([template, displayName, lead]) => ({ template, displayName, lead: !!lead }));
+  await assert.rejects(createSquad({ blueprint: 'seo-geo', name: 'Sopwer Search', team, intake: { platform: 'code' } }), /Site URL: required; Repository .*: required/);
+  const r = await createSquad({ blueprint: 'seo-geo', name: 'Sopwer Search', team, intake: { platform: 'code', url: 'https://sopwer.id', repo: 'git@github.com:sopwer/sopwer.id.git', branch: 'develop' } });
+  const site = fs.readFileSync(path.join(r.path, 'docs', 'SITE.md'), 'utf8');
+  assert.match(site, /\*\*How is the site's content managed\?\*\* Code in a repository/);
+  assert.match(site, /\*\*Base branch for changes:\*\* develop/);
+  assert.match(r.kickoff, /^Start as the lead/);
+  assert.match(r.kickoff, /do not ask them again:\n- \*\*How is the site's content managed\?\*\* Code in a repository\n- \*\*Site URL:\*\* https:\/\/sopwer\.id/);
+  // the Company Guide creates without answers: the plain kickoff, which asks for the site itself
+  const g = await createSquad({ blueprint: 'seo-geo', name: 'Guide Search', team });
+  assert.equal(g.kickoff, b.kickoff);
+  assert.match(b.kickoff, /WordPress, another CMS or code in a repository/);
+  assert.ok(!fs.existsSync(path.join(g.path, 'docs', 'SITE.md')));
 });
