@@ -120,6 +120,13 @@ nasihat hukum.
   Local SEO Specialist. Hanya data gratis: tanpa OpenSEO dan tanpa data SEO berbayar. Hard stop: tidak publikasi, tidak
   mengubah halaman live, tidak IndexNow dan tidak email outreach tanpa persetujuanmu; tanpa teknik black-hat; tidak
   pernah mengarang peringkat, volume, kutipan atau testimoni.
+- **Pertanyaan awal dan Web Developer (1.15)**: saat Siapkan Squad, langkah **Detail** menanyakan konten situs dikelola
+  dengan apa: WordPress, CMS lain, atau langsung di code. Untuk code, isi juga URL situs, repository dan branch dasarnya.
+  Jawabannya masuk ke `docs/SITE.md` dan ke kickoff lead (lead tidak bertanya ulang), dan repository itu ditautkan
+  dengan akses tulis untuk Web Developer dan Technical SEO Specialist. Setiap malam (01:00) Web Developer mengambil
+  tulisan yang sudah kamu setujui (APPROVED) di board: commit halaman di branch sendiri di repository situs, atau
+  menyiapkan draf siap tempel di `content/ready/` untuk WordPress atau CMS lain. Technical SEO mengecek, lalu kamu yang
+  push, merge atau menempel dan menerbitkan; agen tidak pernah push.
 - **Konektor Google**: buat service account di Google Cloud, aktifkan Search Console API dan Google Analytics Data
   API, buat kunci JSON lalu unggah di Admin → Integrasi → Google (yang terlihat hanya e-mailnya). Tambahkan e-mail itu
   di Search Console (Settings → Users and permissions) dan di GA4 (Property access management, peran Viewer), lalu isi

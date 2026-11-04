@@ -1257,6 +1257,15 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## Phase 5, Sprint 25: first questions in Set up Squad, the web developer for SEO & GEO, 1.15.0 (4 Nov 2026)
+
+The owner asked who in the SEO & GEO squad puts approved content into the site's code, commits it and pushes it: nobody did. The writer only drafted in the squad folder, the technical SEO specialist only made technical fixes, and the lead asked for "the site's repository or CMS" in free text at kickoff.
+
+- **First questions** (Blueprint `intake` and `intakeDoc`; `blueprints.cleanIntake()`, `intakeAnswers()`, `intakeMarkdown()`, `intakeKickoff()`, `intakeRepos()`): a Blueprint can ask questions in Set up Squad (choice, text, URL, repository, branch; shown by condition, e.g. the repository only for a site in code). The answers are checked on the server, written to the Blueprint's intake document and added to the lead's kickoff ("do not ask them again"); a repository answer becomes a linked repository with write access for the roles the question names and the given base branch. Without answers (the Company Guide) the kickoff asks itself.
+- **Set up Squad**: a **Details** step between Team and Folder when the Blueprint has questions (cards for a choice, fields with hints, required marks); the Folder step shows the repository from the answers; Review lists the answers.
+- **SEO & GEO v2**: asks how the site is managed (WordPress, another CMS, or code in a repository with its URL, repository and base branch) into `docs/SITE.md`; a new **Web Developer** role (`web-developer`, skill `site-content-update`) puts APPROVED pieces on the site (a commit on its own branch of the site's repository, or a ready-to-paste draft in `content/ready/` for a CMS) in the new nightly routine *Approved pages to the site*, so the loop adds it; the technical SEO specialist checks it (new gate); pushing and merging stay with the owner.
+- Tests: `seo-geo.test.js` (questions, conditions, validation, `docs/SITE.md`, kickoff, repositories), loop and recommendation tests with the web developer; i18n (18 keys, Indonesian).
+
 ## Phase 5, Sprint 24: complete squads that run their loop, the advisor model, wizard redesign, 1.14.0 (3 Nov 2026)
 
 The owner set up an SEO & GEO squad for sopwer.id from a prompt and got four agents: haiku, told to "keep the team small", dropped the GEO Analyst although the owner picked SEO & GEO, and the squad's weekly GEO panel routine would have been skipped every week without anyone noticing.
