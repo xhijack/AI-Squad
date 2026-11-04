@@ -57,7 +57,7 @@ test('Build: the SEO & GEO Space with the local SEO specialist, its Google targe
   assert.equal(b.error, undefined, b.error);
   const cfg = floors.readFloor(b.path);
   assert.equal(cfg.floor.blueprint.id, 'seo-geo');
-  assert.deepEqual(cfg.team.agents.map((x) => x.role.template).sort(), ['content-writer', 'geo-analyst', 'keyword-researcher', 'local-seo-specialist', 'seo-geo-strategist', 'technical-seo-specialist']);
+  assert.deepEqual(cfg.team.agents.map((x) => x.role.template).sort(), ['content-writer', 'geo-analyst', 'keyword-researcher', 'local-seo-specialist', 'seo-geo-strategist', 'technical-seo-specialist', 'web-developer']);
   const k = kpi.list(b.id, b.path).find((x) => x.id === 'organic-clicks');
   assert.equal(k.needs, 'the Search Console site (Floor settings → Google)');
   assert.match(fs.readFileSync(path.join(b.path, 'docs', 'squad', 'MATERIALS.md'), 'utf8'), /Google access: add seo@senyum/);

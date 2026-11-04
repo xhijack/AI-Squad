@@ -89,14 +89,14 @@ test('Claude Code answer: unknown roles dropped, counts clamped to the Blueprint
 test('the loop of a Blueprint: lead, minimums, routine agents and document owners; gaps and completion', () => {
   const seo = bp.getBlueprint('seo-geo');
   const loop = bp.loopRoles(seo);
-  assert.deepEqual(loop.map((r) => r.template), ['seo-geo-strategist', 'content-writer', 'technical-seo-specialist', 'geo-analyst', 'keyword-researcher']);
+  assert.deepEqual(loop.map((r) => r.template), ['seo-geo-strategist', 'content-writer', 'web-developer', 'technical-seo-specialist', 'geo-analyst', 'keyword-researcher']);
   assert.deepEqual(loop.find((r) => r.template === 'geo-analyst').duties, [{ kind: 'routine', id: 'geo-panel', text: 'Routine: GEO panel check (a third of the prompts)' }]);
   assert.ok(loop[0].duties.some((d) => d.kind === 'lead') && loop[0].duties.some((d) => d.text === 'Owns SEO brief'));
   // the team Claude Code once gave for sopwer.id: four roles, no GEO Analyst
   const four = ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer'].map((template) => ({ template }));
-  assert.deepEqual(bp.loopGaps(seo, four).map((r) => r.template), ['geo-analyst']);
+  assert.deepEqual(bp.loopGaps(seo, four).map((r) => r.template), ['web-developer', 'geo-analyst']);
   const done = rec.completeLoop(seo, four.map((m) => ({ ...m, count: 1, reason: 'x' })));
-  assert.deepEqual(done.map((p) => p.template), [...four.map((m) => m.template), 'geo-analyst']);
+  assert.deepEqual(done.map((p) => p.template), [...four.map((m) => m.template), 'web-developer', 'geo-analyst']);
   assert.match(done.at(-1).reason, /^Checks every month whether AI answers cite you.*Kept for the squad's loop: Routine: GEO panel check/);
   // a minimum is raised, not just present
   const sh = bp.getBlueprint('software-house');
@@ -114,8 +114,8 @@ test('Claude Code leaves a loop role out: it is put back with the reason; the ad
       return { blueprint: 'seo-geo', name: 'Squad SEO Sopwer', goal: 'Keywords for sopwer.id', team: ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer'].map((template) => ({ template, count: 1, reason: 'for sopwer.id' })) };
     } });
   assert.equal(r.source, 'claude');
-  assert.deepEqual(r.team.map((m) => m.template), ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer', 'geo-analyst']);
-  assert.deepEqual(r.loopAdded, ['geo-analyst']);
+  assert.deepEqual(r.team.map((m) => m.template), ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer', 'web-developer', 'geo-analyst']);
+  assert.deepEqual(r.loopAdded, ['web-developer', 'geo-analyst']);
   assert.deepEqual(rec.advisor(), { model: 'opus', effort: 'high' });
   assert.deepEqual(rec.advisor({ advisor: { model: 'sonnet', effort: 'medium' } }), { model: 'sonnet', effort: 'medium' });
   assert.deepEqual(rec.advisor({ advisor: { model: 'gpt', effort: 'huge' } }), { model: 'opus', effort: 'high' }, 'unknown values fall back');

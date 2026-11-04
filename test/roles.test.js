@@ -11,7 +11,7 @@ const root = scratch();
 test('default templates are seeded and parsed', () => {
   const ids = roles.listTemplates().map((t) => t.role).sort();
   assert.deepEqual(ids, ['ads-analytics-specialist', 'bookkeeper', 'content-writer', 'contract-drafter', 'crm-administrator', 'devops-engineer', 'erp-functional-consultant', 'finance-controller', 'frappe-developer', 'fullstack-developer', 'geo-analyst', 'keyword-researcher', 'lead-researcher', 'legal-counsel', 'local-seo-specialist', 'market-researcher', 'marketing-strategist',
-    'product-manager', 'project-manager', 'qa-engineer', 'sales-analyst', 'sales-copywriter', 'sales-manager', 'second-opinion-reviewer', 'security-engineer', 'seo-geo-strategist', 'seo-specialist', 'social-media-specialist', 'sprint-developer', 'sprint-lead', 'sprint-qa', 'support-agent', 'support-lead', 'technical-seo-specialist', 'ui-ux-designer']);
+    'product-manager', 'project-manager', 'qa-engineer', 'sales-analyst', 'sales-copywriter', 'sales-manager', 'second-opinion-reviewer', 'security-engineer', 'seo-geo-strategist', 'seo-specialist', 'social-media-specialist', 'sprint-developer', 'sprint-lead', 'sprint-qa', 'support-agent', 'support-lead', 'technical-seo-specialist', 'ui-ux-designer', 'web-developer']);
   assert.equal(roles.getTemplate('sales-manager').category, 'sales');
   const t = roles.getTemplate('frappe-developer');
   assert.equal(t.version, 3);
