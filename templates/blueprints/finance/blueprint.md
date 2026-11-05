@@ -1,13 +1,18 @@
 ---
 id: finance
 title: Finance
-version: 1
+version: 2
 category: finance
 description: An Owner-only finance desk that runs the monthly close, keeps the cash-flow view and budget vs actual, reconciles the bank and drafts receivables follow-ups from a read-only ERPNext key; it never pays, posts, files or sends anything.
 keywords: [finance, keuangan, accounting, akuntansi, bookkeeping, pembukuan, cash flow, arus kas, receivables, piutang, payables, hutang, invoice, faktur, tax, pajak, ppn, pph, budget, anggaran, close, tutup buku, reconciliation, rekonsiliasi, bank]
 workflow: free-team
 layout: rows
 space: { kind: department, access: owner, erpnext: finance, telegram: counts }
+intake:
+  - { id: books, kind: choice, required: true, label: "Where are the books kept?", options: [{ value: erpnext, label: ERPNext, hint: "Read with a read-only finance key; agents never post." }, { value: other, label: Other accounting software, hint: "Accurate, Jurnal, Xero, ...: you export the reports." }, { value: sheet, label: A spreadsheet, hint: "You place the file in docs/finance/." }] }
+  - { id: books-name, kind: text, required: true, label: "Which software?", placeholder: "Accurate", when: { books: other } }
+  - { id: currency, kind: text, required: true, label: "Main currency:", default: IDR, placeholder: IDR }
+  - { id: close-day, kind: text, required: true, label: "The month is closed by which day?", default: "5", placeholder: "5" }
 roles:
   - { template: finance-controller, min: 1, default: 1, max: 1, lead: true, why: "Leads the desk: runs the month-end close, the cash-flow view and budget vs actual, and drafts receivables follow-ups for you to send." }
   - { template: bookkeeper, min: 0, default: 1, max: 1, why: "Reconciles ERPNext with your bank statements, flags anomalies and prepares the tax worksheets." }
@@ -22,6 +27,16 @@ cadence:
   - { id: receivables-digest, title: Receivables digest, agent: finance-controller, every: weekdays, at: "08:00", budget: 1, task: "Write today's receivables digest in docs/finance/receivables/<date>.md from ERPNext (read only): overdue Sales Invoices by age (1-30, 31-60, 61-90, over 90 days), the customers to follow up today and a DRAFT follow-up for each. Send nothing; the owner decides." }
   - { id: monthly-close, title: Monthly close checklist, agent: finance-controller, every: "monthly:1", at: "08:30", budget: 2, task: "Start last month's close in docs/finance/close/<yyyy-mm>.md from the close calendar in docs/FINANCE-POLICY.md: each step, who does it, its status and what blocks it; the bank reconciliation for the bookkeeper. Post, submit and pay nothing." }
   - { id: budget-vs-actual, title: Budget vs actual note, agent: finance-controller, every: "weekly:mon", at: "09:00", budget: 1, task: "Write the weekly budget vs actual note in docs/finance/budget/<date>.md: the budget in docs/FINANCE-POLICY.md against ERPNext's actuals per account group this month, and the three largest differences with their likely cause. Read only." }
+  - { id: bank-reconciliation, title: Weekly bank reconciliation, agent: bookkeeper, every: "weekly:fri", at: "09:00", budget: 1, task: "Reconcile the bank statements the owner placed in docs/finance/bank/ against the books. Write docs/finance/reconciliation/<date>.md: matched, unmatched and questions for the lead. Post, submit and pay nothing, and log in to no bank." }
+flows:
+  The monthly close:
+    - { by: bookkeeper, does: "Reconciles the bank statements you placed in docs/finance/bank/" }
+    - { by: lead, does: "Runs the close checklist and the budget vs actual note" }
+    - { by: owner, does: "Reviews them; you post, pay and file yourself" }
+  A receivables follow-up:
+    - { by: lead, does: "Lists the overdue invoices in the receivables digest" }
+    - { by: lead, does: "Drafts a reminder per customer" }
+    - { by: owner, does: "Sends the reminders, or approves them for the Outbox" }
 gates: [source documents approved, owner approval before any payment, filing or message to a customer]
 ownerOnly: [payments, submitting or cancelling ERPNext documents, tax filing, invoices and reminders to customers, salaries]
 kickoff: "Start as the lead of this desk. Read AISQUAD.md first. Then ask me for the finance policy (approval limits, who pays, the close calendar, the tax calendar, the budget). Draft docs/FINANCE-POLICY.md from my answers for my approval. No finance work starts before it is approved."

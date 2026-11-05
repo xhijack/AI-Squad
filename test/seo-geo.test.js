@@ -109,7 +109,7 @@ test('first questions (1.15): asked by condition, checked, written to docs/SITE.
   assert.match(r.kickoff, /do not ask them again:\n- \*\*How is the site's content managed\?\*\* Code in a repository\n- \*\*Site URL:\*\* https:\/\/sopwer\.id/);
   // the Company Guide creates without answers: the plain kickoff, which asks for the site itself
   const g = await createSquad({ blueprint: 'seo-geo', name: 'Guide Search', team });
-  assert.equal(g.kickoff, b.kickoff);
-  assert.match(b.kickoff, /WordPress, another CMS or code in a repository/);
+  assert.ok(g.kickoff.startsWith(b.kickoff));
+  assert.match(g.kickoff, /ask me these first questions one at a time and write my answers to `docs\/SITE\.md`:\n- How is the site's content managed\? \(WordPress \/ Another CMS \/ Code in a repository\)\n- Site URL:\n- Which CMS\? \(only if How is the site's content managed is Another CMS\)/);
   assert.ok(!fs.existsSync(path.join(g.path, 'docs', 'SITE.md')));
 });

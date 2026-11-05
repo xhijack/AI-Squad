@@ -1,12 +1,16 @@
 ---
 id: software-house
 title: Software House
-version: 6
+version: 7
 category: software
 description: A software team that builds and ships an application from a PRD, a tech spec and a design, in QA-gated sprints.
 keywords: [software, app, application, website, web, mobile, saas, platform, pos, "point of sale", erp, crm system, api, backend, frontend, dashboard, portal, marketplace, ecommerce, "e-commerce", shop, store, booking, system, develop, build, code, startup, mvp]
 workflow: squad-sprint
 layout: pods
+intake:
+  - { id: stack, kind: text, label: "Tech stack (optional; leave empty and the team proposes one):", placeholder: "Next.js, PostgreSQL" }
+  - { id: deploy, kind: choice, required: true, label: "Where will it run?", options: [{ value: server, label: Our own server or VPS, hint: "DevOps prepares an install plan for your approval." }, { value: cloud, label: A cloud platform, hint: "Vercel, Netlify, Fly, ..." }, { value: undecided, label: Not decided yet, hint: "The team proposes one in the Tech Spec." }] }
+  - { id: url, kind: url, label: "The current app's URL (optional):", placeholder: "https://app.example.com" }
 roles:
   - { template: project-manager, min: 1, default: 1, max: 1, lead: true, why: "Leads the squad: collects the PRD, tech spec and design from you, plans sprints and modules, and is your single point of contact." }
   - { template: fullstack-developer, min: 1, default: 2, max: 4, why: "Builds the modules assigned in the sprint plan, with tests, from the PRD stories and the tech spec." }
@@ -27,6 +31,18 @@ kpis:
 cadence:
   - { id: standup-summary, title: Sprint standup summary, agent: project-manager, every: weekdays, at: "09:00", budget: 1, task: "Summarise yesterday in docs/squad/standups/<date>.md from docs/squad/TASKS.md and the git log: done, in progress, blocked, and what needs the owner. Keep it short." }
   - { id: dependency-check, title: Weekly dependency and security check, agent: fullstack-developer, every: "weekly:fri", at: "10:00", budget: 2, task: "Check the project's dependencies for known vulnerabilities and outdated major versions with the package manager's own audit command (npm audit, pip-audit, bench or similar). Write the findings with severity and a proposed fix to docs/squad/security/<date>-dependencies.md. Change no dependency without a task." }
+flows:
+  A module:
+    - { by: lead, does: "Plans the sprint's modules from the PRD and the Tech Spec" }
+    - { by: second-opinion-reviewer, does: "Reviews the plan before the sprint starts", optional: true }
+    - { by: owner, does: "Approves the plan" }
+    - { by: fullstack-developer, does: "Builds the module on its branch, with tests" }
+    - { by: ui-ux-designer, does: "Reviews it against the design", optional: true }
+    - { by: qa-engineer, does: "Tests it with evidence at mobile and desktop width" }
+    - { by: lead, does: "Commits it after QA passes" }
+    - { by: security-engineer, does: "Reviews security before the release", optional: true }
+    - { by: owner, does: "Approves the merge and the deploy" }
+    - { by: devops-engineer, does: "Deploys to staging, and to production with your go-ahead", optional: true }
 gates: [source documents approved, plan review before each sprint, tests green, QA pass per module, design review, final QA smoke test]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then run the source document intake: ask me for the PRD, the Tech Spec and the Design Document (and what you need for docs/ENVIRONMENTS.md). For anything missing, interview me and draft it in docs/ for my approval. No sprint starts until PRD, Tech Spec and Design are approved. Ask me every decision and approval with AskUserQuestion (one question per decision, with options), and keep your plain-text summaries short."
 ---

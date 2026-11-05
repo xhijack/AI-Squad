@@ -1,13 +1,16 @@
 ---
 id: legal
 title: Legal
-version: 3
+version: 4
 category: legal
 description: An Owner-only legal desk that drafts bilingual contracts (Indonesian and English) from locked templates, checks each against Pasal 1320 KUHPerdata, UU PDP and electronic signature rules, and leaves every contract a DRAFT until the owner approves it.
 keywords: [legal, contract, contracts, agreement, perjanjian, kontrak, nda, kerahasiaan, terms, sow, mou, spk, legal review, compliance, pdp, privacy, signature, tanda tangan]
 workflow: free-team
 layout: rows
 space: { kind: department, access: owner }
+intake:
+  - { id: languages, kind: choice, required: true, label: "Contract language:", options: [{ value: bilingual, label: Indonesian and English, hint: "Side by side; the Indonesian text governs (UU 24/2009)." }, { value: id, label: Indonesian only }, { value: en, label: English only, hint: "Only with foreign parties; check UU 24/2009 first." }] }
+  - { id: signing, kind: choice, required: true, label: "How do you sign?", options: [{ value: wet, label: Wet ink }, { value: esign, label: Electronic signature, hint: "PrivyID, Peruri, DocuSign, ..." }, { value: both, label: Both }] }
 roles:
   - { template: legal-counsel, min: 1, default: 1, max: 1, lead: true, why: "Leads the desk: turns your request into a contract draft from the templates, runs the checklist and brings it to you for approval." }
   - { template: contract-drafter, min: 0, default: 1, max: 2, why: "Drafts and revises the bilingual text clause by clause and fills in the checklist." }
@@ -18,6 +21,12 @@ kpis:
   - { id: revisions, name: Revisions per contract, unit: rounds, direction: down, period: month, source: { kind: manual } }
 cadence:
   - { id: contract-queue, title: Weekly contract queue review, agent: legal-counsel, every: "weekly:mon", at: "09:00", budget: 1, task: "Review the contract queue: every DRAFT in contracts/ with its age, what it waits for and the next step, and contracts with a deadline or renewal in the next 30 days. Write it to docs/legal/queue-<date>.md for the owner. Change no contract text." }
+flows:
+  A contract:
+    - { by: lead, does: "Takes the request and picks the locked template" }
+    - { by: contract-drafter, does: "Drafts it from the template, in the agreed languages" }
+    - { by: lead, does: "Runs the legal checklist (Pasal 1320 KUHPerdata, UU PDP, signatures)" }
+    - { by: owner, does: "Approves the terms and signs" }
 gates: [source documents approved, legal checklist complete, owner approval before any contract leaves the Space]
 ownerOnly: [contract terms, liability, penalties, governing law, signing]
 kickoff: "Start as the lead of this desk. Read AISQUAD.md first. Then ask me for the legal policy (which contracts we sign, who approves, how we sign, our standard positions). Draft docs/LEGAL-POLICY.md from my answers for my approval. No contract work starts before it is approved."

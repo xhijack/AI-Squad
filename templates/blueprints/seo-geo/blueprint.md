@@ -1,7 +1,7 @@
 ---
 id: seo-geo
 title: SEO & GEO
-version: 2
+version: 3
 category: marketing
 description: A search-only marketing team that grows organic search and visibility in AI answers from free data (Search Console, GA4, PageSpeed, Bing, IndexNow), with keyword research, technical SEO, content, a web developer who puts approved pages on the site (code, WordPress or another CMS) and a monthly AI prompt panel; nothing is published without the owner.
 keywords: [seo, geo, aeo, search, "search engine", google, "search console", ranking, keywords, organic, "organic traffic", "ai answers", chatgpt, perplexity, "ai visibility", "llms.txt", "technical seo", "local seo", backlinks, content, blog, sitemap, "core web vitals", wordpress, cms, website, pencarian, "mesin pencari"]
@@ -48,9 +48,31 @@ cadence:
   - { id: technical-audit, title: Full technical audit, agent: technical-seo-specialist, every: "monthly:1", at: "00:00", budget: 3, task: "Run the full technical audit with the seo-audit skill: crawling, indexing (gsc_inspect for the key URLs), canonicals, redirects, schema, Core Web Vitals (psi_run mobile and desktop), AI search access and llms.txt. Write docs/seo/AUDIT.md and the prioritised fixes in docs/seo/plan.md, each with a baseline. Fixes go as a branch or PR; change nothing live." }
   - { id: decay-list, title: Decay list for refresh, agent: keyword-researcher, every: "monthly:1", at: "00:30", budget: 1, task: "Find the pages whose Search Console clicks fell two months in a row (gsc_performance, dimensions page, for each of the last three months). Write docs/seo/decay/<yyyy-mm>.md: page, clicks per month, the queries that dropped, and a refresh proposal per page (content-refresh). Add the top three to docs/BOARD.md as TODO for the lead." }
   - { id: strategy-review, title: Strategy and cluster review, agent: seo-geo-strategist, every: "quarterly:1", at: "01:00", budget: 3, task: "Review the quarter: targets against goals, which clusters in docs/seo/KEYWORDS.md and which prompts in docs/seo/PROMPTS.md earned results, and propose the next quarter's clusters and prompts in docs/seo/plan.md as a DRAFT for the owner. Change no approved document yourself." }
+flows:
+  A content piece:
+    - { by: keyword-researcher, does: "Writes the brief from Search Console queries and the search results", status: TODO }
+    - { by: content-writer, does: "Drafts it answer first, in the brand voice, with sources", status: DRAFT }
+    - { by: lead, does: "Checks brand, facts and the SEO checklist", status: REVIEW }
+    - { by: owner, does: "Approves the draft", status: APPROVED }
+    - { by: web-developer, does: "Puts it on the site: a commit on a branch, or a ready-to-paste CMS draft", status: REVIEW }
+    - { by: technical-seo-specialist, does: "Checks the site change against the SEO checklist" }
+    - { by: owner, does: "Pushes and merges, or pastes and publishes", status: PUBLISHED }
+    - { by: lead, does: "Re-measures it after 28 days in the weekly report", status: MEASURED }
+  A technical fix:
+    - { by: technical-seo-specialist, does: "Finds it in the audit or the daily anomaly check, with a baseline" }
+    - { by: technical-seo-specialist, does: "Fixes it on a branch of the site's repository, or writes a proposal" }
+    - { by: owner, does: "Pushes and merges, or applies the proposal" }
+    - { by: lead, does: "Re-measures it after 28 days in the weekly report" }
+  The AI prompt panel:
+    - { by: geo-analyst, does: "Checks a third of the prompts every week" }
+    - { by: geo-analyst, does: "Proposes at most three changes to the lead" }
+    - { by: owner, does: "Picks the changes to make; they become content pieces or technical fixes" }
+  A local listing:
+    - { by: local-seo-specialist, does: "Drafts profile updates and review replies", optional: true }
+    - { by: owner, does: "Posts them on Google Business Profile" }
 gates: [source documents approved, baseline recorded before every change, brand and voice review, fact check, SEO checklist per piece, technical SEO check of the site change, owner approval before publishing, re-measure after 28 days]
 ownerOnly: [publishing, pushing or merging to the site's repository, live copy, IndexNow submit, outreach e-mail, paid SEO tools, black-hat techniques]
-kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me, in my language and one step at a time, for the SEO brief, the brand rules and Google access (how the site is managed is in docs/SITE.md when I answered it in Set up Squad; if that file is missing, ask first whether the site runs on WordPress, another CMS or code in a repository, and for code its URL, repository and base branch, then write docs/SITE.md and link the repository in Floor settings → Repositories): explain how to add the service account's e-mail in Search Console and GA4 and where to enter the properties (Floor settings → Google). Draft missing documents in docs/ for my approval. No content or technical change starts before the brief, brand, keywords and prompt panel are approved and a baseline is recorded."
+kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me, in my language and one step at a time, for the SEO brief, the brand rules and Google access (how the site is managed is in docs/SITE.md; for a site in code, link its repository in Floor settings → Repositories if it is not linked yet): explain how to add the service account's e-mail in Search Console and GA4 and where to enter the properties (Floor settings → Google). Draft missing documents in docs/ for my approval. No content or technical change starts before the brief, brand, keywords and prompt panel are approved and a baseline is recorded."
 ---
 ## Purpose
 A search-only marketing team: more organic search traffic and more citations in AI answers, from free official data, with every change measured against a baseline. Publishing, live changes, IndexNow submits and outreach wait for the owner.

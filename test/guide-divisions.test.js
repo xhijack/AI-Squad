@@ -41,7 +41,7 @@ test('the plan: Finance Owner-only and manual, Support supervised; their targets
   assert.deepEqual([sup.blueprint, sup.access, sup.mode, sup.budget], ['support', 'team', 'supervised', 30]);
   assert.deepEqual(fin.kpis.map((k) => [k.id, k.target, k.onBehind]), [['overdue-receivables', null, 'notify'], ['cash-in-bank', null, 'notify'], ['days-to-close', 5, 'notify'], ['unreconciled-lines', null, 'notify']]);
   assert.deepEqual(sup.kpis.map((k) => [k.id, k.target, k.requires || '']), [['first-response', 24, 'helpdesk'], ['open-tickets', null, ''], ['resolved', null, ''], ['csat', 90, 'helpdesk']]);
-  assert.deepEqual(fin.routines.map((r) => [r.id, r.on]), [['receivables-digest', false], ['monthly-close', false], ['budget-vs-actual', false]], 'a manual squad: unticked');
+  assert.deepEqual(fin.routines.map((r) => [r.id, r.on]), [['receivables-digest', false], ['monthly-close', false], ['budget-vs-actual', false], ['bank-reconciliation', false]], 'a manual squad: unticked');
   assert.deepEqual(sup.routines.map((r) => [r.id, r.at, r.on]), [['morning-triage', '08:00', true], ['weekly-report', '16:00', true], ['kb-gaps', '10:00', true]]);
   assert.deepEqual(fin.materials.map((m) => `${m.id}:${m.status}`), ['erpnext:have', 'finance-key:missing', 'bank-statements:missing', 'finance-policy:missing']);
   assert.deepEqual(sup.materials.map((m) => `${m.id}:${m.status}`), ['ticket-source:missing', 'kb-sources:missing', 'support-policy:missing']);

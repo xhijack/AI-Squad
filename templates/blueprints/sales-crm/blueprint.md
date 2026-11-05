@@ -1,12 +1,17 @@
 ---
 id: sales-crm
 title: Sales & CRM
-version: 3
+version: 4
 category: sales
 description: A sales team that researches and qualifies leads, keeps the CRM clean, writes outreach for approval and reports the pipeline.
 keywords: [sales, crm, leads, lead generation, prospecting, prospects, outreach, outbound, cold email, pipeline, deals, b2b, customers, clients, follow up, follow-up, hubspot, salesforce, pipedrive, quotation, proposal, revenue, sdr, account]
 workflow: free-team
 layout: rows
+intake:
+  - { id: crm, kind: choice, required: true, label: "Where do you keep your leads and deals?", options: [{ value: erpnext, label: ERPNext, hint: "Leads, Opportunities and Customers through the ERPNext integration." }, { value: other, label: Another CRM, hint: "HubSpot, Pipedrive, Zoho, ... through its integration." }, { value: sheet, label: A spreadsheet, hint: "The CRM administrator keeps it tidy." }, { value: none, label: Nowhere yet, hint: "The squad starts a simple pipeline in docs/PIPELINE.md." }] }
+  - { id: crm-name, kind: text, required: true, label: "Which CRM?", placeholder: "HubSpot", when: { crm: other } }
+  - { id: outreach, kind: text, required: true, label: "How do you reach new leads?", placeholder: "Email, WhatsApp, LinkedIn" }
+  - { id: url, kind: url, label: "Your website (optional):", placeholder: "https://sopwer.id" }
 roles:
   - { template: sales-manager, min: 1, default: 1, max: 1, lead: true, why: "Leads the squad: collects the ideal customer profile, the offer and the pipeline from you, and approves outreach with you." }
   - { template: lead-researcher, min: 0, default: 1, max: 2, why: "Finds and qualifies prospects that match your ideal customer profile, with sources." }
@@ -23,6 +28,23 @@ kpis:
   - { id: won, name: Quotations ordered, unit: orders, direction: up, period: month, source: { kind: erpnext, doctype: Quotation, filters: [["status", "=", "Ordered"]], aggregate: count, dateField: modified } }
 cadence:
   - { id: follow-up-list, title: Follow-up list from ERPNext, agent: sales-manager, every: weekdays, at: "08:00", budget: 1, task: "Make today's follow-up list in docs/sales/followups/<date>.md from ERPNext: open Leads and Opportunities with no contact for 3 days or more, Quotations waiting for an answer, each with the next step and who does it. Read only; send nothing." }
+  - { id: lead-batch, title: Weekly lead batch, agent: lead-researcher, every: "weekly:mon", at: "09:00", budget: 1.5, task: "Research and qualify the next lead batch against docs/ICP.md with the lead-qualification skill (the segment and size the lead set on docs/BOARD.md, else 20 leads of the first segment), with a source for every fact. Hand the batch to the CRM administrator. Contact nobody." }
+  - { id: crm-hygiene, title: Weekly CRM hygiene, agent: crm-administrator, every: "weekly:thu", at: "16:00", budget: 1, task: "Run the crm-hygiene skill: duplicates, missing owners and next steps, stale deals. Record new leads by CRM id. Write the findings in docs/handoffs/<date>-crm-hygiene.md for the lead; delete nothing." }
+  - { id: approved-outreach, title: Approved outreach to the Outbox, agent: sales-copywriter, every: weekdays, at: "08:30", budget: 0.5, task: "Take the outreach messages on docs/BOARD.md that the owner APPROVED and that are not requested yet, and request each in the Outbox with the publish-request skill, by CRM id. Mark them DONE only when the answer says sent. Send nothing yourself." }
+  - { id: pipeline-report, title: Weekly pipeline report, agent: sales-analyst, every: "weekly:fri", at: "15:00", budget: 1, task: "Write docs/reports/<date>-pipeline.md with the pipeline-report skill: stages, conversion, replies and meetings from the outreach, each number with its source and date range. Propose the next actions to the lead." }
+flows:
+  An outreach sequence:
+    - { by: lead-researcher, does: "Researches and qualifies a lead batch against the ICP, with sources", status: IN_PROGRESS }
+    - { by: crm-administrator, does: "Records the leads in the CRM by id and checks hygiene" }
+    - { by: sales-copywriter, does: "Drafts the outreach sequence for the batch", status: REVIEW }
+    - { by: lead, does: "Checks the offer, the tone and the fit with the ICP" }
+    - { by: owner, does: "Approves the sequence", status: APPROVED }
+    - { by: sales-copywriter, does: "Requests the messages in the Outbox; the server sends them", status: DONE }
+    - { by: sales-analyst, does: "Tracks replies and meetings in the weekly pipeline report" }
+  A deal:
+    - { by: lead, does: "Lists the follow-ups due from the CRM every weekday" }
+    - { by: sales-analyst, does: "Writes the weekly pipeline report with sources" }
+    - { by: owner, does: "Decides the price, the discount and the next step" }
 gates: [source documents approved, data hygiene check, owner approval before any outbound message]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me for the ideal customer profile, the offer and the pipeline. For anything missing, interview me and draft it in docs/ for my approval. No prospecting starts until all three are approved."
 ---

@@ -1,13 +1,17 @@
 ---
 id: support
 title: Support
-version: 1
+version: 2
 category: support
 description: A support team that triages tickets against SLAs, drafts replies from a knowledge base it keeps, escalates bugs and product gaps to the product and engineering Spaces, and reports the numbers every week.
 keywords: [support, customer support, customer service, layanan pelanggan, helpdesk, help desk, tickets, tiket, sla, csat, faq, knowledge base, kb, complaints, keluhan, issue, hd ticket, zendesk, freshdesk, intercom, crisp, chat support, onboarding]
 workflow: free-team
 layout: rows
 space: { kind: department }
+intake:
+  - { id: tickets, kind: choice, required: true, label: "Where do the tickets come in?", options: [{ value: erpnext, label: ERPNext, hint: "Issue, or HD Ticket with the Helpdesk app." }, { value: helpdesk, label: A help desk, hint: "Freshdesk, Zendesk, Help Scout, ... through its integration." }, { value: email, label: An e-mail inbox, hint: "Through an e-mail integration." }, { value: whatsapp, label: WhatsApp, hint: "Through a WhatsApp integration." }] }
+  - { id: helpdesk, kind: text, required: true, label: "Which help desk?", placeholder: "Freshdesk", when: { tickets: helpdesk } }
+  - { id: hours, kind: text, required: true, label: "Support hours:", placeholder: "Mon-Fri 08:00-17:00 WIB" }
 roles:
   - { template: support-lead, min: 1, default: 1, max: 1, lead: true, why: "Leads the squad: triages tickets against the SLAs, reviews replies and KB articles, escalates to product and engineering, and reports the week." }
   - { template: support-agent, min: 0, default: 1, max: 3, why: "Drafts replies from the knowledge base and turns resolved tickets into articles, without customers' personal data." }
@@ -22,6 +26,17 @@ cadence:
   - { id: morning-triage, title: Morning triage, agent: support-lead, every: weekdays, at: "08:00", budget: 1, task: "Triage the tickets in docs/support/triage/<date>.md: new and open tickets by priority and SLA from docs/SUPPORT-POLICY.md, who answers each, which wait for the customer, which need the owner. Ticket ids only, no customers' personal data. Send nothing." }
   - { id: weekly-report, title: Weekly support report, agent: support-lead, every: "weekly:fri", at: "16:00", budget: 2, task: "Write the weekly support report in docs/support/reports/<date>.md: each target from docs/squad/KPI.md with its value, the top 5 topics, escalations to product and engineering with their status, and the KB articles added. Use only the numbers in KPI.md." }
   - { id: kb-gaps, title: Weekly KB gaps, agent: support-agent, every: "weekly:wed", at: "10:00", budget: 1, task: "List in docs/support/kb-gaps-<date>.md the questions of the last week that had no APPROVED article in docs/kb/, and draft the two most frequent as articles with the kb-writer skill (STATUS: DRAFT, no personal data)." }
+flows:
+  A ticket:
+    - { by: lead, does: "Triages new tickets against the SLAs every morning" }
+    - { by: support-agent, does: "Drafts the reply from the knowledge base" }
+    - { by: lead, does: "Checks it against the support policy" }
+    - { by: owner, does: "Decides what only you decide (refunds, credits, promised dates); the rest goes out through the Outbox after its checks" }
+    - { by: support-agent, does: "Escalates bugs and product gaps as handoffs to the other Spaces" }
+  A knowledge base article:
+    - { by: support-agent, does: "Finds the gap in the weekly check and drafts the article" }
+    - { by: lead, does: "Checks it is correct and free of personal data" }
+    - { by: owner, does: "Approves it for publishing" }
 gates: [source documents approved, owner approval before refunds, credits or promises, KB articles free of personal data]
 ownerOnly: [refunds, credits, discounts, deleting customer accounts, promised dates]
 kickoff: "Start as the lead of this squad. Read AISQUAD.md first. Then ask me for the support policy (channels, hours, SLAs per priority, tone, what only I decide, where to escalate) and where the tickets live (ERPNext Issues or a help desk). Draft docs/SUPPORT-POLICY.md from my answers for my approval. No ticket is answered before it is approved."

@@ -21,7 +21,7 @@ You do not log in to the CMS. Write `content/ready/<slug>/` for the owner to pas
 - `seo.md`: title, slug, meta description, focus keyword, category and tags, featured image, alt texts, canonical, schema JSON-LD, internal links to add on other pages.
 
 ## Hand off
-Write `docs/handoffs/<date>-<slug>.md`: what changed, the branch and commit (code) or the `content/ready/` folder (CMS), how to preview, the checklist, and the steps left for the owner (push and merge, or paste and publish). Set the piece to **REVIEW** for the technical SEO check, and tell the lead.
+Write `docs/handoffs/<date>-<slug>.md`: what changed, the branch and commit (code) or the `content/ready/` folder (CMS), how to preview, the checklist, and the steps left for the owner (push and merge, or paste and publish). Set the piece to **REVIEW** for the SEO check (the technical SEO specialist or the SEO specialist of the squad), and tell the lead.
 
 ## Rules
 - Never change the approved wording; a needed change goes back to the lead.

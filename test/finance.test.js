@@ -41,7 +41,7 @@ test('the Blueprint: Owner-only department, the finance key, counts on Telegram,
   }
   // targets (no goals) and routines (off)
   assert.deepEqual(b.kpis.map((k) => [k.id, k.source.kind]), [['overdue-receivables', 'erpnext'], ['cash-in-bank', 'manual'], ['days-to-close', 'manual'], ['unreconciled-lines', 'erpnext']]);
-  assert.deepEqual(b.cadence.map((r) => [r.id, r.every]), [['receivables-digest', 'weekdays'], ['monthly-close', 'monthly:1'], ['budget-vs-actual', 'weekly:mon']]);
+  assert.deepEqual(b.cadence.map((r) => [r.id, r.every]), [['receivables-digest', 'weekdays'], ['monthly-close', 'monthly:1'], ['budget-vs-actual', 'weekly:mon'], ['bank-reconciliation', 'weekly:fri']]);
   for (const r of b.cadence) { assert.equal(cadence.cleanRoutine(r).enabled, false); assert.match(r.task, /send nothing|post, submit and pay nothing|read only/i); }
 });
 
@@ -60,7 +60,7 @@ test('Set up: the Space is built Owner-only with the finance key, targets withou
   const ks = kpi.readDefs(fin.path);
   assert.deepEqual(ks.map((k) => [k.id, k.target, k.source.kind, k.period]), [['overdue-receivables', null, 'erpnext', 'total'], ['cash-in-bank', null, 'manual', 'total'], ['days-to-close', null, 'manual', 'month'], ['unreconciled-lines', null, 'erpnext', 'total']]);
   assert.ok(cadence.readDefs(fin.path).every((r) => !r.enabled));
-  assert.equal(cadence.readDefs(fin.path).length, 3);
+  assert.equal(cadence.readDefs(fin.path).length, 4);
   assert.match(fs.readFileSync(path.join(fin.path, 'docs', 'FINANCE-POLICY.md'), 'utf8'), /^STATUS: DRAFT$/m);
   const agent = fs.readFileSync(path.join(fin.path, '.claude', 'agents', 'fina-controller.md'), 'utf8');
   assert.match(agent, /Hard stop: no payments/);
