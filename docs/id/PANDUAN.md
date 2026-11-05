@@ -127,6 +127,11 @@ nasihat hukum.
   tulisan yang sudah kamu setujui (APPROVED) di board: commit halaman di branch sendiri di repository situs, atau
   menyiapkan draf siap tempel di `content/ready/` untuk WordPress atau CMS lain. Technical SEO mengecek, lalu kamu yang
   push, merge atau menempel dan menerbitkan; agen tidak pernah push.
+- **Alur kerja dan pemeriksanya (1.16)**: setiap Blueprint menuliskan jalan setiap jenis pekerjaan, langkah demi langkah,
+  sampai kamu yang memutuskan. Di langkah **Tim** pada Siapkan Squad, panel **Alur kerja** menunjukkan siapa di timmu
+  yang mengerjakan tiap langkah; langkah yang role-nya tidak ada di tim ditandai kuning. Blueprint yang alurnya bolong
+  (rutinitas tanpa role, langkah tanpa pelaksana, alur tanpa keputusanmu) ditolak oleh tes, dan `/aisquad doctor`
+  memperingatkan kalau Blueprint yang kamu ubah jadi bolong. Semua Blueprint kini juga punya pertanyaan awal.
 - **Konektor Google**: buat service account di Google Cloud, aktifkan Search Console API dan Google Analytics Data
   API, buat kunci JSON lalu unggah di Admin → Integrasi → Google (yang terlihat hanya e-mailnya). Tambahkan e-mail itu
   di Search Console (Settings → Users and permissions) dan di GA4 (Property access management, peran Viewer), lalu isi
