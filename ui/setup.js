@@ -53,7 +53,7 @@ function whatHtml() {
 const loopOf = () => (bpOf()?.loop || []).map((r) => ({ ...r, have: s.team.filter((m) => m.template === r.template).length, need: r.duties.some((d) => d.kind === 'min') ? r.min : 1 }));
 const gapsOf = () => loopOf().filter((r) => r.have < r.need);
 const dutyText = (d) => (d.kind === 'lead' ? tt('Leads the squad and is the one who talks to you') : d.kind === 'min' ? tt('Required by the Blueprint (at least {n})', { n: d.text.match(/\d+/)?.[0] || 1 })
-  : d.kind === 'routine' ? tt('Routine: {title}', { title: tx(d.text.replace(/^Routine: /, '')) }) : tt('Owns {title}', { title: tx(d.text.replace(/^Owns /, '')) }));
+  : d.kind === 'routine' ? tt('Routine: {title}', { title: tx(d.text.replace(/^Routine: /, '')) }) : d.kind === 'flow' ? tt('A step in "{flow}"', { flow: tx(d.item) }) : tt('Owns {title}', { title: tx(d.text.replace(/^Owns /, '')) }));
 function loopHtml() {
   const loop = loopOf();
   if (!loop.length) return '';
@@ -65,8 +65,27 @@ function loopHtml() {
     <ul class="loopList">${loop.map((r) => {
       const miss = r.have < r.need;
       return `<li class="${miss ? 'miss' : ''}"><span class="loopIcon">${ic(miss ? 'alert' : 'check')}</span><div class="grow"><b>${esc(tplOf(r.template).title)}</b>${r.need > 1 ? ` <span class="note">${tt('×{n} needed', { n: r.need })}</span>` : ''}
-        <div class="note">${r.duties.map(dutyText).map(esc).join(' · ')}</div></div>${miss ? `<button type="button" class="small" data-addloop="${esc(r.template)}">${tt('Add')}</button>` : ''}</li>`;
+        <div class="note">${[...new Set(r.duties.map(dutyText))].map(esc).join(' · ')}</div></div>${miss ? `<button type="button" class="small" data-addloop="${esc(r.template)}">${tt('Add')}</button>` : ''}</li>`;
     }).join('')}</ul></section>`;
+}
+
+// the Blueprint's work flows (1.16): each kind of work item, step by step, with who in this team does it
+function flowsHtml() {
+  const flows = bpOf()?.flows || [];
+  if (!flows.length) return '';
+  const lead = s.team.find((m) => m.lead), name = (m) => esc(String(m.displayName).split(' - ')[0] || tplOf(m.template).title);
+  const who = (st) => {
+    if (st.by === 'owner') return { html: `<b>${tt('You')}</b>`, cls: 'owner' };
+    const role = st.by === 'lead' ? bpOf().lead : st.by, ms = st.by === 'lead' && lead ? [lead] : s.team.filter((m) => m.template === role);
+    if (ms.length) return { html: `<b>${ms.map(name).join(', ')}</b>`, cls: '' };
+    return { html: `<b>${esc(tplOf(role).title)}</b> <span class="chip">${st.optional ? tt('optional, not in the team') : tt('not in the team')}</span>`, cls: st.optional ? 'opt' : 'miss' };
+  };
+  const rows = flows.map((f) => ({ f, steps: f.steps.map((st) => ({ st, w: who(st) })) }));
+  const broken = rows.filter((r) => r.steps.some((x) => x.w.cls === 'miss')).length;
+  return `<details class="card flowCard" ${broken ? 'open' : ''}><summary><span class="grow"><b>${tt('Work flows')}</b>
+      <span class="note">${tt('How each kind of work travels from the first agent to you')}</span></span>
+      ${broken ? `<span class="loopState warn">${ic('alert')}${tt('{n} with a step nobody does', { n: broken })}</span>` : `<span class="loopState ok">${ic('check')}${flows.length === 1 ? tt('{n} flow, every step has someone', { n: 1 }) : tt('{n} flows, every step has someone', { n: flows.length })}</span>`}</summary>
+    ${rows.map(({ f, steps }) => `<h5 class="flowItem">${esc(tx(f.item))}</h5><ol class="flowSteps">${steps.map(({ st, w }) => `<li class="${w.cls}"><span class="flowWho">${w.html}</span><span class="flowDoes">${esc(tx(st.does))}${st.status ? ` <span class="chip">${esc(st.status)}</span>` : ''}</span></li>`).join('')}</ol>`).join('')}</details>`;
 }
 
 // the Blueprint's first questions: a question shows only while its condition holds (as intakeAsked on the server)
@@ -123,6 +142,7 @@ function teamHtml() {
       <div class="ssField"><label for="ssGoal">${tt('Goal (written to AISQUAD.md)')}</label><textarea id="ssGoal" rows="4">${esc(s.goal)}</textarea></div>
       ${added.length ? `<p class="note loopNote">${ic('info')}<span>${tt('Added back so the loop is complete: {list}.', { list: added.map((x) => esc(tplOf(x).title)).join(', ') })}</span></p>` : ''}</div>
     ${loopHtml()}
+    ${flowsHtml()}
     <div class="sectionHead ssSection"><h3 class="grow">${s.team.length === 1 ? tt('Team · {n} agent', { n: 1 }) : tt('Team · {n} agents', { n: s.team.length })}</h3><button type="button" class="small" data-catalog="${s.catalog ? 'close' : 'open'}" aria-expanded="${s.catalog}">${s.catalog ? tt('Close the catalog') : tt('+ Add agent')}</button></div>
     ${s.catalog ? catalogHtml() : ''}
     ${s.team.length ? `<ul class="memberList">${s.team.map(memberCard).join('')}</ul>` : `<div class="empty">${tt('No agents yet. Add them from the catalog.')}</div>`}`;

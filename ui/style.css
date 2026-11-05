@@ -935,6 +935,23 @@ fieldset.intakeQ { border: 0; padding: 0; min-width: 0; }
 .loopIcon { color: var(--success-ink); padding-top: 1px; }
 .loopList li.miss .loopIcon { color: var(--warning-ink); }
 .loopList .note { line-height: 1.5; }
+.flowCard { margin-top: var(--sp-3); }
+.flowCard > summary { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; cursor: pointer; list-style: none; }
+.flowCard > summary::-webkit-details-marker { display: none; }
+.flowCard > summary .note { display: block; }
+.flowCard > summary > .grow { flex: 1 1 240px; min-width: 0; }
+.flowItem { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-sm); }
+.flowSteps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: var(--sp-1); }
+.flowSteps li { counter-increment: step; display: grid; grid-template-columns: var(--sp-6) minmax(140px, 200px) 1fr; gap: var(--sp-2); align-items: baseline; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--surface-muted); line-height: 1.5; }
+.flowSteps li::before { content: counter(step); font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.flowSteps li.owner { background: var(--accent-soft); }
+.flowSteps li.miss { background: var(--warning-soft); box-shadow: inset 3px 0 0 var(--warning-border); }
+.flowSteps li.opt { color: var(--text-muted); }
+.flowSteps .chip { margin-left: var(--sp-1); }
+@media (max-width: 640px) {
+  .flowSteps li { grid-template-columns: var(--sp-5) 1fr; }
+  .flowSteps .flowDoes { grid-column: 2; }
+}
 .memberList { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
 .memberList .card + .card { margin-top: 0; }
 .memberCard { margin-top: 0; padding: var(--sp-3) var(--sp-4); }
