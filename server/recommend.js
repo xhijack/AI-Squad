@@ -84,7 +84,10 @@ export function claudePrompt(prompt, blueprints, roles) {
     '',
     'Blueprints:',
     ...blueprints.flatMap((b) => {
-      const loop = new Map(loopRoles(b).map((r) => [r.template, r.duties.map((d) => d.text).join('; ')]));
+      const loop = new Map(loopRoles(b).map((r) => {
+        const flows = [...new Set(r.duties.filter((d) => d.kind === 'flow').map((d) => d.item))];      // one mention per flow keeps the prompt short
+        return [r.template, [...r.duties.filter((d) => d.kind !== 'flow').map((d) => d.text), ...(flows.length ? [`steps in ${flows.join(', ')}`] : [])].join('; ')];
+      }));
       return [`- ${b.id}: ${b.title}. ${b.description}`, ...b.roles.map((r) => `  - ${r.template}: min ${r.min}, default ${r.default}, max ${r.max}${r.lead ? ', lead' : ''}${loop.has(r.template) ? `, loop (${loop.get(r.template)})` : ', optional'}. ${clip(r.why, 200)}`),
         ...(b.cadence?.length ? [`  Routines: ${b.cadence.map((r) => `${r.title} by ${r.agent}, ${r.every}`).join('; ')}`] : [])];
     }),

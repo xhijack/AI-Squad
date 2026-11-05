@@ -13,6 +13,8 @@ import * as backup from './backup.js';
 import * as google from './google.js';
 import * as sessions from './sessions.js';
 import * as limits from './limits.js';
+import * as blueprints from './blueprints.js';
+import { listTemplates } from './roles.js';
 
 const run = (file, args) => { try { return execFileSync(file, args, { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); } catch { return null; } };
 const gb = (b) => `${(b / 2 ** 30).toFixed(1)} GB`;
@@ -86,6 +88,13 @@ export function runDoctor({ service = null, online = null, now = Date.now() } = 
   }
 
   const res = readResources();
+  // Blueprints whose loop cannot close (1.16): an edited or improved copy in the library can lose a role or a step
+  try {
+    const templates = listTemplates().map((t) => t.role);
+    const broken = blueprints.listBlueprints().map((b) => ({ b, errors: blueprints.checkBlueprint(b, { templates }).filter((x) => x.level === 'error') })).filter((x) => x.errors.length);
+    add('blueprints', 'Blueprints', broken.length ? 'warn' : 'ok', broken.length ? broken.map((x) => `${x.b.id}: ${x.errors[0].text}${x.errors.length > 1 ? ` (+${x.errors.length - 1})` : ''}`).join('; ') : 'every work flow reaches the owner',
+      broken.length ? `Fix the Blueprint in ${blueprints.libraryDir()}, or delete the edited copy to get the shipped one back` : '');
+  } catch (e) { add('blueprints', 'Blueprints', 'warn', e.message); }
   add('ram', 'Memory', res.mem.total < 8 * 2 ** 30 ? 'warn' : 'ok', `${gb(res.mem.available)} free of ${gb(res.mem.total)}`, res.mem.total < 8 * 2 ** 30 ? 'Under 8 GB: keep the number of agents running at once low (Menu → Backups and health)' : '');
   if (res.disk) add('disk', 'Disk', res.disk.free < 5 * 2 ** 30 ? 'warn' : 'ok', `${gb(res.disk.free)} free`, res.disk.free < 5 * 2 ** 30 ? 'Free some disk space' : '');
 

@@ -13,6 +13,7 @@ import * as building from '../server/building.js';
 import { createSquad } from '../server/setup.js';
 import { readFloor } from '../server/floors.js';
 import { execFileSync } from 'node:child_process';
+import { listTemplates } from '../server/roles.js';
 
 const root = scratch();
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-claude-print.cjs');
@@ -77,7 +78,7 @@ test('Claude Code answer: unknown roles dropped, counts clamped to the Blueprint
   const args = JSON.parse(fs.readFileSync(log, 'utf8').trim());
   assert.deepEqual(args.slice(0, 8), ['-p', '--model', 'opus', '--effort', 'high', '--output-format', 'json', '--tools']);
   assert.match(args.at(-1), /COMPLETE team/);
-  assert.match(args.at(-1), /- qa-engineer: min 1, default 1, max 1, loop \(Required by the Blueprint \(at least 1\)\)/);
+  assert.match(args.at(-1), /- qa-engineer: min 1, default 1, max 1, loop \(Required by the Blueprint \(at least 1\); steps in A module\)/);
   process.env.FAKE_CLAUDE_MODE = 'garbage';
   assert.equal((await rec.recommend({ prompt: 'a POS app' })).source, 'keywords', 'unreadable answer falls back');
   delete process.env.FAKE_CLAUDE_MODE; delete process.env.FAKE_CLAUDE_LOG;
@@ -90,7 +91,8 @@ test('the loop of a Blueprint: lead, minimums, routine agents and document owner
   const seo = bp.getBlueprint('seo-geo');
   const loop = bp.loopRoles(seo);
   assert.deepEqual(loop.map((r) => r.template), ['seo-geo-strategist', 'content-writer', 'web-developer', 'technical-seo-specialist', 'geo-analyst', 'keyword-researcher']);
-  assert.deepEqual(loop.find((r) => r.template === 'geo-analyst').duties, [{ kind: 'routine', id: 'geo-panel', text: 'Routine: GEO panel check (a third of the prompts)' }]);
+  assert.deepEqual(loop.find((r) => r.template === 'geo-analyst').duties, [{ kind: 'routine', id: 'geo-panel', text: 'Routine: GEO panel check (a third of the prompts)' },
+    { kind: 'flow', item: 'The AI prompt panel', text: 'The AI prompt panel: Checks a third of the prompts every week' }, { kind: 'flow', item: 'The AI prompt panel', text: 'The AI prompt panel: Proposes at most three changes to the lead' }]);
   assert.ok(loop[0].duties.some((d) => d.kind === 'lead') && loop[0].duties.some((d) => d.text === 'Owns SEO brief'));
   // the team Claude Code once gave for sopwer.id: four roles, no GEO Analyst
   const four = ['seo-geo-strategist', 'keyword-researcher', 'technical-seo-specialist', 'content-writer'].map((template) => ({ template }));
@@ -133,7 +135,7 @@ test('Set up Squad: next free Floor from 2, a new folder under the squads folder
   assert.equal(r.lead, 'rina-pm', 'the Blueprint lead role leads');
   assert.ok(fs.existsSync(path.join(r.path, '.git')));
   const f = readFloor(r.path);
-  assert.deepEqual(f.floor.blueprint, { id: 'software-house', version: 6 });
+  assert.deepEqual(f.floor.blueprint, { id: 'software-house', version: 7 });
   assert.equal(f.floor.workflow, 'squad-sprint');
   // its routines (1.5): seeded off, in the first commit
   const routines = JSON.parse(fs.readFileSync(path.join(r.path, '.claude', 'aisquad', 'cadence.json'), 'utf8')).routines;
@@ -150,7 +152,7 @@ test('the standard is written into AISQUAD.md and every agent file, with the rul
     { template: 'project-manager', displayName: 'Rina - PM', lead: true }, { template: 'fullstack-developer', displayName: 'Budi - Dev' }, { template: 'devops-engineer', displayName: 'Ops' }] });
   const read = (f) => fs.readFileSync(path.join(r.path, f), 'utf8');
   const brief = read('AISQUAD.md');
-  assert.match(brief, /## Squad standard: Software House v6/);
+  assert.match(brief, /## Squad standard: Software House v7/);
   assert.match(brief, /only the lead \(Rina - PM \(`rina-pm`\)\) talks to the owner/);
   assert.match(brief, /\| `docs\/PRD\.md` \| What and why/);
   assert.doesNotMatch(brief, /Rules per role/, 'role rules go to the agents, not the brief');
@@ -208,7 +210,7 @@ test('approving a source document touches only its STATUS and approval lines', (
 });
 
 test('Blueprints seed routines (1.5): Marketing, Sales, Software House, ERP Consultant and Legal; every one is valid', () => {
-  const want = { 'digital-marketing': ['daily-content-draft', 'weekly-report'], 'sales-crm': ['follow-up-list'], 'software-house': ['standup-summary', 'dependency-check'], 'erp-consultant': ['uat-gap-status'], legal: ['contract-queue'] };
+  const want = { 'digital-marketing': ['daily-content-draft', 'weekly-report', 'approved-to-site', 'approved-posts', 'weekly-numbers'], 'sales-crm': ['follow-up-list', 'lead-batch', 'crm-hygiene', 'approved-outreach', 'pipeline-report'], 'software-house': ['standup-summary', 'dependency-check'], 'erp-consultant': ['uat-gap-status', 'approved-gaps'], legal: ['contract-queue'], product: ['research-digest', 'roadmap-review'] };
   for (const [id, ids] of Object.entries(want)) {
     const b = bp.getBlueprint(id);
     assert.deepEqual(b.cadence.map((r) => r.id), ids, id);
@@ -219,7 +221,7 @@ test('Blueprints seed routines (1.5): Marketing, Sales, Software House, ERP Cons
     }
   }
   // Marketing works at night: its routines sit inside the 22:00-05:00 shift
-  assert.ok(bp.getBlueprint('digital-marketing').cadence.every((r) => r.at >= '22:00'));
+  assert.ok(bp.getBlueprint('digital-marketing').cadence.every((r) => r.at >= '22:00' || r.at < '05:00'));
   assert.deepEqual(bp.parseBlueprint('---\nid: x\n---\n').cadence, []);
 });
 
@@ -231,10 +233,45 @@ test('a Blueprint can list owner-only topics for Autopilot', () => {
 
 test('Software House v3: an optional Security Engineer, a plan review gate and the premise check for the lead', () => {
   const b = bp.getBlueprint('software-house');
-  assert.equal(b.version, 6);
+  assert.equal(b.version, 7);
   assert.ok(b.roles.find((r) => r.template === 'second-opinion-reviewer' && r.min === 0));
   assert.deepEqual(b.roles.find((r) => r.template === 'security-engineer'), { template: 'security-engineer', min: 0, default: 0, max: 1, lead: false, why: b.roles.find((r) => r.template === 'security-engineer').why });
   assert.ok(b.gates.includes('plan review before each sprint'));
   assert.match(bp.roleRules(b, 'security-engineer'), /never production/);
   assert.match(bp.roleRules(b, 'project-manager'), /premise check/);
+});
+
+test('work flows (1.16): every shipped Blueprint closes its loop; the check names what is broken', () => {
+  const templates = listTemplates().map((t) => t.role);
+  for (const b of bp.listBlueprints()) {
+    assert.ok(b.flows.length, `${b.id}: has a work flow`);
+    assert.deepEqual(bp.checkBlueprint(b, { templates }).filter((x) => x.level === 'error'), [], `${b.id}: no error`);
+    for (const f of b.flows) assert.ok(f.steps.some((st) => st.by === 'owner'), `${b.id}/${f.item}: the owner decides`);
+    assert.ok(b.intake.length, `${b.id}: asks its first questions`);
+  }
+  const broken = bp.parseBlueprint(`---
+id: shop
+roles:
+  - { template: shop-lead, default: 1, lead: true }
+  - { template: packer, default: 1 }
+  - { template: courier, default: 0 }
+cadence:
+  - { id: stock, title: Stock count, agent: buyer, every: daily, task: Count }
+flows:
+  An order:
+    - { by: lead, does: Takes the order }
+    - { by: shipper, does: Ships it }
+  A refund:
+    - { by: lead, does: Checks it }
+    - { by: owner, does: Approves it }
+    - { by: packer, does: Takes the parcel back }
+---
+`);
+  assert.deepEqual(bp.checkBlueprint(broken, { templates: ['shop-lead', 'packer'] }).map((x) => [x.level, x.code]), [
+    ['error', 'role-unknown'], ['error', 'routine-agent'], ['error', 'flow-role'], ['error', 'flow-owner'], ['warn', 'flow-pickup'], ['warn', 'role-idle']]);
+  assert.deepEqual(bp.checkBlueprint(bp.parseBlueprint('---\nid: x\nroles:\n  - { template: a, default: 1 }\n---\n')).map((x) => x.code), ['flow-none']);
+  // a flow step puts its role in the loop, an optional one does not
+  const sh = bp.getBlueprint('software-house');
+  assert.ok(bp.loopRoles(sh).find((r) => r.template === 'qa-engineer').duties.some((d) => d.kind === 'flow'));
+  assert.ok(!bp.loopRoles(sh).some((r) => r.template === 'security-engineer'));
 });

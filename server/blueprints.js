@@ -40,6 +40,8 @@ export function parseBlueprint(text, fallbackId = '') {
     cadence: Array.isArray(data.cadence) ? data.cadence.filter((r) => r && r.title && r.task) : [],
     // first questions (1.15): asked in Set up Squad, so the lead starts from the answers instead of asking again
     intake: cleanIntake(data.intake), intakeDoc: String(data.intakeDoc || 'docs/SETUP.md'),
+    // the work flows (1.16): how each kind of work item travels from the first agent to the owner, step by step
+    flows: cleanFlows(data.flows),
     // ERPNext key and Telegram (1.7): Finance reads with the finance key and sends only counts
     // built-in MCP servers the squad's sessions get (1.8): aisquad-google
     mcp: list(data.mcp).filter((x) => x === google.MCP_NAME),
@@ -126,6 +128,7 @@ export function loopRoles(bp) {
   for (const r of bp.roles) if (r.min > 0 && r.template !== bp.lead) add(r.template, { kind: 'min', text: `Required by the Blueprint (at least ${r.min})` });
   for (const r of bp.cadence || []) add(r.agent, { kind: 'routine', id: kebab(r.id || r.title, 40), text: `Routine: ${r.title}` });
   for (const d of bp.sourceDocs || []) if (d?.owner) add(d.owner, { kind: 'doc', text: `Owns ${d.title || d.path}` });
+  for (const f of bp.flows || []) for (const st of f.steps) if (st.by !== 'owner' && !st.optional) add(stepRole(bp, st), { kind: 'flow', item: f.item, text: `${f.item}: ${st.does}` });
   return [...by.values()];
 }
 // the loop roles a team (members with a template) leaves out, with what stops without them
@@ -133,6 +136,42 @@ export function loopGaps(bp, team) {
   const have = new Map();
   for (const m of team || []) have.set(m.template, (have.get(m.template) || 0) + 1);
   return loopRoles(bp).filter((r) => (have.get(r.template) || 0) < (r.duties.some((d) => d.kind === 'min') ? r.min : 1));
+}
+
+// ---------- work flows (1.16) ----------
+// flows: { "<work item>": [{ by: owner | lead | <role template>, does, status?, optional? }] } -> [{ item, steps }]
+export function cleanFlows(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return [];
+  return Object.entries(input).filter(([, steps]) => Array.isArray(steps)).map(([item, steps]) => ({
+    item: String(item), steps: steps.filter((x) => x && x.by && x.does).map((x) => ({ by: x.by === 'owner' || x.by === 'lead' ? x.by : kebab(x.by), does: String(x.does), ...(x.status ? { status: String(x.status) } : {}), ...(x.optional ? { optional: true } : {}) })),
+  })).filter((f) => f.steps.length);
+}
+const stepRole = (bp, st) => (st.by === 'lead' ? bp.lead : st.by === 'owner' ? '' : st.by);
+
+// the Blueprint checked for a loop that cannot close (1.16) -> [{ level: error | warn, code, text }]. Shipped
+// Blueprints must have no error (test/blueprints.test.js); the owner sees both when editing one.
+export function checkBlueprint(bp, { templates = null } = {}) {
+  const out = [], err = (code, text) => out.push({ level: 'error', code, text }), warn = (code, text) => out.push({ level: 'warn', code, text });
+  const roles = new Set(bp.roles.map((r) => r.template)), known = templates ? new Set(templates) : null;
+  for (const r of bp.roles) if (known && !known.has(r.template)) err('role-unknown', `Role "${r.template}" has no Role Template`);
+  for (const r of bp.cadence || []) if (!roles.has(kebab(r.agent || ''))) err('routine-agent', `Routine "${r.title}" is run by "${r.agent}", which is not a role of this Blueprint`);
+  for (const d of bp.sourceDocs || []) if (d?.owner && !roles.has(kebab(d.owner))) err('doc-owner', `${d.path} is owned by "${d.owner}", which is not a role of this Blueprint`);
+  for (const q of bp.intake || []) for (const a of q.agents || []) if (!roles.has(a)) err('intake-agent', `Question "${q.label}" gives write access to "${a}", which is not a role of this Blueprint`);
+  if (!bp.flows.length) err('flow-none', 'No work flow: write how a work item travels from the first agent to the owner (flows)');
+  const routine = new Set((bp.cadence || []).map((r) => kebab(r.agent || '')));
+  for (const f of bp.flows) {
+    f.steps.forEach((st, i) => {
+      const role = stepRole(bp, st);
+      if (st.by !== 'owner' && !roles.has(role)) err('flow-role', `${f.item}, step ${i + 1}: "${st.by}" is not a role of this Blueprint`);
+      // after the owner's go-ahead the work waits for someone to pick it up: a routine of that role, or the lead
+      // (a sprint squad's board dispatches every module by itself)
+      if (i && bp.workflow !== 'squad-sprint' && f.steps[i - 1].by === 'owner' && st.by !== 'owner' && role !== bp.lead && !routine.has(role)) warn('flow-pickup', `${f.item}, step ${i + 1}: after your approval "${role}" has no routine, so it waits until the lead assigns it`);
+    });
+    if (!f.steps.some((st) => st.by === 'owner')) err('flow-owner', `${f.item}: no step for the owner; nothing leaves the squad without the owner's approval`);
+  }
+  const busy = new Set([bp.lead, ...routine, ...(bp.sourceDocs || []).map((d) => kebab(d?.owner || '')), ...bp.flows.flatMap((f) => f.steps.map((st) => stepRole(bp, st)))]);
+  for (const r of bp.roles) if (!busy.has(r.template)) (r.default > 0 ? err : warn)('role-idle', `Role "${r.template}" has no routine, no document and no step in a flow: it never gets work`);
+  return out;
 }
 
 // ---------- first questions (1.15) ----------
@@ -178,7 +217,11 @@ export function intakeMarkdown(bp, answers = {}) {
 }
 export function intakeKickoff(bp, answers = {}) {
   const md = intakeMarkdown(bp, answers);
-  return md ? `${bp.kickoff}\n\nThe owner already answered the first questions in Set up Squad (also in \`${bp.intakeDoc}\`); do not ask them again:\n${md.split('\n').filter((l) => l.startsWith('- ')).join('\n')}`.trim() : bp.kickoff;
+  if (md) return `${bp.kickoff}\n\nThe owner already answered the first questions in Set up Squad (also in \`${bp.intakeDoc}\`); do not ask them again:\n${md.split('\n').filter((l) => l.startsWith('- ')).join('\n')}`.trim();
+  // created without the wizard (the Company Guide): the lead asks them first and writes the intake document
+  if (!(bp.intake || []).length) return bp.kickoff;
+  const when = (q) => (q.when ? ` (only if ${Object.entries(q.when).map(([k, v]) => `${bp.intake.find((x) => x.id === k)?.label.replace(/[:?]\s*$/, '') || k} is ${v.map((x) => bp.intake.find((y) => y.id === k)?.options?.find((o) => o.value === x)?.label || x).join(' or ')}`).join(', ')})` : '');
+  return `${bp.kickoff}\n\nBefore anything else, ask me these first questions one at a time and write my answers to \`${bp.intakeDoc}\`:\n${bp.intake.map((q) => `- ${q.label}${q.kind === 'choice' ? ` (${q.options.map((o) => o.label).join(' / ')})` : ''}${when(q)}`).join('\n')}`.trim();
 }
 // the repositories the answers name -> [{ where, branch, templates }] (a Linked repository with write access)
 export function intakeRepos(bp, answers = {}) {

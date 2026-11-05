@@ -169,7 +169,7 @@ const routes = [
   ['GET', /^\/api\/jobs$/, (p, b, req) => { const q = new URL(req.url, 'http://x').searchParams; return { jobs: jobs.listJobs({ floorId: q.get('floor') || '', agentId: q.get('agent') || '', limit: 50 }).map(({ prompt, ...j }) => j) }; }, { pin: true }],
   ['GET', /^\/api\/jobs\/(j-[\w-]+)$/, ([id]) => jobs.jobDetail(id), { pin: true }],
   ['POST', /^\/api\/jobs\/(j-[\w-]+)\/stop$/, ([id]) => { const j = jobs.stopJob(id); squad.stopRemote(j); squad.logJobEnded(j); return { ok: true, job: j }; }, { pin: true }],
-  ['GET', /^\/api\/blueprints$/, () => ({ blueprints: blueprints.listBlueprints().map(({ dir, ...b }) => ({ ...b, loop: blueprints.loopRoles(b) })), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber(), advisor: advisor() })],
+  ['GET', /^\/api\/blueprints$/, () => ({ blueprints: ((templates) => blueprints.listBlueprints().map(({ dir, ...b }) => ({ ...b, loop: blueprints.loopRoles(b), check: blueprints.checkBlueprint(b, { templates }) })))(blueprints.catalog().map((t) => t.role)), squadsDir: squadsDir(), nextFloorNumber: building.nextFloorNumber(), advisor: advisor() })],
   ['GET', /^\/api\/catalog$/, () => ({ templates: blueprints.catalog() })],
   ['POST', /^\/api\/floors\/([\w-]+)\/skills\/install$/, ([id], b) => squad.installSkills(id, b.names || b.name), { pin: true }],
   ['POST', /^\/api\/squads\/recommend$/, (p, b) => recommend({ prompt: b.prompt, blueprint: b.blueprint, useClaude: b.useClaude !== false }), { pin: true }],
