@@ -84,7 +84,8 @@ function gitRules(git) {
 export function repoRules(repos, lead = false) {
   const out = ['This repository is the primary one: the board, the docs and the handoffs live here.'];
   for (const r of repos) {
-    out.push(r.access === 'write'
+    out.push(r.forTeam ? `\`${r.path}\` (${r.id}, ${r.abs}): your teammates ${r.forTeam.map((x) => `\`${x}\``).join(', ')} edit and commit there on their own branches (not on \`${r.branch.main}\`); it is open in your session because they run in it. Give them that work; do not edit there yourself. Never push.`
+      : r.access === 'write'
       ? `\`${r.path}\` (${r.id}, ${r.abs}): you may edit and commit there on your sprint branch (${r.branch.strategy === 'trunk' ? `directly on \`${r.branch.main}\`` : `not on \`${r.branch.main}\``}). Never push.${r.gate ? ` Its quality gate: \`${r.gate}\`.` : ''}`
       : `\`${r.path}\` (${r.id}, ${r.abs}): read only, for context. Never change files there and never run git writes in it; a change it needs goes into the module handoff for its maintainer.`);
   }

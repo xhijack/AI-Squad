@@ -40,6 +40,7 @@ test('the owner sets the linked repositories: checked, written without absolute 
   assert.match(file(seo), /`\.\.\/dtamu-bukutamu` \(bukutamu, .*\): read only, for context\. Never change files there/);
   assert.doesNotMatch(file(dev), /dtamu-landing-page/, 'landing is for the SEO agent only');
   assert.match(file(lead), /dtamu-landing-page[\s\S]*name the repository of every module/, 'the lead plans for every repository');
+  assert.match(file(lead), new RegExp(`\\.\\./dtamu-landing-page\` \\(landing, .*\\): your teammates \`${seo}\` edit and commit there on their own branches[\\s\\S]*do not edit there yourself`), 'the teammates run in the lead\'s session (1.16.5)');
   assert.match(fs.readFileSync(path.join(app, 'AISQUAD.md'), 'utf8'), /\*\*Repositories:\*\* this one is the primary[\s\S]*`\.\.\/dtamu-bukutamu` \(bukutamu, read\)/);
 });
 
@@ -54,6 +55,17 @@ test('an agent starts with --add-dir for its repositories and every write denied
   assert.ok(s.includes(`Bash(git -C ${bukutamu} commit:*)`), 'git writes denied there');
   assert.ok(!s.includes(`Edit(/${landing}/**)`), 'the write repository stays writable for its agent');
   squad.stopAgent(FLOOR, seo);
+});
+
+test('the lead starts with its teammates\' write repository open (they run in its session), the read-only one closed', async () => {
+  await squad.startAgent(FLOOR, lead);
+  const start = () => (fs.existsSync(LOG) ? fs.readFileSync(LOG, 'utf8') : '').split('\n').filter((l) => l.startsWith('START') && l.includes(`--agent ${lead}`)).at(-1) || '';
+  for (let i = 0; i < 40 && !start(); i++) await new Promise((r) => setTimeout(r, 150));
+  const s = start();
+  assert.match(s, new RegExp(`--add-dir ${landing}`));
+  assert.ok(!s.includes(`Edit(/${landing}/**)`) && !s.includes(`Bash(git -C ${landing} commit:*)`), 'no write denied where a teammate commits: Claude Code would refuse to spawn it');
+  assert.ok(s.includes(`Edit(/${bukutamu}/**)`), 'the read-only repository stays closed');
+  squad.stopAgent(FLOOR, lead);
 });
 
 test('a repository elsewhere on this machine: the local path (building.json) wins, the repository file is unchanged', () => {

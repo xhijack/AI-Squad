@@ -60,9 +60,14 @@ export function agentRepos(root, repos, agentId, local = {}) {
   return repos.filter((r) => r.agents.includes(agentId) || (r.access === 'read' && !r.agents.length))
     .map((r) => ({ id: r.id, path: r.path, abs: resolve(root, r, local), access: r.access === 'write' && r.agents.includes(agentId) ? 'write' : 'read', branch: r.branch, gate: r.gate || '' }));
 }
-// the lead plans for every repository: all of them, read access unless it is assigned to a "write" one
-export const leadRepos = (root, repos, leadId, local = {}) => repos.map((r) => ({ id: r.id, path: r.path, abs: resolve(root, r, local),
-  access: r.access === 'write' && r.agents.includes(leadId) ? 'write' : 'read', branch: r.branch, gate: r.gate || '' }));
+// the lead plans for every repository. Its teammates run inside its session (agent teams), so a teammate can never
+// do more than the lead's session allows: a "write" repository with any agent assigned is open for writing in the
+// lead's session too (forTeam: for the teammates, not the lead itself). Before 1.16.5 it was read-only there, the
+// lead's start denied every write, and Claude Code refused to spawn the web developer ("Create Unsafe Agents").
+export const leadRepos = (root, repos, leadId, local = {}) => repos.map((r) => {
+  const own = r.access === 'write' && r.agents.includes(leadId), team = r.access === 'write' && !own && r.agents.length > 0;
+  return { id: r.id, path: r.path, abs: resolve(root, r, local), access: own || team ? 'write' : 'read', ...(team ? { forTeam: r.agents.filter((x) => x !== leadId) } : {}), branch: r.branch, gate: r.gate || '' };
+});
 // Claude Code arguments: one --add-dir per repository the agent may read
 export const addDirArgs = (list) => list.filter((r) => fs.existsSync(r.abs)).flatMap((r) => ['--add-dir', r.abs]);
 // deny rules for read-only repositories: every file write tool on that path (Claude Code writes absolute paths as
