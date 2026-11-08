@@ -10,12 +10,14 @@ import { t } from './i18n.js';
 export const isAsk = (item) => !!item?.questions?.length && (item.questions.length > 1 || item.questions.some((q) => q.multiSelect));
 const clean = (label) => String(label).replace(/\s*\(recommended\)\s*/i, ' ').trim();
 
-export function askFormHtml(item, { act = 'answer-ask' } = {}) {
+// footer: false leaves out the error line and the send button (the conversation view puts them in its fixed footer,
+// so they stay in sight however long the questions are; the button reaches the form with form="<id>")
+export function askFormHtml(item, { act = 'answer-ask', id = '', footer = true } = {}) {
   const blocks = item.questions.map((q, i) => `<fieldset class="askQ"><legend>${q.header ? `<b>${esc(q.header)}</b> · ` : ''}${q.multiSelect ? t('choose any') : t('choose one')}</legend>
     <div class="askText">${esc(q.question)}</div>
     ${q.options.map((o) => `<label class="inline askOpt"><input type="${q.multiSelect ? 'checkbox' : 'radio'}" name="q${i}" value="${o.n}"> ${esc(clean(o.label))}${o.recommended ? ` <span class="chip ok">${t('Recommended')}</span>` : ''}</label>`).join('')}
     <input name="q${i}text" class="askOther" placeholder="${t('Other (your own answer)')}" aria-label="${t('Other answer for {header}', { header: esc(q.header || q.question) })}"></fieldset>`).join('');
-  return `<form class="askForm" data-act="${act}" data-id="${esc(item.id)}">${blocks}<div class="row"><span class="err grow" data-askerr></span><button class="gold">${t('Send answers')}</button></div></form>`;
+  return `<form class="askForm" ${id ? `id="${esc(id)}" ` : ''}data-act="${act}" data-id="${esc(item.id)}">${blocks}${footer ? `<div class="row"><span class="err grow" data-askerr></span><button class="gold">${t('Send answers')}</button></div>` : ''}</form>`;
 }
 
 // -> [{ choices, text }] or throws with what is missing

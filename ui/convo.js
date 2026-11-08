@@ -34,28 +34,31 @@ function dialogEl() {
   return d;
 }
 
+// -> { main, bar }: main goes under the message in the scrolling body (questions and options can be long), bar is the
+// fixed footer that keeps the send buttons in sight on a laptop screen
 function actionsHtml(item, a) {
   const desk = item.floorId && item.agentId ? `<a class="btn ghost" href="#/floor/${esc(item.floorId)}/desk/${esc(item.agentId)}" data-desk>${t('Open desk')}</a>` : '';
   const dismiss = a.dismiss ? `<button type="button" class="ghost" data-dismiss>${esc(a.dismiss === 'OK' ? t('OK') : t('Dismiss'))}</button>` : '';
-  if (a.mode === 'ask') return `${askFormHtml(item, { act: 'convo-ask' })}<div class="convoBar">${desk}</div>`;
+  if (a.mode === 'ask') return { main: askFormHtml(item, { act: 'convo-ask', id: 'convoAsk', footer: false }),
+    bar: `<div class="convoBar">${desk}<span class="err grow" data-askerr role="alert"></span><button type="submit" class="gold" form="convoAsk">${t('Send answers')}</button></div>` };
   if (a.mode === 'options') {
     const free = a.options.find((o) => o.free);
-    return `<div class="convoOpts">${a.options.filter((o) => !o.free).map((o) => `<button type="button" class="big ${o.recommended ? 'gold' : ''}" data-n="${o.n}">${o.recommended ? `<small>${t('Recommended')}</small>` : ''}${esc(o.label)}</button>`).join('')}</div>
-      ${free ? `<form class="convoForm" data-free="${free.n}"><textarea name="text" rows="2" placeholder="${esc(free.label)}" aria-label="${t('Your own answer')}" required></textarea><button class="gold">${t('Send')}</button></form>` : ''}
-      <div class="convoBar">${desk}<span class="spacer"></span>${dismiss}</div>`;
+    return { main: `<div class="convoOpts">${a.options.filter((o) => !o.free).map((o) => `<button type="button" class="big ${o.recommended ? 'gold' : ''}" data-n="${o.n}">${o.recommended ? `<small>${t('Recommended')}</small>` : ''}${esc(o.label)}</button>`).join('')}</div>
+      ${free ? `<form class="convoForm" data-free="${free.n}"><textarea name="text" rows="2" placeholder="${esc(free.label)}" aria-label="${t('Your own answer')}" required></textarea><button class="gold">${t('Send')}</button></form>` : ''}`,
+    bar: `<div class="convoBar">${desk}<span class="spacer"></span>${dismiss}</div>` };
   }
   if (a.mode === 'reply') {
     const who = esc(String(item.agentName || t('the agent')).split(' - ')[0]);
-    return `${a.canReply ? `<form class="convoForm" data-reply><textarea name="text" rows="3" placeholder="${t('Reply to {name}…', { name: who })}" aria-label="${t('Your reply to {name}', { name: who })}" required>${esc(drafts.get(item.id) || '')}</textarea></form>` : `<p class="note">${t('This agent runs on its own: reply in its own terminal.')}</p>`}
-      <div class="convoBar">${desk}<span class="spacer"></span>${dismiss}${a.canReply ? `<button type="button" class="gold" data-send>${t('Reply')}</button>` : ''}</div>`;
+    return { main: '', bar: `${a.canReply ? `<form class="convoForm" data-reply><textarea name="text" rows="3" placeholder="${t('Reply to {name}…', { name: who })}" aria-label="${t('Your reply to {name}', { name: who })}" required>${esc(drafts.get(item.id) || '')}</textarea></form>` : `<p class="note">${t('This agent runs on its own: reply in its own terminal.')}</p>`}
+      <div class="convoBar">${desk}<span class="spacer"></span>${dismiss}${a.canReply ? `<button type="button" class="gold" data-send>${t('Reply')}</button>` : ''}</div>` };
   }
-  return `<div class="convoBar">${desk}<span class="spacer"></span>${dismiss}<button type="button" class="ghost" data-close>${t('Close')}</button></div>`;
+  return { main: '', bar: `<div class="convoBar">${desk}<span class="spacer"></span>${dismiss}<button type="button" class="ghost" data-close>${t('Close')}</button></div>` };
 }
 
 function render() {
   const d = dialogEl(), item = C.list[C.i], ag = agentOf(item), a = actionsFor(item);
   C.portrait?.dispose(); C.portrait = null;
-  const markdown = item.kind === 'finished' || item.kind === 'reply';
+  const markdown = item.kind === 'finished' || item.kind === 'reply', parts = actionsHtml(item, a);
   d.className = `convo ${esc(item.kind)}`;
   d.innerHTML = `<div class="convoHead">
       <canvas class="convoPortrait" width="200" height="240" role="img" aria-label="${esc(ag.displayName)}"></canvas>
@@ -63,8 +66,8 @@ function render() {
         <div class="note">${esc([ag.title, item.floorNumber ? t('Floor {n} · {name}', { n: item.floorNumber, name: item.floorName }) : item.floorName].filter(Boolean).join(' · '))}</div><div class="note">${ago(item.ts)}</div></div>
       <div class="convoNav">${C.list.length > 1 ? `<button type="button" class="iconBtn ghost" data-prev aria-label="${t('Previous item')}">‹</button><span class="note">${ofText(C.i, C.list.length)}</span><button type="button" class="iconBtn ghost" data-next aria-label="${t('Next item')}">›</button>` : ''}
         ${item.agentId && item.text ? `<button type="button" class="small ghost" data-listen title="${t('Read the whole message aloud')}">▶ ${t('Listen')}</button>` : ''}<button type="button" class="iconBtn ghost" data-close aria-label="${t('Close')}">×</button></div></div>
-    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">${t('Decided automatically: <b>{choice}</b>. Pick another option to change it.', { choice: esc(item.chosen) })}</p>` : ''}${item.hardStop?.length ? `<p class="note warnText">${t('Hard stop ({reasons}): only you decide this.', { reasons: esc(item.hardStop.join(', ')) })}</p>` : ''}</div></div>
-    <div class="convoActions">${actionsHtml(item, a)}</div>`;
+    <div class="convoBody" tabindex="0"><div class="convoMsg ${markdown ? 'md' : ''}">${markdown ? mdLite(item.text) : `<p>${esc(item.text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</p>`}${item.kind === 'decided' ? `<p class="note">${t('Decided automatically: <b>{choice}</b>. Pick another option to change it.', { choice: esc(item.chosen) })}</p>` : ''}${item.hardStop?.length ? `<p class="note warnText">${t('Hard stop ({reasons}): only you decide this.', { reasons: esc(item.hardStop.join(', ')) })}</p>` : ''}</div>${parts.main ? `<div class="convoMain">${parts.main}</div>` : ''}</div>
+    <div class="convoActions">${parts.bar}</div>`;
   if (!d.open) d.showModal();
   wire(d, item, a);
   // the portrait (one small WebGL canvas) and the office: camera to the agent, a short bubble over its head
@@ -73,7 +76,7 @@ function render() {
     try { C.portrait = createPortrait(d.querySelector('.convoPortrait'), ag, { reducedMotion: reduced() }); C.portrait.talk(Math.min(4000, 800 + item.text.length * 6)); } catch { /* no WebGL: the text is what matters */ }
   });
   if (item.agentId) { ctx.scene?.focusAgent(item.floorId, item.agentId); ctx.scene?.say(item.floorId, item.agentId, bubbleText(item), 8000); }
-  (d.querySelector('.convoActions textarea') || d.querySelector('.convoActions button.gold') || d.querySelector('.convoBody')).focus({ preventScroll: true });
+  (d.querySelector('.convoActions textarea') || d.querySelector('.convoOpts button.gold') || d.querySelector('.convoActions button.gold') || d.querySelector('.convoBody')).focus({ preventScroll: true });
 }
 
 // one action at a time in the conversation view: a second click or Enter while it runs does nothing
@@ -105,7 +108,7 @@ function wire(d, item, a) {
     return answer(item, { option: +b.dataset.n });
   }, t('Answer sent')); });
   const askF = d.querySelector('form[data-act="convo-ask"]');
-  if (askF) askF.onsubmit = (e) => { e.preventDefault(); try { const answers = readAskForm(askF, item); act(() => answer(item, { answers }), t('Answers sent')); } catch (x) { askF.querySelector('[data-askerr]').textContent = x.message; } };
+  if (askF) askF.onsubmit = (e) => { e.preventDefault(); try { const answers = readAskForm(askF, item); act(() => answer(item, { answers }), t('Answers sent')); } catch (x) { d.querySelector('[data-askerr]').textContent = x.message; } };
   const free = d.querySelector('[data-free]');
   if (free) free.onsubmit = (e) => { e.preventDefault(); act(() => answer(item, { option: +free.dataset.free, text: free.elements.text.value }), t('Answer sent')); };
   const reply = d.querySelector('[data-reply]');
