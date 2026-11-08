@@ -1257,6 +1257,10 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## 1.16.4: the admin pages scroll with the mouse wheel (8 Nov 2026)
+
+- **Fix** (`ui/admin.html`, `ui/style.css`): `html, body { overflow: hidden }` locks the office for its scene; the admin page reopened only `body`, which grew past a still-hidden `<html>`, so a script could scroll it but the mouse wheel and the trackpad could not (Floor settings is 3,753 px on a 768 px screen). `<html class="adminPage">` is now the scroller; the top bar, the sidebar, the save bar and the Floor settings jump bar stay in place (the jump bar sits under the top bar). Checked with real wheel events in headless Chrome on Spaces, Integrations, Cadence and the overview.
+
 ## 1.16.3: finding Floor settings → Google (8 Nov 2026)
 
 The SEO & GEO lead told the owner to enter the properties in "Floor settings → Google"; the owner could not find it: Floor settings is a long page (Admin → Spaces → All settings) and Google was its eleventh section.
