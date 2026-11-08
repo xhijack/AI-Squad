@@ -59,7 +59,7 @@ const TEXT = {
     chatOn: 'Chatting with {agent} in {space}. Type your message; /end stops.', chatOff: 'Chat ended.', noAgent: 'No agent called "{q}". Try its name or id.', many: 'Several agents match: {list}',
     sent: 'Sent to {agent}.', queued: 'Queued ({reason}); {agent} answers when there is room.', digestTitle: 'Summary for {day}', nothingOpen: 'Nothing waits for you.', open: 'Waiting for you ({n}):',
     lastDay: 'Last 24 hours: {done} background jobs done, {failed} failed, ${cost} spent; {stops} idle agents stopped; {chats} chat answers.', targets: 'Targets: {met} of {n} met, {behind} behind, {unset} without a goal.', behindLine: '{space} · {name}: {value} of {target} {unit}', suggestions: '{n} new improvement suggestions in Admin → Improvements.',
-    status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', test: 'Test message from The AI Squad.',
+    status: '{working} working, {waiting} waiting for you, {queued} queued, {slots} free slots.', replyBtn: 'Reply', dismissBtn: 'Dismiss', openBtn: 'Open', diffBtn: 'See the change', test: 'Test message from The AI Squad.',
     askMany: 'Several questions (or several choices): answer them in The AI Squad.',
     routines: 'Routines today: {done} done, {failed} failed, {skipped} skipped.', triggered: 'Targets that raised work:', triggeredLine: '{space} · {name}: {what}',
     what_notify: 'a notice', what_suggest: 'a plan to approve', what_act: 'the agents act on it',
@@ -74,7 +74,7 @@ const TEXT = {
     chatOn: 'Chat dengan {agent} di {space}. Ketik pesanmu; /end untuk berhenti.', chatOff: 'Chat selesai.', noAgent: 'Tidak ada agent bernama "{q}". Coba nama atau id-nya.', many: 'Beberapa agent cocok: {list}',
     sent: 'Terkirim ke {agent}.', queued: 'Masuk antrean ({reason}); {agent} menjawab saat ada slot.', digestTitle: 'Ringkasan {day}', nothingOpen: 'Tidak ada yang menunggumu.', open: 'Menunggumu ({n}):',
     lastDay: '24 jam terakhir: {done} job latar belakang selesai, {failed} gagal, ${cost} terpakai; {stops} agent diam dihentikan; {chats} jawaban chat.', targets: 'Target: {met} dari {n} tercapai, {behind} tertinggal, {unset} belum punya angka.', behindLine: '{space} · {name}: {value} dari {target} {unit}', suggestions: '{n} saran perbaikan baru di Admin → Perbaikan.',
-    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', test: 'Pesan uji dari The AI Squad.',
+    status: '{working} bekerja, {waiting} menunggumu, {queued} antre, {slots} slot kosong.', askMany: 'Beberapa pertanyaan (atau pilihan ganda): jawab di The AI Squad.', replyBtn: 'Balas', dismissBtn: 'Tutup', openBtn: 'Buka', diffBtn: 'Lihat perubahan', test: 'Pesan uji dari The AI Squad.',
     routines: 'Rutinitas hari ini: {done} selesai, {failed} gagal, {skipped} dilewati.', triggered: 'Target yang memicu pekerjaan:', triggeredLine: '{space} · {name}: {what}',
     what_notify: 'pemberitahuan', what_suggest: 'rencana untuk disetujui', what_act: 'agen langsung bekerja',
     countsOnly: '{n} hal dari Space khusus Owner menunggumu di The AI Squad (detail hanya di aplikasi).',
@@ -153,7 +153,8 @@ export function messageFor(item, tok, s = settings(), counts = countsOnly()) {
   }
   const where = [item.floorName || item.floorId, item.agentName].filter(Boolean).join(' · ');
   // a price approval: only its first line (customer, total) travels; the lines and the note are opened in the app
-  const lines = [`[${KIND[item.kind] || item.kind}] ${where}`.trim(), short(['price', 'contract'].includes(item.kind) ? String(item.text).split('\n')[0] : item.text, 600)];
+  const merge = item.kind === 'outbox' && item.channel === 'merge';            // the commits and files to read before saying yes
+  const lines = [`[${merge ? 'Merge' : KIND[item.kind] || item.kind}] ${where}`.trim(), short(['price', 'contract'].includes(item.kind) ? String(item.text).split('\n')[0] : item.text, merge ? 1500 : 600)];
   // several questions or multi-select (1.0.1): every question with its options, answered in the app (no one-tap buttons)
   const many = item.questions?.length && (item.questions.length > 1 || item.questions.some((q) => q.multiSelect));
   const opts = many ? [] : (item.options || []).filter((o) => !o.free).slice(0, 6);
@@ -170,6 +171,7 @@ export function messageFor(item, tok, s = settings(), counts = countsOnly()) {
     if (['question', 'permission', 'reply', 'finished', 'decided', 'price', 'contract', 'proposal', 'outbox'].includes(item.kind) || (item.kind === 'handoff' && item.mode === 'question')) row.push({ text: say('replyBtn', {}, s.lang), data: `r:${tok}` });
     if (item.kind === 'crash') buttons.push([{ text: 'Resume', data: `a:${tok}:1` }, { text: 'Start fresh', data: `a:${tok}:2` }]);
     if (!['question', 'permission', 'price', 'contract', 'target-plan', 'proposal', 'outbox'].includes(item.kind) && !(item.kind === 'handoff' && item.mode === 'held')) row.push({ text: say('dismissBtn', {}, s.lang), data: `x:${tok}` });   // a price is approved or sent back, never dismissed     // a dialog is answered, not dismissed
+    if (item.url && /^https:\/\//.test(item.url)) buttons.push([{ text: say('diffBtn', {}, s.lang), url: item.url }]);
     if (s.publicUrl) row.push({ text: say('openBtn', {}, s.lang), url: item.floorId ? `${s.publicUrl}/#/floor/${item.floorId}${item.agentId ? `/agent/${item.agentId}` : ''}` : `${s.publicUrl}/` });
     buttons.push(row);
   }
@@ -242,7 +244,8 @@ export async function notifyTick(now = Date.now(), { fetchFn } = {}) {
     const same = contentKey(item);
     if (st.sentText[same] && now - st.sentText[same] < SAME_MS) { st.sent[item.id] = { ts: now, duplicate: true, msgs: [] }; continue; }
     if (item.notice && now < (item.notifyAt || 0)) continue;                                // a stall notice: only once it has lasted 15 min
-    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal', 'target-plan'].includes(item.kind);   // a recovery plan waits for Approve / Dismiss (1.5)
+    const urgent = s.immediate.includes(item.kind) || item.autopilot?.critical || ['price', 'handoff', 'erpnext', 'contract', 'legal', 'target-plan'].includes(item.kind)
+      || (item.kind === 'outbox' && item.channel === 'merge');                // a branch to merge: read it and say yes from Telegram (1.17)   // a recovery plan waits for Approve / Dismiss (1.5)
     if (!urgent) { st.sent[item.id] = { ts: now, digest: true, msgs: [] }; continue; }       // waits for the digest
     if (quiet && item.kind !== 'resource') continue;                                         // after the quiet hours
     if (st.hourly.length >= s.maxPerHour) break;

@@ -10,6 +10,8 @@
 //   via: postiz           post, message, ad: the integration and its publishing tool (TOOLS.md in the folder lists them)
 //   tool: schedule_post
 //   ref: v1.4.2           deploys: the version, tag or commit
+//   repo: sopwer-landing  merge (1.17): the linked repository, and the agent's branch in it
+//   branch: web-developer/k1-meta
 //   ---
 //   Notes for the reviewer and the Owner (deploys: what changes, the tests and the QA that passed).
 //   ```json
@@ -21,6 +23,10 @@
 // and anything over the cap always wait for the Owner; ads and production deploys always do. Approved, the server
 // calls the tool itself (a post, a message, an ad) and keeps the receipt, or tells the agent to go (a deploy).
 // The agent reads every answer in docs/squad/outbox/answered/<id>.md.
+// A merge (1.17) always waits for the Owner: the server first pushes the agent's branch so the Owner can read the
+// change on the forge (GitHub, GitLab), and the card (also on Telegram, at once) carries the commits, the files and
+// the compare link. Approved, the server merges that exact commit into the repository's main branch in a worktree,
+// runs its quality gate and pushes the main branch. A branch that moved after the push waits for a new look.
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -36,6 +42,7 @@ import { parseFrontmatter } from './frontmatter.js';
 import { redact } from './redact.js';
 import { readJson, writeJson, readText, safeReaddir, oneLine, clip, bad, notFound } from './util.js';
 import { readSafe, writeSafe, safeDir, pendingFiles } from './proposals.js';
+import * as mergeLib from './merge.js';
 
 export const DIR = 'docs/squad/outbox';
 export const MAX_BYTES = 32 * 1024;
@@ -46,16 +53,18 @@ export const CHANNELS = {
   ad: { modes: ['owner'], tool: true, perDay: 0, what: 'an ad', go: 'Run the ad' },
   'deploy-staging': { modes: ['owner', 'auto'], tool: false, perDay: 10, what: 'a deploy to staging', go: 'Deploy to staging' },
   'deploy-production': { modes: ['owner'], tool: false, perDay: 0, what: 'a deploy to production', go: 'Deploy to production' },
+  merge: { modes: ['owner'], tool: false, perDay: 0, what: 'a merge into the main branch', go: 'Merge it' },
 };
 const MODE_TEXT = { owner: 'every one waits for the Owner', review: 'goes out after a second reviewer passes it', auto: 'goes out by itself' };
 const KEEP = 1000, CARD = 1200, ONE_TAP = 520, STUCK_MS = 10 * 60e3, OPEN_MAX = 20;
-const OPEN = new Set(['new', 'reviewing', 'held', 'queued', 'publishing', 'failed']);
+const OPEN = new Set(['new', 'preparing', 'reviewing', 'held', 'queued', 'publishing', 'failed']);
 const SKIP = /^(readme|tools)\.md$/i;
 const file = () => path.join(config.home, 'outbox.json');
 const rulesFile = () => path.join(config.home, 'autonomy.json');
 
 // set by squad.js; tests set their own
-export const deps = { spaces: () => [], log: () => {}, invalidate: () => {}, wake: null, ask: null };
+// repo(floorId, repoId) -> { id, abs, main, gate, access, agents, mergeMethod } of a linked repository (merges, 1.17)
+export const deps = { spaces: () => [], log: () => {}, invalidate: () => {}, wake: null, ask: null, repo: () => null };
 
 export const load = () => { const j = readJson(file(), null); return Array.isArray(j?.items) ? j.items : []; };
 // the decided ones are trimmed; what is still open never is
@@ -135,6 +144,13 @@ export function parseRequest(text, space) {
   const r = { channel, title: oneLine(data.title || '', 140), from: String(data.from || '').trim(), note: clip(String(body || '').replace(JSON_BLOCK, '').trim(), 4000) };
   if (!r.title) return { error: 'The request needs a title' };
   if (hasSecret(r.note) || hasSecret(r.title)) return { error: 'It contains what looks like a secret (a key, a token, a password): never publish one' };
+  if (channel === 'merge') {
+    r.repo = String(data.repo || '').trim(); r.branch = String(data.branch || '').trim();
+    if (!/^[a-z0-9-]{1,60}$/.test(r.repo)) return { error: 'repo: the id of the linked repository (Floor settings → Repositories)' };
+    if (!/^[\w./-]{1,120}$/.test(r.branch) || r.branch.startsWith('-') || r.branch.includes('..')) return { error: 'branch: your branch in that repository, e.g. web-developer/k1-meta' };
+    if (!r.note) return { error: 'Write below the header what changes and how to check it (pages, preview, build or tests)' };
+    return r;
+  }
   if (!d.tool) {
     if (!r.note) return { error: 'Write below the header what goes out: the version, what changes, and the tests and QA that passed' };
     r.ref = oneLine(data.ref || '', 80);
@@ -162,7 +178,7 @@ export function parseRequest(text, space) {
 export function toolsDoc(space) {
   const rules = rulesOf(space.id, space), tools = integ.publishTools(integSpace(space));
   const lines = ['# Publishing from this Space', '', `Written by The AI Squad; do not edit. Never call a publishing tool yourself (it is blocked): write a request in \`${DIR}/\` (the publish-request skill) and the server sends it after the checks. Answers come to \`${DIR}/answered/\`.`, '', '## The rules here', ''];
-  for (const [c, d] of Object.entries(CHANNELS)) lines.push(`- **${c}**: ${MODE_TEXT[rules[c].mode]}${rules[c].mode !== 'owner' ? `, at most ${rules[c].perDay} a day (more wait for the Owner)` : ''}${d.tool ? '' : ' (you deploy it yourself after the go)'}`);
+  for (const [c, d] of Object.entries(CHANNELS)) lines.push(`- **${c}**: ${MODE_TEXT[rules[c].mode]}${rules[c].mode !== 'owner' ? `, at most ${rules[c].perDay} a day (more wait for the Owner)` : ''}${c === 'merge' ? ' (with `repo:` and `branch:`; the server pushes your branch for the Owner to read, and merges and pushes the main branch after the Owner\'s go)' : d.tool ? '' : ' (you deploy it yourself after the go)'}`);
   lines.push('', 'Money and legal topics, tools that cost money and anything over the day\'s limit always wait for the Owner.', '', '## Publishing tools', '');
   if (!tools.length) lines.push('None yet: the Owner marks publishing tools in Admin → Integrations. Until then nothing can be posted or sent from here; deploys can still be requested.');
   for (const x of tools) {
@@ -225,6 +241,7 @@ function hold(rec, reason, now) {
 const queueAuto = (rec, now) => { approvals.set(rec.id, digest(rec)); return update(rec.id, { status: 'queued', auto: true, decidedAt: now, by: 'rules' }); };
 // the checks that never need a model, in order; -> the item with its new status
 function firstLook(rec, space, now) {
+  if (rec.channel === 'merge') return update(rec.id, { status: 'preparing' });     // the branch is pushed first (work)
   const rule = rulesOf(rec.floorId, space)[rec.channel];
   if (rule.mode === 'owner') return hold(rec, 'every request of this kind waits for you (the Space\'s rules)', now);
   if (rec.paid) return hold(rec, 'the tool costs money', now);
@@ -317,6 +334,7 @@ async function execute(id) {
     approvals.delete(id);
     const space = spaceOf(rec.floorId);
     const how = rec.by === 'rules' ? (rec.review ? 'the reviewer passed it and the rules allow it' : 'the rules allow it') : `approved by ${rec.by}`;
+    if (rec.channel === 'merge') { rec = await executeMerge(rec, how); deps.invalidate(); return rec; }
     if (!CHANNELS[rec.channel].tool) {
       rec = update(id, { status: 'go', doneAt: Date.now() });
       answer(rec, `Go (${how}). Do it now, as you described it, then write what happened (what went out, the smoke check, anything that failed) in ${DIR}/answered/${rec.id}.result.md.`);
@@ -346,6 +364,105 @@ async function execute(id) {
     return rec;
   } finally { executing.delete(id); }
 }
+// ---------- merges (1.17) ----------
+const gitIn = (abs, args, timeout) => mergeLib.git(abs, args, timeout ? { timeout } : {});
+// a clone URL -> the page that compares two branches (GitHub, GitLab, Bitbucket), or ''
+export function compareUrl(remote, main, branch) {
+  const m = String(remote || '').match(/^(?:git@([^:]+):|ssh:\/\/git@([^/]+)\/|https:\/\/(?:[^@/]+@)?([^/]+)\/)(.+?)(?:\.git)?\/?$/);
+  if (!m) return '';
+  const host = m[1] || m[2] || m[3], repo = m[4], b = encodeURIComponent(branch).replace(/%2F/g, '/'), base = encodeURIComponent(main).replace(/%2F/g, '/');
+  if (/gitlab/.test(host)) return `https://${host}/${repo}/-/compare/${base}...${b}`;
+  if (/bitbucket/.test(host)) return `https://${host}/${repo}/branches/compare/${b}%0D${base}`;
+  return `https://${host}/${repo}/compare/${base}...${b}`;
+}
+// the main branch as the forge has it: fetched, and the local one fast-forwarded when it is only behind
+async function syncMain(abs, main) {
+  const remotes = (await gitIn(abs, ['remote'])).out.split('\n');
+  if (!remotes.includes('origin')) return { origin: false };
+  const f = await gitIn(abs, ['fetch', '-q', 'origin', main], 120000);
+  if (!f.ok) return { origin: true, error: `git fetch failed: ${oneLine(f.err, 200)}` };
+  const local = await gitIn(abs, ['rev-parse', '-q', '--verify', `refs/heads/${main}`]), remote = await gitIn(abs, ['rev-parse', '-q', '--verify', `refs/remotes/origin/${main}`]);
+  if (!remote.ok || (local.ok && local.out === remote.out)) return { origin: true };
+  if (local.ok && !(await gitIn(abs, ['merge-base', '--is-ancestor', local.out, remote.out])).ok) return { origin: true, diverged: true };
+  const head = await gitIn(abs, ['symbolic-ref', '--short', '-q', 'HEAD']);
+  const u = head.ok && head.out === main ? await gitIn(abs, ['merge', '--ff-only', '-q', remote.out]) : await gitIn(abs, ['update-ref', `refs/heads/${main}`, remote.out, ...(local.ok ? [local.out] : [])]);
+  return { origin: true, ...(u.ok ? {} : { error: `could not bring ${main} up to date: ${oneLine(u.err, 200)}` }) };
+}
+function stopMerge(rec, reason, now) {
+  const x = update(rec.id, { status: 'rejected', decidedAt: now, by: 'rules', rejectReason: reason });
+  answer(x, `Not merged: ${reason}.`);
+  deps.log(rec.floorId, { type: 'publish.invalid', agent: rec.agentId || null, data: { id: rec.id, channel: 'merge', reason } });
+  return x;
+}
+// before the Owner looks: the branch checked, pushed to the forge, and summed up for the card
+async function prepareMerge(id, now = Date.now()) {
+  const rec = get(id);
+  if (rec?.status !== 'preparing') return rec;
+  const repo = deps.repo(rec.floorId, rec.repo);
+  if (!repo) return stopMerge(rec, `there is no linked repository "${rec.repo}" in this Space`, now);
+  if (repo.access !== 'write') return stopMerge(rec, `${rec.repo} is linked read-only`, now);
+  if (!rec.agentId || !repo.agents.includes(rec.agentId)) return stopMerge(rec, `${rec.agentId || 'the sender'} does not commit in ${rec.repo}`, now);
+  if (!rec.branch.startsWith(`${rec.agentId}/`)) return stopMerge(rec, `only a branch of your own (${rec.agentId}/…) is merged this way`, now);
+  if (rec.branch === repo.main) return stopMerge(rec, `that is the main branch`, now);
+  const tip = await gitIn(repo.abs, ['rev-parse', '-q', '--verify', `refs/heads/${rec.branch}`]);
+  if (!tip.ok) return stopMerge(rec, `branch ${rec.branch} is not in ${rec.repo}`, now);
+  const sync = await syncMain(repo.abs, repo.main);
+  const base = sync.origin && !sync.diverged ? `refs/remotes/origin/${repo.main}` : `refs/heads/${repo.main}`;
+  const subjects = (await gitIn(repo.abs, ['log', '--format=%s', `${base}..${tip.out}`])).out.split('\n').filter(Boolean);
+  if (!subjects.length) return stopMerge(rec, `${rec.branch} has nothing that ${repo.main} does not have`, now);
+  const stat = (await gitIn(repo.abs, ['diff', '--shortstat', `${base}...${tip.out}`])).out.trim();
+  const files = (await gitIn(repo.abs, ['diff', '--name-only', `${base}...${tip.out}`])).out.split('\n').filter(Boolean);
+  let pushed = false, pushError = '', url = '';
+  if (sync.origin) {
+    const p = await gitIn(repo.abs, ['push', '-q', 'origin', `+refs/heads/${rec.branch}:refs/heads/${rec.branch}`], 120000);
+    pushed = p.ok; pushError = p.ok ? '' : oneLine(p.err, 300);
+    if (p.ok) url = compareUrl((await gitIn(repo.abs, ['remote', 'get-url', 'origin'])).out, repo.main, rec.branch);
+  }
+  const merge = { repo: rec.repo, main: repo.main, branch: rec.branch, commits: subjects.slice(0, 12), count: subjects.length, stat, files: files.slice(0, 15), fileCount: files.length, url, pushed, pushError, ...(sync.diverged ? { diverged: true } : {}), ...(sync.error ? { syncError: sync.error } : {}) };
+  const x = update(id, { ref: tip.out, merge, status: 'held', reason: 'every merge waits for you', heldAt: now });
+  deps.log(rec.floorId, { type: 'publish.held', agent: rec.agentId || null, data: { id, channel: 'merge', title: rec.title, reason: x.reason, branch: rec.branch, pushed } });
+  deps.invalidate();
+  return x;
+}
+// the Owner said go: exactly the commit the card showed goes into the main branch, which is pushed
+async function executeMerge(rec, how) {
+  const id = rec.id, repo = deps.repo(rec.floorId, rec.repo);
+  if (!repo) return update(id, { status: 'failed', doneAt: Date.now(), error: `the linked repository ${rec.repo} is gone` });
+  const tip = await gitIn(repo.abs, ['rev-parse', '-q', '--verify', `refs/heads/${rec.branch}`]);
+  if (!tip.ok || tip.out !== rec.ref) {     // new commits after the Owner looked: push and show it again
+    const x = update(id, { status: 'preparing', reason: undefined });
+    answer(x, `Not merged yet: ${rec.branch} changed after the Owner looked at it. It goes to the Owner again.`);
+    return prepareMerge(id);
+  }
+  const sync = await syncMain(repo.abs, repo.main);
+  if (sync.diverged) return update(id, { status: 'failed', doneAt: Date.now(), error: `the local ${repo.main} and the one on the forge went apart: bring ${rec.repo} up to date by hand, then try again` });
+  if (sync.error) return update(id, { status: 'failed', doneAt: Date.now(), error: sync.error });
+  const r = await mergeLib.mergeBranch(rec.floorId, repo.abs, { mainBranch: repo.main, mergeMethod: repo.mergeMethod || 'squash', qualityGate: repo.gate || '', pushPolicy: 'never' }, rec.branch, { trigger: 'manual' });
+  if (r.result !== 'merged' && !(r.result === 'noop' && /Already merged/.test(r.reason || ''))) {
+    const x = update(id, { status: 'failed', doneAt: Date.now(), error: oneLine(`${r.reason || r.result}${r.conflicts?.length ? `: ${r.conflicts.slice(0, 8).join(', ')}` : ''}`, 400) });
+    answer(x, `Not merged: ${x.error}. Bring your branch up to date with ${repo.main} (merge or rebase it), fix it, commit, and ask again with a new request.`);
+    deps.log(rec.floorId, { type: 'publish.failed', agent: rec.agentId || null, data: { id, channel: 'merge', title: rec.title, error: x.error } });
+    if (rec.agentId && deps.wake) { try { deps.wake({ floorId: rec.floorId, agentId: rec.agentId, title: `Merge refused: ${rec.title}`, prompt: `The merge of ${rec.branch} into ${repo.main} (${rec.repo}) was refused: ${x.error}.\n\nBring the branch up to date with ${repo.main}, fix what failed, commit, and request the merge again in ${DIR}/ (channel: merge).`, auto: false }); } catch { /* the answer has it */ } }
+    return x;
+  }
+  let pushed = false, pushError = '';
+  if (sync.origin) {
+    const p = await gitIn(repo.abs, ['push', '-q', 'origin', `refs/heads/${repo.main}:refs/heads/${repo.main}`], 120000);
+    pushed = p.ok; pushError = p.ok ? '' : oneLine(p.err, 300);
+  }
+  if (sync.origin && !pushed) {
+    const x = update(id, { status: 'failed', doneAt: Date.now(), error: `merged into ${repo.main} on this machine, but the push failed: ${pushError}` });
+    answer(x, `Merged into ${repo.main} on this machine; pushing it failed (${pushError}). The Owner tries again.`);
+    deps.log(rec.floorId, { type: 'publish.failed', agent: rec.agentId || null, data: { id, channel: 'merge', title: rec.title, error: x.error } });
+    return x;
+  }
+  const commit = r.commit || (await gitIn(repo.abs, ['rev-parse', `refs/heads/${repo.main}`])).out;
+  const x = update(id, { status: 'published', doneAt: Date.now(), result: `${rec.branch} merged into ${repo.main} (${commit.slice(0, 7)})${sync.origin ? ' and pushed' : ' (no remote: on this machine only)'}${r.gate ? `; quality gate ${r.gate.ok ? 'passed' : 'failed'}` : ''}` });
+  answer(x, `Merged (${how}): ${x.result}.`);
+  deps.log(rec.floorId, { type: 'publish.done', agent: rec.agentId || null, data: { id, channel: 'merge', title: rec.title, branch: rec.branch, into: repo.main, commit, pushed, by: rec.by } });
+  return x;
+}
+
 // reviews and sends, outside the tick (a review takes up to a few minutes); one round at a time
 let running = null;
 export function work({ now = Date.now(), ask = deps.ask || runReview } = {}) {
@@ -355,6 +472,7 @@ export function work({ now = Date.now(), ask = deps.ask || runReview } = {}) {
     for (const x of load().filter((y) => y.status === 'publishing' && !executing.has(y.id) && now - (y.startedAt || 0) > STUCK_MS)) {
       update(x.id, { status: 'failed', uncertain: true, error: 'the server stopped during the call: check the channel before trying again', doneAt: now });
     }
+    for (const x of load().filter((y) => y.status === 'preparing')) { try { await prepareMerge(x.id, now); } catch (e) { update(x.id, { status: 'failed', doneAt: now, error: oneLine(e.message, 300) }); } }
     for (const x of load().filter((y) => y.status === 'reviewing')) await review(x.id, ask, now);
     for (const x of load().filter((y) => y.status === 'queued')) await execute(x.id);
   })().finally(() => { running = null; });
@@ -402,7 +520,23 @@ function answer(rec, line) {
 // ---------- what the Owner sees ----------
 export const waiting = () => load().filter((x) => x.status === 'held' || x.status === 'failed');
 export const shown = (rec) => (rec.args ? JSON.stringify(rec.args, null, 2) : rec.note || '');
+function mergeCard(rec) {
+  const m = rec.merge || {}, who = `${rec.agentName || 'An agent'} (${rec.floorName})`;
+  const head = rec.status === 'failed' ? `Not merged: ${rec.title}\n${rec.error}`
+    : `${who} asks to merge ${m.branch} into ${m.main} (${m.repo}): ${rec.title}`;
+  const lines = [head, '',
+    `${m.count} commit${m.count === 1 ? '' : 's'}${m.stat ? `, ${m.stat}` : ''}`,
+    ...(m.commits || []).slice(0, 6).map((c) => `• ${oneLine(c, 90)}`), ...(m.count > 6 ? [`• … ${m.count - 6} more`] : []),
+    ...(m.files?.length ? ['', `Files: ${m.files.slice(0, 8).join(', ')}${m.fileCount > 8 ? ` and ${m.fileCount - 8} more` : ''}`] : []),
+    '', m.url ? `See the change: ${m.url}` : m.pushError ? `The branch could not be pushed for review (${m.pushError}); read it in the repository.` : 'No remote: read the branch in the repository on this machine.',
+    ...(m.diverged ? [`Careful: the local ${m.main} and the one on the forge went apart.`] : []),
+    '', `Notes: ${clip(rec.note, 500)}`];
+  const text = clip(lines.join('\n'), 3000);
+  return { text, full: true, digest: digest(rec),
+    options: rec.status === 'failed' ? [{ n: 1, label: 'Try again' }, { n: 2, label: 'Drop it' }] : [{ n: 1, label: CHANNELS.merge.go }, { n: 2, label: 'Not now, with a note…', free: true }] };
+}
 export function card(rec) {
+  if (rec.channel === 'merge') return mergeCard(rec);
   const d = CHANNELS[rec.channel], body = shown(rec);
   const who = `${rec.agentName || 'An agent'} (${rec.floorName})`;
   const head = rec.status === 'failed'

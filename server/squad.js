@@ -889,6 +889,13 @@ Object.assign(kpiLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) log
   measured: (floorId, root, id, now) => { if (realFloor(floorId)) targetCheck(floorId, { only: id, now }).catch((e) => console.error('[kpi]', floorId, id, e.message)); } });
 Object.assign(proposals.deps, { spaces: spacesForHandoff, log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate() });
 Object.assign(outbox.deps, { spaces: spacesForHandoff, log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); }, invalidate: () => invalidate(),
+  // a merge request (1.17): the linked repository on this machine, its main branch and gate, who commits there
+  repo: (floorId, repoId) => {
+    const entry = building.floorEntry(floorId);
+    if (!entry) return null;
+    const r = reposLib.readRepos(entry.path).find((x) => x.id === repoId);
+    return r ? { id: r.id, abs: reposLib.resolve(entry.path, r, floors.localRepoPaths(entry.path)), main: r.branch.main, gate: r.gate || '', access: r.access, agents: r.agents, mergeMethod: floors.readFloor(entry.path).git.mergeMethod } : null;
+  },
   // a deploy that got its go: the agent does it now, in the background (P1)
   wake: ({ floorId, agentId, prompt, title, auto }) => admit({ floorId, agentId, action: 'job', task: prompt, title, priority: 'P1', via: auto ? 'autopilot' : 'owner', opts: { kind: 'task', permissionMode: 'acceptEdits', headOnly: true } }) });
 Object.assign(guideLib.deps, { log: (floorId, ev) => { if (realFloor(floorId)) logEvent(floorId, ev); } });
@@ -937,7 +944,7 @@ function ownerDesk(states) {
   // what waits to go out (1.12): a post, a message, an ad or a deploy held by the rules, or a send that failed
   for (const x of outbox.waiting()) {
     const c = outbox.card(x);
-    out.push({ ...where(x.floorId, x.agentId), id: attId('outbox', x.id, x.status, c.digest), kind: 'outbox', ownerOnly: true, answerable: true, outboxId: x.id, outboxStatus: x.status, outboxDigest: c.digest, channel: x.channel,
+    out.push({ ...where(x.floorId, x.agentId), id: attId('outbox', x.id, x.status, c.digest), kind: 'outbox', ownerOnly: true, answerable: true, outboxId: x.id, outboxStatus: x.status, outboxDigest: c.digest, channel: x.channel, ...(x.merge?.url ? { url: x.merge.url } : {}),
       hardStop: x.channel === 'ad' ? ['money'] : x.channel === 'deploy-production' ? ['production'] : [], text: c.text, options: c.options, ts: x.heldAt || x.doneAt || x.createdAt });
   }
   return out;

@@ -14,7 +14,7 @@ import { readJson, writeJson } from './util.js';
 export const GATE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEP_DIRS = ['node_modules', '.venv', 'venv', 'vendor'];   // linked into the worktree so the gate can run
 
-function git(cwd, args, { timeout = 60000, env } = {}) {
+export function git(cwd, args, { timeout = 60000, env } = {}) {
   return new Promise((resolve) => {
     execFile('git', ['-C', cwd, ...args], { timeout, maxBuffer: 16e6, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env } },
       (err, stdout, stderr) => resolve({ ok: !err, code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, out: String(stdout).trim(), err: String(stderr).trim() }));
