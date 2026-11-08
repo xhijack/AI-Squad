@@ -1,7 +1,7 @@
 ---
 id: seo-geo
 title: SEO & GEO
-version: 4
+version: 5
 category: marketing
 description: A search-only marketing team that grows organic search and visibility in AI answers from free data (Search Console, GA4, PageSpeed, Bing, IndexNow), with keyword research, technical SEO, content, a web developer who puts approved pages on the site (code, WordPress or another CMS) and a monthly AI prompt panel; nothing is published without the owner.
 keywords: [seo, geo, aeo, search, "search engine", google, "search console", ranking, keywords, organic, "organic traffic", "ai answers", chatgpt, perplexity, "ai visibility", "llms.txt", "technical seo", "local seo", backlinks, content, blog, sitemap, "core web vitals", wordpress, cms, website, pencarian, "mesin pencari"]
@@ -21,7 +21,7 @@ roles:
   - { template: technical-seo-specialist, min: 0, default: 1, max: 1, why: "Keeps the site crawlable, indexed and fast (robots, sitemap, canonicals, schema, Core Web Vitals, llms.txt); fixes go as a pull request to your site's repository." }
   - { template: keyword-researcher, min: 0, default: 1, max: 1, why: "Finds the keywords and questions people search from your Search Console data and the search results, clusters them and writes a brief per page. Never invents a volume." }
   - { template: content-writer, min: 0, default: 1, max: 2, why: "Writes and refreshes pages answer first, in your brand voice, with sources and an FAQ. Everything stays a draft until you approve it." }
-  - { template: web-developer, min: 0, default: 1, max: 1, why: "Puts the pages you approved on the site: commits them on a branch of the site's repository, or prepares ready-to-paste drafts for WordPress or another CMS. You push, merge or publish." }
+  - { template: web-developer, min: 0, default: 1, max: 1, why: "Puts the pages you approved on the site: commits them on a branch of the site's repository, or prepares ready-to-paste drafts for WordPress or another CMS. You approve the merge (in the app or on Telegram) or publish." }
   - { template: geo-analyst, min: 0, default: 1, max: 1, why: "Checks every month whether AI answers cite you for the prompts that matter, tracks visits from AI assistants and proposes pages that are easier to cite." }
   - { template: local-seo-specialist, min: 0, default: 0, max: 1, why: "Optional, for clinics, shops and local services: Google Business Profile, name-address-phone consistency and local pages." }
 sourceDocs:
@@ -56,12 +56,12 @@ flows:
     - { by: owner, does: "Approves the draft", status: APPROVED }
     - { by: web-developer, does: "Puts it on the site: a commit on a branch, or a ready-to-paste CMS draft", status: REVIEW }
     - { by: technical-seo-specialist, does: "Checks the site change against the SEO checklist" }
-    - { by: owner, does: "Pushes and merges, or pastes and publishes", status: PUBLISHED }
+    - { by: owner, does: "Approves the merge (in the app or on Telegram), or pastes and publishes", status: PUBLISHED }
     - { by: lead, does: "Re-measures it after 28 days in the weekly report", status: MEASURED }
   A technical fix:
     - { by: technical-seo-specialist, does: "Finds it in the audit or the daily anomaly check, with a baseline" }
     - { by: technical-seo-specialist, does: "Fixes it on a branch of the site's repository, or writes a proposal" }
-    - { by: owner, does: "Pushes and merges, or applies the proposal" }
+    - { by: owner, does: "Approves the merge (in the app or on Telegram), or applies the proposal" }
     - { by: lead, does: "Re-measures it after 28 days in the weekly report" }
   The AI prompt panel:
     - { by: geo-analyst, does: "Checks a third of the prompts every week" }
@@ -97,7 +97,7 @@ Free official sources only, through the `aisquad-google` tools (the server makes
 - **Owner ↔ squad:** only the lead ({{lead}}) talks to the owner. Everyone else writes questions to `docs/QUESTIONS.md` and tells the lead.
 - **Lead ↔ teammates:** the lead spawns teammates with their agent ids as names; teammates reach the lead with SendMessage to `main`.
 - **Handoff files:** finished pieces go in `docs/handoffs/<date>-<piece>.md`; drafts live in `content/drafts/`; briefs in `docs/seo/briefs/`; ready-to-paste CMS drafts in `content/ready/<slug>/`.
-- **From draft to site:** writer drafts → lead reviews → owner APPROVES → web developer commits it on a branch of the site's repository (or prepares it for the CMS) → technical SEO checks it → owner pushes, merges or pastes, and publishes.
+- **From draft to site:** writer drafts → lead reviews → owner APPROVES → web developer commits it on a branch of the site's repository (or prepares it for the CMS) → technical SEO checks it → the web developer asks for the merge in the Outbox; the server pushes the branch, the owner reads it and says yes (in the app or on Telegram), the server merges and pushes the main branch (or, for a CMS, the owner pastes and publishes).
 - **Board:** `docs/BOARD.md` lists every piece: owner, cluster or prompt, target, due date, status (TODO / DRAFT / REVIEW / APPROVED / PUBLISHED / MEASURED).
 
 ## Work items

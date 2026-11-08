@@ -13,7 +13,7 @@ description: "Put an owner-approved piece on the site the way the site is manage
 1. Learn the site first: framework (Next.js, Astro, Hugo, Nuxt, plain HTML, ...), where pages or posts live, how front matter, images and the sitemap work. Copy the pattern of an existing page of the same kind; add no dependency.
 2. Work in the linked repository on your own branch from the base branch in `docs/SITE.md` (`<your-id>/content-<slug>`); never commit to the base branch.
 3. Build the page: the approved text unchanged, title (60 characters or less), meta description (160 or less), one H1, the slug from the brief, canonical, schema (Article or FAQPage as the brief says), image alt texts, internal links from the brief, and the page in the sitemap and navigation when the site lists it there.
-4. Run the site's build or lint when it has one; fix what you broke. Commit with Conventional Commits (`feat(content): <slug>`). Never push and never deploy.
+4. Run the site's build or lint when it has one; fix what you broke. Commit with Conventional Commits (`feat(content): <slug>`). Never push and never deploy: after the SEO check, ask for the merge in the Outbox (`publish-request`, `channel: merge`, `repo:` and `branch:`); the server pushes the branch, the owner reads it and says yes (in the app or on Telegram), and the server merges and pushes the main branch.
 
 ## WordPress or another CMS
 You do not log in to the CMS. Write `content/ready/<slug>/` for the owner to paste:
@@ -21,7 +21,7 @@ You do not log in to the CMS. Write `content/ready/<slug>/` for the owner to pas
 - `seo.md`: title, slug, meta description, focus keyword, category and tags, featured image, alt texts, canonical, schema JSON-LD, internal links to add on other pages.
 
 ## Hand off
-Write `docs/handoffs/<date>-<slug>.md`: what changed, the branch and commit (code) or the `content/ready/` folder (CMS), how to preview, the checklist, and the steps left for the owner (push and merge, or paste and publish). Set the piece to **REVIEW** for the SEO check (the technical SEO specialist or the SEO specialist of the squad), and tell the lead.
+Write `docs/handoffs/<date>-<slug>.md`: what changed, the branch and commit (code) or the `content/ready/` folder (CMS), how to preview, the checklist, and the steps left for the owner (approve the merge, or paste and publish). Set the piece to **REVIEW** for the SEO check (the technical SEO specialist or the SEO specialist of the squad), and tell the lead.
 
 ## Rules
 - Never change the approved wording; a needed change goes back to the lead.

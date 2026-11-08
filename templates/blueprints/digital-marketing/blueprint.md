@@ -1,7 +1,7 @@
 ---
 id: digital-marketing
 title: Digital Marketing
-version: 6
+version: 7
 category: marketing
 description: A marketing team that turns a brief, brand rules and a channel plan into content, social posts, SEO and campaigns, and reports results against KPIs.
 keywords: [marketing, digital marketing, seo, content, blog, social, "social media", instagram, tiktok, linkedin, facebook, ads, advertising, campaign, brand, branding, awareness, traffic, newsletter, email marketing, influencer, launch, growth, audience, followers, copywriting]
@@ -22,7 +22,7 @@ roles:
   - { template: content-writer, min: 0, default: 1, max: 2, why: "Writes articles, landing pages and emails in your brand voice, with every claim sourced." }
   - { template: social-media-specialist, min: 0, default: 1, max: 2, why: "Turns the content calendar into posts per platform and tracks engagement." }
   - { template: ads-analytics-specialist, min: 0, default: 1, max: 1, why: "Sets up tracking and paid campaigns and reports honest numbers per KPI." }
-  - { template: web-developer, min: 0, default: 1, max: 1, why: "Puts the pages you approved on the site: commits them on a branch of the site's repository, or prepares ready-to-paste drafts for WordPress or another CMS. You push, merge or publish." }
+  - { template: web-developer, min: 0, default: 1, max: 1, why: "Puts the pages you approved on the site: commits them on a branch of the site's repository, or prepares ready-to-paste drafts for WordPress or another CMS. You approve the merge (in the app or on Telegram) or publish." }
   - { template: ui-ux-designer, min: 0, default: 0, max: 1, why: "Optional: visuals, landing page layouts and campaign creatives within your brand rules." }
 sourceDocs:
   - { path: docs/MARKETING-BRIEF.md, title: Marketing Brief, purpose: "Goals, audience, offer, KPIs", owner: marketing-strategist, readers: all }
@@ -54,7 +54,7 @@ flows:
     - { by: owner, does: "Approves it", status: APPROVED }
     - { by: web-developer, does: "Puts it on the site: a commit on a branch, or a ready-to-paste CMS draft", status: REVIEW }
     - { by: seo-specialist, does: "Checks titles, meta and links on the change" }
-    - { by: owner, does: "Pushes and merges, or pastes and publishes", status: PUBLISHED }
+    - { by: owner, does: "Approves the merge (in the app or on Telegram), or pastes and publishes", status: PUBLISHED }
   A campaign:
     - { by: lead, does: "Writes the campaign brief, the budget and the KPI" }
     - { by: ui-ux-designer, does: "Designs the visuals", optional: true }
