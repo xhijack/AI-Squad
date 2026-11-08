@@ -1257,6 +1257,14 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## 1.16.5: a lead can spawn the teammates that write in a linked repository (8 Nov 2026)
+
+After the machine rebooted, the Sopwer.id SEO lead resumed and could not re-spawn its web developer and technical SEO specialist: Claude Code's auto mode refused ("Create Unsafe Agents", then "Auto-Mode Bypass"). The site's repository had been linked with write access for those two, not for the lead; teammates run inside the lead's session, and the lead's restart denied every write there, so spawning a teammate to write there looked like a way around the lead's own limits. Before the reboot the lead's session predated the link, which is why it worked then.
+
+- **Fix** (`repos.leadRepos`): a write repository with any agent assigned is open in the lead's session as well (`forTeam`); the lead's agent file says its teammates commit there and it does not edit there itself. Read-only repositories stay closed for everyone.
+- **Recovery after a crash** (README): the server restarts by itself; resume the lead (its Desk → Resume), which re-spawns the teammates; check the board and the linked repositories' branches.
+- Test: `repos-squad.test.js` (the lead starts with its teammates' write repository open and the read-only one closed).
+
 ## 1.16.4: the admin pages scroll with the mouse wheel (8 Nov 2026)
 
 - **Fix** (`ui/admin.html`, `ui/style.css`): `html, body { overflow: hidden }` locks the office for its scene; the admin page reopened only `body`, which grew past a still-hidden `<html>`, so a script could scroll it but the mouse wheel and the trackpad could not (Floor settings is 3,753 px on a 768 px screen). `<html class="adminPage">` is now the scroller; the top bar, the sidebar, the save bar and the Floor settings jump bar stay in place (the jump bar sits under the top bar). Checked with real wheel events in headless Chrome on Spaces, Integrations, Cadence and the overview.
