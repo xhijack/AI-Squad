@@ -78,6 +78,16 @@ test('round trip: three questions, the first multi-select with free text, answer
   assert.equal(lastAnswer(), '"Which guest protocol features?"="Named link, RSVP, Guest photo wall", "Full custom design?"="No", "Sound effects?"="Only at check-in"');
 });
 
+test('round trip through the server\'s own pane io (tmux.askIO), as the Send answers button drives it', async () => {
+  const tm = await import('../server/tmux.js');
+  const d = open(QS);
+  await new Promise((r) => setTimeout(r, 800));
+  const io = tm.askIO('', { target: `=${d.name}:`, socket: SOCK });            // the path an answer from the app takes (1.16.2: askCalls was undefined)
+  const r = await ask.answerAll(QS, [{ choices: [2] }, { choices: [1] }, { text: 'Quiet' }], io, { settleMs: 250 });
+  assert.deepEqual(r, { ok: true });
+  assert.equal(lastAnswer(), '"Which guest protocol features?"="Closed cover", "Full custom design?"="Yes (Recommended)", "Sound effects?"="Quiet"');
+});
+
 test('round trip: one multi-select question; four questions mixed; a mismatch stops with a clear error', async () => {
   const one = [{ header: 'Pick', question: 'Which colours?', multiSelect: true, options: ['Red', 'Blue (Recommended)', 'Green'] }];
   let d = open(one); await new Promise((r) => setTimeout(r, 800));

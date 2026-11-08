@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile, execFileSync } from 'node:child_process';
 import { config, claudeBin } from './config.js';
+import { tmuxCalls } from './askdialog.js';   // circular with askdialog.js (cleanScreen): both are used only at call time
 
 const SESSION_PREFIX = 'aisquad-';
 export const sessionName = (floorId, agentId) => `${SESSION_PREFIX}${floorId}-${agentId}`.replace(/[^\w-]/g, '-').slice(0, 120);
@@ -275,7 +276,7 @@ export async function typeTask(name, text, { settleMs = 600, verifyMs = 1500 } =
 
 // a multi-question / multi-select AskUserQuestion dialog (server/askdialog.js): keys and screen of one pane
 export function askIO(name, { target = `=${name}:`, socket = socketFor(name) } = {}) {
-  return { send: async (keys) => { for (const c of askCalls(keys)) tmux(['send-keys', '-t', target, ...c], socket); },
+  return { send: async (keys) => { for (const c of tmuxCalls(keys)) tmux(['send-keys', '-t', target, ...c], socket); },
     capture: async () => (target === `=${name}:` && name ? capture(name) : capturePane(target, socket)), sleep };
 }
 // choose option n of the open dialog (arrow keys + Enter); free-text options get the typed text.
