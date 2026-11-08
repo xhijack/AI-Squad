@@ -1257,6 +1257,14 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## 1.16.3: finding Floor settings → Google (8 Nov 2026)
+
+The SEO & GEO lead told the owner to enter the properties in "Floor settings → Google"; the owner could not find it: Floor settings is a long page (Admin → Spaces → All settings) and Google was its eleventh section.
+
+- **Floor settings**: a jump bar over the page with every section; a Space with the Google tools (`usesGoogle` in the Floor detail, from `.mcp.json`) has Google first and marked. `/admin#/spaces/<id>/<section>` opens on that section (e.g. `/google`).
+- **The office**: the Floor menu ⋯ has **Google (Search Console, GA4)** for such a Space, straight to that section.
+- **The agents' words**: the SEO & GEO kickoff, the strategist's role, the IndexNow note and the plan's Google line name the way there (the Floor menu ⋯ → Google, or Admin → Spaces → All settings → Google).
+
 ## 1.16.2: Send answers works for several questions (8 Nov 2026)
 
 - **Fix** (`server/tmux.js`): answering a dialog with several questions or a multi-select from the app failed with "askCalls is not defined": `askIO()` called a function that never existed (the helper is `askdialog.tmuxCalls`). The round-trip tests drove the pane with their own io, so the server's path was never run. `test/askdialog.test.js` now answers through `tmux.askIO()` in a real pane.
