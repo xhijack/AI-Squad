@@ -1257,6 +1257,10 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## 1.16.2: Send answers works for several questions (8 Nov 2026)
+
+- **Fix** (`server/tmux.js`): answering a dialog with several questions or a multi-select from the app failed with "askCalls is not defined": `askIO()` called a function that never existed (the helper is `askdialog.tmuxCalls`). The round-trip tests drove the pane with their own io, so the server's path was never run. `test/askdialog.test.js` now answers through `tmux.askIO()` in a real pane.
+
 ## 1.16.1: a long question scrolls on a laptop screen (8 Nov 2026)
 
 - **Conversation view** (`ui/convo.js`, `askFormHtml({ footer: false })`): the questions and options of an agent's question were in the dialog's footer row, which grew past the screen while the dialog clipped its overflow, so on a laptop (1366×768) the later questions and the send button could not be reached and the agent's message shrank to three lines. They now sit under the message in the one scrolling area; the footer keeps **Open desk**, the error line and **Send answers** (`form="convoAsk"`) in sight; the dialog's height uses `dvh`.
