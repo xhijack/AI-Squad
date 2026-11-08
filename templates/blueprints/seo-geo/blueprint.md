@@ -1,7 +1,7 @@
 ---
 id: seo-geo
 title: SEO & GEO
-version: 3
+version: 4
 category: marketing
 description: A search-only marketing team that grows organic search and visibility in AI answers from free data (Search Console, GA4, PageSpeed, Bing, IndexNow), with keyword research, technical SEO, content, a web developer who puts approved pages on the site (code, WordPress or another CMS) and a monthly AI prompt panel; nothing is published without the owner.
 keywords: [seo, geo, aeo, search, "search engine", google, "search console", ranking, keywords, organic, "organic traffic", "ai answers", chatgpt, perplexity, "ai visibility", "llms.txt", "technical seo", "local seo", backlinks, content, blog, sitemap, "core web vitals", wordpress, cms, website, pencarian, "mesin pencari"]
@@ -72,7 +72,7 @@ flows:
     - { by: owner, does: "Posts them on Google Business Profile" }
 gates: [source documents approved, baseline recorded before every change, brand and voice review, fact check, SEO checklist per piece, technical SEO check of the site change, owner approval before publishing, re-measure after 28 days]
 ownerOnly: [publishing, pushing or merging to the site's repository, live copy, IndexNow submit, outreach e-mail, paid SEO tools, black-hat techniques]
-kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me, in my language and one step at a time, for the SEO brief, the brand rules and Google access (how the site is managed is in docs/SITE.md; for a site in code, link its repository in Floor settings → Repositories if it is not linked yet): explain how to add the service account's e-mail in Search Console and GA4 and where to enter the properties (Floor settings → Google). Draft missing documents in docs/ for my approval. No content or technical change starts before the brief, brand, keywords and prompt panel are approved and a baseline is recorded."
+kickoff: "Start as the lead of this squad. Read AISQUAD.md (the squad standard) first. Then ask me, in my language and one step at a time, for the SEO brief, the brand rules and Google access (how the site is managed is in docs/SITE.md; for a site in code, link its repository in Floor settings → Repositories if it is not linked yet): explain how to add the service account's e-mail in Search Console and GA4 and where to enter the properties: Floor settings → Google (in the office: the Floor menu ⋯ → Google; or Admin → Spaces → this Space → All settings → Google). Draft missing documents in docs/ for my approval. No content or technical change starts before the brief, brand, keywords and prompt panel are approved and a baseline is recorded."
 ---
 ## Purpose
 A search-only marketing team: more organic search traffic and more citations in AI answers, from free official data, with every change measured against a baseline. Publishing, live changes, IndexNow submits and outreach wait for the owner.

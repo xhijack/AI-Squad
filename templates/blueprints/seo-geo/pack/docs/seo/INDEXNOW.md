@@ -8,7 +8,7 @@ connector makes, and it needs the owner's approval each time (on the Desk; never
 2. Put a text file named `<key>.txt` at the root of the site, containing only the key
    (`https://www.example.com/<key>.txt`). This proves the site is yours. Publishing the file is a change to the live
    site: the owner does it, or approves a pull request that adds it.
-3. Enter the key and the site's address in Floor settings → Google. The key is not a secret: it is public on the site.
+3. Enter the key and the site's address in Floor settings → Google (in the office: the Floor menu ⋯ → Google; or Admin → Spaces → this Space → All settings → Google). The key is not a secret: it is public on the site.
 
 ## Each time
 - Only pages the owner approved and published, at most 100 URLs per submit, all on the Space's own site.
