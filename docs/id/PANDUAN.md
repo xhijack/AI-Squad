@@ -127,6 +127,13 @@ nasihat hukum.
   tulisan yang sudah kamu setujui (APPROVED) di board: commit halaman di branch sendiri di repository situs, atau
   menyiapkan draf siap tempel di `content/ready/` untuk WordPress atau CMS lain. Technical SEO mengecek, lalu kamu yang
   push, merge atau menempel dan menerbitkan; agen tidak pernah push.
+- **Merge disetujui dari Telegram (1.17)**: agen yang commit di repo yang ditautkan (Web Developer, Technical SEO,
+  developer) tidak pernah push atau merge sendiri. Ia mengajukan permintaan merge di Outbox (`channel: merge`). Server
+  mem-push branch-nya ke GitHub supaya bisa kamu baca, lalu mengirim ke aplikasi dan Telegram: daftar commit, file yang
+  berubah, tombol **Lihat perubahan** (halaman compare GitHub) dan **1. Merge sekarang**. Setuju: server merge commit
+  yang kamu lihat itu ke branch utama repo (Pengaturan Lantai → Repository), menjalankan quality gate-nya, lalu push.
+  Kalau branch-nya berubah setelah kamu lihat, ia dikirim ulang ke kamu dulu. Konflik atau gate merah: ditolak, dan
+  agennya diminta memperbarui branch-nya. Telegram harus sudah disambungkan (Admin → Notifikasi).
 - **Alur kerja dan pemeriksanya (1.16)**: setiap Blueprint menuliskan jalan setiap jenis pekerjaan, langkah demi langkah,
   sampai kamu yang memutuskan. Di langkah **Tim** pada Siapkan Squad, panel **Alur kerja** menunjukkan siapa di timmu
   yang mengerjakan tiap langkah; langkah yang role-nya tidak ada di tim ditandai kuning. Blueprint yang alurnya bolong

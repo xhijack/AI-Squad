@@ -1257,6 +1257,16 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## Phase 5, Sprint 27: merges approved from Telegram, 1.17.0 (8 Nov 2026)
+
+The owner asked for the web developer and the technical SEO specialist to commit and push on another branch, send the change to Telegram to read, and merge into the main branch on a yes there.
+
+- **Outbox channel `merge`** (`server/outbox.js`): a request with `repo:` (a linked write repository the agent is assigned to) and `branch:` (its own `<agent-id>/…` branch). The server checks it, fetches the main branch (fast-forwarding a local one that is only behind), pushes the branch to `origin` for review, and holds it with the commits, the shortstat, the files and the compare URL (`compareUrl()`: GitHub, GitLab, Bitbucket). Always the Owner.
+- **The yes** (`approve` → `executeMerge`): only the commit the Owner saw (`ref` in the digest); a branch with new commits goes back to the Owner. `merge.mergeBranch()` merges it in a worktree with the repository's gate and merge method, then the server pushes the main branch. Conflicts or a red gate fail it, answer the agent and wake it to update its branch; a failed push can be tried again.
+- **Telegram** (`server/notify.js`): a merge goes out at once (not in the digest) with up to 1,500 characters, **Merge it** one tap, Reply for a note, and **See the change** (the compare page).
+- **Agents**: `publish-request` and `site-content-update` explain the channel; web-developer v3 and technical-seo-specialist v2 have the skill; SEO & GEO v4 and Digital Marketing v7 flows say the owner approves the merge in the app or on Telegram.
+- Tests: `test/outbox-merge.test.js` (a bare remote: asked, pushed, held, Telegram message, merged and pushed, a moved branch shown again, refusals, a conflict that wakes the agent).
+
 ## 1.16.5: a lead can spawn the teammates that write in a linked repository (8 Nov 2026)
 
 After the machine rebooted, the Sopwer.id SEO lead resumed and could not re-spawn its web developer and technical SEO specialist: Claude Code's auto mode refused ("Create Unsafe Agents", then "Auto-Mode Bypass"). The site's repository had been linked with write access for those two, not for the lead; teammates run inside the lead's session, and the lead's restart denied every write there, so spawning a teammate to write there looked like a way around the lead's own limits. Before the reboot the lead's session predated the link, which is why it worked then.

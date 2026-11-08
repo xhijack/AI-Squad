@@ -21,6 +21,7 @@ opened and no public address is needed.
 |---|---|
 | Questions, permissions, waiting for a reply, crashes, scope changes, backup alerts | at once, with buttons |
 | Machine alerts (RAM, swap, disk) | at once, also in quiet hours |
+| A branch to merge (1.17): the commits, the files, **See the change** (the compare page) and **1. Merge it** | at once, with buttons |
 | Finished work, stalls, merges, budget | in the morning digest |
 
 Quiet hours (default 22:00-07:00) hold everything but machine alerts; it is sent after. At most 20 messages an hour.
