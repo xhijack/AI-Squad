@@ -322,11 +322,11 @@ function apChip(f) {
 
 function floorMenuHtml(f) {
   const any = (fn) => f.agents.some(fn);
-  return [['floor-settings', tt('Floor settings')], ['edit-mode', tt('Edit layout and looks')], ['add-agent', tt('Add agent')],
+  return [['floor-settings', tt('Floor settings')], ...(state.floor?.id === f.id && state.floor.usesGoogle ? [['floor-settings', tt('Google (Search Console, GA4)'), 'google']] : []), ['edit-mode', tt('Edit layout and looks')], ['add-agent', tt('Add agent')],
     ...(any((a) => !a.running) ? [['start-all', tt('Start all agents')]] : []), ...(any((a) => a.running) ? [['stop-all', tt('Stop all agents')]] : []),
     ...(state.floor?.id === f.id && state.floor.blueprint ? [['source-docs', tt('Source documents')]] : []),
     ...(state.floor?.id === f.id && state.floor.board ? [['board', tt('Board')]] : []), ...(f.workflow === 'squad-sprint' ? [['performance', tt('Performance')]] : []), ['cost', tt('Cost')], ['log', tt('Squad Log')], ['audit', tt('Audit')], ['retro', tt('Retro')], ...(f.workflow === 'squad-sprint' ? [['ship', tt('Ship readiness')]] : []), ['designs', tt('Design variants')]]
-    .map(([act, text]) => `<button role="menuitem" data-act="${act}">${text}</button>`).join('');
+    .map(([act, text, section]) => `<button role="menuitem" data-act="${act}"${section ? ` data-section="${section}"` : ''}>${text}</button>`).join('');
 }
 
 // ---------- dock (icons, bottom centre) ----------
@@ -578,7 +578,7 @@ const shouts = {};
 const actions = Object.assign(ctx.actions, {
   // settings live on the admin page (1.10): /admin, without the scene
   admin(el) { location.assign(`/admin#/${el?.dataset?.tab || 'overview'}`); },
-  'floor-settings'() { location.assign(`/admin#/spaces/${encodeURIComponent(state.route.floorId || '')}`); },
+  'floor-settings'(el) { const sec = el?.dataset?.section; location.assign(`/admin#/spaces/${encodeURIComponent(state.route.floorId || '')}${sec ? `/${encodeURIComponent(sec)}` : ''}`); },
   'hide-side'() { state.sideHidden = true; try { localStorage.setItem('aisquad.sideHidden', '1'); } catch { /* private mode */ } render(); },
   board() {
     const f = state.floor; if (!f) return;

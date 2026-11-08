@@ -268,7 +268,7 @@ const LABEL = {
   'ticket-source': 'Where the tickets live (ERPNext Issues or a help desk connected as an integration)', 'kb-sources': 'What answers come from (product docs, FAQ, past replies without personal data)', 'support-policy': 'Channels, hours, SLAs per priority and what only the owner decides',
 };
 // Google access in plain words, with the service account's e-mail when it is uploaded
-export const googleLabel = (email) => (email ? `Google access: add ${email} to Search Console (Users and permissions) and GA4 (Viewer), then enter the properties in Floor settings → Google` : 'Google access: upload the service account\'s key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google');
+export const googleLabel = (email) => (email ? `Google access: add ${email} to Search Console (Users and permissions) and GA4 (Viewer), then enter the properties in Floor settings → Google (the Floor menu ⋯ → Google, or Admin → Spaces → All settings → Google)` : 'Google access: upload the service account\'s key (Admin → Integrations → Google), add its e-mail to Search Console and GA4, then enter the properties in Floor settings → Google');
 const STATUS_TEXT = { have: 'available: ask the owner where it is', missing: 'missing: interview the owner and draft it for approval', later: 'later: not needed for the first weeks' };
 const MODE_TEXT = { automatic: 'automatic: routine work runs and ships by itself; money, legal, production, secrets and deleting data still wait for the owner', supervised: 'supervised: the squad prepares, the owner approves what goes out', manual: 'manual: the squad drafts only; the owner decides everything' };
 const cell = (s) => String(s ?? '').replace(/\|/g, '/');

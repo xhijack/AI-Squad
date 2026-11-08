@@ -60,7 +60,8 @@ async function editAgent(el) {
 
 const serverRowHtml = (s) => `<div class="row serverRow"><input data-host value="${esc(s.host || '')}" placeholder="erpnext@192.168.0.150" aria-label="${tt('Host')}" style="max-width:220px">
   <input data-purpose class="grow" value="${esc(s.purpose || '')}" placeholder="${esc(tt('Staging ERPNext (bench in ~/frappe-bench)'))}" aria-label="${tt('Purpose')}"><button type="button" class="small ghost danger" data-rmserver aria-label="${tt('Remove server')}">×</button></div>`;
-async function floorSettings() {
+// section: open on one section (e.g. 'google' from /admin#/spaces/<id>/google, as the agents' instructions link)
+async function floorSettings(section = '') {
   const f = ctx.state.floor;
   if (!f?.floor) return;
   const c = f.floor;
@@ -77,39 +78,39 @@ async function floorSettings() {
     <label class="inline"><input type="checkbox" name="autoNext" ${c.sprint?.autoNext ? 'checked' : ''}> ${tt('Squad Sprint: start the next sprint automatically (fresh lead session) once a closed sprint is merged')}</label>
     <div class="grid2"><div><label>${tt('Budget (USD, 0 = none)')}</label><input name="budgetUsd" type="number" min="0" value="${c.budget.usd}"></div>
       <div><label>${tt('Budget period')}</label>${segHtml('budgetPeriod', [['month', tt('Per month')], ['day', tt('Per day')]], c.budget.period)}</div></div>
-    <h3 style="margin-top:var(--sp-5)">Autopilot</h3>
+    <h3 class="fsSec" id="fs-autopilot" style="margin-top:var(--sp-5)">Autopilot</h3>
     ${segHtml('autopilot', Object.entries(AP_NAME), c.autopilot || 'off')}
     <ul class="note apLevels">${['off', 'balanced', 'full'].map((k) => `<li><b>${AP_NAME[k]}:</b> ${esc(tx(ap.text?.[k] || ''))}</li>`).join('')}</ul>
     <div class="grid2"><div><label>${tt('Auto-answer after (minutes)')}</label><input name="apTimeout" type="number" min="0.5" max="60" step="0.5" value="${(c.autopilotTimeoutSec || 180) / 60}"></div>
       <p class="note">${tt('A question with a "(Recommended)" option that is not critical gets that answer after this time; an unanswered plain-text ask gets a nudge to decide.')}</p></div>
     <details class="apHard"><summary>${tt('Always waits for you (hard-stop list)')}</summary><ul class="note">${(ap.hardStop || []).map((x) => `<li>${esc(tx(x))}</li>`).join('')}<li>${tt('Balanced also: anything the Blueprint marks as owner-only')}</li></ul>
       <p class="note">${tt('Autopilot also turns on auto-resume after a crash. It never approves a source document and never pushes; the budget and the memory guard still apply.')}</p></details>
-    <h3 style="margin-top:var(--sp-5)">${tt('Recovery and memory')}</h3>
+    <h3 class="fsSec" id="fs-recovery" style="margin-top:var(--sp-5)">${tt('Recovery and memory')}</h3>
     <label class="inline"><input type="checkbox" name="autoResume" ${c.recovery?.autoResume ? 'checked' : ''}> ${tt('Auto-resume after a crash (at most 2 times per hour per agent, not while memory is still under pressure)')}</label>
     <div class="grid2"><div><label>${tt('Max concurrent agents')}</label><input name="maxAgents" type="number" min="1" max="20" value="${c.recovery?.maxAgents || 4}"></div>
       <p class="note">${tt('The lead is told this limit. Starting more, or starting while swap is above 80 %, asks you first.')}</p></div>
-    <h3 style="margin-top:var(--sp-5)">Standup</h3>
+    <h3 class="fsSec" id="fs-standup" style="margin-top:var(--sp-5)">Standup</h3>
     <div class="grid2"><div><label>${tt('Daily standup at (local time)')}</label><input name="standupTime" type="time" value="${esc(c.standup?.time || '09:30')}"></div>
       <label class="inline" style="align-self:end"><input type="checkbox" name="standupMeeting" ${c.standup?.meeting !== false ? 'checked' : ''}> ${tt('The team meets at the table for it')}</label></div>
     <p class="note">${tt('Made from the Squad Log (done, doing, blocked by per agent), no model call. It shows in the Standup tab.')}</p>
-    <h3 style="margin-top:var(--sp-5)">${tt('Routines')}</h3><div id="dCadence" class="note">${tt('Loading…')}</div>
-    <h3 style="margin-top:var(--sp-5)">${tt('Voice (this Floor\'s default)')}</h3>
+    <h3 class="fsSec" id="fs-routines" style="margin-top:var(--sp-5)">${tt('Routines')}</h3><div id="dCadence" class="note">${tt('Loading…')}</div>
+    <h3 class="fsSec" id="fs-voice" style="margin-top:var(--sp-5)">${tt('Voice (this Floor\'s default)')}</h3>
     <p class="note">${tt('How this Floor\'s agents speak unless an agent sets its own (Desk → Profile → Voice). Auto picks Indonesian or English from the words of each line.')}</p>
     ${voiceControlsHtml(c.voice?.lang || 'auto', c.voice?.settings || null)}
     <div class="row"><button type="button" class="small ghost" data-vpreview>${tt('Preview')}</button><div class="grow" id="dVErr"></div></div>
-    <h3 style="margin-top:var(--sp-5)">${tt('Squad Log and Audit')}</h3>
+    <h3 class="fsSec" id="fs-log" style="margin-top:var(--sp-5)">${tt('Squad Log and Audit')}</h3>
     <label class="inline"><input type="checkbox" name="logMessages" ${c.log?.messages !== false ? 'checked' : ''}> ${tt('Log message text (tasks, messages between agents, questions and answers). Off: metadata only.')}</label>
     <label class="inline"><input type="checkbox" name="logMask" ${c.log?.maskPersonalData !== false ? 'checked' : ''}> ${tt('Mask personal data (e-mail, phone, national id and bank account numbers). Secrets are always removed.')}</label>
     <label class="inline"><input type="checkbox" name="auditAuto" ${c.audit?.auto ? 'checked' : ''}> ${tt('Audit automatically after a sprint closes')}</label>
     <label>${tt('Audit model')}</label>${segHtml('auditModel', [['sonnet', 'Sonnet'], ['haiku', 'Haiku'], ['opus', 'Opus']], c.audit?.model || 'sonnet')}
-    <h3 style="margin-top:var(--sp-5)">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
-    <h3 style="margin-top:var(--sp-5)">${tt('Servers')}</h3>
+    <h3 class="fsSec" id="fs-git" style="margin-top:var(--sp-5)">Git</h3>${gitHtml(f.git, { approved: f.merge?.approved })}
+    <h3 class="fsSec" id="fs-servers" style="margin-top:var(--sp-5)">${tt('Servers')}</h3>
     <p class="note">${tt('The servers DevOps may reach: a host alias from ~/.ssh/config or user@host, and what it is for. Each one allows <code>ssh &lt;host&gt; …</code> in this Space (also in background runs) and is listed in the DevOps prompt; anything else is local development.')}</p>
     <div id="dServers">${(c.servers || []).map(serverRowHtml).join('')}</div>
     <button type="button" class="small" data-addserver>${tt('+ Add server')}</button>
-    <h3 style="margin-top:var(--sp-5)">Google</h3><div id="dGoogle" class="note">${tt('Loading…')}</div>
-    <h3 style="margin-top:var(--sp-5)">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
-    <h3 style="margin-top:var(--sp-5)">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
+    <h3 class="fsSec" id="fs-google" style="margin-top:var(--sp-5)">Google</h3><div id="dGoogle" class="note">${tt('Loading…')}</div>
+    <h3 class="fsSec" id="fs-repositories" style="margin-top:var(--sp-5)">${tt('Repositories')}</h3><div id="dRepos" class="note">${tt('Loading…')}</div>
+    <h3 class="fsSec" id="fs-merges" style="margin-top:var(--sp-5)">${tt('Merges')}</h3><div id="dMerges" class="note">${tt('Loading…')}</div>`,
   `<button class="ghost danger" data-remove>${tt('Remove Floor')}</button><span class="spacer"></span><button class="ghost" data-close>${tt('Cancel')}</button><button class="gold" data-ok>${tt('Save')}</button>`)));
   bindSegs(body);
   body.querySelector('#dLang').onchange = (e) => setLang(e.target.value);   // per browser, not saved with the Floor
@@ -119,6 +120,12 @@ async function floorSettings() {
   loadCadence(f.id, body.querySelector('#dCadence'));
   loadRepos(f.id, body.querySelector('#dRepos'), f.agents);
   loadGoogle(f.id, body.querySelector('#dGoogle'), ctx.state.me?.role === 'owner');
+  // a jump bar over the long page: every section one click away; a Space with the Google tools has Google first
+  const secs = [...body.querySelectorAll('h3.fsSec')];
+  const order = f.usesGoogle ? [secs.find((h) => h.id === 'fs-google'), ...secs.filter((h) => h.id !== 'fs-google')] : secs;
+  body.querySelector('.mBody, form')?.insertAdjacentHTML('afterbegin', `<nav class="fsJump" aria-label="${tt('Sections')}">${order.map((h) => `<a href="#${h.id}" data-jump="${h.id}" class="chip${h.id === 'fs-google' && f.usesGoogle ? ' ok' : ''}">${esc(h.textContent)}</a>`).join('')}</nav>`);
+  body.querySelectorAll('[data-jump]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); body.querySelector(`#${a.dataset.jump}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
+  if (section) requestAnimationFrame(() => body.querySelector(`#fs-${CSS.escape(section)}`)?.scrollIntoView({ block: 'start' }));
   const servers = body.querySelector('#dServers');
   servers.onclick = (e) => e.target.closest('[data-rmserver]')?.closest('.serverRow').remove();
   body.querySelector('[data-addserver]').onclick = () => { servers.insertAdjacentHTML('beforeend', serverRowHtml({})); servers.lastElementChild.querySelector('input').focus(); };

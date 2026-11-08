@@ -986,3 +986,9 @@ details.skills summary:focus-visible { outline: none; box-shadow: var(--focus-ri
 }
 .pageModal .stepper { flex-wrap: wrap; row-gap: var(--sp-2); }
 .pageModal .stepper li { flex: 0 0 auto; }
+
+/* Floor settings (1.16.3): a jump bar over the long page, so Google, Repositories and the rest are one click away */
+.fsJump { position: sticky; top: calc(-1 * var(--sp-4)); z-index: 2; display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: var(--sp-2) 0; margin-bottom: var(--sp-2); background: var(--surface); border-bottom: 1px solid var(--border); }
+.fsJump .chip { text-decoration: none; cursor: pointer; }
+.fsJump .chip:hover, .fsJump .chip:focus-visible { background: var(--accent-soft); color: var(--text); }
+h3.fsSec { scroll-margin-top: 64px; }

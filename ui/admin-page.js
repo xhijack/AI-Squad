@@ -45,8 +45,8 @@ let route = { id: 'overview', arg: '' };
 function parse() {
   let h = ''; try { h = decodeURIComponent(location.hash.replace(/^#\/?/, '')); } catch { /* a broken link: the overview */ }
   if (h.startsWith('floor/')) return { office: h };                 // a link into the office (e.g. Set up Squad's new Floor)
-  const [id, arg = ''] = h.split('/');
-  return { id: id || 'overview', arg };
+  const [id, arg = '', sub = ''] = h.split('/');
+  return { id: id || 'overview', arg, sub };
 }
 // each visit renders into a fresh pane: a slow render of a section left behind lands in a detached node
 let pane = main, seq = 0, latestDone = false;
@@ -79,7 +79,7 @@ async function render(main) {
   try {
     if (route.id === 'overview') { const html = await overviewHtml(); if (main.isConnected) { main.innerHTML = html; bindOverview(main); } return; }
     if (route.id === 'general') { const html = await generalHtml(); if (main.isConnected) { main.innerHTML = html; bindGeneral(main); } return; }
-    if (route.id === 'spaces' && route.arg) return await floorSettings(route.arg, main);
+    if (route.id === 'spaces' && route.arg) return await floorSettings(route.arg, main, route.sub);
     if (route.id === 'learning') return await learningPage(main);
     if (route.id === 'publishing') return await publishingPage(main);
     if (DIALOG[route.id]) return await DIALOG[route.id]();
@@ -90,12 +90,12 @@ async function render(main) {
   }
 }
 // Floor settings for one Space: the same dialog the office used, as this page
-async function floorSettings(id, main) {
+async function floorSettings(id, main, section = '') {
   const f = await api('GET', `/api/floors/${encodeURIComponent(id)}`);
   if (!main.isConnected) return;
   if (f.notFound || f.missing) { main.innerHTML = `<div class="empty">${t('That Floor no longer exists')}</div>`; return; }
   ctx.state.floor = f; ctx.state.route = { mode: 'floor', floorId: id };
-  await ctx.actions['floor-settings']();
+  await ctx.actions['floor-settings'](section);
   const head = main.querySelector('.mHead');
   head?.insertAdjacentHTML('afterbegin', `<a class="btn small ghost" href="#/spaces" aria-label="${t('All Spaces')}">‹ ${t('Spaces')}</a>`);
   head?.insertAdjacentHTML('beforeend', `<a class="btn small" href="/#/floor/${esc(id)}">${t('Open in the office')}</a>`);

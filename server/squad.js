@@ -637,7 +637,7 @@ export function floorDetail(id) {
     let effective = null; try { effective = floors.effectiveOf(entry.path, a); } catch { /* shown as error in summary */ }
     return { ...a, effective, templateStatus: floors.templateStatus(entry.path, a) };
   });
-  return { ...sum, floor: s.cfg.floor, git: s.cfg.git, team, brief: readBriefSafe(entry.path), feed: feed.slice(0, 60), messages: messages.slice(0, 40),
+  return { ...sum, floor: s.cfg.floor, git: s.cfg.git, team, usesGoogle: googleLib.inSpace(entry.path), brief: readBriefSafe(entry.path), feed: feed.slice(0, 60), messages: messages.slice(0, 40),
     attentionItems: s.attention, teamName: tx.teamFor(entry.path)?.name || null,
     board: s.cfg.floor.workflow === 'squad-sprint' ? sprint.boardData(entry.path) : blueprintBoard(entry.path),
     blueprint: blueprintInfo(entry.path, s.cfg.floor.blueprint),
