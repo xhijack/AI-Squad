@@ -127,7 +127,7 @@ export function parseTasks(md) {
     const head = splitRow(lines[i]);
     if (!head || !/^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) continue;
     const col = (name) => head.findIndex((h) => h.toLowerCase().replace(/\s+/g, ' ') === name);
-    const iTask = col('task'), iStatus = col('status');
+    const iTask = ['task', 'piece', 'item'].map(col).find((x) => x >= 0) ?? -1, iStatus = col('status');   // Blueprint boards name the work Piece or Item
     if (iTask < 0 || iStatus < 0) continue;
     const iOwner = col('owner'), iBlocked = col('blocked by');
     const rows = [];
@@ -150,7 +150,7 @@ function splitRow(line) {
 export const COLUMNS = ['TODO', 'IN_PROGRESS', 'REVIEW', 'BLOCKED', 'DONE'];
 function statusColumn(s) {
   const u = s.toUpperCase().replace(/[\s-]+/g, '_');
-  if (u.startsWith('DONE') || u.startsWith('VERIFIED') || u.startsWith('PASS') || u.startsWith('PUBLISHED') || u.startsWith('APPROVED')) return 'DONE';
+  if (u.startsWith('DONE') || u.startsWith('VERIFIED') || u.startsWith('PASS') || u.startsWith('PUBLISHED') || u.startsWith('APPROVED') || u.startsWith('MEASURED')) return 'DONE';
   if (u.startsWith('IN_PROGRESS') || u.startsWith('BUILD') || u.startsWith('FIXED') || u.startsWith('DRAFT')) return 'IN_PROGRESS';
   if (u.startsWith('REVIEW') || u.startsWith('QA')) return 'REVIEW';
   if (u.startsWith('BLOCKED') || u.startsWith('OPEN')) return 'BLOCKED';

@@ -1541,7 +1541,14 @@ export async function autopilotTick(now = Date.now(), { res = wd.readResources()
     const stop = autopilot.chainStop({ level: f.autopilot.level, budgetOver: f.budget?.level === 'over', pressure: recovery.memoryPressure(res), criticalWaiting: f.autopilot.critical, openWork: open });
     const st = apMem.idle.get(f.id) || {}; apMem.idle.set(f.id, st);
     const allIdle = !!lead?.running && f.agents.every((a) => a.state !== 'working' && a.state !== 'waiting');
-    if (!stop && space.inShift(cfg.floor.shift, now) && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
+    const shiftOn = !!space.cleanShift(cfg.floor.shift).enabled, inShift = space.inShift(cfg.floor.shift, now);
+    if (!stop && lead && autopilot.shiftWakeDue({ shiftOn, inShift, leadRunning: !!lead.running, actionable: actionableTasks(entry.path, cfg.floor) }, st, now)) {
+      const n = actionableTasks(entry.path, cfg.floor);
+      await sendTask(f.id, lead.id, autopilot.shiftWake(n), [], { via: 'autopilot', priority: 'P2' });
+      logEvent(f.id, { type: 'autopilot.shift-wake', agent: lead.id, data: { actionable: n } });
+      done.push({ floorId: f.id, agentId: lead.id, kind: 'shift-wake' });
+    }
+    if (!stop && inShift && autopilot.idleNudgeDue({ allIdle, openWork: open }, st, now)) {
       await sendTask(f.id, lead.id, autopilot.idleNudge(open), [], { via: 'autopilot', priority: 'P2' });
       logEvent(f.id, { type: 'autopilot.nudged', agent: lead.id, data: { kind: 'idle', open } });
       done.push({ floorId: f.id, agentId: lead.id, kind: 'idle' });
@@ -1552,9 +1559,15 @@ export async function autopilotTick(now = Date.now(), { res = wd.readResources()
   return done;
 }
 // open rows on the board (Squad Sprint TASKS.md, or a Blueprint squad's docs/BOARD.md); null without a board
+const boardOf = (root, floor) => (floor.workflow === 'squad-sprint' && sprint.hasPack(root) ? sprint.boardData(root) : blueprintBoard(root));
 function openTasks(root, floor) {
-  const b = floor.workflow === 'squad-sprint' && sprint.hasPack(root) ? sprint.boardData(root) : blueprintBoard(root);
+  const b = boardOf(root, floor);
   return b ? b.tasks.filter((t) => t.column !== 'DONE').length : null;
+}
+// rows the team can move without the owner: not done and not in review
+function actionableTasks(root, floor) {
+  const b = boardOf(root, floor);
+  return b ? b.tasks.filter((t) => t.column !== 'DONE' && t.column !== 'REVIEW').length : 0;
 }
 // the dialog is still the same one: choose the recommended option, keep a muted item so the owner can change it
 async function autoAnswer(f, a) {

@@ -12,6 +12,8 @@ export const LEVEL_TEXT = {
 export const DEFAULT_LEVEL = 'balanced';                 // new Floors; Floors from before 0.4.0 stay "off" until changed
 export const DEFAULT_TIMEOUT_SEC = 180;
 export const IDLE_NUDGE = { afterMs: 5 * 60e3, everyMs: 15 * 60e3 };
+// a Space with a shift: its lead, stopped after going idle, is woken in the shift while the board has work it can move
+export const SHIFT_WAKE = { everyMs: 3 * 60 * 60e3 };
 export const LEAD_MARK = 'DECIDED BY LEAD (autopilot), owner may correct';
 
 // the hard-stop list: [key, what the owner reads, patterns (English and Indonesian)]
@@ -85,6 +87,15 @@ export function idleNudgeDue({ allIdle, openWork }, state, now = Date.now()) {
   state.lastNudge = now;
   return true;
 }
+
+// wake the stopped lead at most every SHIFT_WAKE.everyMs, only inside an enabled shift and with actionable rows
+export function shiftWakeDue({ shiftOn, inShift, leadRunning, actionable }, state, now = Date.now()) {
+  if (!shiftOn || !inShift || leadRunning || !actionable) return false;
+  if (state.lastWake && now - state.lastWake < SHIFT_WAKE.everyMs) return false;
+  state.lastWake = now;
+  return true;
+}
+export const shiftWake = (n) => `Your shift has started. The board has ${n} piece${n === 1 ? '' : 's'} the team can move (TODO, in progress or blocked). Read the board, the handoffs and the questions, pick what moves forward tonight within the budget, and start only the teammates that work needs. What waits for the owner goes to the Outbox (a merge request for a finished branch). If nothing can move without the owner, say so in one line and stop.`;
 
 // the chain (resume, continue, close, merge, next sprint) stops for these; '' = keep going
 export function chainStop({ level = 'off', budgetOver = false, pressure = '', criticalWaiting = 0, openWork = null } = {}) {

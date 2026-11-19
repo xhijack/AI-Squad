@@ -1257,6 +1257,14 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## 1.17.1: a Space with a shift wakes its lead, and Blueprint boards are read (19 Nov 2026)
+
+The owner asked whether the Sopwer.id squad was working. It had not worked since 9 Nov: the night shift (22:00-05:00) only released queued automated work, and the idle nudge needs the lead running, so once the lead stopped after 30 idle minutes nothing woke it again. And the SEO & GEO board names its first column `Piece` (Product: `Item`), which `parseTasks()` did not read, so the board looked empty and autopilot saw an empty backlog.
+
+- `sprint.parseTasks()` reads `Task`, `Piece` or `Item`; `MEASURED` counts as done.
+- **Shift wake** (`autopilot.shiftWakeDue()`, `squad.autopilotTick()`): inside an enabled shift, with the lead stopped and rows the team can move (not done, not in review), the lead gets a task at most every 3 hours (`SHIFT_WAKE`); the dispatcher starts it. Autopilot off, the budget or memory pressure stop it as before. Spaces without a shift are not woken.
+- Tests: `test/shift-wake.test.js`.
+
 ## Phase 5, Sprint 27: merges approved from Telegram, 1.17.0 (8 Nov 2026)
 
 The owner asked for the web developer and the technical SEO specialist to commit and push on another branch, send the change to Telegram to read, and merge into the main branch on a yes there.
