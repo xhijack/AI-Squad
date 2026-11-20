@@ -35,7 +35,7 @@ export const TYPES = {
   'agent.idle': 'idle', 'agent.busy': 'idle', 'watchdog.alert': 'idle',
   'audit.done': 'audit', 'improvement.decided': 'audit', 'retro.done': 'audit',
   'auth.signed_in': 'access', 'auth.failed': 'access', 'auth.locked': 'access', 'auth.signed_out': 'access',
-  'autopilot.decided': 'autopilot', 'autopilot.nudged': 'autopilot', 'autopilot.blocked': 'autopilot', 'autopilot.changed': 'autopilot',
+  'autopilot.decided': 'autopilot', 'autopilot.nudged': 'autopilot', 'autopilot.shift-wake': 'autopilot', 'autopilot.blocked': 'autopilot', 'autopilot.changed': 'autopilot',
 };
 export const CATEGORIES = [...new Set(Object.values(TYPES))];
 // free text that the Floor setting "log message text" (log.messages = false) leaves out
@@ -59,6 +59,7 @@ function summarize(e) {
     case 'agent.crashed': return `${who} ${d.cause === 'oom' ? 'was killed: out of memory' : d.cause === 'killed' ? 'stopped unexpectedly mid-turn' : 'ended without a stop from The AI Squad'}${d.withLead ? ` (with the lead ${d.withLead})` : ''}`;
     case 'agent.resumed': return `${who} resumed its last session${d.via === 'auto-resume' ? ' automatically' : ''}`;
     case 'autopilot.decided': return d.by === 'lead' ? `the lead decided on its own (autopilot)${t(d.question)}` : `${who}'s question answered automatically with "${d.option}"${t(d.question, 60)}`;
+    case 'autopilot.shift-wake': return `autopilot woke ${who} for the shift: ${d.actionable} piece${d.actionable === 1 ? '' : 's'} the team can move`;
     case 'autopilot.nudged': return d.kind === 'idle' ? `autopilot nudged ${who}: squad idle with ${d.open} open tasks` : `autopilot nudged ${who} to decide an unanswered ask`;
     case 'autopilot.blocked': return `critical item waits for the owner (${(d.reasons || []).join(', ')})${t(d.question, 60)}`;
     case 'autopilot.changed': return `the owner changed an autopilot decision from "${d.from}" to "${d.to}"`;

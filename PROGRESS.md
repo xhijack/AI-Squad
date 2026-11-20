@@ -1257,6 +1257,10 @@ The owner asked to put the 3D web online, so it can run on a VPS and be reached 
 - Tests: `proposals.test.js` (a fact through the card, a document edited and restored, a skill to every Space with a hand-written one left alone, a note on a rejection, invalid, out-of-bounds, linked and oversized files refused, the Owner's folders only from an Owner-only Space, Owner-only routes, secrets removed).
 - Idea from Nakama (org memory with proposals, self-improving skills); kept to The AI Squad's rules: files in git, the Owner decides, nothing automatic yet (the trust ladder can take this over later).
 
+## 1.17.2: the shift wake is a known log event (20 Nov 2026)
+
+The first night after 1.17.1 the Sopwer.id lead was woken at 22:00 and the team moved M1, T4, K2 and T5 and sent four merge requests; the server log warned `Unknown log event type: autopilot.shift-wake`. `server/log.js` now knows it (category autopilot, "autopilot woke <lead> for the shift: N pieces the team can move").
+
 ## 1.17.1: a Space with a shift wakes its lead, and Blueprint boards are read (19 Nov 2026)
 
 The owner asked whether the Sopwer.id squad was working. It had not worked since 9 Nov: the night shift (22:00-05:00) only released queued automated work, and the idle nudge needs the lead running, so once the lead stopped after 30 idle minutes nothing woke it again. And the SEO & GEO board names its first column `Piece` (Product: `Item`), which `parseTasks()` did not read, so the board looked empty and autopilot saw an empty backlog.
